@@ -155,18 +155,19 @@ export default function Auth() {
           </label>
         )}
         <label>
-          {t(lang, 'email')}
+          {lang === 'bn' ? 'ফোন নম্বর বা ইমেইল' : 'Phone number or Email'}
           <input
-            type="email"
+            type="text"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            placeholder={lang === 'bn' ? 'যেমন 8170859653 বা ইমেইল' : 'e.g. 8170859653 or name@gmail.com'}
             required
-            autoComplete="email"
+            autoComplete="username"
           />
         </label>
         {mode !== 'forgot' && (
           <label>
-            {t(lang, 'password')}
+            {lang === 'bn' ? 'পাসওয়ার্ড বা পিন (কমপক্ষে ৬টি)' : 'Password / PIN (min 6 chars)'}
             <input
               type="password"
               value={password}

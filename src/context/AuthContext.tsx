@@ -38,6 +38,16 @@ interface AuthContextValue {
   refresh: () => Promise<void>
 }
 
+export function formatAuthIdentifier(input: string): string {
+  const trimmed = input.trim().toLowerCase()
+  const digitsOnly = trimmed.replace(/\D/g, '')
+  if (digitsOnly.length >= 10 && !trimmed.includes('@')) {
+    const last10 = digitsOnly.slice(-10)
+    return `${last10}@greenvest.shop`
+  }
+  return trimmed
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -122,9 +132,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
+      const authEmail = formatAuthIdentifier(email)
       if (cloud && supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim().toLowerCase(),
+          email: authEmail,
           password,
         })
         if (error) {
@@ -160,9 +171,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ensureSeeded()
       const all = getUsers()
       const found = all.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password,
+        (u) => u.email.toLowerCase() === authEmail.toLowerCase() && u.password === password,
       )
-      if (!found) return { ok: false, error: 'Invalid email or password' }
+      if (!found) return { ok: false, error: 'Invalid phone/email or password' }
       setSessionUserId(found.id)
       setUser(found)
       setUsers(all)
@@ -173,9 +184,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = useCallback(
     async (name: string, email: string, password: string): Promise<AuthResult> => {
+      const authEmail = formatAuthIdentifier(email)
       if (cloud && supabase) {
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim().toLowerCase(),
+          email: authEmail,
           password,
           options: { data: { name: name.trim() } },
         })
@@ -208,12 +220,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       ensureSeeded()
       const all = getUsers()
-      if (all.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-        return { ok: false, error: 'Email already registered' }
+      if (all.some((u) => u.email.toLowerCase() === authEmail.toLowerCase())) {
+        return { ok: false, error: 'Phone number / email already registered' }
       }
       const newUser: User = {
         id: uid('u'),
-        email: email.trim().toLowerCase(),
+        email: authEmail,
         password,
         name: name.trim(),
         role: 'customer',
