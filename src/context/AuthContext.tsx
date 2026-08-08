@@ -162,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return {
               ok: false,
               error:
-                'Wrong email/password, or email not confirmed yet. After Sign up, check inbox — or ask admin to confirm your account.',
+                'Incorrect phone number/email or password. If you do not have an account yet, click Sign Up first.',
             }
           }
           return { ok: false, error: msg }

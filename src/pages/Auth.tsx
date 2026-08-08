@@ -44,7 +44,7 @@ export default function Auth() {
       if (!res.ok) {
         setError(
           res.error ||
-            (lang === 'bn' ? 'লগইন ব্যর্থ — ইমেইল/পাসওয়ার্ড চেক করুন' : 'Login failed'),
+            (lang === 'bn' ? 'লগইন ব্যর্থ — ফোন নম্বর/পাসওয়ার্ড চেক করুন' : 'Login failed — check credentials'),
         )
         return
       }
