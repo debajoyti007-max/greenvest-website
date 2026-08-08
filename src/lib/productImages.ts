@@ -32,12 +32,83 @@ export const PRODUCT_IMAGES: Record<string, string> = {
 
 export const HERO_IMAGE = asset('veg/hero.jpg')
 
-/** Prefer local photos so broken remote URLs never hide vegetables. */
-export function resolveProductImage(id: string, imageUrl?: string) {
-  if (PRODUCT_IMAGES[id]) return PRODUCT_IMAGES[id]
-  if (imageUrl?.startsWith('/')) return asset(imageUrl.replace(/^\//, ''))
-  if (imageUrl && !imageUrl.includes('unsplash.com') && !imageUrl.includes('images.unsplash')) {
+/** Prefer local photos & smart name matching so correct vegetable photo always shows. */
+export function resolveProductImage(id: string, imageUrl?: string, name?: string) {
+  // 1. If explicit valid custom upload URL from Supabase Storage
+  if (imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('data:')) && !imageUrl.includes('unsplash.com')) {
     return imageUrl
   }
+
+  const query = `${name || ''} ${id || ''} ${imageUrl || ''}`.toLowerCase()
+
+  // 2. Smart keyword matching by English and Bengali vegetable names
+  if (query.includes('bitter') || query.includes('করলা') || query.includes('উচ্ছে') || query.includes('bittergourd')) {
+    return PRODUCT_IMAGES.p19
+  }
+  if (query.includes('coriander') || query.includes('ধনে') || query.includes('dhania')) {
+    return PRODUCT_IMAGES.p16
+  }
+  if (query.includes('bottle') || query.includes('লাউ') || query.includes('bottlegourd')) {
+    return PRODUCT_IMAGES.p18
+  }
+  if (query.includes('spinach') || query.includes('পালং') || query.includes('শাক')) {
+    return PRODUCT_IMAGES.p4
+  }
+  if (query.includes('cabbage') || query.includes('বাঁধাকপি')) {
+    return PRODUCT_IMAGES.p10
+  }
+  if (query.includes('cauliflower') || query.includes('ফুলকপি')) {
+    return PRODUCT_IMAGES.p8
+  }
+  if (query.includes('capsicum') || query.includes('ক্যাপসিকাম')) {
+    return PRODUCT_IMAGES.p11
+  }
+  if (query.includes('brinjal') || query.includes('বেগুন') || query.includes('बैंगন')) {
+    return PRODUCT_IMAGES.p9
+  }
+  if (query.includes('chili') || query.includes('মরিচ') || query.includes('লঙ্কা')) {
+    return PRODUCT_IMAGES.p7
+  }
+  if (query.includes('cucumber') || query.includes('শসা')) {
+    return PRODUCT_IMAGES.p6
+  }
+  if (query.includes('carrot') || query.includes('গাজর')) {
+    return PRODUCT_IMAGES.p5
+  }
+  if (query.includes('garlic') || query.includes('রসুন')) {
+    return PRODUCT_IMAGES.p12
+  }
+  if (query.includes('ginger') || query.includes('আদা')) {
+    return PRODUCT_IMAGES.p13
+  }
+  if (query.includes('okra') || query.includes('ঢেঁড়স') || query.includes('ভেন্ডি')) {
+    return PRODUCT_IMAGES.p14
+  }
+  if (query.includes('beans') || query.includes('শিম')) {
+    return PRODUCT_IMAGES.p15
+  }
+  if (query.includes('lemon') || query.includes('লেবু')) {
+    return PRODUCT_IMAGES.p17
+  }
+  if (query.includes('radish') || query.includes('মুলা')) {
+    return PRODUCT_IMAGES.p20
+  }
+  if (query.includes('peas') || query.includes('মটর')) {
+    return PRODUCT_IMAGES.p21
+  }
+  if (query.includes('potato') || query.includes('আলু')) {
+    return PRODUCT_IMAGES.p2
+  }
+  if (query.includes('onion') || query.includes('পেঁয়াজ')) {
+    return PRODUCT_IMAGES.p3
+  }
+  if (query.includes('tomato') || query.includes('টমেটো')) {
+    return PRODUCT_IMAGES.p1
+  }
+
+  // 3. Fallback by explicit ID
+  if (PRODUCT_IMAGES[id]) return PRODUCT_IMAGES[id]
+
+  // 4. Default fallback hero photo
   return HERO_IMAGE
 }

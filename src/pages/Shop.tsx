@@ -18,7 +18,7 @@ function ProductCard({
   added: string | null
   onPick: (p: Product) => void
 }) {
-  const img = resolveProductImage(p.id, p.imageUrl)
+  const img = resolveProductImage(p.id, p.imageUrl, `${p.name} ${p.bnName}`)
   const low =
     p.inStock && p.stockQty != null && p.stockQty > 0 && p.stockQty <= LOW_STOCK_QTY
   return (
@@ -31,7 +31,7 @@ function ProductCard({
           loading="lazy"
           onError={(e) => {
             const el = e.currentTarget
-            const fallback = resolveProductImage(p.id)
+            const fallback = resolveProductImage(p.id, undefined, `${p.name} ${p.bnName}`)
             if (!el.src.endsWith(fallback)) el.src = fallback
           }}
         />
@@ -228,7 +228,7 @@ export default function Shop() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-photo">
-              <img src={resolveProductImage(picked.id, picked.imageUrl)} alt={picked.name} />
+              <img src={resolveProductImage(picked.id, picked.imageUrl, `${picked.name} ${picked.bnName}`)} alt={picked.name} />
             </div>
             <h2 id="grade-title">{lang === 'bn' ? picked.bnName : picked.name}</h2>
             <p className="muted">{t(lang, 'selectGrade')}</p>

@@ -117,7 +117,7 @@ export default function SellerProducts() {
   const preview = form.imageUrl
     ? form.imageUrl
     : editing
-      ? resolveProductImage(editing.id, editing.imageUrl)
+      ? resolveProductImage(editing.id, editing.imageUrl, `${editing.name} ${editing.bnName}`)
       : ''
 
   const tabs: { id: Section; en: string; bn: string; count: number }[] = [
@@ -308,7 +308,7 @@ export default function SellerProducts() {
                 <tr key={p.id}>
                   <td className="emoji-cell">
                     <img
-                      src={resolveProductImage(p.id, p.imageUrl)}
+                      src={resolveProductImage(p.id, p.imageUrl, `${p.name} ${p.bnName}`)}
                       alt=""
                       className="seller-thumb"
                       width={40}
