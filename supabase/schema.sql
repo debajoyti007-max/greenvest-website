@@ -68,7 +68,7 @@ create index if not exists orders_user_id_idx on public.orders (user_id);
 create index if not exists orders_created_at_idx on public.orders (created_at desc);
 create index if not exists order_items_order_id_idx on public.order_items (order_id);
 
--- Auto-create profile on signup
+-- Auto-create profile and auto-confirm email on signup
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -76,6 +76,9 @@ security definer
 set search_path = public
 as $$
 begin
+  -- Auto confirm user email so login never gets blocked
+  update auth.users set email_confirmed_at = now() where id = new.id and email_confirmed_at is null;
+
   insert into public.profiles (id, email, name, role)
   values (
     new.id,

@@ -158,6 +158,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
           // Supabase returns this when email confirm is ON and not confirmed yet
+          if (/email not confirmed/i.test(msg)) {
+            return {
+              ok: false,
+              error:
+                'Account needs one-time confirmation. Run the 1-line SQL update in Supabase or click Sign Up with your mobile number.',
+            }
+          }
           if (/invalid login credentials/i.test(msg)) {
             return {
               ok: false,
