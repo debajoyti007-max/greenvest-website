@@ -112,12 +112,16 @@ export default function Auth() {
       <h1 className="brand-hero compact">GreenVest</h1>
       <p className="lede center">
         {mode === 'login'
-          ? t(lang, 'welcomeLogin')
+          ? lang === 'bn'
+            ? 'ফোন নম্বর দিয়ে সহজেই লগইন করুন'
+            : 'Log in easily with your Phone Number'
           : mode === 'signup'
-            ? t(lang, 'welcomeSignup')
+            ? lang === 'bn'
+              ? 'ফোন নম্বর দিয়ে নতুন অ্যাকাউন্ট খুলুন'
+              : 'Sign up in seconds with your Phone Number'
             : lang === 'bn'
-              ? 'পাসওয়ার্ড ভুলে গেলে ইমেইল দিন'
-              : 'Enter your email to reset password'}
+              ? 'পাসওয়ার্ড ভুলে গেলে নম্বর/ইমেইল দিন'
+              : 'Enter your phone/email to reset password'}
       </p>
 
       {mode !== 'forgot' && (
@@ -151,27 +155,34 @@ export default function Auth() {
         {mode === 'signup' && (
           <label>
             {t(lang, 'name')}
-            <input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={lang === 'bn' ? 'আপনার নাম' : 'Your full name'}
+              required
+              autoComplete="name"
+            />
           </label>
         )}
         <label>
-          {lang === 'bn' ? 'ফোন নম্বর বা ইমেইল' : 'Phone number or Email'}
+          {lang === 'bn' ? 'মোবাইল নম্বর (বা ইমেইল)' : 'Phone Number (or Email)'}
           <input
             type="text"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder={lang === 'bn' ? 'যেমন 8170859653 বা ইমেইল' : 'e.g. 8170859653 or name@gmail.com'}
+            placeholder={lang === 'bn' ? 'যেমন 8170859653' : 'e.g. 8170859653'}
             required
             autoComplete="username"
           />
         </label>
         {mode !== 'forgot' && (
           <label>
-            {lang === 'bn' ? 'পাসওয়ার্ড বা পিন (কমপক্ষে ৬টি)' : 'Password / PIN (min 6 chars)'}
+            {lang === 'bn' ? 'পাসওয়ার্ড বা পিন (কমপক্ষে ৬টি সংকেত)' : 'PIN / Password (min 6 chars)'}
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••"
               required
               minLength={6}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -228,8 +239,8 @@ export default function Auth() {
       {mode !== 'forgot' && (
         <p className="hint" style={{ marginTop: '1rem' }}>
           {lang === 'bn'
-            ? 'নতুন অ্যাকাউন্ট কাস্টমার হিসেবে তৈরি হয়। সেলার অ্যাকাউন্ট অ্যাডমিন অনুমোদন করে।'
-            : 'New accounts are customers. An admin promotes sellers.'}
+            ? '১০ ডিজিটের মোবাইল নম্বর দিয়ে সহজে অ্যাকাউন্ট খুলুন ও অর্ডার করুন।'
+            : 'Use your 10-digit mobile number for instant login and fast ordering.'}
         </p>
       )}
 

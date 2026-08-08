@@ -10,6 +10,7 @@ export interface User {
   password: string
   name: string
   role: Role
+  phone?: string
   createdAt: string
 }
 

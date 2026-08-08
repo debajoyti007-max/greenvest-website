@@ -46,6 +46,11 @@ export default function Checkout() {
       if (last.pin) setPin(last.pin)
       if (last.deliverySlot) setSlot(last.deliverySlot)
       setPrefilled(true)
+      return
+    }
+    if (user.email.endsWith('@greenvest.shop')) {
+      const raw = user.email.replace('@greenvest.shop', '')
+      if (/^\d{10}$/.test(raw)) setPhone(raw)
     }
   }, [user, orders])
 

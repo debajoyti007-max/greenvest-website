@@ -43,3 +43,13 @@ export const IS_DEV = import.meta.env.DEV
 
 /** Local offline shop allowed only in development. */
 export const ALLOW_LOCAL_FALLBACK = IS_DEV
+
+export function formatDisplayContact(email: string, phone?: string): string {
+  if (phone && phone.trim()) return phone.trim()
+  if (!email) return ''
+  if (email.endsWith('@greenvest.shop')) {
+    const raw = email.replace('@greenvest.shop', '')
+    if (/^\d{10}$/.test(raw)) return raw
+  }
+  return email
+}

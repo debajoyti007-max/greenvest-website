@@ -102,8 +102,8 @@ export default function SellerCustomers() {
                     <div className="muted">{c.lastAddress}</div>
                   </td>
                   <td>
-                    <div>{c.phone}</div>
-                    <div className="muted">{c.email}</div>
+                    <div><strong>{c.phone || c.email.replace('@greenvest.shop', '')}</strong></div>
+                    {!c.email.endsWith('@greenvest.shop') && <div className="muted">{c.email}</div>}
                   </td>
                   <td>{c.orders}</td>
                   <td>৳{c.spent}</td>

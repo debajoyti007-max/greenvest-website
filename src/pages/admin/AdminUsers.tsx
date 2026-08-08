@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
+import { formatDisplayContact } from '../../lib/business'
 import type { Role } from '../../types'
 
 export default function AdminUsers() {
@@ -44,7 +45,7 @@ export default function AdminUsers() {
           <thead>
             <tr>
               <th>{lang === 'bn' ? 'নাম' : 'Name'}</th>
-              <th>{lang === 'bn' ? 'ইমেইল' : 'Email'}</th>
+              <th>{lang === 'bn' ? 'ফোন / যোগাযোগ' : 'Phone / Contact'}</th>
               <th>{lang === 'bn' ? 'রোল' : 'Role'}</th>
               <th></th>
             </tr>
@@ -55,7 +56,7 @@ export default function AdminUsers() {
                 <td>
                   <strong>{u.name}</strong>
                 </td>
-                <td>{u.email}</td>
+                <td>{formatDisplayContact(u.email, u.phone)}</td>
                 <td>
                   <span className={`role-pill role-${u.role}`}>{u.role}</span>
                 </td>

@@ -94,8 +94,8 @@ export default function Cart() {
             <strong>{lang === 'bn' ? 'অর্ডার করতে লগইন লাগবে' : 'Login required to order'}</strong>
             <span>
               {lang === 'bn'
-                ? 'চেকআউটের আগে অ্যাকাউন্ট দিয়ে লগইন বা সাইন আপ করুন। কার্ট সেভ থাকবে।'
-                : 'Sign in or create an account before checkout. Your cart stays saved.'}
+                ? 'চেকআউটের আগে মোবাইল নম্বর দিয়ে লগইন বা সাইন আপ করুন। কার্ট সেভ থাকবে।'
+                : 'Sign in or create an account with your mobile number before checkout. Your cart stays saved.'}
             </span>
             <Link to="/auth" className="btn btn-primary">
               {lang === 'bn' ? 'লগইন / সাইন আপ' : 'Login / Sign up'}
