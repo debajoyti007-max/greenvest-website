@@ -125,7 +125,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: email.trim().toLowerCase(),
           password,
         })
-        if (error) return { ok: false, error: error.message }
+        if (error) {
+          const msg = error.message || 'Login failed'
+          // Supabase returns this when email confirm is ON and not confirmed yet
+          if (/invalid login credentials/i.test(msg)) {
+            return {
+              ok: false,
+              error:
+                'Wrong email/password, or email not confirmed yet. After Sign up, check inbox — or ask admin to confirm your account.',
+            }
+          }
+          return { ok: false, error: msg }
+        }
         const profile = data.user ? await fetchProfile(data.user.id) : null
         if (!profile) return { ok: false, error: 'Profile missing. Contact support.' }
         setUser(profile)

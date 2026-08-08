@@ -77,8 +77,8 @@ export default function Auth() {
         setMode('login')
         setInfo(
           lang === 'bn'
-            ? 'অ্যাকাউন্ট তৈরি হয়েছে। ইমেইলে কনফার্ম লিংক থাকলে খুলুন, তারপর লগইন করুন।'
-            : 'Account created. Confirm your email if required, then log in.',
+            ? 'অ্যাকাউন্ট তৈরি হয়েছে। ইমেইলে কনফার্ম লিংক খুলে তারপর লগইন করুন (লিংক না এলে অ্যাডমিনকে বলুন)।'
+            : 'Account created. Open the confirm link in your email, then log in (if no email arrives, ask admin).',
         )
       } finally {
         setBusy(false)
