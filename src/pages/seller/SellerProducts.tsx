@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../../lib/business'
 import { t } from '../../lib/i18n'
-import { fileToProductImage } from '../../lib/imageUpload'
+import { uploadProductImage } from '../../lib/imageUpload'
 import { resolveProductImage } from '../../lib/productImages'
 import type { Product, Season } from '../../types'
 
@@ -83,8 +83,9 @@ export default function SellerProducts() {
     setPhotoError('')
     setPhotoBusy(true)
     try {
-      const dataUrl = await fileToProductImage(file)
-      setForm((f) => ({ ...f, imageUrl: dataUrl }))
+      const key = editing?.id || `tmp-${user.id}`
+      const url = await uploadProductImage(file, key)
+      setForm((f) => ({ ...f, imageUrl: url }))
     } catch (err) {
       setPhotoError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
