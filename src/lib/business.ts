@@ -35,7 +35,8 @@ export const SELLER_WHATSAPP = SUPPORT_WHATSAPP
 
 export const UPI_ID = env('VITE_UPI_ID', '8170859653-2@ybl')
 export const UPI_BANK = env('VITE_UPI_BANK', 'State Bank of India ····9764')
-export const UPI_QR_SRC = env('VITE_UPI_QR_SRC', '/upi-qr.png')
+const assetBase = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
+export const UPI_QR_SRC = env('VITE_UPI_QR_SRC', `${assetBase}upi-qr.png`)
 
 /** True only during `npm run dev` — allows localStorage fallback. */
 export const IS_DEV = import.meta.env.DEV
