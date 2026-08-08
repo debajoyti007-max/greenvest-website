@@ -11,6 +11,7 @@ type ProductRow = {
   p_b: number
   p_c: number
   in_stock: boolean
+  archived?: boolean | null
   category: string
   unit: string
   image_url: string | null
@@ -82,6 +83,7 @@ function mapProduct(row: ProductRow): Product {
     pB: Number(row.p_b),
     pC: Number(row.p_c),
     inStock: row.in_stock,
+    archived: Boolean(row.archived),
     category: row.category,
     unit: row.unit,
     imageUrl: row.image_url || undefined,
@@ -98,6 +100,7 @@ function productToRow(p: Product | (Omit<Product, 'id'> & { id: string })) {
     p_b: p.pB,
     p_c: p.pC,
     in_stock: p.inStock,
+    archived: Boolean(p.archived),
     category: p.category,
     unit: p.unit,
     image_url: p.imageUrl || null,
@@ -177,11 +180,12 @@ export async function fetchProducts(): Promise<Product[]> {
 
 export async function upsertProduct(product: Product): Promise<Product> {
   const client = requireClient()
-  const { data, error } = await client
-    .from('products')
-    .upsert(productToRow(product))
-    .select('*')
-    .single()
+  const row = productToRow(product)
+  let { data, error } = await client.from('products').upsert(row).select('*').single()
+  if (error && /archived/i.test(error.message)) {
+    const { archived: _a, ...rest } = row
+    ;({ data, error } = await client.from('products').upsert(rest).select('*').single())
+  }
   if (error) throw error
   return mapProduct(data as ProductRow)
 }

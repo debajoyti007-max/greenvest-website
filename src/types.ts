@@ -20,6 +20,8 @@ export interface Product {
   pB: number
   pC: number
   inStock: boolean
+  /** Hidden from shop; kept for seller history / next season */
+  archived?: boolean
   category: string
   unit: string
   /** Optional photo URL; emoji used as fallback */

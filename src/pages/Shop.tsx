@@ -4,7 +4,61 @@ import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'
 import { HERO_IMAGE, resolveProductImage } from '../lib/productImages'
-import type { Grade, Product } from '../types'
+import type { Grade, Lang, Product } from '../types'
+
+function ProductCard({
+  p,
+  lang,
+  added,
+  onPick,
+}: {
+  p: Product
+  lang: Lang
+  added: string | null
+  onPick: (p: Product) => void
+}) {
+  const img = resolveProductImage(p.id, p.imageUrl)
+  return (
+    <article className={`product-tile premium-tile ${p.inStock ? '' : 'out'}`}>
+      <div className="product-media photo">
+        <img
+          src={img}
+          alt={lang === 'bn' ? p.bnName : p.name}
+          className="product-photo"
+          loading="lazy"
+          onError={(e) => {
+            const el = e.currentTarget
+            const fallback = resolveProductImage(p.id)
+            if (!el.src.endsWith(fallback)) el.src = fallback
+          }}
+        />
+        {!p.inStock && <span className="stock-badge">{t(lang, 'outOfStock')}</span>}
+      </div>
+      <div className="product-body">
+        <h2>{lang === 'bn' ? p.bnName : p.name}</h2>
+        <p className="muted">
+          {lang === 'bn' ? p.name : p.bnName} · {p.unit}
+        </p>
+        <div className="price-row">
+          <span className="price">৳{p.pB}</span>
+          <span className="grade-prices">
+            <span>A ৳{p.pA}</span>
+            <span>B ৳{p.pB}</span>
+            <span>C ৳{p.pC}</span>
+          </span>
+        </div>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!p.inStock}
+          onClick={() => onPick(p)}
+        >
+          {added === p.id ? t(lang, 'added') : t(lang, 'chooseGrade')}
+        </button>
+      </div>
+    </article>
+  )
+}
 
 export default function Shop() {
   const { products, lang, addToCart, priceFor, loading } = useStore()
@@ -14,12 +68,14 @@ export default function Shop() {
   const [grade, setGrade] = useState<Grade>('B')
   const [added, setAdded] = useState<string | null>(null)
 
-  const categories = useMemo(() => {
-    const set = new Set(products.map((p) => p.category))
-    return ['All', ...Array.from(set)]
-  }, [products])
+  const shopProducts = useMemo(() => products.filter((p) => !p.archived), [products])
 
-  const filtered = products.filter((p) => {
+  const categories = useMemo(() => {
+    const set = new Set(shopProducts.map((p) => p.category))
+    return ['All', ...Array.from(set)]
+  }, [shopProducts])
+
+  const filtered = shopProducts.filter((p) => {
     const catOk = category === 'All' || p.category === category
     const q = search.trim().toLowerCase()
     const searchOk =
@@ -29,6 +85,9 @@ export default function Shop() {
       p.category.toLowerCase().includes(q)
     return catOk && searchOk
   })
+
+  const available = filtered.filter((p) => p.inStock)
+  const unavailable = filtered.filter((p) => !p.inStock)
 
   const openPick = (p: Product) => {
     if (!p.inStock) return
@@ -99,51 +158,44 @@ export default function Shop() {
             {lang === 'bn' ? 'কোনো সবজি পাওয়া যায়নি।' : 'No vegetables match your search.'}
           </p>
         ) : (
-          <div className="product-grid premium-grid">
-            {filtered.map((p) => {
-              const img = resolveProductImage(p.id, p.imageUrl)
-              return (
-                <article key={p.id} className={`product-tile premium-tile ${p.inStock ? '' : 'out'}`}>
-                  <div className="product-media photo">
-                    <img
-                      src={img}
-                      alt={lang === 'bn' ? p.bnName : p.name}
-                      className="product-photo"
-                      loading="lazy"
-                      onError={(e) => {
-                        const el = e.currentTarget
-                        const fallback = resolveProductImage(p.id)
-                        if (!el.src.endsWith(fallback)) el.src = fallback
-                      }}
-                    />
-                    {!p.inStock && <span className="stock-badge">{t(lang, 'outOfStock')}</span>}
-                  </div>
-                  <div className="product-body">
-                    <h2>{lang === 'bn' ? p.bnName : p.name}</h2>
-                    <p className="muted">
-                      {lang === 'bn' ? p.name : p.bnName} · {p.unit}
-                    </p>
-                    <div className="price-row">
-                      <span className="price">৳{p.pB}</span>
-                      <span className="grade-prices">
-                        <span>A ৳{p.pA}</span>
-                        <span>B ৳{p.pB}</span>
-                        <span>C ৳{p.pC}</span>
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={!p.inStock}
-                      onClick={() => openPick(p)}
-                    >
-                      {added === p.id ? t(lang, 'added') : t(lang, 'chooseGrade')}
-                    </button>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
+          <>
+            <section className="shop-section">
+              <h2 className="section-title">
+                {lang === 'bn' ? 'আজকের স্টক' : 'Available today'}
+                <span className="muted"> ({available.length})</span>
+              </h2>
+              {available.length === 0 ? (
+                <p className="empty">
+                  {lang === 'bn' ? 'এখন স্টকে কিছু নেই।' : 'Nothing in stock right now.'}
+                </p>
+              ) : (
+                <div className="product-grid premium-grid">
+                  {available.map((p) => (
+                    <ProductCard key={p.id} p={p} lang={lang} added={added} onPick={openPick} />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {unavailable.length > 0 && (
+              <section className="shop-section shop-section-old">
+                <h2 className="section-title">
+                  {lang === 'bn' ? 'এখন নেই (পরে আসতে পারে)' : 'Currently unavailable'}
+                  <span className="muted"> ({unavailable.length})</span>
+                </h2>
+                <p className="hint">
+                  {lang === 'bn'
+                    ? 'স্টক আউট আইটেম নিচে সরে যায় — কার্টে যোগ করা যায় না।'
+                    : 'Out-of-stock items move here automatically — cannot add to cart.'}
+                </p>
+                <div className="product-grid premium-grid">
+                  {unavailable.map((p) => (
+                    <ProductCard key={p.id} p={p} lang={lang} added={added} onPick={openPick} />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
 
         <p className="shop-footnote">

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
@@ -15,10 +15,13 @@ const emptyForm = {
   pB: 0,
   pC: 0,
   inStock: true,
+  archived: false,
   category: 'Vegetables',
   unit: 'kg',
   imageUrl: '',
 }
+
+type Section = 'active' | 'restock' | 'archived'
 
 export default function SellerProducts() {
   const { user } = useAuth()
@@ -28,20 +31,29 @@ export default function SellerProducts() {
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoError, setPhotoError] = useState('')
   const [query, setQuery] = useState('')
+  const [section, setSection] = useState<Section>('active')
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
   }
 
-  const filtered = products.filter((p) => {
+  const searched = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return true
-    return (
-      p.name.toLowerCase().includes(q) ||
-      p.bnName.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q)
-    )
-  })
+    return products.filter((p) => {
+      if (!q) return true
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.bnName.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q)
+      )
+    })
+  }, [products, query])
+
+  const active = searched.filter((p) => !p.archived && p.inStock)
+  const restock = searched.filter((p) => !p.archived && !p.inStock)
+  const archived = searched.filter((p) => p.archived)
+
+  const list = section === 'active' ? active : section === 'restock' ? restock : archived
 
   const startEdit = (p: Product) => {
     setEditing(p)
@@ -54,6 +66,7 @@ export default function SellerProducts() {
       pB: p.pB,
       pC: p.pC,
       inStock: p.inStock,
+      archived: Boolean(p.archived),
       category: p.category,
       unit: p.unit,
       imageUrl: p.imageUrl || '',
@@ -91,23 +104,46 @@ export default function SellerProducts() {
     setPhotoError('')
   }
 
+  const setArchived = async (p: Product, archived: boolean) => {
+    await updateProduct({ ...p, archived, inStock: archived ? false : p.inStock })
+  }
+
   const preview = form.imageUrl
     ? form.imageUrl
     : editing
       ? resolveProductImage(editing.id, editing.imageUrl)
       : ''
 
+  const tabs: { id: Section; en: string; bn: string; count: number }[] = [
+    { id: 'active', en: 'Selling today', bn: 'আজ বিক্রি', count: active.length },
+    { id: 'restock', en: 'Out of stock', bn: 'স্টক নেই', count: restock.length },
+    { id: 'archived', en: 'Old / archived', bn: 'পুরনো / আর্কাইভ', count: archived.length },
+  ]
+
   return (
     <div className="page">
       <div className="page-head">
-        <h1>{lang === 'bn' ? 'সবজি তালিকা' : 'Product list'}</h1>
+        <h1>{lang === 'bn' ? 'প্রোডাক্ট ম্যানেজ' : 'Manage products'}</h1>
         <Link to="/seller" className="btn btn-ghost">
           {t(lang, 'backDashboard')}
         </Link>
       </div>
+      <p className="lede">
+        {lang === 'bn'
+          ? 'স্টক আউট হলে নিজে থেকে “স্টক নেই” সেকশনে যায়। সিজন শেষ হলে আর্কাইভ করুন।'
+          : 'Out-of-stock items auto-move to Restock. Archive old season items to hide from shop.'}
+      </p>
 
       <form className="form product-form" onSubmit={onSubmit}>
-        <h2>{editing ? (lang === 'bn' ? 'এডিট' : 'Edit product') : lang === 'bn' ? 'নতুন আইটেম' : 'Add product'}</h2>
+        <h2>
+          {editing
+            ? lang === 'bn'
+              ? 'এডিট'
+              : 'Edit product'
+            : lang === 'bn'
+              ? 'নতুন আইটেম'
+              : 'Add product'}
+        </h2>
         <div className="form-grid">
           <label>
             Emoji
@@ -151,14 +187,6 @@ export default function SellerProducts() {
             </div>
           )}
           {photoError && <p className="form-error span-2">{photoError}</p>}
-          <label className="span-2">
-            {lang === 'bn' ? 'অথবা ইমেজ URL' : 'Or image URL'}
-            <input
-              value={form.imageUrl.startsWith('data:') ? '' : form.imageUrl}
-              onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-              placeholder="/veg/tomato.jpg or https://..."
-            />
-          </label>
           <label>
             Grade A ৳
             <input
@@ -189,10 +217,10 @@ export default function SellerProducts() {
             {editing
               ? lang === 'bn'
                 ? 'সেভ'
-                : 'Save changes'
+                : 'Save'
               : lang === 'bn'
                 ? 'যোগ করুন'
-                : 'Add item'}
+                : 'Add'}
           </button>
           {editing && (
             <button
@@ -210,8 +238,21 @@ export default function SellerProducts() {
         </div>
       </form>
 
+      <div className="cat-filters seller-filters">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`chip ${section === tab.id ? 'active' : ''}`}
+            onClick={() => setSection(tab.id)}
+          >
+            {lang === 'bn' ? tab.bn : tab.en} ({tab.count})
+          </button>
+        ))}
+      </div>
+
       <label className="search-field seller-product-search">
-        <span className="sr-only">{lang === 'bn' ? 'সার্চ' : 'Search'}</span>
+        <span className="sr-only">Search</span>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -231,47 +272,74 @@ export default function SellerProducts() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((p) => (
-              <tr key={p.id}>
-                <td className="emoji-cell">
-                  <img
-                    src={resolveProductImage(p.id, p.imageUrl)}
-                    alt=""
-                    className="seller-thumb"
-                    width={40}
-                    height={40}
-                  />
-                </td>
-                <td>
-                  <strong>{lang === 'bn' ? p.bnName : p.name}</strong>
-                  <div className="muted">{lang === 'bn' ? p.name : p.bnName}</div>
-                </td>
-                <td>
-                  ৳{p.pA} / ৳{p.pB} / ৳{p.pC}
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className={`stock-toggle ${p.inStock ? 'in' : 'out'}`}
-                    onClick={() => void toggleStock(p.id)}
-                  >
-                    {p.inStock ? 'IN' : 'OUT'}
-                  </button>
-                </td>
-                <td className="actions">
-                  <button type="button" className="btn btn-ghost" onClick={() => startEdit(p)}>
-                    {lang === 'bn' ? 'এডিট' : 'Edit'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost danger"
-                    onClick={() => void deleteProduct(p.id)}
-                  >
-                    {lang === 'bn' ? 'মুছুন' : 'Delete'}
-                  </button>
+            {list.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="muted">
+                  {lang === 'bn' ? 'এই সেকশনে কিছু নেই।' : 'Nothing in this section.'}
                 </td>
               </tr>
-            ))}
+            ) : (
+              list.map((p) => (
+                <tr key={p.id}>
+                  <td className="emoji-cell">
+                    <img
+                      src={resolveProductImage(p.id, p.imageUrl)}
+                      alt=""
+                      className="seller-thumb"
+                      width={40}
+                      height={40}
+                    />
+                  </td>
+                  <td>
+                    <strong>{lang === 'bn' ? p.bnName : p.name}</strong>
+                    <div className="muted">{lang === 'bn' ? p.name : p.bnName}</div>
+                  </td>
+                  <td>
+                    ৳{p.pA} / ৳{p.pB} / ৳{p.pC}
+                  </td>
+                  <td>
+                    {!p.archived && (
+                      <button
+                        type="button"
+                        className={`stock-toggle ${p.inStock ? 'in' : 'out'}`}
+                        onClick={() => void toggleStock(p.id)}
+                      >
+                        {p.inStock ? 'IN' : 'OUT'}
+                      </button>
+                    )}
+                  </td>
+                  <td className="actions">
+                    <button type="button" className="btn btn-ghost" onClick={() => startEdit(p)}>
+                      {lang === 'bn' ? 'এডিট' : 'Edit'}
+                    </button>
+                    {p.archived ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => void setArchived(p, false)}
+                      >
+                        {lang === 'bn' ? 'ফেরত আনুন' : 'Restore'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => void setArchived(p, true)}
+                      >
+                        {lang === 'bn' ? 'আর্কাইভ' : 'Archive'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-ghost danger"
+                      onClick={() => void deleteProduct(p.id)}
+                    >
+                      {lang === 'bn' ? 'মুছুন' : 'Delete'}
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

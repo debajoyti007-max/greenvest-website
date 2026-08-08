@@ -21,6 +21,7 @@ create table if not exists public.products (
   p_b numeric not null default 0,
   p_c numeric not null default 0,
   in_stock boolean not null default true,
+  archived boolean not null default false,
   category text not null default 'Vegetables',
   unit text not null default 'kg',
   image_url text,
