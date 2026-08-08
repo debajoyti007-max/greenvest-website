@@ -32,85 +32,67 @@ export const PRODUCT_IMAGES: Record<string, string> = {
 
 export const HERO_IMAGE = asset('veg/hero.jpg')
 
-/** Prefer local photos & smart name matching so correct vegetable photo always shows. */
+/**
+ * Always resolve product image from local /public/veg/ files using name matching.
+ * The DB image_url field is IGNORED for standard products to avoid stale/wrong URLs.
+ * Only truly custom uploaded images (Supabase Storage /product-images/ path) are used directly.
+ */
 export function resolveProductImage(id: string, imageUrl?: string, name?: string) {
-  // 1. If explicit valid custom upload URL from Supabase Storage
-  if (imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('data:')) && !imageUrl.includes('unsplash.com')) {
+  // 1. Only use imageUrl if it's a real custom upload (Supabase Storage), not a legacy CDN link
+  if (
+    imageUrl &&
+    imageUrl.startsWith('http') &&
+    (imageUrl.includes('/storage/v1/object/') || imageUrl.includes('product-images'))
+  ) {
     return imageUrl
   }
 
-  // 2. Strict name & ID query (excludes imageUrl so old tomato links never contaminate search)
-  const nameQuery = `${name || ''} ${id || ''}`.toLowerCase()
+  // 2. Name + ID based matching — always wins over any DB image_url
+  const nameQ = `${name || ''} ${id || ''}`.toLowerCase()
 
-  if (nameQuery.includes('bitter') || nameQuery.includes('করলা') || nameQuery.includes('উচ্ছে') || nameQuery.includes('bittergourd') || id === 'p19') {
+  if (nameQ.includes('bitter') || nameQ.includes('করলা') || nameQ.includes('উচ্ছে') || id === 'p19')
     return PRODUCT_IMAGES.p19
-  }
-  if (nameQuery.includes('coriander') || nameQuery.includes('ধনে') || nameQuery.includes('dhania') || id === 'p16') {
-    return PRODUCT_IMAGES.p16
-  }
-  if (nameQuery.includes('bottle') || nameQuery.includes('লাউ') || nameQuery.includes('bottlegourd') || id === 'p18') {
+  if (nameQ.includes('bottle') || nameQ.includes('লাউ') || id === 'p18')
     return PRODUCT_IMAGES.p18
-  }
-  if (nameQuery.includes('spinach') || nameQuery.includes('পালং') || nameQuery.includes('শাক') || id === 'p4') {
+  if (nameQ.includes('coriander') || nameQ.includes('ধনে') || nameQ.includes('dhania') || id === 'p16')
+    return PRODUCT_IMAGES.p16
+  if (nameQ.includes('spinach') || nameQ.includes('পালং') || id === 'p4')
     return PRODUCT_IMAGES.p4
-  }
-  if (nameQuery.includes('cabbage') || nameQuery.includes('বাঁধাকপি') || id === 'p10') {
+  if (nameQ.includes('cabbage') || nameQ.includes('বাঁধাকপি') || id === 'p10')
     return PRODUCT_IMAGES.p10
-  }
-  if (nameQuery.includes('cauliflower') || nameQuery.includes('ফুলকপি') || id === 'p8') {
+  if (nameQ.includes('cauliflower') || nameQ.includes('ফুলকপি') || id === 'p8')
     return PRODUCT_IMAGES.p8
-  }
-  if (nameQuery.includes('capsicum') || nameQuery.includes('ক্যাপসিকাম') || id === 'p11') {
+  if (nameQ.includes('capsicum') || nameQ.includes('ক্যাপসিকাম') || id === 'p11')
     return PRODUCT_IMAGES.p11
-  }
-  if (nameQuery.includes('brinjal') || nameQuery.includes('বেগুন') || nameQuery.includes('बैंगন') || id === 'p9') {
+  if (nameQ.includes('brinjal') || nameQ.includes('বেগুন') || nameQ.includes('eggplant') || id === 'p9')
     return PRODUCT_IMAGES.p9
-  }
-  if (nameQuery.includes('chili') || nameQuery.includes('মরিচ') || nameQuery.includes('লঙ্কা') || id === 'p7') {
+  if (nameQ.includes('chili') || nameQ.includes('chilli') || nameQ.includes('মরিচ') || nameQ.includes('লঙ্কা') || id === 'p7')
     return PRODUCT_IMAGES.p7
-  }
-  if (nameQuery.includes('cucumber') || nameQuery.includes('শসা') || id === 'p6') {
+  if (nameQ.includes('cucumber') || nameQ.includes('শসা') || id === 'p6')
     return PRODUCT_IMAGES.p6
-  }
-  if (nameQuery.includes('carrot') || nameQuery.includes('গাজর') || id === 'p5') {
+  if (nameQ.includes('carrot') || nameQ.includes('গাজর') || id === 'p5')
     return PRODUCT_IMAGES.p5
-  }
-  if (nameQuery.includes('garlic') || nameQuery.includes('রসুন') || id === 'p12') {
+  if (nameQ.includes('garlic') || nameQ.includes('রসুন') || id === 'p12')
     return PRODUCT_IMAGES.p12
-  }
-  if (nameQuery.includes('ginger') || nameQuery.includes('আদা') || id === 'p13') {
+  if (nameQ.includes('ginger') || nameQ.includes('আদা') || id === 'p13')
     return PRODUCT_IMAGES.p13
-  }
-  if (nameQuery.includes('okra') || nameQuery.includes('ঢেঁড়স') || nameQuery.includes('ভেন্ডি') || id === 'p14') {
+  if (nameQ.includes('okra') || nameQ.includes('ঢেঁড়স') || nameQ.includes('ভেন্ডি') || id === 'p14')
     return PRODUCT_IMAGES.p14
-  }
-  if (nameQuery.includes('beans') || nameQuery.includes('শিম') || id === 'p15') {
+  if (nameQ.includes('beans') || nameQ.includes('শিম') || id === 'p15')
     return PRODUCT_IMAGES.p15
-  }
-  if (nameQuery.includes('lemon') || nameQuery.includes('লেবু') || id === 'p17') {
+  if (nameQ.includes('lemon') || nameQ.includes('লেবু') || id === 'p17')
     return PRODUCT_IMAGES.p17
-  }
-  if (nameQuery.includes('radish') || nameQuery.includes('মুলা') || id === 'p20') {
+  if (nameQ.includes('radish') || nameQ.includes('মুলা') || id === 'p20')
     return PRODUCT_IMAGES.p20
-  }
-  if (nameQuery.includes('peas') || nameQuery.includes('মটর') || id === 'p21') {
+  if (nameQ.includes('peas') || nameQ.includes('মটর') || id === 'p21')
     return PRODUCT_IMAGES.p21
-  }
-  if (nameQuery.includes('potato') || nameQuery.includes('আলু') || id === 'p2') {
+  if (nameQ.includes('potato') || nameQ.includes('আলু') || id === 'p2')
     return PRODUCT_IMAGES.p2
-  }
-  if (nameQuery.includes('onion') || nameQuery.includes('পেঁয়াজ') || id === 'p3') {
+  if (nameQ.includes('onion') || nameQ.includes('পেঁয়াজ') || id === 'p3')
     return PRODUCT_IMAGES.p3
-  }
-  if (nameQuery.includes('tomato') || nameQuery.includes('টমেটো') || id === 'p1') {
+  if (nameQ.includes('tomato') || nameQ.includes('টমেটো') || id === 'p1')
     return PRODUCT_IMAGES.p1
-  }
 
-  // 3. Fallback to valid /veg/ image path if provided
-  if (imageUrl?.startsWith('/veg/')) {
-    return asset(imageUrl)
-  }
-
-  // 4. Default fallback hero photo
+  // 3. Fallback: hero photo
   return HERO_IMAGE
 }
