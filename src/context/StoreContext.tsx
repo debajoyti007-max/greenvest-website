@@ -9,7 +9,6 @@ import {
 } from 'react'
 import {
   createOrder,
-  deleteAllOrdersApi,
   deleteProductApi,
   fetchOrders,
   fetchProducts,
@@ -24,7 +23,6 @@ import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
 import { isSupabaseConfigured } from '../lib/supabase'
 import {
-  clearLocalShopData,
   ensureSeeded,
   getCart,
   getLang,
@@ -70,7 +68,6 @@ interface StoreContextValue {
   morningReset: () => Promise<void>
   updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>
   verifyUtr: (id: string, verified: boolean) => Promise<void>
-  resetDemo: () => Promise<void>
   refresh: () => Promise<void>
 }
 
@@ -392,24 +389,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud, refreshCloud],
   )
 
-  const resetDemo = useCallback(async () => {
-    // Dev-only safety valve; never exposed in production admin UI
-    if (!import.meta.env.DEV) return
-    if (cloud && user?.role === 'admin') {
-      try {
-        await deleteAllOrdersApi()
-      } catch (err) {
-        console.error(err)
-      }
-      saveCart([])
-      setCart([])
-      await refreshCloud()
-      return
-    }
-    clearLocalShopData()
-    refreshLocal()
-  }, [cloud, user?.role, refreshCloud, refreshLocal])
-
   const value = useMemo(
     () => ({
       products,
@@ -433,7 +412,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       morningReset,
       updateOrderStatus,
       verifyUtr,
-      resetDemo,
       refresh,
     }),
     [
@@ -458,7 +436,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       morningReset,
       updateOrderStatus,
       verifyUtr,
-      resetDemo,
       refresh,
     ],
   )

@@ -301,12 +301,6 @@ export async function verifyUtrApi(id: string, verified: boolean): Promise<void>
   if (error) throw error
 }
 
-export async function deleteAllOrdersApi(): Promise<void> {
-  const client = requireClient()
-  const { error } = await client.from('orders').delete().neq('id', '')
-  if (error) throw error
-}
-
 export function subscribeOrders(onChange: () => void) {
   if (!isSupabaseConfigured || !supabase) return () => {}
   const client = supabase

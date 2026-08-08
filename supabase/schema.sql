@@ -240,7 +240,7 @@ on conflict (id) do update set
   category = excluded.category,
   unit = excluded.unit;
 
--- AFTER creating Auth users in Dashboard, promote demo roles:
--- update public.profiles set role = 'seller', name = 'Demo Seller' where email = 'seller@demo.com';
--- update public.profiles set role = 'admin', name = 'Demo Admin' where email = 'admin@demo.com';
--- update public.profiles set name = 'Demo Customer' where email = 'customer@demo.com';
+-- Production: after you Sign up (or create Auth user), promote your own email:
+-- update public.profiles set role = 'admin' where email = 'YOUR_REAL_EMAIL@gmail.com';
+-- update public.profiles set role = 'seller' where email = 'YOUR_SELLER_EMAIL@gmail.com';
+-- Delete any old demo Auth users (e.g. *@demo.com) in Authentication → Users.

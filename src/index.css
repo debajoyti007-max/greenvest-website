@@ -995,59 +995,6 @@ img {
   box-shadow: 0 2px 8px rgba(20, 83, 45, 0.08);
 }
 
-.demo-box {
-  background: var(--green-50);
-  border: 1px dashed var(--green-600);
-  border-radius: var(--radius);
-  padding: 1rem 1.15rem;
-  font-size: 0.88rem;
-  color: var(--muted);
-}
-
-.demo-box code {
-  font-family: ui-monospace, monospace;
-  color: var(--green-900);
-  font-size: 0.85em;
-}
-
-.demo-roles {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  margin: 0.75rem 0;
-}
-
-.demo-role-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.15rem;
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
-  background: var(--white);
-  border-radius: 12px;
-  padding: 0.75rem 0.9rem;
-  cursor: pointer;
-  transition: border-color 0.15s, transform 0.15s;
-}
-
-.demo-role-card:hover {
-  border-color: var(--green-600);
-  transform: translateY(-1px);
-}
-
-.demo-role-card strong {
-  color: var(--green-900);
-  font-size: 0.95rem;
-}
-
-.demo-role-card em {
-  font-style: normal;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
 .pay-box .pay-eta {
   color: rgba(255, 255, 255, 0.85);
   margin: 0.35rem 0 0;

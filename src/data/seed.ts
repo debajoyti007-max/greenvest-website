@@ -1,36 +1,7 @@
-import type { Product, User } from '../types'
+import type { Product } from '../types'
 import { PRODUCT_IMAGES } from '../lib/productImages'
 
-/** Dev-only local accounts — never shown in the Auth UI. */
-export const SEED_USERS: User[] = import.meta.env.DEV
-  ? [
-      {
-        id: 'u-customer',
-        email: 'customer@demo.com',
-        password: 'demo123',
-        name: 'Demo Customer',
-        role: 'customer',
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'u-seller',
-        email: 'seller@demo.com',
-        password: 'demo123',
-        name: 'Demo Seller',
-        role: 'seller',
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'u-admin',
-        email: 'admin@demo.com',
-        password: 'demo123',
-        name: 'Demo Admin',
-        role: 'admin',
-        createdAt: new Date().toISOString(),
-      },
-    ]
-  : []
-
+/** Catalog seed for local DEV only (production uses Supabase products). */
 export const SEED_PRODUCTS: Product[] = [
   { id: 'p1', emoji: '🍅', name: 'Tomato', bnName: 'টমেটো', pA: 60, pB: 45, pC: 30, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p1 },
   { id: 'p2', emoji: '🥔', name: 'Potato', bnName: 'আলু', pA: 40, pB: 30, pC: 22, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p2 },

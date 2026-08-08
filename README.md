@@ -8,19 +8,58 @@ Live data via **Supabase**. Public site on **GitHub Pages**.
 
 ---
 
+## How you log in (roles)
+
+There are **no demo accounts**. Everyone signs up / logs in with a real email at **/auth**.
+
+| Role | How you get it | After login |
+|------|----------------|-------------|
+| **Customer** | Sign up on the website | Shop, cart, my orders |
+| **Seller** | Admin clicks **Make seller** (or SQL below) | **/seller** — products, stock, orders, UTR |
+| **Admin** | One-time SQL in Supabase (below) | **/admin** — users; also can open **/seller** |
+
+### Make yourself Admin (first time)
+
+1. Open the live site → **Login** → **Sign up** with your real email + strong password.  
+2. Supabase → **SQL Editor** → run (use your email):
+
+```sql
+update public.profiles set role = 'admin' where email = 'YOUR_REAL_EMAIL@gmail.com';
+```
+
+3. Log out and log in again → you will see **Admin** (and **Seller**) in the menu.  
+4. Delete any old `*@demo.com` users in Supabase → **Authentication → Users**.
+
+### Make a Seller
+
+**Option A (in the app):** Login as admin → **Admin** → find the user’s email → **Make seller**.  
+**Option B (SQL):**
+
+```sql
+update public.profiles set role = 'seller' where email = 'SELLER_EMAIL@gmail.com';
+```
+
+Seller then logs in → opens **Seller** to manage the shop.
+
+### What the seller manages day-to-day
+
+- **Dashboard** — today’s / yesterday’s sales, low-stock alerts, morning reset  
+- **Products** — add/edit prices, photos, season, stock qty, in/out/archived  
+- **Orders** — verify UTR, update status, WhatsApp customer  
+- **Customers** — list + WhatsApp / call  
+
+Admin does **not** need a revenue screen — business ops stay on the seller side.
+
+---
+
 ## Production checklist (owner)
 
 1. **Supabase keys** in GitHub → Settings → Secrets → Actions  
    - `VITE_SUPABASE_URL`  
    - `VITE_SUPABASE_ANON_KEY` (anon only — never `service_role`)
 2. If you ever pasted a **service_role** key in chat, **rotate it** in Supabase → Project Settings → API.
-3. **Rotate or delete** old demo logins (`customer@demo.com` / `demo123`). Create real seller/admin accounts with strong passwords, then:
-   ```sql
-   update public.profiles set role = 'seller' where email = 'YOUR_SELLER@email.com';
-   update public.profiles set role = 'admin' where email = 'YOUR_ADMIN@email.com';
-   ```
-4. Supabase Auth: prefer **Confirm email OFF** until you configure SMTP, or turn it ON for stricter signups.
-5. Push to `master` → GitHub Actions deploys Pages automatically.
+3. Prefer **Confirm email OFF** in Auth until SMTP is set, or turn it ON for stricter signups.
+4. Push to `master` → GitHub Actions deploys Pages automatically.
 
 ### Optional env overrides
 See `.env.example` for `VITE_SUPPORT_PHONE`, `VITE_SUPPORT_WHATSAPP`, `VITE_UPI_ID`, etc.
@@ -37,12 +76,12 @@ npm run dev
 ```
 Open http://localhost:3000  
 
-Without Supabase keys, **dev only** falls back to local demo data. Production builds **require** Supabase.
+Without Supabase keys, **dev only** can use localStorage (no demo logins). Production builds **require** Supabase.
 
 ### First-time Supabase setup
 1. Create project at [supabase.com](https://supabase.com)  
 2. SQL Editor → run `supabase/schema.sql`  
-3. Create Auth users → set roles in `profiles`  
+3. Sign up on the site → set your role with the SQL above  
 4. Sync catalog (optional): `node scripts/sync-products.mjs`
 
 ---
@@ -52,5 +91,5 @@ Without Supabase keys, **dev only** falls back to local demo data. Production bu
 - Shared products & orders (cloud)  
 - UPI QR + manual UTR, min ₹500, delivery 12–24h  
 - WhatsApp seller notify on order  
-- Seller stock / photo upload / UTR verify  
-- Admin make/revoke sellers (no “reset demo” in production)
+- Seller stock / photo / season / delivery slot / UTR verify  
+- Admin make/revoke sellers (no demo reset)

@@ -1,4 +1,4 @@
-import { SEED_PRODUCTS, SEED_USERS } from '../data/seed'
+import { SEED_PRODUCTS } from '../data/seed'
 import type { CartItem, Lang, Order, Product, User } from '../types'
 
 const KEYS = {
@@ -28,13 +28,11 @@ function write<T>(key: string, value: T) {
   window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key } }))
 }
 
-/** Seed demo users/products for local (no-cloud) mode */
+/** Local DEV catalog bootstrap (no demo accounts). */
 export function ensureSeeded() {
   if (localStorage.getItem(KEYS.seeded) === '1') {
-    const users = read<User[]>(KEYS.users, [])
-    if (users.length === 0) write(KEYS.users, SEED_USERS)
+    if (!localStorage.getItem(KEYS.users)) write(KEYS.users, [] as User[])
     const products = read<Product[]>(KEYS.products, [])
-    // Refresh catalog when new seed items are added, or repair broken Bangla names
     const needsRefresh =
       products.length < SEED_PRODUCTS.length ||
       products.some((p) => !p.bnName || /^[?\s]+$/.test(p.bnName) || !/[\u0980-\u09FF]/.test(p.bnName))
@@ -43,7 +41,7 @@ export function ensureSeeded() {
     }
     return
   }
-  write(KEYS.users, SEED_USERS)
+  write(KEYS.users, [] as User[])
   write(KEYS.products, SEED_PRODUCTS)
   write(KEYS.orders, [] as Order[])
   write(KEYS.cart, [] as CartItem[])
@@ -51,7 +49,7 @@ export function ensureSeeded() {
 }
 
 export function getUsers(): User[] {
-  return read(KEYS.users, SEED_USERS)
+  return read(KEYS.users, [])
 }
 
 export function saveUsers(users: User[]) {
@@ -101,19 +99,6 @@ export function getLang(): Lang {
 export function setLang(lang: Lang) {
   localStorage.setItem(KEYS.lang, lang)
   window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: KEYS.lang } }))
-}
-
-export function clearLocalShopData() {
-  const lang = getLang()
-  localStorage.removeItem(KEYS.users)
-  localStorage.removeItem(KEYS.products)
-  localStorage.removeItem(KEYS.orders)
-  localStorage.removeItem(KEYS.cart)
-  localStorage.removeItem(KEYS.session)
-  localStorage.removeItem(KEYS.seeded)
-  ensureSeeded()
-  setLang(lang)
-  window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: 'reset' } }))
 }
 
 export function uid(prefix = 'id') {
