@@ -1,32 +1,35 @@
 import type { Product, User } from '../types'
 import { PRODUCT_IMAGES } from '../lib/productImages'
 
-export const SEED_USERS: User[] = [
-  {
-    id: 'u-customer',
-    email: 'customer@demo.com',
-    password: 'demo123',
-    name: 'Demo Customer',
-    role: 'customer',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'u-seller',
-    email: 'seller@demo.com',
-    password: 'demo123',
-    name: 'Demo Seller',
-    role: 'seller',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'u-admin',
-    email: 'admin@demo.com',
-    password: 'demo123',
-    name: 'Demo Admin',
-    role: 'admin',
-    createdAt: new Date().toISOString(),
-  },
-]
+/** Dev-only local accounts — never shown in the Auth UI. */
+export const SEED_USERS: User[] = import.meta.env.DEV
+  ? [
+      {
+        id: 'u-customer',
+        email: 'customer@demo.com',
+        password: 'demo123',
+        name: 'Demo Customer',
+        role: 'customer',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'u-seller',
+        email: 'seller@demo.com',
+        password: 'demo123',
+        name: 'Demo Seller',
+        role: 'seller',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'u-admin',
+        email: 'admin@demo.com',
+        password: 'demo123',
+        name: 'Demo Admin',
+        role: 'admin',
+        createdAt: new Date().toISOString(),
+      },
+    ]
+  : []
 
 export const SEED_PRODUCTS: Product[] = [
   { id: 'p1', emoji: '🍅', name: 'Tomato', bnName: 'টমেটো', pA: 60, pB: 45, pC: 30, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p1 },
@@ -37,7 +40,7 @@ export const SEED_PRODUCTS: Product[] = [
   { id: 'p6', emoji: '🥒', name: 'Cucumber', bnName: 'শসা', pA: 45, pB: 32, pC: 20, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p6 },
   { id: 'p7', emoji: '🌶️', name: 'Green Chili', bnName: 'কাঁচা মরিচ', pA: 120, pB: 90, pC: 60, inStock: true, category: 'Spices', unit: 'kg', imageUrl: PRODUCT_IMAGES.p7 },
   { id: 'p8', emoji: '🥦', name: 'Cauliflower', bnName: 'ফুলকপি', pA: 50, pB: 38, pC: 25, inStock: true, category: 'Vegetables', unit: 'pc', imageUrl: PRODUCT_IMAGES.p8 },
-  { id: 'p9', emoji: '🍆', name: 'Brinjal', bnName: 'বেগুন', pA: 55, pB: 40, pC: 28, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p9 },
+  { id: 'p9', emoji: '🍆', name: 'Brinjal', bnName: 'बैंगন', pA: 55, pB: 40, pC: 28, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p9 },
   { id: 'p10', emoji: '🥬', name: 'Cabbage', bnName: 'বাঁধাকপি', pA: 45, pB: 32, pC: 22, inStock: true, category: 'Vegetables', unit: 'pc', imageUrl: PRODUCT_IMAGES.p10 },
   { id: 'p11', emoji: '🫑', name: 'Capsicum', bnName: 'ক্যাপসিকাম', pA: 90, pB: 70, pC: 50, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p11 },
   { id: 'p12', emoji: '🧄', name: 'Garlic', bnName: 'রসুন', pA: 180, pB: 140, pC: 100, inStock: true, category: 'Spices', unit: 'kg', imageUrl: PRODUCT_IMAGES.p12 },
