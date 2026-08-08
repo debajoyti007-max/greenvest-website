@@ -1374,6 +1374,8 @@ img {
 .low-stock-alert {
   border-color: #fdba74;
 }
+
+.slot-options {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;

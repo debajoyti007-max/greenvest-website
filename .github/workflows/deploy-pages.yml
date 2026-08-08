@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [master]
+    branches: [master, feature/bengali-i18n-supabase]
   workflow_dispatch:
 
 permissions:
@@ -26,7 +26,6 @@ jobs:
       - run: npm ci
       - name: Build
         env:
-          GITHUB_PAGES: '1'
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
