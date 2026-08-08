@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import SkeletonCard from '../components/SkeletonCard'
+import { showToast } from '../components/Toast'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
@@ -111,6 +113,12 @@ export default function Shop() {
     addToCart(picked.id, grade, 1)
     setAdded(picked.id)
     setPicked(null)
+    showToast(
+      lang === 'bn'
+        ? `${picked.bnName} কার্টে যোগ হয়েছে!`
+        : `${picked.name} added to cart!`,
+      picked.emoji || '✅'
+    )
     setTimeout(() => setAdded(null), 900)
   }
 
@@ -122,19 +130,51 @@ export default function Shop() {
     <div className="page shop-page">
       <section className="hero-full" style={{ backgroundImage: `url(${HERO_IMAGE})` }}>
         <div className="hero-full-shade" />
-        <div className="hero-full-copy">
-          <p className="hero-kicker">{t(lang, 'farmToDoor')}</p>
-          <h1 className="brand-hero light">GreenVest</h1>
-          <p className="hero-sub">
+        <div className="hero-full-copy hero-animated">
+          <p className="hero-kicker hero-anim-1">{t(lang, 'farmToDoor')}</p>
+          <h1 className="brand-hero light hero-anim-2">GreenVest</h1>
+          <p className="hero-sub hero-anim-3">
             {lang === 'bn'
               ? `গ্রেড A/B/C · মিনিমাম ৳${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
               : `Grade A/B/C · Min ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW}`}
           </p>
-          <button type="button" className="btn btn-primary hero-cta" onClick={scrollToGrid}>
+          <button type="button" className="btn btn-primary hero-cta hero-anim-4" onClick={scrollToGrid}>
             {t(lang, 'shopVeggies')}
           </button>
         </div>
       </section>
+
+      {/* Trust strips */}
+      <div className="trust-strips">
+        <div className="trust-item">
+          <span className="trust-icon">🚜</span>
+          <div>
+            <strong>{lang === 'bn' ? 'সরাসরি ফার্ম থেকে' : 'Farm Fresh'}</strong>
+            <span>{lang === 'bn' ? 'প্রতিদিন তাজা সবজি' : 'Sourced daily'}</span>
+          </div>
+        </div>
+        <div className="trust-item">
+          <span className="trust-icon">⚡</span>
+          <div>
+            <strong>{lang === 'bn' ? `${DELIVERY_WINDOW_BN} ডেলিভারি` : `${DELIVERY_WINDOW} Delivery`}</strong>
+            <span>{lang === 'bn' ? 'দ্রুত ডোরস্টেপ' : 'Fast doorstep'}</span>
+          </div>
+        </div>
+        <div className="trust-item">
+          <span className="trust-icon">💯</span>
+          <div>
+            <strong>{lang === 'bn' ? 'গ্রেড গ্যারান্টি' : 'Grade Guarantee'}</strong>
+            <span>{lang === 'bn' ? 'A/B/C মান নিশ্চিত' : 'A/B/C quality assured'}</span>
+          </div>
+        </div>
+        <div className="trust-item">
+          <span className="trust-icon">🔒</span>
+          <div>
+            <strong>{lang === 'bn' ? 'নিরাপদ UPI পেমেন্ট' : 'Safe UPI Payment'}</strong>
+            <span>{lang === 'bn' ? 'GPay · PhonePe · BHIM' : 'GPay · PhonePe · BHIM'}</span>
+          </div>
+        </div>
+      </div>
 
       <div className="shop-body" id="veg-grid">
         <p className="friendly-tip">{t(lang, 'tipMin')}</p>
@@ -163,7 +203,9 @@ export default function Shop() {
         </div>
 
         {loading ? (
-          <p className="empty">{t(lang, 'loading')}</p>
+          <div className="product-grid premium-grid">
+            {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
         ) : filtered.length === 0 ? (
           <p className="empty">
             {lang === 'bn' ? 'কোনো সবজি পাওয়া যায়নি।' : 'No vegetables match your search.'}

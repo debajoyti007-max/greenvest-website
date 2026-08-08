@@ -1732,3 +1732,195 @@ button.linkish {
   background-size: 600px 100%;
   animation: skeletonShimmer 1.5s infinite ease-in-out;
 }
+
+/* ── Hero Animations ─────────────────────────────── */
+@keyframes heroFadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes heroPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
+  50%       { box-shadow: 0 0 0 12px rgba(34,197,94,0); }
+}
+
+.hero-animated { animation: heroFadeUp 0.7s ease both; }
+.hero-anim-1   { animation: heroFadeUp 0.55s 0.05s ease both; }
+.hero-anim-2   { animation: heroFadeUp 0.65s 0.18s ease both; }
+.hero-anim-3   { animation: heroFadeUp 0.65s 0.30s ease both; }
+.hero-anim-4   { animation: heroFadeUp 0.6s 0.44s ease both; }
+
+.hero-cta:hover { animation: heroPulse 1.4s infinite; }
+
+/* ── Card Glow & Hover ───────────────────────────── */
+.product-tile {
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+.product-tile:hover:not(.out) {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 36px rgba(22,163,74,0.18), 0 0 0 2.5px rgba(34,197,94,0.35);
+}
+.product-tile:hover:not(.out) .product-photo {
+  transform: scale(1.06);
+}
+.product-photo {
+  transition: transform 0.32s ease;
+}
+
+/* ── Trust Strips ────────────────────────────────── */
+.trust-strips {
+  display: flex;
+  gap: 0;
+  background: var(--white);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.trust-strips::-webkit-scrollbar { display: none; }
+
+.trust-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1.25rem;
+  flex: 1;
+  min-width: 160px;
+  border-right: 1px solid var(--line);
+}
+.trust-item:last-child { border-right: none; }
+
+.trust-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+.trust-item div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.trust-item strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.trust-item span {
+  font-size: 0.73rem;
+  color: var(--muted);
+}
+
+/* ── Skeleton Cards ──────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #e8f0eb 25%, #d1e3d5 50%, #e8f0eb 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 8px;
+}
+.skeleton-tile { pointer-events: none; opacity: 0.75; }
+.skeleton-media { background: #e8f0eb; }
+.skeleton-img   { width: 100%; aspect-ratio: 1; border-radius: 0; }
+.skeleton-line  { display: block; }
+
+/* ── Sticky Cart Bar ─────────────────────────────── */
+@keyframes cartBarUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.cart-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  background: var(--green-900);
+  color: #fff;
+  box-shadow: 0 -4px 24px rgba(14,83,45,0.25);
+  animation: cartBarUp 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+.cart-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+}
+.cart-bar-sep { opacity: 0.5; margin: 0 0.15rem; }
+
+.cart-bar-btn {
+  background: var(--green-500);
+  color: var(--white);
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  font-weight: 700;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.15s;
+  text-decoration: none;
+}
+.cart-bar-btn:hover {
+  background: var(--green-600);
+  transform: scale(1.04);
+}
+
+/* Push footer up when cart bar is visible */
+.site-footer { padding-bottom: 4.5rem; }
+
+/* ── Toast Notifications ─────────────────────────── */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes toastOut {
+  from { opacity: 1; }
+  to   { opacity: 0; transform: scale(0.92); }
+}
+
+.toast-stack {
+  position: fixed;
+  bottom: 5.5rem;
+  right: 1.25rem;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.7rem 1.1rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  animation: toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+  max-width: 280px;
+}
+.toast-success { background: var(--green-900); color: #fff; }
+.toast-error   { background: #b91c1c; color: #fff; }
+.toast-info    { background: #1e40af; color: #fff; }
+
+.toast-emoji { font-size: 1.1rem; }
+
+/* ── Page Fade-In Transition ─────────────────────── */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page {
+  animation: pageIn 0.3s ease both;
+}
+
