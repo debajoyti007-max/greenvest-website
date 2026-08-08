@@ -7,15 +7,15 @@ function asset(path: string) {
 }
 
 export const PRODUCT_IMAGES: Record<string, string> = {
-  p1: asset('veg/tomato.jpg'),
-  p2: asset('veg/potato.jpg'),
-  p3: asset('veg/onion.jpg'),
-  p4: asset('veg/spinach.jpg'),
-  p5: asset('veg/carrot.jpg'),
-  p6: asset('veg/cucumber.jpg'),
-  p7: asset('veg/chili.jpg'),
-  p8: asset('veg/cauliflower.jpg'),
-  p9: asset('veg/brinjal.jpg'),
+  p1:  asset('veg/tomato.jpg'),
+  p2:  asset('veg/potato.jpg'),
+  p3:  asset('veg/onion.jpg'),
+  p4:  asset('veg/spinach.jpg'),
+  p5:  asset('veg/carrot.jpg'),
+  p6:  asset('veg/cucumber.jpg'),
+  p7:  asset('veg/chili.jpg'),
+  p8:  asset('veg/cauliflower.jpg'),
+  p9:  asset('veg/brinjal.jpg'),
   p10: asset('veg/cabbage.jpg'),
   p11: asset('veg/capsicum.jpg'),
   p12: asset('veg/garlic.jpg'),
@@ -32,67 +32,52 @@ export const PRODUCT_IMAGES: Record<string, string> = {
 
 export const HERO_IMAGE = asset('veg/hero.jpg')
 
+/** Map of product name keywords → local image (always wins over DB URL) */
+const NAME_MAP: Array<[string[], string]> = [
+  [['bitter', 'করলা', 'উচ্ছে', 'karela'],        PRODUCT_IMAGES.p19],
+  [['bottle', 'লাউ', 'lauki'],                    PRODUCT_IMAGES.p18],
+  [['coriander', 'ধনে', 'dhania', 'cilantro'],   PRODUCT_IMAGES.p16],
+  [['spinach', 'পালং', 'palak'],                  PRODUCT_IMAGES.p4],
+  [['cabbage', 'বাঁধাকপি'],                       PRODUCT_IMAGES.p10],
+  [['cauliflower', 'ফুলকপি'],                      PRODUCT_IMAGES.p8],
+  [['capsicum', 'ক্যাপসিকাম', 'bell pepper'],    PRODUCT_IMAGES.p11],
+  [['brinjal', 'বেগুন', 'eggplant', 'aubergine'], PRODUCT_IMAGES.p9],
+  [['chili', 'chilli', 'মরিচ', 'লঙ্কা'],         PRODUCT_IMAGES.p7],
+  [['cucumber', 'শসা'],                            PRODUCT_IMAGES.p6],
+  [['carrot', 'গাজর'],                             PRODUCT_IMAGES.p5],
+  [['garlic', 'রসুন'],                             PRODUCT_IMAGES.p12],
+  [['ginger', 'আদা'],                              PRODUCT_IMAGES.p13],
+  [['okra', 'ঢেঁড়স', 'ভেন্ডি', 'bhindi'],       PRODUCT_IMAGES.p14],
+  [['beans', 'শিম'],                               PRODUCT_IMAGES.p15],
+  [['lemon', 'লেবু'],                              PRODUCT_IMAGES.p17],
+  [['radish', 'মুলা', 'মূলা'],                    PRODUCT_IMAGES.p20],
+  [['peas', 'মটর'],                                PRODUCT_IMAGES.p21],
+  [['potato', 'আলু'],                              PRODUCT_IMAGES.p2],
+  [['onion', 'পেঁয়াজ'],                           PRODUCT_IMAGES.p3],
+  [['tomato', 'টমেটো'],                            PRODUCT_IMAGES.p1],
+]
+
+/** ID → local image (for seed products p1–p21) */
+const ID_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(PRODUCT_IMAGES).map(([k, v]) => [k, v])
+)
+
 /**
- * Always resolve product image from local /public/veg/ files using name matching.
- * The DB image_url field is IGNORED for standard products to avoid stale/wrong URLs.
- * Only truly custom uploaded images (Supabase Storage /product-images/ path) are used directly.
+ * Always resolve product image from local /public/veg/ using name or ID.
+ * DB image_url is COMPLETELY IGNORED — prevents any wrong CDN/Unsplash URL from showing.
  */
-export function resolveProductImage(id: string, imageUrl?: string, name?: string) {
-  // 1. Only use imageUrl if it's a real custom upload (Supabase Storage), not a legacy CDN link
-  if (
-    imageUrl &&
-    imageUrl.startsWith('http') &&
-    (imageUrl.includes('/storage/v1/object/') || imageUrl.includes('product-images'))
-  ) {
-    return imageUrl
+export function resolveProductImage(_id: string, _imageUrl?: string, name?: string): string {
+  const id = _id || ''
+  const nameQ = (name || '').toLowerCase()
+
+  // 1. Match by name keywords (most reliable — works for any DB row)
+  for (const [keywords, img] of NAME_MAP) {
+    if (keywords.some((kw) => nameQ.includes(kw))) return img
   }
 
-  // 2. Name + ID based matching — always wins over any DB image_url
-  const nameQ = `${name || ''} ${id || ''}`.toLowerCase()
+  // 2. Match by ID (p1–p21 seed products)
+  if (id in ID_MAP) return ID_MAP[id]
 
-  if (nameQ.includes('bitter') || nameQ.includes('করলা') || nameQ.includes('উচ্ছে') || id === 'p19')
-    return PRODUCT_IMAGES.p19
-  if (nameQ.includes('bottle') || nameQ.includes('লাউ') || id === 'p18')
-    return PRODUCT_IMAGES.p18
-  if (nameQ.includes('coriander') || nameQ.includes('ধনে') || nameQ.includes('dhania') || id === 'p16')
-    return PRODUCT_IMAGES.p16
-  if (nameQ.includes('spinach') || nameQ.includes('পালং') || id === 'p4')
-    return PRODUCT_IMAGES.p4
-  if (nameQ.includes('cabbage') || nameQ.includes('বাঁধাকপি') || id === 'p10')
-    return PRODUCT_IMAGES.p10
-  if (nameQ.includes('cauliflower') || nameQ.includes('ফুলকপি') || id === 'p8')
-    return PRODUCT_IMAGES.p8
-  if (nameQ.includes('capsicum') || nameQ.includes('ক্যাপসিকাম') || id === 'p11')
-    return PRODUCT_IMAGES.p11
-  if (nameQ.includes('brinjal') || nameQ.includes('বেগুন') || nameQ.includes('eggplant') || id === 'p9')
-    return PRODUCT_IMAGES.p9
-  if (nameQ.includes('chili') || nameQ.includes('chilli') || nameQ.includes('মরিচ') || nameQ.includes('লঙ্কা') || id === 'p7')
-    return PRODUCT_IMAGES.p7
-  if (nameQ.includes('cucumber') || nameQ.includes('শসা') || id === 'p6')
-    return PRODUCT_IMAGES.p6
-  if (nameQ.includes('carrot') || nameQ.includes('গাজর') || id === 'p5')
-    return PRODUCT_IMAGES.p5
-  if (nameQ.includes('garlic') || nameQ.includes('রসুন') || id === 'p12')
-    return PRODUCT_IMAGES.p12
-  if (nameQ.includes('ginger') || nameQ.includes('আদা') || id === 'p13')
-    return PRODUCT_IMAGES.p13
-  if (nameQ.includes('okra') || nameQ.includes('ঢেঁড়স') || nameQ.includes('ভেন্ডি') || id === 'p14')
-    return PRODUCT_IMAGES.p14
-  if (nameQ.includes('beans') || nameQ.includes('শিম') || id === 'p15')
-    return PRODUCT_IMAGES.p15
-  if (nameQ.includes('lemon') || nameQ.includes('লেবু') || id === 'p17')
-    return PRODUCT_IMAGES.p17
-  if (nameQ.includes('radish') || nameQ.includes('মুলা') || id === 'p20')
-    return PRODUCT_IMAGES.p20
-  if (nameQ.includes('peas') || nameQ.includes('মটর') || id === 'p21')
-    return PRODUCT_IMAGES.p21
-  if (nameQ.includes('potato') || nameQ.includes('আলু') || id === 'p2')
-    return PRODUCT_IMAGES.p2
-  if (nameQ.includes('onion') || nameQ.includes('পেঁয়াজ') || id === 'p3')
-    return PRODUCT_IMAGES.p3
-  if (nameQ.includes('tomato') || nameQ.includes('টমেটো') || id === 'p1')
-    return PRODUCT_IMAGES.p1
-
-  // 3. Fallback: hero photo
+  // 3. Fallback
   return HERO_IMAGE
 }
