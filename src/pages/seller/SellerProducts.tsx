@@ -168,9 +168,6 @@ export default function SellerProducts() {
               <option value="Vegetables">Vegetables</option>
               <option value="Leafy">Leafy</option>
               <option value="Spices">Spices</option>
-              <option value="Fish">Fish</option>
-              <option value="Eggs">Eggs</option>
-              <option value="Pulses">Pulses</option>
             </select>
           </label>
           <label>
