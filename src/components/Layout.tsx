@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import CartBar from './CartBar'
 import ConfigBanner from './ConfigBanner'
 import NetworkStatus from './NetworkStatus'
+import Toast from './Toast'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { t } from '../lib/i18n'
@@ -113,6 +115,9 @@ export default function Layout() {
       <main className="main-content">
         <Outlet />
       </main>
+
+      <CartBar />
+      <Toast />
 
       <footer className="site-footer">
         <div className="footer-inner">
