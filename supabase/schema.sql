@@ -224,17 +224,30 @@ exception
   when duplicate_object then null;
 end $$;
 
--- Seed products (safe to re-run; refreshes images)
+-- Seed products (safe to re-run; refreshes images to local high-res photos)
 insert into public.products (id, emoji, name, bn_name, p_a, p_b, p_c, in_stock, category, unit, image_url)
 values
-  ('p1', '🍅', 'Tomato', 'টমেটো', 60, 45, 30, true, 'Vegetables', 'kg', 'https://images.unsplash.com/photo-1546470427-e26264be0d16?auto=format&fit=crop&w=800&q=80'),
-  ('p2', '🥔', 'Potato', 'আলু', 40, 30, 22, true, 'Vegetables', 'kg', 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=800&q=80'),
-  ('p3', '🧅', 'Onion', 'পেঁয়াজ', 55, 42, 28, true, 'Vegetables', 'kg', 'https://images.unsplash.com/photo-1518977956812-cd3dbae8c9f1?auto=format&fit=crop&w=800&q=80'),
-  ('p4', '🥬', 'Spinach', 'পালং শাক', 35, 25, 18, true, 'Leafy', 'bunch', 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&w=800&q=80'),
-  ('p5', '🥕', 'Carrot', 'গাজর', 70, 50, 35, true, 'Vegetables', 'kg', 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=800&q=80'),
-  ('p6', '🥒', 'Cucumber', 'শসা', 45, 32, 20, true, 'Vegetables', 'kg', 'https://images.unsplash.com/photo-1449300079323-02e209d9d3a6?auto=format&fit=crop&w=800&q=80'),
-  ('p7', '🌶️', 'Green Chili', 'কাঁচা মরিচ', 120, 90, 60, true, 'Spices', 'kg', 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?auto=format&fit=crop&w=800&q=80'),
-  ('p8', '🥦', 'Cauliflower', 'ফুলকপি', 50, 38, 25, false, 'Vegetables', 'pc', 'https://images.unsplash.com/photo-1568584711075-3d921a8d3c5f?auto=format&fit=crop&w=800&q=80')
+  ('p1', '🍅', 'Tomato', 'টমেটো', 60, 45, 30, true, 'Vegetables', 'kg', '/veg/tomato.jpg'),
+  ('p2', '🥔', 'Potato', 'আলু', 40, 30, 22, true, 'Vegetables', 'kg', '/veg/potato.jpg'),
+  ('p3', '🧅', 'Onion', 'পেঁয়াজ', 55, 42, 28, true, 'Vegetables', 'kg', '/veg/onion.jpg'),
+  ('p4', '🥬', 'Spinach', 'পালং শাক', 35, 25, 18, true, 'Leafy', 'bunch', '/veg/spinach.jpg'),
+  ('p5', '🥕', 'Carrot', 'গাজর', 70, 50, 35, true, 'Vegetables', 'kg', '/veg/carrot.jpg'),
+  ('p6', '🥒', 'Cucumber', 'শসা', 45, 32, 20, true, 'Vegetables', 'kg', '/veg/cucumber.jpg'),
+  ('p7', '🌶️', 'Green Chili', 'কাঁচা মরিচ', 120, 90, 60, true, 'Spices', 'kg', '/veg/chili.jpg'),
+  ('p8', '🥦', 'Cauliflower', 'ফুলকপি', 50, 38, 25, true, 'Vegetables', 'pc', '/veg/cauliflower.jpg'),
+  ('p9', '🍆', 'Brinjal', 'বেগুন', 55, 40, 28, true, 'Vegetables', 'kg', '/veg/brinjal.jpg'),
+  ('p10', '🥬', 'Cabbage', 'বাঁধাকপি', 45, 32, 22, true, 'Vegetables', 'pc', '/veg/cabbage.jpg'),
+  ('p11', '🫑', 'Capsicum', 'ক্যাপসিকাম', 90, 70, 50, true, 'Vegetables', 'kg', '/veg/capsicum.jpg'),
+  ('p12', '🧄', 'Garlic', 'রসুন', 180, 140, 100, true, 'Spices', 'kg', '/veg/garlic.jpg'),
+  ('p13', '🫚', 'Ginger', 'আদা', 160, 120, 90, true, 'Spices', 'kg', '/veg/ginger.jpg'),
+  ('p14', '🌿', 'Okra', 'ঢেঁড়স', 70, 55, 40, true, 'Vegetables', 'kg', '/veg/okra.jpg'),
+  ('p15', '🫛', 'Beans', 'শিম', 80, 60, 45, true, 'Vegetables', 'kg', '/veg/beans.jpg'),
+  ('p16', '🌿', 'Coriander', 'ধনে পাতা', 30, 20, 15, true, 'Leafy', 'bunch', '/veg/coriander.jpg'),
+  ('p17', '🍋', 'Lemon', 'লেবু', 100, 80, 60, true, 'Vegetables', 'kg', '/veg/lemon.jpg'),
+  ('p18', '🥒', 'Bottle Gourd', 'লাউ', 40, 30, 20, true, 'Vegetables', 'kg', '/veg/bottlegourd.jpg'),
+  ('p19', '🥒', 'Bitter Gourd', 'করলা', 65, 50, 35, true, 'Vegetables', 'kg', '/veg/bittergourd.jpg'),
+  ('p20', '🌱', 'Radish', 'মুলা', 40, 28, 18, true, 'Vegetables', 'kg', '/veg/radish.jpg'),
+  ('p21', '🫛', 'Green Peas', 'মটরশুঁটি', 90, 70, 50, true, 'Vegetables', 'kg', '/veg/peas.jpg')
 on conflict (id) do update set
   image_url = excluded.image_url,
   name = excluded.name,
