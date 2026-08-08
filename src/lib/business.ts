@@ -9,8 +9,8 @@ export const DELIVERY_WINDOW = '12–24 hours'
 export const DELIVERY_WINDOW_BN = '১২–২৪ ঘণ্টা'
 export const ADVANCE_PERCENT = 50
 
-/** Display phone (with spaces ok). */
-export const SUPPORT_PHONE = env('VITE_SUPPORT_PHONE', '+91 81708 59653')
+/** Display phone. */
+export const SUPPORT_PHONE = env('VITE_SUPPORT_PHONE', '+91 8170859653')
 /** WhatsApp deep-link number: country code + digits, no + or spaces. */
 export const SUPPORT_WHATSAPP = env('VITE_SUPPORT_WHATSAPP', '918170859653')
 export const SUPPORT_EMAIL = env('VITE_SUPPORT_EMAIL', 'greenvest.orders@gmail.com')
