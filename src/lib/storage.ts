@@ -1,5 +1,5 @@
 import { SEED_PRODUCTS } from '../data/seed'
-import type { CartItem, Lang, Order, Product, User } from '../types'
+import type { CartItem, DeliverySlot, Lang, Order, Product, User } from '../types'
 
 const KEYS = {
   users: 'gv_users',
@@ -9,9 +9,17 @@ const KEYS = {
   session: 'gv_session',
   lang: 'gv_lang',
   seeded: 'gv_seeded',
+  delivery: 'gv_delivery',
 } as const
 
 export const STORE_EVENT = 'greenvest-store-update'
+
+export type SavedDelivery = {
+  address: string
+  phone: string
+  pin: string
+  deliverySlot?: DeliverySlot
+}
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -99,6 +107,21 @@ export function getLang(): Lang {
 export function setLang(lang: Lang) {
   localStorage.setItem(KEYS.lang, lang)
   window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: KEYS.lang } }))
+}
+
+export function getSavedDelivery(userId: string): SavedDelivery | null {
+  if (!userId) return null
+  return read<SavedDelivery | null>(`${KEYS.delivery}:${userId}`, null)
+}
+
+export function saveDelivery(userId: string, data: SavedDelivery) {
+  if (!userId) return
+  write(`${KEYS.delivery}:${userId}`, {
+    address: data.address.trim(),
+    phone: data.phone.trim(),
+    pin: data.pin.replace(/\D/g, ''),
+    deliverySlot: data.deliverySlot,
+  })
 }
 
 export function uid(prefix = 'id') {

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -6,11 +6,12 @@ import { DELIVERY_SLOTS, DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT }
 import { calcDeliveryFee } from '../lib/delivery'
 import { t, zoneLabel } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC } from '../lib/payment'
+import { getSavedDelivery } from '../lib/storage'
 import type { DeliverySlot } from '../types'
 
 export default function Checkout() {
   const { user } = useAuth()
-  const { cart, cartTotal, lang, placeOrder } = useStore()
+  const { cart, cartTotal, lang, placeOrder, orders } = useStore()
   const navigate = useNavigate()
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
@@ -19,10 +20,34 @@ export default function Checkout() {
   const [slot, setSlot] = useState<DeliverySlot>('morning')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [prefilled, setPrefilled] = useState(false)
 
   const delivery = useMemo(() => calcDeliveryFee(pin), [pin])
   const grandTotal = cartTotal + delivery.fee
   const advance = Math.ceil(grandTotal * 0.5)
+
+  useEffect(() => {
+    if (!user) return
+    const saved = getSavedDelivery(user.id)
+    if (saved?.address) {
+      setAddress(saved.address)
+      setPhone(saved.phone || '')
+      if (saved.pin) setPin(saved.pin)
+      if (saved.deliverySlot) setSlot(saved.deliverySlot)
+      setPrefilled(true)
+      return
+    }
+    const last = orders
+      .filter((o) => o.userId === user.id && o.status !== 'cancelled')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    if (last) {
+      setAddress(last.address)
+      setPhone(last.phone)
+      if (last.pin) setPin(last.pin)
+      if (last.deliverySlot) setSlot(last.deliverySlot)
+      setPrefilled(true)
+    }
+  }, [user, orders])
 
   if (!user) return <Navigate to="/auth" replace />
   if (cart.length === 0) {
@@ -86,6 +111,13 @@ export default function Checkout() {
     <div className="page narrow">
       <h1>{lang === 'bn' ? 'চেকআউট' : 'Checkout'}</h1>
       <p className="friendly-tip">{t(lang, 'howToPay')}</p>
+      {prefilled && (
+        <p className="hint">
+          {lang === 'bn'
+            ? 'আগের ঠিকানা ও ফোন অটো ভরা হয়েছে — চাইলে বদলাতে পারেন।'
+            : 'Address & phone filled from your last order — edit if needed.'}
+        </p>
+      )}
       <div className="checkout-panel">
         <div className="pay-box">
           <h2>{lang === 'bn' ? 'অগ্রিম পেমেন্ট (ম্যানুয়াল UTR)' : 'Advance payment (manual UTR)'}</h2>

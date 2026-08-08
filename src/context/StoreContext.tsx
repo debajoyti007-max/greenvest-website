@@ -29,6 +29,7 @@ import {
   getOrders,
   getProducts,
   saveCart,
+  saveDelivery,
   saveOrders,
   saveProducts,
   setLang as persistLang,
@@ -61,6 +62,7 @@ interface StoreContextValue {
   cartTotal: number
   priceFor: (p: Product, grade: Grade) => number
   placeOrder: (opts: PlaceOrderOpts) => Promise<Order | null>
+  reorderFromOrder: (order: Order) => { added: number; skipped: number }
   updateProduct: (product: Product) => Promise<void>
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
@@ -272,6 +274,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         await createOrder(order)
+        saveDelivery(user.id, {
+          address: order.address,
+          phone: order.phone,
+          pin: order.pin,
+          deliverySlot: order.deliverySlot,
+        })
         saveCart([])
         setCart([])
         await refreshCloud()
@@ -281,11 +289,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const nextOrders = [order, ...getOrders()]
       saveOrders(nextOrders)
       setOrders(nextOrders)
+      saveDelivery(user.id, {
+        address: order.address,
+        phone: order.phone,
+        pin: order.pin,
+        deliverySlot: order.deliverySlot,
+      })
       saveCart([])
       setCart([])
       return order
     },
     [user, cloud, products, priceFor, refreshCloud],
+  )
+
+  const reorderFromOrder = useCallback(
+    (order: Order) => {
+      const catalog = cloud ? products : getProducts()
+      let added = 0
+      let skipped = 0
+      const next = [...getCart()]
+
+      for (const it of order.items) {
+        const p = catalog.find((x) => x.id === it.productId)
+        if (!p || !p.inStock || p.archived) {
+          skipped += 1
+          continue
+        }
+        const idx = next.findIndex((c) => c.productId === it.productId && c.grade === it.grade)
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], qty: next[idx].qty + it.qty }
+        } else {
+          next.push({ productId: it.productId, grade: it.grade, qty: it.qty })
+        }
+        added += 1
+      }
+
+      saveCart(next)
+      setCart(next)
+      return { added, skipped }
+    },
+    [cloud, products],
   )
 
   const updateProduct = useCallback(
@@ -405,6 +448,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cartTotal,
       priceFor,
       placeOrder,
+      reorderFromOrder,
       updateProduct,
       addProduct,
       deleteProduct,
@@ -429,6 +473,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cartTotal,
       priceFor,
       placeOrder,
+      reorderFromOrder,
       updateProduct,
       addProduct,
       deleteProduct,

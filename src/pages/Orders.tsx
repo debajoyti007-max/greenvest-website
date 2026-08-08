@@ -1,20 +1,43 @@
-import { Link, Navigate } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { t } from '../lib/i18n'
+import type { Order } from '../types'
 
 export default function Orders() {
   const { user } = useAuth()
-  const { orders, lang } = useStore()
+  const { orders, lang, reorderFromOrder } = useStore()
+  const navigate = useNavigate()
+  const [msg, setMsg] = useState('')
 
   if (!user) return <Navigate to="/auth" replace />
 
   const mine = orders.filter((o) => o.userId === user.id)
 
+  const onReorder = (o: Order) => {
+    const { added, skipped } = reorderFromOrder(o)
+    if (added === 0) {
+      setMsg(
+        lang === 'bn'
+          ? 'এই অর্ডারের আইটেম এখন স্টকে নেই।'
+          : 'None of those items are in stock right now.',
+      )
+      return
+    }
+    setMsg(
+      lang === 'bn'
+        ? `${added} আইটেম কার্টে যোগ হয়েছে${skipped ? ` (${skipped} স্টক আউট স্কিপ)` : ''}।`
+        : `Added ${added} item(s) to cart${skipped ? ` (${skipped} out of stock skipped)` : ''}.`,
+    )
+    navigate('/cart')
+  }
+
   return (
     <div className="page">
       <h1>{t(lang, 'myOrders')}</h1>
+      {msg && <p className="hint">{msg}</p>}
       {mine.length === 0 ? (
         <div className="empty-block">
           <p>{t(lang, 'noOrders')}</p>
@@ -71,6 +94,13 @@ export default function Orders() {
                   )}
                 </span>
               </footer>
+              {o.status !== 'cancelled' && (
+                <div className="form-actions" style={{ marginTop: '0.75rem' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => onReorder(o)}>
+                    {lang === 'bn' ? 'আবার অর্ডার' : 'Reorder'}
+                  </button>
+                </div>
+              )}
             </article>
           ))}
         </div>
