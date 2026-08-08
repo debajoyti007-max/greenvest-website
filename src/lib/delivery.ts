@@ -1,17 +1,13 @@
-/** Simple demo delivery zones by PIN prefix (West Bengal style). */
-export function calcDeliveryFee(pin: string): { fee: number; zone: string } {
-  const clean = pin.replace(/\D/g, '')
-  if (clean.length < 3) {
-    return { fee: 40, zone: 'Standard' }
-  }
-  // Local Nandakumar / nearby demo PINs
-  if (clean.startsWith('721') || clean.startsWith('700')) {
-    return { fee: 30, zone: 'Local' }
-  }
-  if (clean.startsWith('71') || clean.startsWith('72')) {
-    return { fee: 50, zone: 'Nearby' }
-  }
-  return { fee: 80, zone: 'Far' }
-}
+/** Delivery zones by PIN prefix (West Bengal). */
+export type DeliveryZone = 'local' | 'nearby' | 'far' | 'standard'
 
-export const SELLER_WHATSAPP = '919999999999' // replace with real business number later
+export function calcDeliveryFee(pin: string): { fee: number; zone: DeliveryZone } {
+  const p = pin.replace(/\D/g, '')
+  if (p.length < 3) return { fee: 40, zone: 'standard' }
+  // Local Nandakumar / nearby PINs
+  if (p.startsWith('7216') || p.startsWith('7211')) return { fee: 30, zone: 'local' }
+  if (p.startsWith('721') || p.startsWith('700') || p.startsWith('711')) return { fee: 50, zone: 'nearby' }
+  if (p.startsWith('71') || p.startsWith('72')) return { fee: 50, zone: 'nearby' }
+  if (p.length >= 6) return { fee: 80, zone: 'far' }
+  return { fee: 50, zone: 'standard' }
+}

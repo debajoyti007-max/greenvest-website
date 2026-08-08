@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -9,10 +10,18 @@ export default function OrderSuccess() {
   const { id } = useParams()
   const { user } = useAuth()
   const { orders, lang } = useStore()
+  const notified = useRef(false)
+
+  const order = user ? orders.find((o) => o.id === id && o.userId === user.id) : undefined
+
+  useEffect(() => {
+    if (!order || notified.current) return
+    notified.current = true
+    openSellerOrderWhatsApp(order)
+  }, [order])
 
   if (!user) return <Navigate to="/auth" replace />
 
-  const order = orders.find((o) => o.id === id && o.userId === user.id)
   if (!order) {
     return (
       <div className="page narrow">

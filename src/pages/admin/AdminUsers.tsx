@@ -5,62 +5,48 @@ import type { Role } from '../../types'
 
 export default function AdminUsers() {
   const { user, users, setUserRole, mode: dataMode } = useAuth()
-  const { products, orders, resetDemo, lang } = useStore()
+  const { products, orders, lang } = useStore()
 
   if (!user || user.role !== 'admin') {
     return <Navigate to="/" replace />
   }
 
-  const onReset = async () => {
-    if (
-      confirm(
-        lang === 'bn'
-          ? 'সব অর্ডার মুছবেন ও লোকাল কার্ট খালি করবেন?'
-          : 'Clear all cloud orders and local cart?',
-      )
-    ) {
-      await resetDemo()
-    }
-  }
-
   return (
     <div className="page">
-      <h1>Admin — Users</h1>
-      <p className="lede">Make or revoke sellers. No revenue screens here.</p>
+      <h1>{lang === 'bn' ? 'অ্যাডমিন — ইউজার' : 'Admin — Users'}</h1>
+      <p className="lede">
+        {lang === 'bn'
+          ? 'সেলার বানান বা বাতিল করুন। আয়ের স্ক্রিন নেই।'
+          : 'Make or revoke sellers. No revenue screens here.'}
+      </p>
 
       <div className="dash-grid admin-health">
         <div className="stat">
-          <span>Users</span>
+          <span>{lang === 'bn' ? 'ইউজার' : 'Users'}</span>
           <strong>{users.length}</strong>
         </div>
         <div className="stat">
-          <span>Products</span>
+          <span>{lang === 'bn' ? 'প্রোডাক্ট' : 'Products'}</span>
           <strong>{products.length}</strong>
         </div>
         <div className="stat">
-          <span>Orders</span>
+          <span>{lang === 'bn' ? 'অর্ডার' : 'Orders'}</span>
           <strong>{orders.length}</strong>
         </div>
         <div className="stat">
-          <span>Storage</span>
-          <strong>{dataMode === 'cloud' ? 'Supabase' : 'This device'}</strong>
+          <span>{lang === 'bn' ? 'স্টোরেজ' : 'Storage'}</span>
+          <strong>{dataMode === 'cloud' ? 'Supabase' : 'Local'}</strong>
         </div>
-      </div>
-
-      <div className="admin-tools">
-        <button type="button" className="btn btn-ghost danger" onClick={onReset}>
-          Reset demo data
-        </button>
       </div>
 
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Actions</th>
+              <th>{lang === 'bn' ? 'নাম' : 'Name'}</th>
+              <th>{lang === 'bn' ? 'ইমেইল' : 'Email'}</th>
+              <th>{lang === 'bn' ? 'রোল' : 'Role'}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -82,7 +68,7 @@ export default function AdminUsers() {
                           className="btn btn-primary"
                           onClick={() => void setUserRole(u.id, 'seller')}
                         >
-                          Make seller
+                          {lang === 'bn' ? 'সেলার বানান' : 'Make seller'}
                         </button>
                       ) : (
                         <button
@@ -90,12 +76,14 @@ export default function AdminUsers() {
                           className="btn btn-secondary"
                           onClick={() => void setUserRole(u.id, 'customer' as Role)}
                         >
-                          Revoke seller
+                          {lang === 'bn' ? 'সেলার বাতিল' : 'Revoke seller'}
                         </button>
                       )}
                     </>
                   )}
-                  {u.role === 'admin' && <span className="muted">Protected</span>}
+                  {u.role === 'admin' && (
+                    <span className="muted">{lang === 'bn' ? 'সুরক্ষিত' : 'Protected'}</span>
+                  )}
                 </td>
               </tr>
             ))}

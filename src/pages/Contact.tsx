@@ -1,5 +1,7 @@
+import { SUPPORT_EMAIL, SUPPORT_HOURS, SUPPORT_PHONE } from '../lib/business'
 import { Link } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
+import { supportWhatsAppUrl } from '../lib/whatsapp'
 
 export default function Contact() {
   const { lang } = useStore()
@@ -13,13 +15,17 @@ export default function Contact() {
       </p>
       <ul className="legal-list">
         <li>
-          <strong>WhatsApp / Phone:</strong> +91 90000 00000
+          <strong>WhatsApp / Phone:</strong>{' '}
+          <a href={supportWhatsAppUrl()} target="_blank" rel="noreferrer">
+            {SUPPORT_PHONE}
+          </a>
         </li>
         <li>
-          <strong>Email:</strong> support@greenvest.demo
+          <strong>Email:</strong>{' '}
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
         </li>
         <li>
-          <strong>{lang === 'bn' ? 'সময়' : 'Hours'}:</strong> 7:00 AM – 8:00 PM
+          <strong>{lang === 'bn' ? 'সময়' : 'Hours'}:</strong> {SUPPORT_HOURS}
         </li>
       </ul>
       <Link to="/" className="btn btn-secondary">

@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
+import SetupRequired, { shouldBlockApp } from './components/SetupRequired'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { StoreProvider } from './context/StoreContext'
 import AdminUsers from './pages/admin/AdminUsers'
@@ -18,6 +19,8 @@ import SellerOrders from './pages/seller/SellerOrders'
 import SellerProducts from './pages/seller/SellerProducts'
 import type { Role } from './types'
 
+const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
+
 function RequireRole({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return <p className="page">Loading…</p>
@@ -27,6 +30,14 @@ function RequireRole({ roles, children }: { roles: Role[]; children: React.React
 }
 
 function AppRoutes() {
+  if (shouldBlockApp()) {
+    return (
+      <Routes>
+        <Route path="*" element={<SetupRequired />} />
+      </Routes>
+    )
+  }
+
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -82,7 +93,7 @@ export default function App() {
   return (
     <AuthProvider>
       <StoreProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={routerBasename}>
           <AppRoutes />
         </BrowserRouter>
       </StoreProvider>

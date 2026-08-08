@@ -20,7 +20,7 @@ import {
   upsertProduct,
   verifyUtrApi,
 } from '../lib/api'
-import { MIN_ORDER_AMOUNT } from '../lib/business'
+import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
 import { isSupabaseConfigured } from '../lib/supabase'
 import {
@@ -119,8 +119,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [user])
 
   const refresh = useCallback(async () => {
-    if (cloud) await refreshCloud()
-    else refreshLocal()
+    if (cloud) {
+      await refreshCloud()
+      return
+    }
+    if (ALLOW_LOCAL_FALLBACK) {
+      refreshLocal()
+      return
+    }
+    setProducts([])
+    setCart(getCart())
+    setOrders([])
+    const l = getLang()
+    setLangState(l)
+    document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
+    document.body.classList.toggle('lang-bn', l === 'bn')
+    setLoading(false)
   }, [cloud, refreshCloud, refreshLocal])
 
   useEffect(() => {
@@ -129,8 +143,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onStore = () => {
-      if (!cloud) refreshLocal()
-      else {
+      if (cloud) {
+        setCart(getCart())
+        setLangState(getLang())
+      } else if (ALLOW_LOCAL_FALLBACK) {
+        refreshLocal()
+      } else {
         setCart(getCart())
         setLangState(getLang())
       }
@@ -373,6 +391,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const resetDemo = useCallback(async () => {
+    // Dev-only safety valve; never exposed in production admin UI
+    if (!import.meta.env.DEV) return
     if (cloud && user?.role === 'admin') {
       try {
         await deleteAllOrdersApi()

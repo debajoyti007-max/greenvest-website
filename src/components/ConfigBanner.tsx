@@ -1,18 +1,19 @@
-import { useAuth } from '../context/AuthContext'
+import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../lib/business'
+import { isProductionMisconfigured } from '../lib/runtime'
 import { useStore } from '../context/StoreContext'
 
-/** Soft tip only — local demo works without Supabase. */
+/** Shown only when production build is missing Supabase env. */
 export default function ConfigBanner() {
-  const { mode } = useAuth()
   const { lang } = useStore()
-  if (mode === 'cloud') return null
+  if (!isProductionMisconfigured()) return null
 
   return (
-    <div className="config-banner soft" role="status">
+    <div className="config-banner" role="alert">
+      <strong>{lang === 'bn' ? 'সাইট কনফিগার হয়নি' : 'Store not configured'}</strong>
       <span>
         {lang === 'bn'
-          ? 'এখন লোকাল ডেমো চলছে (এই ডিভাইসে)। ফোন–ফোন শেয়ারের জন্য পরে Supabase keys দিন।'
-          : 'Running on this device (local demo). For phone↔phone shared orders later, add Supabase keys.'}
+          ? `অর্ডার চালু করতে Supabase keys দরকার। সাহায্য: ${SUPPORT_PHONE} / ${SUPPORT_EMAIL}`
+          : `Supabase keys are required for live orders. Help: ${SUPPORT_PHONE} / ${SUPPORT_EMAIL}`}
       </span>
     </div>
   )

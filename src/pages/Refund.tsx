@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
+import { SUPPORT_PHONE } from '../lib/business'
 
 export default function Refund() {
   const { lang } = useStore()
@@ -13,8 +14,8 @@ export default function Refund() {
       </p>
       <p>
         {lang === 'bn'
-          ? 'নষ্ট বা ভুল আইটেম পেলে ডেলিভারির দিনে যোগাযোগ করুন। UTR পেমেন্ট ম্যানুয়াল — অটো রিফান্ড নেই।'
-          : 'Contact us the same day for spoiled or wrong items. UTR payment is manual — there is no automatic refund gateway.'}
+          ? `নষ্ট বা ভুল আইটেম পেলে ডেলিভারির দিনে ${SUPPORT_PHONE}-এ যোগাযোগ করুন। UPI/UTR পেমেন্ট ম্যানুয়াল — অটো রিফান্ড গেটওয়ে নেই।`
+          : `Contact us the same day at ${SUPPORT_PHONE} for spoiled or wrong items. UPI/UTR payment is manual — there is no automatic refund gateway.`}
       </p>
       <Link to="/contact" className="btn btn-primary">
         {lang === 'bn' ? 'যোগাযোগ' : 'Contact us'}

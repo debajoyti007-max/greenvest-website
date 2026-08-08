@@ -11,35 +11,8 @@ function redirectFor(role: Role) {
   return '/'
 }
 
-const DEMOS: { role: Role; email: string; label: string; labelBn: string; desc: string; descBn: string }[] = [
-  {
-    role: 'customer',
-    email: 'customer@demo.com',
-    label: 'Customer',
-    labelBn: 'কাস্টমার',
-    desc: 'Shop, cart, UPI pay + UTR, track orders',
-    descBn: 'কেনাকাটা, কার্ট, UPI + UTR, অর্ডার ট্র্যাক',
-  },
-  {
-    role: 'seller',
-    email: 'seller@demo.com',
-    label: 'Seller',
-    labelBn: 'সেলার',
-    desc: 'Stock, prices, verify UTR, revenue',
-    descBn: 'স্টক, দাম, UTR যাচাই, আয়',
-  },
-  {
-    role: 'admin',
-    email: 'admin@demo.com',
-    label: 'Admin',
-    labelBn: 'অ্যাডমিন',
-    desc: 'Make / revoke sellers only (no revenue)',
-    descBn: 'সেলার বানানো/বাতিল (আয় নেই)',
-  },
-]
-
 export default function Auth() {
-  const { user, login, signup, loading, mode: dataMode } = useAuth()
+  const { user, login, signup, loading } = useAuth()
   const { lang } = useStore()
   const navigate = useNavigate()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
@@ -47,6 +20,7 @@ export default function Auth() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
 
   if (loading) {
@@ -61,6 +35,7 @@ export default function Auth() {
 
   const doLogin = async (mail: string, pass: string) => {
     setError('')
+    setInfo('')
     setBusy(true)
     try {
       const res = await login(mail, pass)
@@ -80,6 +55,7 @@ export default function Auth() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
+    setInfo('')
     if (mode === 'login') {
       await doLogin(email, password)
     } else {
@@ -94,7 +70,16 @@ export default function Auth() {
           setError(res.error || (lang === 'bn' ? 'সাইন আপ ব্যর্থ' : 'Signup failed'))
           return
         }
-        navigate('/')
+        if (res.user) {
+          navigate(redirectFor(res.user.role))
+          return
+        }
+        setMode('login')
+        setInfo(
+          lang === 'bn'
+            ? 'অ্যাকাউন্ট তৈরি হয়েছে। ইমেইলে কনফার্ম লিংক থাকলে খুলুন, তারপর লগইন করুন।'
+            : 'Account created. Confirm your email if required, then log in.',
+        )
       } finally {
         setBusy(false)
       }
@@ -108,38 +93,26 @@ export default function Auth() {
         {mode === 'login' ? t(lang, 'welcomeLogin') : t(lang, 'welcomeSignup')}
       </p>
 
-      {dataMode === 'cloud' ? (
-        <div className="alert warn" style={{ background: '#ecfdf5', borderColor: '#86efac', color: '#14532d' }}>
-          <strong>{lang === 'bn' ? 'ক্লাউড রেডি' : 'Cloud ready'}</strong>
-          <span>
-            {lang === 'bn'
-              ? 'অর্ডার সব ডিভাইসে শেয়ার হবে। নিচে এক ক্লিকে লগইন করুন।'
-              : 'Orders sync across devices. Use one-click login below.'}
-          </span>
-        </div>
-      ) : (
-        <div className="alert warn" style={{ background: '#ecfdf5', borderColor: '#86efac', color: '#14532d' }}>
-          <strong>{lang === 'bn' ? 'লোকাল ডেমো' : 'Local demo'}</strong>
-          <span>
-            {lang === 'bn'
-              ? 'এক ক্লিকে লগইন করুন — এখনই কাজ করবে।'
-              : 'Use one-click login below — works on this PC.'}
-          </span>
-        </div>
-      )}
-
       <div className="auth-tabs">
         <button
           type="button"
           className={mode === 'login' ? 'active' : ''}
-          onClick={() => setMode('login')}
+          onClick={() => {
+            setMode('login')
+            setError('')
+            setInfo('')
+          }}
         >
           {t(lang, 'login')}
         </button>
         <button
           type="button"
           className={mode === 'signup' ? 'active' : ''}
-          onClick={() => setMode('signup')}
+          onClick={() => {
+            setMode('signup')
+            setError('')
+            setInfo('')
+          }}
         >
           {t(lang, 'signup')}
         </button>
@@ -149,7 +122,7 @@ export default function Auth() {
         {mode === 'signup' && (
           <label>
             {t(lang, 'name')}
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
+            <input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
           </label>
         )}
         <label>
@@ -159,6 +132,7 @@ export default function Auth() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoComplete="email"
           />
         </label>
         <label>
@@ -169,9 +143,11 @@ export default function Auth() {
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={6}
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
           />
         </label>
         {error && <p className="form-error">{error}</p>}
+        {info && <p className="hint">{info}</p>}
         <button type="submit" className="btn btn-primary" disabled={busy}>
           {busy
             ? t(lang, 'pleaseWait')
@@ -181,37 +157,11 @@ export default function Auth() {
         </button>
       </form>
 
-      <div className="demo-box">
-        <h3>{lang === 'bn' ? 'এক ক্লিকে ডেমো লগইন' : 'One-click demo login'}</h3>
-        <p>
-          {t(lang, 'password')}: <code>demo123</code>
-        </p>
-        <div className="demo-roles">
-          {DEMOS.map((d) => (
-            <button
-              key={d.email}
-              type="button"
-              className="demo-role-card"
-              disabled={busy}
-              onClick={() => {
-                setEmail(d.email)
-                setPassword('demo123')
-                setMode('login')
-                void doLogin(d.email, 'demo123')
-              }}
-            >
-              <strong>{lang === 'bn' ? d.labelBn : d.label}</strong>
-              <span className="muted">{d.email}</span>
-              <em>{lang === 'bn' ? d.descBn : d.desc}</em>
-            </button>
-          ))}
-        </div>
-        <p className="hint">
-          {lang === 'bn'
-            ? 'সাইন আপ শুধু কাস্টমার বানায়। সেলার হতে অ্যাডমিন “Make seller” করবে।'
-            : 'Sign up creates a customer only. Admin can promote someone to seller.'}
-        </p>
-      </div>
+      <p className="hint" style={{ marginTop: '1rem' }}>
+        {lang === 'bn'
+          ? 'নতুন অ্যাকাউন্ট কাস্টমার হিসেবে তৈরি হয়। সেলার অ্যাকাউন্ট অ্যাডমিন অনুমোদন করে।'
+          : 'New accounts are customers. An admin promotes sellers.'}
+      </p>
     </div>
   )
 }

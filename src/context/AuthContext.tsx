@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
 import { fetchProfile, fetchProfiles, updateProfileRole } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
@@ -42,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const cloud = isSupabaseConfigured
+  const allowLocal = ALLOW_LOCAL_FALLBACK && !cloud
 
   const loadUsersIfStaff = useCallback(async (profile: User | null) => {
     if (!profile || (profile.role !== 'admin' && profile.role !== 'seller')) {
@@ -79,15 +81,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refresh = useCallback(async () => {
-    if (!cloud || !supabase) {
+    if (cloud && supabase) {
+      const { data } = await supabase.auth.getSession()
+      await applyCloudSession(data.session?.user.id ?? null)
+      setLoading(false)
+      return
+    }
+    if (allowLocal) {
       refreshLocal()
       setLoading(false)
       return
     }
-    const { data } = await supabase.auth.getSession()
-    await applyCloudSession(data.session?.user.id ?? null)
+    setUser(null)
+    setUsers([])
     setLoading(false)
-  }, [cloud, refreshLocal, applyCloudSession])
+  }, [cloud, allowLocal, refreshLocal, applyCloudSession])
 
   useEffect(() => {
     void refresh()
@@ -97,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       return () => sub.subscription.unsubscribe()
     }
+    if (!allowLocal) return
     const onStore = () => refreshLocal()
     const onStorage = (e: StorageEvent) => {
       if (!e.key || e.key.startsWith('gv_')) refreshLocal()
@@ -107,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(STORE_EVENT, onStore)
       window.removeEventListener('storage', onStorage)
     }
-  }, [cloud, refresh, refreshLocal, applyCloudSession])
+  }, [cloud, allowLocal, refresh, refreshLocal, applyCloudSession])
 
   const login = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
@@ -118,10 +127,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         if (error) return { ok: false, error: error.message }
         const profile = data.user ? await fetchProfile(data.user.id) : null
-        if (!profile) return { ok: false, error: 'Profile missing. Run schema.sql.' }
+        if (!profile) return { ok: false, error: 'Profile missing. Contact support.' }
         setUser(profile)
         await loadUsersIfStaff(profile)
         return { ok: true, user: profile }
+      }
+
+      if (!allowLocal) {
+        return { ok: false, error: 'Store is not configured. Contact support.' }
       }
 
       ensureSeeded()
@@ -135,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsers(all)
       return { ok: true, user: found }
     },
-    [cloud, loadUsersIfStaff],
+    [cloud, allowLocal, loadUsersIfStaff],
   )
 
   const signup = useCallback(
@@ -153,9 +166,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (profile) {
             setUser(profile)
             await loadUsersIfStaff(profile)
+            return { ok: true, user: profile }
           }
         }
         return { ok: true }
+      }
+
+      if (!allowLocal) {
+        return { ok: false, error: 'Store is not configured. Contact support.' }
       }
 
       ensureSeeded()
@@ -176,18 +194,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsers(next)
       setSessionUserId(newUser.id)
       setUser(newUser)
-      return { ok: true }
+      return { ok: true, user: newUser }
     },
-    [cloud, loadUsersIfStaff],
+    [cloud, allowLocal, loadUsersIfStaff],
   )
 
   const logout = useCallback(async () => {
     if (cloud && supabase) await supabase.auth.signOut()
     else setSessionUserId(null)
     setUser(null)
-    if (!cloud) setUsers(getUsers())
+    if (allowLocal) setUsers(getUsers())
     else setUsers([])
-  }, [cloud])
+  }, [cloud, allowLocal])
 
   const setUserRole = useCallback(
     async (userId: string, role: Role) => {
@@ -198,13 +216,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (user?.id === userId) setUser(all.find((u) => u.id === userId) ?? null)
         return
       }
+      if (!allowLocal) return
       const all = getUsers()
       const next = all.map((u) => (u.id === userId ? { ...u, role } : u))
       saveUsers(next)
       setUsers(next)
       if (getSessionUserId() === userId) setUser(next.find((u) => u.id === userId) ?? null)
     },
-    [cloud, user?.id],
+    [cloud, allowLocal, user?.id],
   )
 
   const value = useMemo(

@@ -1,5 +1,5 @@
 import type { Order } from '../types'
-import { SELLER_WHATSAPP } from './business'
+import { SUPPORT_WHATSAPP } from './business'
 
 /** Build WhatsApp deep-link so seller gets a new-order ping. */
 export function sellerOrderWhatsAppUrl(order: Order) {
@@ -18,10 +18,15 @@ export function sellerOrderWhatsAppUrl(order: Order) {
     ),
   ]
   const text = encodeURIComponent(lines.join('\n'))
-  return `https://wa.me/${SELLER_WHATSAPP}?text=${text}`
+  return `https://wa.me/${SUPPORT_WHATSAPP}?text=${text}`
 }
 
 export function openSellerOrderWhatsApp(order: Order) {
   const url = sellerOrderWhatsAppUrl(order)
   window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+export function supportWhatsAppUrl(message?: string) {
+  const text = encodeURIComponent(message || 'Hello GreenVest')
+  return `https://wa.me/${SUPPORT_WHATSAPP}?text=${text}`
 }

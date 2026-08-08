@@ -1,68 +1,56 @@
-# GreenVest – Fresh groceries (cloud)
+# GreenVest – Fresh groceries (production)
 
 Customer shop + seller tools + admin users.  
 **Manual UPI / UTR** · **Min order ₹500** · **Delivery 12–24 hours**  
-Shared data via **Supabase**. Premium shop UI with real vegetable photos.
+Live data via **Supabase**. Public site on **GitHub Pages**.
+
+**Live URL:** https://debajoyti007-max.github.io/greenvest-website/
 
 ---
 
-## What YOU do next (beginner checklist)
+## Production checklist (owner)
 
-Do these in order. Stop if something fails and ask for help.
+1. **Supabase keys** in GitHub → Settings → Secrets → Actions  
+   - `VITE_SUPABASE_URL`  
+   - `VITE_SUPABASE_ANON_KEY` (anon only — never `service_role`)
+2. If you ever pasted a **service_role** key in chat, **rotate it** in Supabase → Project Settings → API.
+3. **Rotate or delete** old demo logins (`customer@demo.com` / `demo123`). Create real seller/admin accounts with strong passwords, then:
+   ```sql
+   update public.profiles set role = 'seller' where email = 'YOUR_SELLER@email.com';
+   update public.profiles set role = 'admin' where email = 'YOUR_ADMIN@email.com';
+   ```
+4. Supabase Auth: prefer **Confirm email OFF** until you configure SMTP, or turn it ON for stricter signups.
+5. Push to `master` → GitHub Actions deploys Pages automatically.
 
-### Step 1 — Open the project on your PC
+### Optional env overrides
+See `.env.example` for `VITE_SUPPORT_PHONE`, `VITE_SUPPORT_WHATSAPP`, `VITE_UPI_ID`, etc.
+
+---
+
+## Local development
 ```bash
 cd C:\Users\Debajoyti\Documents\greenvest-website
 npm install
-```
-
-### Step 2 — Create a free Supabase account
-1. Open [https://supabase.com](https://supabase.com) and sign up  
-2. Click **New project** → wait ~2 minutes  
-
-### Step 3 — Copy keys into `.env`
-1. In Supabase: **Project Settings → API**  
-2. On your PC: copy `.env.example` to `.env`  
-3. Paste:
-   - Project URL → `VITE_SUPABASE_URL=...`
-   - **anon public** key → `VITE_SUPABASE_ANON_KEY=...`
-
-### Step 4 — Create database tables
-1. Supabase → **SQL Editor** → New query  
-2. Open file `supabase/schema.sql` in your project  
-3. Copy **all** of it → paste → click **Run**
-
-### Step 5 — Create 3 login users
-Supabase → **Authentication → Users → Add user** (password `demo123` for each):
-
-- `customer@demo.com`
-- `seller@demo.com`
-- `admin@demo.com`
-
-Then run this SQL once:
-
-```sql
-update public.profiles set role = 'seller', name = 'Demo Seller' where email = 'seller@demo.com';
-update public.profiles set role = 'admin', name = 'Demo Admin' where email = 'admin@demo.com';
-update public.profiles set name = 'Demo Customer' where email = 'customer@demo.com';
-```
-
-Also turn **OFF** email confirm: **Authentication → Providers → Email → Confirm email**.
-
-### Step 6 — Start the website
-```bash
+copy .env.example .env
+# fill VITE_SUPABASE_* then:
 npm run dev
 ```
-Open http://localhost:3000 → Login → try Customer / Seller.
+Open http://localhost:3000  
 
-### Step 7 — (Later) Put online
-Netlify or Vercel: upload after `npm run build`, and add the same two env keys there.
+Without Supabase keys, **dev only** falls back to local demo data. Production builds **require** Supabase.
+
+### First-time Supabase setup
+1. Create project at [supabase.com](https://supabase.com)  
+2. SQL Editor → run `supabase/schema.sql`  
+3. Create Auth users → set roles in `profiles`  
+4. Sync catalog (optional): `node scripts/sync-products.mjs`
 
 ---
 
 ## Features
-- Real vegetable photos + full-bleed hero  
-- Shared products & orders (customer phone ↔ seller phone)  
+- Bangla / English UI  
+- Shared products & orders (cloud)  
 - UPI QR + manual UTR, min ₹500, delivery 12–24h  
-- Seller stock / UTR verify / sourcing sheet  
-- Admin make/revoke sellers  
+- WhatsApp seller notify on order  
+- Seller stock / photo upload / UTR verify  
+- Admin make/revoke sellers (no “reset demo” in production)
