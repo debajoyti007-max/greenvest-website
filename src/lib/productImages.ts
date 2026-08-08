@@ -7,15 +7,15 @@ function asset(path: string) {
 }
 
 export const PRODUCT_IMAGES: Record<string, string> = {
-  p1: asset('veg/tomato.jpg'),
-  p2: asset('veg/potato.jpg'),
-  p3: asset('veg/onion.jpg'),
-  p4: asset('veg/spinach.jpg'),
-  p5: asset('veg/carrot.jpg'),
-  p6: asset('veg/cucumber.jpg'),
-  p7: asset('veg/chili.jpg'),
-  p8: asset('veg/cauliflower.jpg'),
-  p9: asset('veg/brinjal.jpg'),
+  p1:  asset('veg/tomato.jpg'),
+  p2:  asset('veg/potato.jpg'),
+  p3:  asset('veg/onion.jpg'),
+  p4:  asset('veg/spinach.jpg'),
+  p5:  asset('veg/carrot.jpg'),
+  p6:  asset('veg/cucumber.jpg'),
+  p7:  asset('veg/chili.jpg'),
+  p8:  asset('veg/cauliflower.jpg'),
+  p9:  asset('veg/brinjal.jpg'),
   p10: asset('veg/cabbage.jpg'),
   p11: asset('veg/capsicum.jpg'),
   p12: asset('veg/garlic.jpg'),
@@ -32,85 +32,52 @@ export const PRODUCT_IMAGES: Record<string, string> = {
 
 export const HERO_IMAGE = asset('veg/hero.jpg')
 
-/** Prefer local photos & smart name matching so correct vegetable photo always shows. */
-export function resolveProductImage(id: string, imageUrl?: string, name?: string) {
-  // 1. If explicit valid custom upload URL from Supabase Storage
-  if (imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('data:')) && !imageUrl.includes('unsplash.com')) {
-    return imageUrl
+/** Map of product name keywords → local image (always wins over DB URL) */
+const NAME_MAP: Array<[string[], string]> = [
+  [['bitter', 'করলা', 'উচ্ছে', 'karela'],        PRODUCT_IMAGES.p19],
+  [['bottle', 'লাউ', 'lauki'],                    PRODUCT_IMAGES.p18],
+  [['coriander', 'ধনে', 'dhania', 'cilantro'],   PRODUCT_IMAGES.p16],
+  [['spinach', 'পালং', 'palak'],                  PRODUCT_IMAGES.p4],
+  [['cabbage', 'বাঁধাকপি'],                       PRODUCT_IMAGES.p10],
+  [['cauliflower', 'ফুলকপি'],                      PRODUCT_IMAGES.p8],
+  [['capsicum', 'ক্যাপসিকাম', 'bell pepper'],    PRODUCT_IMAGES.p11],
+  [['brinjal', 'বেগুন', 'eggplant', 'aubergine'], PRODUCT_IMAGES.p9],
+  [['chili', 'chilli', 'মরিচ', 'লঙ্কা'],         PRODUCT_IMAGES.p7],
+  [['cucumber', 'শসা'],                            PRODUCT_IMAGES.p6],
+  [['carrot', 'গাজর'],                             PRODUCT_IMAGES.p5],
+  [['garlic', 'রসুন'],                             PRODUCT_IMAGES.p12],
+  [['ginger', 'আদা'],                              PRODUCT_IMAGES.p13],
+  [['okra', 'ঢেঁড়স', 'ভেন্ডি', 'bhindi'],       PRODUCT_IMAGES.p14],
+  [['beans', 'শিম'],                               PRODUCT_IMAGES.p15],
+  [['lemon', 'লেবু'],                              PRODUCT_IMAGES.p17],
+  [['radish', 'মুলা', 'মূলা'],                    PRODUCT_IMAGES.p20],
+  [['peas', 'মটর'],                                PRODUCT_IMAGES.p21],
+  [['potato', 'আলু'],                              PRODUCT_IMAGES.p2],
+  [['onion', 'পেঁয়াজ'],                           PRODUCT_IMAGES.p3],
+  [['tomato', 'টমেটো'],                            PRODUCT_IMAGES.p1],
+]
+
+/** ID → local image (for seed products p1–p21) */
+const ID_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(PRODUCT_IMAGES).map(([k, v]) => [k, v])
+)
+
+/**
+ * Always resolve product image from local /public/veg/ using name or ID.
+ * DB image_url is COMPLETELY IGNORED — prevents any wrong CDN/Unsplash URL from showing.
+ */
+export function resolveProductImage(_id: string, _imageUrl?: string, name?: string): string {
+  const id = _id || ''
+  const nameQ = (name || '').toLowerCase()
+
+  // 1. Match by name keywords (most reliable — works for any DB row)
+  for (const [keywords, img] of NAME_MAP) {
+    if (keywords.some((kw) => nameQ.includes(kw))) return img
   }
 
-  // 2. Strict name & ID query (excludes imageUrl so old tomato links never contaminate search)
-  const nameQuery = `${name || ''} ${id || ''}`.toLowerCase()
+  // 2. Match by ID (p1–p21 seed products)
+  if (id in ID_MAP) return ID_MAP[id]
 
-  if (nameQuery.includes('bitter') || nameQuery.includes('করলা') || nameQuery.includes('উচ্ছে') || nameQuery.includes('bittergourd') || id === 'p19') {
-    return PRODUCT_IMAGES.p19
-  }
-  if (nameQuery.includes('coriander') || nameQuery.includes('ধনে') || nameQuery.includes('dhania') || id === 'p16') {
-    return PRODUCT_IMAGES.p16
-  }
-  if (nameQuery.includes('bottle') || nameQuery.includes('লাউ') || nameQuery.includes('bottlegourd') || id === 'p18') {
-    return PRODUCT_IMAGES.p18
-  }
-  if (nameQuery.includes('spinach') || nameQuery.includes('পালং') || nameQuery.includes('শাক') || id === 'p4') {
-    return PRODUCT_IMAGES.p4
-  }
-  if (nameQuery.includes('cabbage') || nameQuery.includes('বাঁধাকপি') || id === 'p10') {
-    return PRODUCT_IMAGES.p10
-  }
-  if (nameQuery.includes('cauliflower') || nameQuery.includes('ফুলকপি') || id === 'p8') {
-    return PRODUCT_IMAGES.p8
-  }
-  if (nameQuery.includes('capsicum') || nameQuery.includes('ক্যাপসিকাম') || id === 'p11') {
-    return PRODUCT_IMAGES.p11
-  }
-  if (nameQuery.includes('brinjal') || nameQuery.includes('বেগুন') || nameQuery.includes('बैंगন') || id === 'p9') {
-    return PRODUCT_IMAGES.p9
-  }
-  if (nameQuery.includes('chili') || nameQuery.includes('মরিচ') || nameQuery.includes('লঙ্কা') || id === 'p7') {
-    return PRODUCT_IMAGES.p7
-  }
-  if (nameQuery.includes('cucumber') || nameQuery.includes('শসা') || id === 'p6') {
-    return PRODUCT_IMAGES.p6
-  }
-  if (nameQuery.includes('carrot') || nameQuery.includes('গাজর') || id === 'p5') {
-    return PRODUCT_IMAGES.p5
-  }
-  if (nameQuery.includes('garlic') || nameQuery.includes('রসুন') || id === 'p12') {
-    return PRODUCT_IMAGES.p12
-  }
-  if (nameQuery.includes('ginger') || nameQuery.includes('আদা') || id === 'p13') {
-    return PRODUCT_IMAGES.p13
-  }
-  if (nameQuery.includes('okra') || nameQuery.includes('ঢেঁড়স') || nameQuery.includes('ভেন্ডি') || id === 'p14') {
-    return PRODUCT_IMAGES.p14
-  }
-  if (nameQuery.includes('beans') || nameQuery.includes('শিম') || id === 'p15') {
-    return PRODUCT_IMAGES.p15
-  }
-  if (nameQuery.includes('lemon') || nameQuery.includes('লেবু') || id === 'p17') {
-    return PRODUCT_IMAGES.p17
-  }
-  if (nameQuery.includes('radish') || nameQuery.includes('মুলা') || id === 'p20') {
-    return PRODUCT_IMAGES.p20
-  }
-  if (nameQuery.includes('peas') || nameQuery.includes('মটর') || id === 'p21') {
-    return PRODUCT_IMAGES.p21
-  }
-  if (nameQuery.includes('potato') || nameQuery.includes('আলু') || id === 'p2') {
-    return PRODUCT_IMAGES.p2
-  }
-  if (nameQuery.includes('onion') || nameQuery.includes('পেঁয়াজ') || id === 'p3') {
-    return PRODUCT_IMAGES.p3
-  }
-  if (nameQuery.includes('tomato') || nameQuery.includes('টমেটো') || id === 'p1') {
-    return PRODUCT_IMAGES.p1
-  }
-
-  // 3. Fallback to valid /veg/ image path if provided
-  if (imageUrl?.startsWith('/veg/')) {
-    return asset(imageUrl)
-  }
-
-  // 4. Default fallback hero photo
+  // 3. Fallback
   return HERO_IMAGE
 }
