@@ -34,8 +34,11 @@ export function ensureSeeded() {
     const users = read<User[]>(KEYS.users, [])
     if (users.length === 0) write(KEYS.users, SEED_USERS)
     const products = read<Product[]>(KEYS.products, [])
-    // Refresh catalog when new seed veggies are added
-    if (products.length < SEED_PRODUCTS.length) {
+    // Refresh catalog when new seed items are added, or repair broken Bangla names
+    const needsRefresh =
+      products.length < SEED_PRODUCTS.length ||
+      products.some((p) => !p.bnName || /^[?\s]+$/.test(p.bnName) || !/[\u0980-\u09FF]/.test(p.bnName))
+    if (needsRefresh) {
       write(KEYS.products, SEED_PRODUCTS)
     }
     return

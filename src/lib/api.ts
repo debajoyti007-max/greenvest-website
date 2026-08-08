@@ -1,4 +1,5 @@
 import type { Grade, Order, OrderItem, OrderStatus, Product, Role, User } from '../types'
+import { SEED_PRODUCTS } from '../data/seed'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 type ProductRow = {
@@ -57,12 +58,26 @@ function requireClient() {
   return supabase
 }
 
+function isBrokenBn(value: string | null | undefined) {
+  if (!value) return true
+  // Corrupted cloud rows sometimes stored literal "?" for Bengali glyphs
+  return /^[?\s]+$/.test(value) || !/[\u0980-\u09FF]/.test(value)
+}
+
+const bnById = new Map(SEED_PRODUCTS.map((p) => [p.id, p.bnName]))
+const bnByName = new Map(SEED_PRODUCTS.map((p) => [p.name.toLowerCase(), p.bnName]))
+
+function repairBnName(id: string, name: string, bnName: string) {
+  if (!isBrokenBn(bnName)) return bnName
+  return bnById.get(id) || bnByName.get(name.toLowerCase()) || name
+}
+
 function mapProduct(row: ProductRow): Product {
   return {
     id: row.id,
     emoji: row.emoji,
     name: row.name,
-    bnName: row.bn_name,
+    bnName: repairBnName(row.id, row.name, row.bn_name),
     pA: Number(row.p_a),
     pB: Number(row.p_b),
     pC: Number(row.p_c),

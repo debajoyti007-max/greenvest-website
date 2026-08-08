@@ -240,6 +240,26 @@ img {
   font-weight: 500;
 }
 
+.seller-photo-preview {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  max-width: 220px;
+}
+
+.seller-photo-preview img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.seller-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
 .lang-toggle {
   border: 1px solid var(--line);
   background: var(--white);

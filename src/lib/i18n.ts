@@ -15,6 +15,11 @@ const dict = {
   vegetables: { en: 'Vegetables', bn: 'সবজি' },
   leafy: { en: 'Leafy', bn: 'পাতা' },
   spices: { en: 'Spices', bn: 'মসলা' },
+  fish: { en: 'Fish', bn: 'মাছ' },
+  eggs: { en: 'Eggs', bn: 'ডিম' },
+  pulses: { en: 'Pulses', bn: 'ডাল' },
+  notifySellerWa: { en: 'Notify seller on WhatsApp', bn: 'সেলারকে WhatsApp-এ জানান' },
+  uploadPhoto: { en: 'Upload photo', bn: 'ছবি আপলোড' },
   chooseGrade: { en: 'Choose grade', bn: 'গ্রেড বেছে নিন' },
   added: { en: 'Added ✓', bn: 'যোগ হয়েছে ✓' },
   addToCart: { en: 'Add to cart', bn: 'কার্টে যোগ' },
@@ -105,6 +110,9 @@ export function catLabel(lang: Lang, category: string): string {
     Vegetables: 'vegetables',
     Leafy: 'leafy',
     Spices: 'spices',
+    Fish: 'fish',
+    Eggs: 'eggs',
+    Pulses: 'pulses',
   }
   const k = map[category]
   return k ? t(lang, k) : category

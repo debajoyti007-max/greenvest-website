@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN } from '../lib/business'
 import { t } from '../lib/i18n'
+import { openSellerOrderWhatsApp } from '../lib/whatsapp'
 
 export default function OrderSuccess() {
   const { id } = useParams()
@@ -53,10 +54,13 @@ export default function OrderSuccess() {
         </p>
       </div>
       <div className="form-actions">
-        <Link to="/orders" className="btn btn-primary">
+        <button type="button" className="btn btn-primary" onClick={() => openSellerOrderWhatsApp(order)}>
+          {t(lang, 'notifySellerWa')}
+        </button>
+        <Link to="/orders" className="btn btn-secondary">
           {t(lang, 'viewMyOrders')}
         </Link>
-        <Link to="/" className="btn btn-secondary">
+        <Link to="/" className="btn btn-ghost">
           {t(lang, 'keepShopping')}
         </Link>
       </div>
