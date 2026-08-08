@@ -32,6 +32,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<AuthResult>
   signup: (name: string, email: string, password: string) => Promise<AuthResult>
   logout: () => Promise<void>
+  resetPassword: (email: string) => Promise<AuthResult>
+  updatePassword: (password: string) => Promise<AuthResult>
   setUserRole: (userId: string, role: Role) => Promise<void>
   refresh: () => Promise<void>
 }
@@ -218,6 +220,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     else setUsers([])
   }, [cloud, allowLocal])
 
+  const resetPassword = useCallback(
+    async (email: string): Promise<AuthResult> => {
+      if (!cloud || !supabase) {
+        return { ok: false, error: 'Password reset needs the live store (Supabase).' }
+      }
+      const base = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/?$/, '/')}`
+      const redirectTo = `${base}auth/reset`
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo,
+      })
+      if (error) return { ok: false, error: error.message }
+      return { ok: true }
+    },
+    [cloud],
+  )
+
+  const updatePassword = useCallback(
+    async (password: string): Promise<AuthResult> => {
+      if (!cloud || !supabase) {
+        return { ok: false, error: 'Password update needs the live store (Supabase).' }
+      }
+      const { error } = await supabase.auth.updateUser({ password })
+      if (error) return { ok: false, error: error.message }
+      return { ok: true }
+    },
+    [cloud],
+  )
+
   const setUserRole = useCallback(
     async (userId: string, role: Role) => {
       if (cloud) {
@@ -247,10 +277,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       signup,
       logout,
+      resetPassword,
+      updatePassword,
       setUserRole,
       refresh,
     }),
-    [user, users, loading, cloud, login, signup, logout, setUserRole, refresh],
+    [
+      user,
+      users,
+      loading,
+      cloud,
+      login,
+      signup,
+      logout,
+      resetPassword,
+      updatePassword,
+      setUserRole,
+      refresh,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

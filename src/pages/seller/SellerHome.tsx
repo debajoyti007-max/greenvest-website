@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { LOW_STOCK_QTY } from '../../lib/business'
+import { printPackingList } from '../../lib/printOrder'
 
 function dayKey(d: Date) {
   return d.toDateString()
@@ -180,6 +181,13 @@ export default function SellerHome() {
         </Link>
         <button type="button" className="btn btn-secondary" onClick={generateSheet}>
           {lang === 'bn' ? 'মন্ডি শিট' : 'Mandi sheet'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => printPackingList(orders, lang)}
+        >
+          {lang === 'bn' ? 'প্যাকিং লিস্ট (সকাল/সন্ধ্যা)' : 'Packing list (AM/PM)'}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onMorningReset}>
           {lang === 'bn' ? 'সকালের স্টক রিসেট' : 'Morning stock reset'}

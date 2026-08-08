@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { t } from '../lib/i18n'
@@ -11,11 +11,13 @@ function redirectFor(role: Role) {
   return '/'
 }
 
+type Mode = 'login' | 'signup' | 'forgot'
+
 export default function Auth() {
-  const { user, login, signup, loading } = useAuth()
+  const { user, login, signup, resetPassword, loading } = useAuth()
   const { lang } = useStore()
   const navigate = useNavigate()
-  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -58,31 +60,50 @@ export default function Auth() {
     setInfo('')
     if (mode === 'login') {
       await doLogin(email, password)
-    } else {
-      if (!name.trim()) {
-        setError(lang === 'bn' ? 'নাম দিন' : 'Name required')
-        return
-      }
+      return
+    }
+    if (mode === 'forgot') {
       setBusy(true)
       try {
-        const res = await signup(name, email, password)
+        const res = await resetPassword(email)
         if (!res.ok) {
-          setError(res.error || (lang === 'bn' ? 'সাইন আপ ব্যর্থ' : 'Signup failed'))
+          setError(res.error || (lang === 'bn' ? 'রিসেট ব্যর্থ' : 'Reset failed'))
           return
         }
-        if (res.user) {
-          navigate(redirectFor(res.user.role))
-          return
-        }
-        setMode('login')
         setInfo(
           lang === 'bn'
-            ? 'অ্যাকাউন্ট তৈরি হয়েছে। ইমেইলে কনফার্ম লিংক খুলে তারপর লগইন করুন (লিংক না এলে অ্যাডমিনকে বলুন)।'
-            : 'Account created. Open the confirm link in your email, then log in (if no email arrives, ask admin).',
+            ? 'ইমেইলে পাসওয়ার্ড রিসেট লিংক পাঠানো হয়েছে (Spam চেক করুন)।'
+            : 'Password reset link sent to your email (check Spam too).',
         )
       } finally {
         setBusy(false)
       }
+      return
+    }
+
+    if (!name.trim()) {
+      setError(lang === 'bn' ? 'নাম দিন' : 'Name required')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await signup(name, email, password)
+      if (!res.ok) {
+        setError(res.error || (lang === 'bn' ? 'সাইন আপ ব্যর্থ' : 'Signup failed'))
+        return
+      }
+      if (res.user) {
+        navigate(redirectFor(res.user.role))
+        return
+      }
+      setMode('login')
+      setInfo(
+        lang === 'bn'
+          ? 'অ্যাকাউন্ট তৈরি হয়েছে। ইমেইলে কনফার্ম লিংক খুলে তারপর লগইন করুন (লিংক না এলে অ্যাডমিনকে বলুন)।'
+          : 'Account created. Open the confirm link in your email, then log in (if no email arrives, ask admin).',
+      )
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -90,33 +111,41 @@ export default function Auth() {
     <div className="page narrow auth-page">
       <h1 className="brand-hero compact">GreenVest</h1>
       <p className="lede center">
-        {mode === 'login' ? t(lang, 'welcomeLogin') : t(lang, 'welcomeSignup')}
+        {mode === 'login'
+          ? t(lang, 'welcomeLogin')
+          : mode === 'signup'
+            ? t(lang, 'welcomeSignup')
+            : lang === 'bn'
+              ? 'পাসওয়ার্ড ভুলে গেলে ইমেইল দিন'
+              : 'Enter your email to reset password'}
       </p>
 
-      <div className="auth-tabs">
-        <button
-          type="button"
-          className={mode === 'login' ? 'active' : ''}
-          onClick={() => {
-            setMode('login')
-            setError('')
-            setInfo('')
-          }}
-        >
-          {t(lang, 'login')}
-        </button>
-        <button
-          type="button"
-          className={mode === 'signup' ? 'active' : ''}
-          onClick={() => {
-            setMode('signup')
-            setError('')
-            setInfo('')
-          }}
-        >
-          {t(lang, 'signup')}
-        </button>
-      </div>
+      {mode !== 'forgot' && (
+        <div className="auth-tabs">
+          <button
+            type="button"
+            className={mode === 'login' ? 'active' : ''}
+            onClick={() => {
+              setMode('login')
+              setError('')
+              setInfo('')
+            }}
+          >
+            {t(lang, 'login')}
+          </button>
+          <button
+            type="button"
+            className={mode === 'signup' ? 'active' : ''}
+            onClick={() => {
+              setMode('signup')
+              setError('')
+              setInfo('')
+            }}
+          >
+            {t(lang, 'signup')}
+          </button>
+        </div>
+      )}
 
       <form className="form" onSubmit={onSubmit}>
         {mode === 'signup' && (
@@ -135,17 +164,19 @@ export default function Auth() {
             autoComplete="email"
           />
         </label>
-        <label>
-          {t(lang, 'password')}
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-          />
-        </label>
+        {mode !== 'forgot' && (
+          <label>
+            {t(lang, 'password')}
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            />
+          </label>
+        )}
         {error && <p className="form-error">{error}</p>}
         {info && <p className="hint">{info}</p>}
         <button type="submit" className="btn btn-primary" disabled={busy}>
@@ -153,14 +184,56 @@ export default function Auth() {
             ? t(lang, 'pleaseWait')
             : mode === 'login'
               ? t(lang, 'login')
-              : t(lang, 'createAccount')}
+              : mode === 'forgot'
+                ? lang === 'bn'
+                  ? 'রিসেট লিংক পাঠান'
+                  : 'Send reset link'
+                : t(lang, 'createAccount')}
         </button>
       </form>
 
-      <p className="hint" style={{ marginTop: '1rem' }}>
-        {lang === 'bn'
-          ? 'নতুন অ্যাকাউন্ট কাস্টমার হিসেবে তৈরি হয়। সেলার অ্যাকাউন্ট অ্যাডমিন অনুমোদন করে।'
-          : 'New accounts are customers. An admin promotes sellers.'}
+      {mode === 'login' && (
+        <p className="hint" style={{ marginTop: '0.75rem' }}>
+          <button
+            type="button"
+            className="linkish"
+            onClick={() => {
+              setMode('forgot')
+              setError('')
+              setInfo('')
+            }}
+          >
+            {lang === 'bn' ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?'}
+          </button>
+        </p>
+      )}
+
+      {mode === 'forgot' && (
+        <p className="hint" style={{ marginTop: '0.75rem' }}>
+          <button
+            type="button"
+            className="linkish"
+            onClick={() => {
+              setMode('login')
+              setError('')
+              setInfo('')
+            }}
+          >
+            {lang === 'bn' ? '← লগইনে ফিরুন' : '← Back to login'}
+          </button>
+        </p>
+      )}
+
+      {mode !== 'forgot' && (
+        <p className="hint" style={{ marginTop: '1rem' }}>
+          {lang === 'bn'
+            ? 'নতুন অ্যাকাউন্ট কাস্টমার হিসেবে তৈরি হয়। সেলার অ্যাকাউন্ট অ্যাডমিন অনুমোদন করে।'
+            : 'New accounts are customers. An admin promotes sellers.'}
+        </p>
+      )}
+
+      <p className="hint" style={{ marginTop: '0.5rem' }}>
+        <Link to="/">{lang === 'bn' ? 'দোকানে ফিরুন' : 'Back to shop'}</Link>
       </p>
     </div>
   )

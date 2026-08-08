@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { t } from '../lib/i18n'
 
 export default function Cart() {
+  const { user } = useAuth()
   const { cart, products, lang, priceFor, updateCartQty, removeFromCart, cartTotal } = useStore()
 
   const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
@@ -87,10 +89,29 @@ export default function Cart() {
               : `Add ₹${shortfall} more to reach the ₹${MIN_ORDER_AMOUNT} minimum`}
           </p>
         )}
+        {!user && canCheckout && (
+          <div className="alert warn cart-login-cta">
+            <strong>{lang === 'bn' ? 'অর্ডার করতে লগইন লাগবে' : 'Login required to order'}</strong>
+            <span>
+              {lang === 'bn'
+                ? 'চেকআউটের আগে অ্যাকাউন্ট দিয়ে লগইন বা সাইন আপ করুন। কার্ট সেভ থাকবে।'
+                : 'Sign in or create an account before checkout. Your cart stays saved.'}
+            </span>
+            <Link to="/auth" className="btn btn-primary">
+              {lang === 'bn' ? 'লগইন / সাইন আপ' : 'Login / Sign up'}
+            </Link>
+          </div>
+        )}
         {canCheckout ? (
-          <Link to="/checkout" className="btn btn-primary">
-            {t(lang, 'checkout')}
-          </Link>
+          user ? (
+            <Link to="/checkout" className="btn btn-primary">
+              {t(lang, 'checkout')}
+            </Link>
+          ) : (
+            <Link to="/auth" className="btn btn-secondary">
+              {lang === 'bn' ? 'লগইন করে চেকআউট' : 'Login to checkout'}
+            </Link>
+          )
         ) : (
           <Link to="/" className="btn btn-secondary">
             {t(lang, 'addMore')}

@@ -42,3 +42,51 @@ export function printOrderInvoice(order: Order) {
   w.document.write(html)
   w.document.close()
 }
+
+/** Print packing / delivery list grouped by morning & evening slots. */
+export function printPackingList(orders: Order[], lang: 'en' | 'bn' = 'en') {
+  const active = orders.filter(
+    (o) => o.status !== 'cancelled' && o.status !== 'delivered',
+  )
+  const morning = active.filter((o) => o.deliverySlot === 'morning' || !o.deliverySlot)
+  const evening = active.filter((o) => o.deliverySlot === 'evening')
+
+  const section = (title: string, list: Order[]) => {
+    if (list.length === 0) {
+      return `<h2>${title}</h2><p class="muted">${lang === 'bn' ? 'কোনো অর্ডার নেই' : 'No orders'}</p>`
+    }
+    const blocks = list
+      .map((o) => {
+        const items = o.items
+          .map((it) => `<li>${it.emoji} ${it.name} (G${it.grade}) × ${it.qty}</li>`)
+          .join('')
+        return `<div class="block">
+          <strong>${o.id}</strong> · ${o.userName} · ${o.phone}
+          <div class="muted">${o.address}${o.pin ? ` · PIN ${o.pin}` : ''}</div>
+          <ul>${items}</ul>
+        </div>`
+      })
+      .join('')
+    return `<h2>${title} (${list.length})</h2>${blocks}`
+  }
+
+  const title = lang === 'bn' ? 'ডেলিভারি প্যাকিং লিস্ট' : 'Delivery packing list'
+  const html = `<!DOCTYPE html><html><head><title>${title}</title>
+  <style>
+    body{font-family:'Hind Siliguri','Noto Sans Bengali','Nirmala UI',system-ui,sans-serif;padding:24px;color:#111}
+    h1{margin:0 0 8px} h2{margin:24px 0 8px;border-bottom:2px solid #166534;padding-bottom:4px}
+    .muted{color:#666;font-size:14px} .block{margin:12px 0;padding:10px 0;border-bottom:1px solid #eee}
+    ul{margin:6px 0 0;padding-left:18px}
+  </style></head><body>
+  <h1>${title}</h1>
+  <p class="muted">${new Date().toLocaleString()}</p>
+  ${section(lang === 'bn' ? 'সকাল' : 'Morning (8 AM – 12 PM)', morning)}
+  ${section(lang === 'bn' ? 'সন্ধ্যা' : 'Evening (4 PM – 8 PM)', evening)}
+  <script>window.onload=()=>window.print()</script>
+  </body></html>`
+
+  const w = window.open('', '_blank', 'width=800,height=1000')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
+}

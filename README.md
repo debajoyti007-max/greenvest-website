@@ -58,8 +58,10 @@ Admin does **not** need a revenue screen — business ops stay on the seller sid
    - `VITE_SUPABASE_URL`  
    - `VITE_SUPABASE_ANON_KEY` (anon only — never `service_role`)
 2. If you ever pasted a **service_role** key in chat, **rotate it** in Supabase → Project Settings → API.
-3. Prefer **Confirm email OFF** in Auth until SMTP is set, or turn it ON for stricter signups.
-4. Push to `master` → GitHub Actions deploys Pages automatically.
+3. Prefer **Confirm email OFF** in Auth until SMTP is set (Auth → Providers → Email), or turn it ON for stricter signups.
+4. For **Forgot password**, add redirect URL in Supabase → Authentication → URL Configuration:  
+   `https://debajoyti007-max.github.io/greenvest-website/auth/reset`
+5. Push to `master` → GitHub Actions deploys Pages automatically.
 
 ### Optional env overrides
 See `.env.example` for `VITE_SUPPORT_PHONE`, `VITE_SUPPORT_WHATSAPP`, `VITE_UPI_ID`, etc.

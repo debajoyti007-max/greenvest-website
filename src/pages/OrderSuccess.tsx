@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
+import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN } from '../lib/business'
@@ -47,6 +48,7 @@ export default function OrderSuccess() {
       <div className="order-card">
         <strong>{order.id}</strong>
         <p className="muted">{new Date(order.createdAt).toLocaleString()}</p>
+        <OrderTimeline order={order} lang={lang} />
         <ul>
           {order.items.map((it) => (
             <li key={`${it.productId}-${it.grade}`}>

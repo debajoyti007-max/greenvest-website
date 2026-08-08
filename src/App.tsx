@@ -12,6 +12,7 @@ import OrderSuccess from './pages/OrderSuccess'
 import Orders from './pages/Orders'
 import Privacy from './pages/Privacy'
 import Refund from './pages/Refund'
+import ResetPassword from './pages/ResetPassword'
 import Shop from './pages/Shop'
 import Terms from './pages/Terms'
 import SellerHome from './pages/seller/SellerHome'
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route path="orders" element={<Orders />} />
         <Route path="orders/success/:id" element={<OrderSuccess />} />
         <Route path="auth" element={<Auth />} />
+        <Route path="auth/reset" element={<ResetPassword />} />
         <Route path="contact" element={<Contact />} />
         <Route path="privacy" element={<Privacy />} />
         <Route path="terms" element={<Terms />} />

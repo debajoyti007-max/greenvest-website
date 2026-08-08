@@ -1,4 +1,5 @@
 import { Link, Navigate } from 'react-router-dom'
+import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { t } from '../lib/i18n'
@@ -32,6 +33,7 @@ export default function Orders() {
                 </div>
                 <span className={`status status-${o.status}`}>{o.status.replace('_', ' ')}</span>
               </header>
+              <OrderTimeline order={o} lang={lang} />
               <ul>
                 {o.items.map((it) => (
                   <li key={`${it.productId}-${it.grade}`}>
