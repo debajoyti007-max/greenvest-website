@@ -2,10 +2,11 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
+import { DELIVERY_SLOTS, DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
 import { t, zoneLabel } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC } from '../lib/payment'
+import type { DeliverySlot } from '../types'
 
 export default function Checkout() {
   const { user } = useAuth()
@@ -15,6 +16,7 @@ export default function Checkout() {
   const [phone, setPhone] = useState('')
   const [pin, setPin] = useState('721601')
   const [utr, setUtr] = useState('')
+  const [slot, setSlot] = useState<DeliverySlot>('morning')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
 
@@ -72,7 +74,7 @@ export default function Checkout() {
       return
     }
     try {
-      const order = await placeOrder({ address, phone, pin, utr })
+      const order = await placeOrder({ address, phone, pin, utr, deliverySlot: slot })
       if (order) navigate(`/orders/success/${order.id}`)
       else setError(lang === 'bn' ? 'অর্ডার হয়নি' : 'Could not place order')
     } catch (err) {
@@ -167,6 +169,27 @@ export default function Checkout() {
           <p className="hint">
             {t(lang, 'zone')}: {zoneLabel(lang, delivery.zone)} · {t(lang, 'fee')} ৳{delivery.fee}
           </p>
+          <fieldset className="slot-fieldset">
+            <legend>{lang === 'bn' ? 'ডেলিভারি স্লট' : 'Delivery slot'}</legend>
+            <label className="slot-option">
+              <input
+                type="radio"
+                name="slot"
+                checked={slot === 'morning'}
+                onChange={() => setSlot('morning')}
+              />
+              {DELIVERY_SLOTS.morning[lang]}
+            </label>
+            <label className="slot-option">
+              <input
+                type="radio"
+                name="slot"
+                checked={slot === 'evening'}
+                onChange={() => setSlot('evening')}
+              />
+              {DELIVERY_SLOTS.evening[lang]}
+            </label>
+          </fieldset>
           <label>
             {t(lang, 'phone')}
             <input

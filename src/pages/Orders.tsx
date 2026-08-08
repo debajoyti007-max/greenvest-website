@@ -43,6 +43,9 @@ export default function Orders() {
               <p className="muted">
                 {o.address}
                 {o.pin ? ` · PIN ${o.pin}` : ''} · {o.phone}
+                {o.deliverySlot
+                  ? ` · ${o.deliverySlot === 'morning' ? (lang === 'bn' ? 'সকাল' : 'Morning') : lang === 'bn' ? 'সন্ধ্যা' : 'Evening'}`
+                  : ''}
               </p>
               <footer>
                 <span>

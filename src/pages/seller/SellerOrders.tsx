@@ -115,6 +115,9 @@ export default function SellerOrders() {
               </ul>
               <p>
                 {o.address} · PIN {o.pin || '—'}
+                {o.deliverySlot
+                  ? ` · ${o.deliverySlot === 'morning' ? (lang === 'bn' ? 'সকাল' : 'Morning') : lang === 'bn' ? 'সন্ধ্যা' : 'Evening'}`
+                  : ''}
               </p>
               <p className="muted">
                 {lang === 'bn' ? 'মোট' : 'Total'} ৳{o.total} · {lang === 'bn' ? 'অগ্রিম' : 'Advance'} ৳

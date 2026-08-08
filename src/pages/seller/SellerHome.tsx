@@ -2,6 +2,11 @@ import { useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
+import { LOW_STOCK_QTY } from '../../lib/business'
+
+function dayKey(d: Date) {
+  return d.toDateString()
+}
 
 export default function SellerHome() {
   const { user } = useAuth()
@@ -12,15 +17,36 @@ export default function SellerHome() {
     return <Navigate to="/" replace />
   }
 
-  const today = new Date().toDateString()
-  const todayOrders = orders.filter((o) => new Date(o.createdAt).toDateString() === today)
+  const todayKey = dayKey(new Date())
+  const y = new Date()
+  y.setDate(y.getDate() - 1)
+  const yesterdayKey = dayKey(y)
+
+  const todayOrders = orders.filter((o) => dayKey(new Date(o.createdAt)) === todayKey)
+  const yesterdayOrders = orders.filter((o) => dayKey(new Date(o.createdAt)) === yesterdayKey)
+
+  const todaySales = todayOrders
+    .filter((o) => o.status !== 'cancelled')
+    .reduce((s, o) => s + o.total, 0)
+  const yesterdaySales = yesterdayOrders
+    .filter((o) => o.status !== 'cancelled')
+    .reduce((s, o) => s + o.total, 0)
+
   const revenue = orders
     .filter((o) => o.status !== 'cancelled')
     .reduce((s, o) => s + (o.utrVerified ? o.advanceAmount : 0), 0)
   const pending = orders.filter((o) => !o.utrVerified && o.status !== 'cancelled').length
   const active = orders.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled').length
-  const inStock = products.filter((p) => p.inStock).length
-  const outStock = products.filter((p) => !p.inStock)
+  const inStock = products.filter((p) => p.inStock && !p.archived).length
+  const outStock = products.filter((p) => !p.archived && !p.inStock)
+  const lowStock = products.filter(
+    (p) =>
+      !p.archived &&
+      p.inStock &&
+      p.stockQty != null &&
+      p.stockQty > 0 &&
+      p.stockQty <= LOW_STOCK_QTY,
+  )
   const uniqueCustomers = new Set(
     orders.filter((o) => o.status !== 'cancelled').map((o) => o.userId || o.phone),
   ).size
@@ -80,9 +106,22 @@ export default function SellerHome() {
         <div className="alert warn">
           <strong>{lang === 'bn' ? 'আজকের কাজ' : 'Action needed'}</strong>
           <span>
-            {pending}{' '}
-            {lang === 'bn' ? 'UTR যাচাই বাকি।' : 'UTR(s) waiting for verification.'}{' '}
+            {pending} {lang === 'bn' ? 'UTR যাচাই বাকি।' : 'UTR(s) waiting.'}{' '}
             <Link to="/seller/orders">{lang === 'bn' ? 'দেখুন →' : 'Open →'}</Link>
+          </span>
+        </div>
+      )}
+
+      {lowStock.length > 0 && (
+        <div className="alert warn low-stock-alert">
+          <strong>{lang === 'bn' ? 'লো স্টক' : 'Low stock'}</strong>
+          <span>
+            {lowStock
+              .map(
+                (p) =>
+                  `${lang === 'bn' ? p.bnName : p.name} (${p.stockQty} ${p.unit})`,
+              )
+              .join(', ')}
           </span>
         </div>
       )}
@@ -90,16 +129,24 @@ export default function SellerHome() {
       {outStock.length > 0 && (
         <div className="alert warn">
           <strong>{lang === 'bn' ? 'স্টক আউট' : 'Out of stock'}</strong>
-          <span>
-            {outStock.map((p) => (lang === 'bn' ? p.bnName : p.name)).join(', ')}
-          </span>
+          <span>{outStock.map((p) => (lang === 'bn' ? p.bnName : p.name)).join(', ')}</span>
         </div>
       )}
 
       <div className="dash-grid">
         <div className="stat">
-          <span>{lang === 'bn' ? 'আজকের অর্ডার' : "Today's orders"}</span>
-          <strong>{todayOrders.length}</strong>
+          <span>{lang === 'bn' ? 'আজকের বিক্রি' : "Today's sales"}</span>
+          <strong>৳{todaySales}</strong>
+          <em className="muted">
+            {todayOrders.length} {lang === 'bn' ? 'অর্ডার' : 'orders'}
+          </em>
+        </div>
+        <div className="stat">
+          <span>{lang === 'bn' ? 'গততকালের বিক্রি' : "Yesterday's sales"}</span>
+          <strong>৳{yesterdaySales}</strong>
+          <em className="muted">
+            {yesterdayOrders.length} {lang === 'bn' ? 'অর্ডার' : 'orders'}
+          </em>
         </div>
         <div className="stat">
           <span>{lang === 'bn' ? 'চলমান ডেলিভারি' : 'Active deliveries'}</span>
@@ -114,13 +161,9 @@ export default function SellerHome() {
           <strong>৳{revenue}</strong>
         </div>
         <div className="stat">
-          <span>{lang === 'bn' ? 'কাস্টমার' : 'Customers'}</span>
-          <strong>{uniqueCustomers}</strong>
-        </div>
-        <div className="stat">
-          <span>{lang === 'bn' ? 'স্টকে' : 'In stock'}</span>
+          <span>{lang === 'bn' ? 'স্টকে / কাস্টমার' : 'In stock / customers'}</span>
           <strong>
-            {inStock}/{products.length}
+            {inStock} · {uniqueCustomers}
           </strong>
         </div>
       </div>

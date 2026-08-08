@@ -11,6 +11,7 @@ export function sellerOrderWhatsAppUrl(order: Order) {
     `ঠিকানা: ${order.address}`,
     `PIN: ${order.pin}`,
     `মোট: ৳${order.total} (অগ্রিম ৳${order.advanceAmount})`,
+    order.deliverySlot ? `স্লট: ${order.deliverySlot}` : '',
     `UTR: ${order.utr}`,
     '',
     ...order.items.map(

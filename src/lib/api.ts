@@ -1,4 +1,14 @@
-import type { Grade, Order, OrderItem, OrderStatus, Product, Role, User } from '../types'
+import type {
+  DeliverySlot,
+  Grade,
+  Order,
+  OrderItem,
+  OrderStatus,
+  Product,
+  Role,
+  Season,
+  User,
+} from '../types'
 import { SEED_PRODUCTS } from '../data/seed'
 import { isSupabaseConfigured, supabase } from './supabase'
 
@@ -12,6 +22,8 @@ type ProductRow = {
   p_c: number
   in_stock: boolean
   archived?: boolean | null
+  stock_qty?: number | null
+  season?: string | null
   category: string
   unit: string
   image_url: string | null
@@ -32,6 +44,7 @@ type OrderRow = {
   address: string
   phone: string
   pin: string
+  delivery_slot?: string | null
   created_at: string
   updated_at: string
   order_items?: OrderItemRow[]
@@ -74,6 +87,7 @@ function repairBnName(id: string, name: string, bnName: string) {
 }
 
 function mapProduct(row: ProductRow): Product {
+  const season = (row.season || 'all') as Season
   return {
     id: row.id,
     emoji: row.emoji,
@@ -84,6 +98,8 @@ function mapProduct(row: ProductRow): Product {
     pC: Number(row.p_c),
     inStock: row.in_stock,
     archived: Boolean(row.archived),
+    stockQty: row.stock_qty == null ? undefined : Number(row.stock_qty),
+    season: ['all', 'summer', 'winter', 'rainy'].includes(season) ? season : 'all',
     category: row.category,
     unit: row.unit,
     imageUrl: row.image_url || undefined,
@@ -101,6 +117,8 @@ function productToRow(p: Product | (Omit<Product, 'id'> & { id: string })) {
     p_c: p.pC,
     in_stock: p.inStock,
     archived: Boolean(p.archived),
+    stock_qty: p.stockQty ?? null,
+    season: p.season || 'all',
     category: p.category,
     unit: p.unit,
     image_url: p.imageUrl || null,
@@ -119,6 +137,7 @@ function mapOrderItem(row: OrderItemRow): OrderItem {
 }
 
 function mapOrder(row: OrderRow): Order {
+  const slot = row.delivery_slot
   return {
     id: row.id,
     userId: row.user_id,
@@ -135,6 +154,7 @@ function mapOrder(row: OrderRow): Order {
     address: row.address,
     phone: row.phone,
     pin: row.pin,
+    deliverySlot: slot === 'morning' || slot === 'evening' ? (slot as DeliverySlot) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -182,8 +202,8 @@ export async function upsertProduct(product: Product): Promise<Product> {
   const client = requireClient()
   const row = productToRow(product)
   let { data, error } = await client.from('products').upsert(row).select('*').single()
-  if (error && /archived/i.test(error.message)) {
-    const { archived: _a, ...rest } = row
+  if (error && /(archived|stock_qty|season)/i.test(error.message)) {
+    const { archived: _a, stock_qty: _s, season: _se, ...rest } = row
     ;({ data, error } = await client.from('products').upsert(rest).select('*').single())
   }
   if (error) throw error
@@ -219,7 +239,7 @@ export async function fetchOrders(): Promise<Order[]> {
 
 export async function createOrder(order: Order): Promise<Order> {
   const client = requireClient()
-  const { error: orderError } = await client.from('orders').insert({
+  const payload: Record<string, unknown> = {
     id: order.id,
     user_id: order.userId,
     user_name: order.userName,
@@ -236,7 +256,14 @@ export async function createOrder(order: Order): Promise<Order> {
     pin: order.pin,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
-  })
+  }
+  if (order.deliverySlot) payload.delivery_slot = order.deliverySlot
+
+  let { error: orderError } = await client.from('orders').insert(payload)
+  if (orderError && /delivery_slot/i.test(orderError.message)) {
+    delete payload.delivery_slot
+    ;({ error: orderError } = await client.from('orders').insert(payload))
+  }
   if (orderError) throw orderError
 
   const items = order.items.map((it) => ({

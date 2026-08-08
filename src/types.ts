@@ -1,6 +1,8 @@
 export type Role = 'customer' | 'seller' | 'admin'
 export type Grade = 'A' | 'B' | 'C'
 export type OrderStatus = 'pending' | 'advance_paid' | 'confirmed' | 'delivered' | 'cancelled'
+export type Season = 'all' | 'summer' | 'winter' | 'rainy'
+export type DeliverySlot = 'morning' | 'evening'
 
 export interface User {
   id: string
@@ -22,6 +24,9 @@ export interface Product {
   inStock: boolean
   /** Hidden from shop; kept for seller history / next season */
   archived?: boolean
+  /** Approximate units left; low-stock alert when <= threshold */
+  stockQty?: number
+  season?: Season
   category: string
   unit: string
   /** Optional photo URL; emoji used as fallback */
@@ -59,6 +64,7 @@ export interface Order {
   address: string
   phone: string
   pin: string
+  deliverySlot?: DeliverySlot
   createdAt: string
   updatedAt: string
 }

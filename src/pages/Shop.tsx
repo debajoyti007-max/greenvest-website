@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
+import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'
 import { HERO_IMAGE, resolveProductImage } from '../lib/productImages'
 import type { Grade, Lang, Product } from '../types'
@@ -18,6 +19,8 @@ function ProductCard({
   onPick: (p: Product) => void
 }) {
   const img = resolveProductImage(p.id, p.imageUrl)
+  const low =
+    p.inStock && p.stockQty != null && p.stockQty > 0 && p.stockQty <= LOW_STOCK_QTY
   return (
     <article className={`product-tile premium-tile ${p.inStock ? '' : 'out'}`}>
       <div className="product-media photo">
@@ -33,6 +36,14 @@ function ProductCard({
           }}
         />
         {!p.inStock && <span className="stock-badge">{t(lang, 'outOfStock')}</span>}
+        {low && (
+          <span className="stock-badge low-badge">
+            {lang === 'bn' ? 'কম স্টক' : 'Low stock'}
+          </span>
+        )}
+        {p.season && p.season !== 'all' && (
+          <span className="season-badge">{SEASON_LABELS[p.season][lang]}</span>
+        )}
       </div>
       <div className="product-body">
         <h2>{lang === 'bn' ? p.bnName : p.name}</h2>

@@ -8,6 +8,20 @@ export const MIN_ORDER_AMOUNT = 500
 export const DELIVERY_WINDOW = '12–24 hours'
 export const DELIVERY_WINDOW_BN = '১২–২৪ ঘণ্টা'
 export const ADVANCE_PERCENT = 50
+/** Alert seller when stockQty is at or below this (and item is in stock). */
+export const LOW_STOCK_QTY = 5
+
+export const DELIVERY_SLOTS = {
+  morning: { en: 'Morning (8 AM – 12 PM)', bn: 'সকাল (৮টা – ১২টা)' },
+  evening: { en: 'Evening (4 PM – 8 PM)', bn: 'সন্ধ্যা (৪টা – ৮টা)' },
+} as const
+
+export const SEASON_LABELS = {
+  all: { en: 'All season', bn: 'সব সিজন' },
+  summer: { en: 'Summer', bn: 'গ্রীষ্ম' },
+  winter: { en: 'Winter', bn: 'শীত' },
+  rainy: { en: 'Rainy', bn: 'বর্ষা' },
+} as const
 
 /** Display phone. */
 export const SUPPORT_PHONE = env('VITE_SUPPORT_PHONE', '+91 8170859653')

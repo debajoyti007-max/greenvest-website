@@ -1,4 +1,5 @@
 import type { Order } from '../types'
+import { DELIVERY_SLOTS } from './business'
 
 export function printOrderInvoice(order: Order) {
   const rows = order.items
@@ -7,6 +8,10 @@ export function printOrderInvoice(order: Order) {
         `<tr><td>${it.emoji} ${it.name} (G${it.grade})</td><td>${it.qty}</td><td>৳${it.unitPrice}</td><td>৳${it.unitPrice * it.qty}</td></tr>`,
     )
     .join('')
+
+  const slotLabel = order.deliverySlot
+    ? DELIVERY_SLOTS[order.deliverySlot].en
+    : '—'
 
   const html = `<!DOCTYPE html><html><head><title>Invoice ${order.id}</title>
   <style>
@@ -19,7 +24,7 @@ export function printOrderInvoice(order: Order) {
   </style></head><body>
   <h1>GreenVest Invoice</h1>
   <p class="muted">${order.id} · ${new Date(order.createdAt).toLocaleString()}</p>
-  <p><strong>${order.userName}</strong><br/>${order.phone}<br/>${order.address}<br/>PIN ${order.pin}</p>
+  <p><strong>${order.userName}</strong><br/>${order.phone}<br/>${order.address}<br/>PIN ${order.pin}<br/>Slot: ${slotLabel}</p>
   <table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
   <tbody>${rows}</tbody></table>
   <div class="tot">

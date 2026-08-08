@@ -22,6 +22,8 @@ create table if not exists public.products (
   p_c numeric not null default 0,
   in_stock boolean not null default true,
   archived boolean not null default false,
+  stock_qty numeric,
+  season text not null default 'all',
   category text not null default 'Vegetables',
   unit text not null default 'kg',
   image_url text,
@@ -45,6 +47,7 @@ create table if not exists public.orders (
   address text not null,
   phone text not null,
   pin text not null default '',
+  delivery_slot text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

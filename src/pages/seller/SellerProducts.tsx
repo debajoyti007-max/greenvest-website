@@ -2,10 +2,11 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
+import { LOW_STOCK_QTY, SEASON_LABELS } from '../../lib/business'
 import { t } from '../../lib/i18n'
 import { fileToProductImage } from '../../lib/imageUpload'
 import { resolveProductImage } from '../../lib/productImages'
-import type { Product } from '../../types'
+import type { Product, Season } from '../../types'
 
 const emptyForm = {
   emoji: '🥬',
@@ -16,6 +17,8 @@ const emptyForm = {
   pC: 0,
   inStock: true,
   archived: false,
+  stockQty: 20,
+  season: 'all' as Season,
   category: 'Vegetables',
   unit: 'kg',
   imageUrl: '',
@@ -67,6 +70,8 @@ export default function SellerProducts() {
       pC: p.pC,
       inStock: p.inStock,
       archived: Boolean(p.archived),
+      stockQty: p.stockQty ?? 0,
+      season: (p.season || 'all') as Season,
       category: p.category,
       unit: p.unit,
       imageUrl: p.imageUrl || '',
@@ -188,6 +193,28 @@ export default function SellerProducts() {
           )}
           {photoError && <p className="form-error span-2">{photoError}</p>}
           <label>
+            {lang === 'bn' ? 'স্টক পরিমাণ' : 'Stock qty'}
+            <input
+              type="number"
+              min={0}
+              value={form.stockQty}
+              onChange={(e) => setForm({ ...form, stockQty: Number(e.target.value) })}
+            />
+          </label>
+          <label>
+            {lang === 'bn' ? 'সিজন' : 'Season'}
+            <select
+              value={form.season}
+              onChange={(e) => setForm({ ...form, season: e.target.value as Season })}
+            >
+              {(Object.keys(SEASON_LABELS) as Season[]).map((s) => (
+                <option key={s} value={s}>
+                  {SEASON_LABELS[s][lang]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             Grade A ৳
             <input
               type="number"
@@ -292,7 +319,19 @@ export default function SellerProducts() {
                   </td>
                   <td>
                     <strong>{lang === 'bn' ? p.bnName : p.name}</strong>
-                    <div className="muted">{lang === 'bn' ? p.name : p.bnName}</div>
+                    <div className="muted">
+                      {lang === 'bn' ? p.name : p.bnName}
+                      {p.season && p.season !== 'all' ? ` · ${SEASON_LABELS[p.season][lang]}` : ''}
+                      {p.stockQty != null ? ` · qty ${p.stockQty}` : ''}
+                      {p.inStock &&
+                      p.stockQty != null &&
+                      p.stockQty > 0 &&
+                      p.stockQty <= LOW_STOCK_QTY
+                        ? lang === 'bn'
+                          ? ' · লো স্টক'
+                          : ' · low'
+                        : ''}
+                    </div>
                   </td>
                   <td>
                     ৳{p.pA} / ৳{p.pB} / ৳{p.pC}

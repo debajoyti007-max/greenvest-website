@@ -45,6 +45,7 @@ interface PlaceOrderOpts {
   phone: string
   pin: string
   utr: string
+  deliverySlot: import('../types').DeliverySlot
 }
 
 interface StoreContextValue {
@@ -267,6 +268,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         address: opts.address.trim(),
         phone: opts.phone.trim(),
         pin: opts.pin.replace(/\D/g, ''),
+        deliverySlot: opts.deliverySlot,
         createdAt: now,
         updatedAt: now,
       }
