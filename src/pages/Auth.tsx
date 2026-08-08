@@ -156,6 +156,7 @@ export default function Auth() {
           <label>
             {t(lang, 'name')}
             <input
+              name="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={lang === 'bn' ? 'আপনার নাম' : 'Your full name'}
@@ -167,6 +168,7 @@ export default function Auth() {
         <label>
           {lang === 'bn' ? 'মোবাইল নম্বর (বা ইমেইল)' : 'Phone Number (or Email)'}
           <input
+            name="username"
             type="text"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -179,6 +181,7 @@ export default function Auth() {
           <label>
             {lang === 'bn' ? 'পাসওয়ার্ড বা পিন (কমপক্ষে ৬টি সংকেত)' : 'PIN / Password (min 6 chars)'}
             <input
+              name="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -187,6 +190,12 @@ export default function Auth() {
               minLength={6}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
+          </label>
+        )}
+        {mode !== 'forgot' && (
+          <label className="remember-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.4rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+            <input type="checkbox" defaultChecked name="remember" />
+            <span>{lang === 'bn' ? 'লগইন তথ্য ব্রাউজারে সেভ রাখুন' : 'Save password & stay logged in'}</span>
           </label>
         )}
         {error && <p className="form-error">{error}</p>}
