@@ -1,5 +1,5 @@
 import { SEED_PRODUCTS, SEED_USERS } from '../data/seed'
-import type { CartItem, Order, Product, User } from '../types'
+import type { CartItem, Lang, Order, Product, User } from '../types'
 
 const KEYS = {
   users: 'gv_users',
@@ -28,15 +28,14 @@ function write<T>(key: string, value: T) {
   window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key } }))
 }
 
+/** Seed demo users/products for local (no-cloud) mode */
 export function ensureSeeded() {
   if (localStorage.getItem(KEYS.seeded) === '1') {
-    // Ensure seed accounts still exist if users were wiped
     const users = read<User[]>(KEYS.users, [])
-    if (users.length === 0) {
-      write(KEYS.users, SEED_USERS)
-    }
+    if (users.length === 0) write(KEYS.users, SEED_USERS)
     const products = read<Product[]>(KEYS.products, [])
-    if (products.length === 0) {
+    // Refresh catalog when new seed veggies are added
+    if (products.length < SEED_PRODUCTS.length) {
       write(KEYS.products, SEED_PRODUCTS)
     }
     return
@@ -90,13 +89,28 @@ export function setSessionUserId(id: string | null) {
   window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: KEYS.session } }))
 }
 
-export function getLang(): 'en' | 'bn' {
-  return (localStorage.getItem(KEYS.lang) as 'en' | 'bn') || 'en'
+export function getLang(): Lang {
+  const saved = localStorage.getItem(KEYS.lang) as Lang | null
+  if (saved === 'en' || saved === 'bn') return saved
+  return 'bn'
 }
 
-export function setLang(lang: 'en' | 'bn') {
+export function setLang(lang: Lang) {
   localStorage.setItem(KEYS.lang, lang)
   window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: KEYS.lang } }))
+}
+
+export function clearLocalShopData() {
+  const lang = getLang()
+  localStorage.removeItem(KEYS.users)
+  localStorage.removeItem(KEYS.products)
+  localStorage.removeItem(KEYS.orders)
+  localStorage.removeItem(KEYS.cart)
+  localStorage.removeItem(KEYS.session)
+  localStorage.removeItem(KEYS.seeded)
+  ensureSeeded()
+  setLang(lang)
+  window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: 'reset' } }))
 }
 
 export function uid(prefix = 'id') {

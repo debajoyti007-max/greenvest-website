@@ -1,9 +1,23 @@
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
-import type { OrderStatus } from '../../types'
+import { printOrderInvoice } from '../../lib/printOrder'
+import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled']
+
+function openMaps(address: string, pin: string) {
+  const q = encodeURIComponent(`${address} ${pin}`.trim())
+  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, '_blank')
+}
+
+function openWhatsApp(order: Order) {
+  const phone = order.phone.replace(/\D/g, '').replace(/^0/, '91')
+  const text = encodeURIComponent(
+    `GreenVest order ${order.id}\nHi ${order.userName}, your order total is ৳${order.total}. UTR: ${order.utr}. Status: ${order.status}.`,
+  )
+  window.open(`https://wa.me/${phone}?text=${text}`, '_blank')
+}
 
 export default function SellerOrders() {
   const { user } = useAuth()
@@ -46,25 +60,43 @@ export default function SellerOrders() {
                 ))}
               </ul>
               <p>
-                {o.address} · {o.phone}
+                {o.address} · PIN {o.pin || '—'} · {o.phone}
+              </p>
+              <p className="muted">
+                Subtotal ৳{o.subtotal ?? o.total} · Delivery ৳{o.deliveryFee ?? 0} · Total ৳{o.total}
               </p>
               <div className="utr-row">
                 <span>
-                  UTR: <code>{o.utr}</code> · Advance ৳{o.advanceAmount} / Total ৳{o.total}
+                  UTR: <code>{o.utr}</code> · Advance ৳{o.advanceAmount}
                 </span>
                 <button
                   type="button"
                   className={`btn ${o.utrVerified ? 'btn-secondary' : 'btn-primary'}`}
-                  onClick={() => verifyUtr(o.id, !o.utrVerified)}
+                  onClick={() => void verifyUtr(o.id, !o.utrVerified)}
                 >
                   {o.utrVerified ? 'Unverify UTR' : 'Verify UTR'}
+                </button>
+              </div>
+              <div className="seller-order-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => openWhatsApp(o)}>
+                  WhatsApp
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => openMaps(o.address, o.pin || '')}
+                >
+                  Maps
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => printOrderInvoice(o)}>
+                  Print invoice
                 </button>
               </div>
               <label className="status-select">
                 Status
                 <select
                   value={o.status}
-                  onChange={(e) => updateOrderStatus(o.id, e.target.value as OrderStatus)}
+                  onChange={(e) => void updateOrderStatus(o.id, e.target.value as OrderStatus)}
                 >
                   {STATUSES.map((s) => (
                     <option key={s} value={s}>

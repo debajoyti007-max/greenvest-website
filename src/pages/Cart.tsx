@@ -1,24 +1,21 @@
 import { Link } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
+import { t } from '../lib/i18n'
 
 export default function Cart() {
-  const {
-    cart,
-    products,
-    lang,
-    priceFor,
-    updateCartQty,
-    removeFromCart,
-    cartTotal,
-  } = useStore()
+  const { cart, products, lang, priceFor, updateCartQty, removeFromCart, cartTotal } = useStore()
+
+  const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
+  const canCheckout = cartTotal >= MIN_ORDER_AMOUNT
 
   if (cart.length === 0) {
     return (
       <div className="page narrow">
-        <h1>{lang === 'bn' ? 'আপনার কার্ট' : 'Your cart'}</h1>
-        <p className="empty">{lang === 'bn' ? 'কার্ট খালি।' : 'Your cart is empty.'}</p>
+        <h1>{t(lang, 'yourCart')}</h1>
+        <p className="empty">{t(lang, 'emptyCart')}</p>
         <Link to="/" className="btn btn-primary">
-          {lang === 'bn' ? 'কেনাকাটা করুন' : 'Continue shopping'}
+          {t(lang, 'continueShop')}
         </Link>
       </div>
     )
@@ -26,7 +23,12 @@ export default function Cart() {
 
   return (
     <div className="page narrow">
-      <h1>{lang === 'bn' ? 'আপনার কার্ট' : 'Your cart'}</h1>
+      <h1>{t(lang, 'yourCart')}</h1>
+      <p className="hint">
+        {lang === 'bn'
+          ? `সর্বনিম্ন অর্ডার ৳${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
+          : `Minimum order ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW}`}
+      </p>
       <ul className="cart-list">
         {cart.map((item) => {
           const p = products.find((x) => x.id === item.productId)
@@ -38,7 +40,7 @@ export default function Cart() {
               <div className="cart-info">
                 <strong>{lang === 'bn' ? p.bnName : p.name}</strong>
                 <span>
-                  Grade {item.grade} · ৳{priceFor(p, item.grade)}/{p.unit}
+                  {t(lang, 'grade')} {item.grade} · ৳{priceFor(p, item.grade)}/{p.unit}
                 </span>
               </div>
               <div className="qty-controls">
@@ -62,7 +64,7 @@ export default function Cart() {
                 className="btn btn-ghost"
                 onClick={() => removeFromCart(item.productId, item.grade)}
               >
-                {lang === 'bn' ? 'মুছুন' : 'Remove'}
+                {t(lang, 'remove')}
               </button>
             </li>
           )
@@ -71,16 +73,29 @@ export default function Cart() {
 
       <div className="cart-summary">
         <div>
-          <span>{lang === 'bn' ? 'মোট' : 'Total'}</span>
+          <span>{t(lang, 'total')}</span>
           <strong>৳{cartTotal}</strong>
         </div>
         <div>
-          <span>{lang === 'bn' ? 'অগ্রিম (৫০%)' : 'Advance (50%)'}</span>
+          <span>{t(lang, 'advance')}</span>
           <strong>৳{Math.ceil(cartTotal * 0.5)}</strong>
         </div>
-        <Link to="/checkout" className="btn btn-primary">
-          {lang === 'bn' ? 'চেকআউটে যান' : 'Proceed to checkout'}
-        </Link>
+        {!canCheckout && (
+          <p className="form-error">
+            {lang === 'bn'
+              ? `আরও ৳${shortfall} যোগ করুন (মিনিমাম ৳${MIN_ORDER_AMOUNT})`
+              : `Add ₹${shortfall} more to reach the ₹${MIN_ORDER_AMOUNT} minimum`}
+          </p>
+        )}
+        {canCheckout ? (
+          <Link to="/checkout" className="btn btn-primary">
+            {t(lang, 'checkout')}
+          </Link>
+        ) : (
+          <Link to="/" className="btn btn-secondary">
+            {t(lang, 'addMore')}
+          </Link>
+        )}
       </div>
     </div>
   )

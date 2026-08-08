@@ -22,6 +22,8 @@ export interface Product {
   inStock: boolean
   category: string
   unit: string
+  /** Optional photo URL; emoji used as fallback */
+  imageUrl?: string
 }
 
 export interface CartItem {
@@ -45,6 +47,8 @@ export interface Order {
   userName: string
   userEmail: string
   items: OrderItem[]
+  subtotal: number
+  deliveryFee: number
   total: number
   advanceAmount: number
   utr: string
@@ -52,6 +56,7 @@ export interface Order {
   status: OrderStatus
   address: string
   phone: string
+  pin: string
   createdAt: string
   updatedAt: string
 }

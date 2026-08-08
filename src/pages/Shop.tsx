@@ -1,11 +1,17 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
-import type { Grade } from '../types'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
+import { catLabel, t } from '../lib/i18n'
+import { HERO_IMAGE, resolveProductImage } from '../lib/productImages'
+import type { Grade, Product } from '../types'
 
 export default function Shop() {
-  const { products, lang, addToCart, priceFor } = useStore()
-  const [grade, setGrade] = useState<Grade>('A')
+  const { products, lang, addToCart, priceFor, loading } = useStore()
   const [category, setCategory] = useState('All')
+  const [search, setSearch] = useState('')
+  const [picked, setPicked] = useState<Product | null>(null)
+  const [grade, setGrade] = useState<Grade>('B')
   const [added, setAdded] = useState<string | null>(null)
 
   const categories = useMemo(() => {
@@ -13,97 +19,179 @@ export default function Shop() {
     return ['All', ...Array.from(set)]
   }, [products])
 
-  const filtered = products.filter((p) => category === 'All' || p.category === category)
+  const filtered = products.filter((p) => {
+    const catOk = category === 'All' || p.category === category
+    const q = search.trim().toLowerCase()
+    const searchOk =
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      p.bnName.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q)
+    return catOk && searchOk
+  })
 
-  const handleAdd = (productId: string) => {
-    addToCart(productId, grade, 1)
-    setAdded(productId)
+  const openPick = (p: Product) => {
+    if (!p.inStock) return
+    setPicked(p)
+    setGrade('B')
+  }
+
+  const confirmAdd = () => {
+    if (!picked) return
+    addToCart(picked.id, grade, 1)
+    setAdded(picked.id)
+    setPicked(null)
     setTimeout(() => setAdded(null), 900)
+  }
+
+  const scrollToGrid = () => {
+    document.getElementById('veg-grid')?.scrollIntoView({ behavior: 'smooth' })
   }
 
   return (
     <div className="page shop-page">
-      <section className="hero-band">
-        <div className="hero-copy">
-          <p className="eyebrow">{lang === 'bn' ? 'তাজা বাজার' : 'Farm-fresh market'}</p>
-          <h1 className="brand-hero">GreenVest</h1>
-          <p className="lede">
+      <section className="hero-full" style={{ backgroundImage: `url(${HERO_IMAGE})` }}>
+        <div className="hero-full-shade" />
+        <div className="hero-full-copy">
+          <p className="hero-kicker">{t(lang, 'farmToDoor')}</p>
+          <h1 className="brand-hero light">GreenVest</h1>
+          <p className="hero-sub">
             {lang === 'bn'
-              ? 'গ্রেড অনুযায়ী তাজা সবজি কিনুন — সরাসরি সেলার থেকে।'
-              : 'Shop live vegetables by grade — straight from the seller.'}
+              ? `গ্রেড A/B/C · মিনিমাম ৳${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
+              : `Grade A/B/C · Min ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW}`}
           </p>
-          <div className="grade-picker" role="group" aria-label="Grade">
-            {(['A', 'B', 'C'] as Grade[]).map((g) => (
+          <button type="button" className="btn btn-primary hero-cta" onClick={scrollToGrid}>
+            {t(lang, 'shopVeggies')}
+          </button>
+        </div>
+      </section>
+
+      <div className="shop-body" id="veg-grid">
+        <p className="friendly-tip">{t(lang, 'tipMin')}</p>
+
+        <div className="toolbar">
+          <label className="search-field">
+            <span className="sr-only">{t(lang, 'search')}</span>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t(lang, 'search')}
+            />
+          </label>
+          <div className="cat-filters">
+            {categories.map((c) => (
               <button
-                key={g}
+                key={c}
                 type="button"
-                className={`grade-btn ${grade === g ? 'active' : ''}`}
-                onClick={() => setGrade(g)}
+                className={`chip ${category === c ? 'active' : ''}`}
+                onClick={() => setCategory(c)}
               >
-                Grade {g}
+                {catLabel(lang, c)}
               </button>
             ))}
           </div>
         </div>
-        <div className="hero-visual" aria-hidden>
-          <div className="veg-orbit">🍅🥔🧅🥬🥕🥒</div>
-        </div>
-      </section>
 
-      <div className="toolbar">
-        <div className="cat-filters">
-          {categories.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={`chip ${category === c ? 'active' : ''}`}
-              onClick={() => setCategory(c)}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-        <p className="hint">
-          {lang === 'bn' ? 'নির্বাচিত গ্রেড:' : 'Selected grade:'} <strong>{grade}</strong>
+        {loading ? (
+          <p className="empty">{t(lang, 'loading')}</p>
+        ) : filtered.length === 0 ? (
+          <p className="empty">
+            {lang === 'bn' ? 'কোনো সবজি পাওয়া যায়নি।' : 'No vegetables match your search.'}
+          </p>
+        ) : (
+          <div className="product-grid premium-grid">
+            {filtered.map((p) => {
+              const img = resolveProductImage(p.id, p.imageUrl)
+              return (
+                <article key={p.id} className={`product-tile premium-tile ${p.inStock ? '' : 'out'}`}>
+                  <div className="product-media photo">
+                    <img
+                      src={img}
+                      alt={lang === 'bn' ? p.bnName : p.name}
+                      className="product-photo"
+                      loading="lazy"
+                      onError={(e) => {
+                        const el = e.currentTarget
+                        const fallback = resolveProductImage(p.id)
+                        if (!el.src.endsWith(fallback)) el.src = fallback
+                      }}
+                    />
+                    {!p.inStock && <span className="stock-badge">{t(lang, 'outOfStock')}</span>}
+                  </div>
+                  <div className="product-body">
+                    <h2>{lang === 'bn' ? p.bnName : p.name}</h2>
+                    <p className="muted">
+                      {lang === 'bn' ? p.name : p.bnName} · {p.unit}
+                    </p>
+                    <div className="price-row">
+                      <span className="price">৳{p.pB}</span>
+                      <span className="grade-prices">
+                        <span>A ৳{p.pA}</span>
+                        <span>B ৳{p.pB}</span>
+                        <span>C ৳{p.pC}</span>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={!p.inStock}
+                      onClick={() => openPick(p)}
+                    >
+                      {added === p.id ? t(lang, 'added') : t(lang, 'chooseGrade')}
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+
+        <p className="shop-footnote">
+          <Link to="/cart">{t(lang, 'viewCart')}</Link>
+          {' · '}
+          {lang === 'bn'
+            ? 'পেমেন্ট: UPI QR + ম্যানুয়াল UTR'
+            : 'Pay via UPI QR + manual UTR'}
         </p>
       </div>
 
-      <div className="product-grid">
-        {filtered.map((p) => (
-          <article key={p.id} className={`product-tile ${p.inStock ? '' : 'out'}`}>
-            <div className="product-emoji">{p.emoji}</div>
-            <h2>{lang === 'bn' ? p.bnName : p.name}</h2>
-            <p className="muted">
-              {lang === 'bn' ? p.name : p.bnName} · {p.unit}
-            </p>
-            <div className="price-row">
-              <span className="price">৳{priceFor(p, grade)}</span>
-              <span className={`stock ${p.inStock ? 'in' : 'off'}`}>
-                {p.inStock ? (lang === 'bn' ? 'স্টকে আছে' : 'In stock') : lang === 'bn' ? 'স্টক নেই' : 'Out of stock'}
-              </span>
+      {picked && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setPicked(null)}>
+          <div
+            className="modal premium-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="grade-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-photo">
+              <img src={resolveProductImage(picked.id, picked.imageUrl)} alt={picked.name} />
             </div>
-            <div className="grade-prices">
-              <span>A ৳{p.pA}</span>
-              <span>B ৳{p.pB}</span>
-              <span>C ৳{p.pC}</span>
+            <h2 id="grade-title">{lang === 'bn' ? picked.bnName : picked.name}</h2>
+            <p className="muted">{t(lang, 'selectGrade')}</p>
+            <div className="grade-picker">
+              {(['A', 'B', 'C'] as Grade[]).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  className={`grade-btn ${grade === g ? 'active' : ''}`}
+                  onClick={() => setGrade(g)}
+                >
+                  {t(lang, 'grade')} {g} · ৳{priceFor(picked, g)}
+                </button>
+              ))}
             </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={!p.inStock}
-              onClick={() => handleAdd(p.id)}
-            >
-              {added === p.id
-                ? lang === 'bn'
-                  ? 'যোগ হয়েছে ✓'
-                  : 'Added ✓'
-                : lang === 'bn'
-                  ? 'কার্টে যোগ'
-                  : 'Add to cart'}
-            </button>
-          </article>
-        ))}
-      </div>
+            <div className="form-actions">
+              <button type="button" className="btn btn-primary" onClick={confirmAdd}>
+                {t(lang, 'addToCart')}
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => setPicked(null)}>
+                {t(lang, 'cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

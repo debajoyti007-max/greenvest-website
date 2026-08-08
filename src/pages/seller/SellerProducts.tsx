@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
@@ -14,6 +14,7 @@ const emptyForm = {
   inStock: true,
   category: 'Vegetables',
   unit: 'kg',
+  imageUrl: '',
 }
 
 export default function SellerProducts() {
@@ -38,17 +39,22 @@ export default function SellerProducts() {
       inStock: p.inStock,
       category: p.category,
       unit: p.unit,
+      imageUrl: p.imageUrl || '',
     })
   }
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!form.name.trim()) return
+    const payload = {
+      ...form,
+      imageUrl: form.imageUrl.trim() || undefined,
+    }
     if (editing) {
-      updateProduct({ ...editing, ...form })
+      await updateProduct({ ...editing, ...payload })
       setEditing(null)
     } else {
-      addProduct(form)
+      await addProduct(payload)
     }
     setForm(emptyForm)
   }
@@ -84,6 +90,14 @@ export default function SellerProducts() {
           <label>
             Unit
             <input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+          </label>
+          <label className="span-2">
+            Image URL (optional)
+            <input
+              value={form.imageUrl}
+              onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+              placeholder="https://..."
+            />
           </label>
           <label>
             Grade A ৳
@@ -155,7 +169,7 @@ export default function SellerProducts() {
                   <button
                     type="button"
                     className={`stock-toggle ${p.inStock ? 'in' : 'out'}`}
-                    onClick={() => toggleStock(p.id)}
+                    onClick={() => void toggleStock(p.id)}
                   >
                     {p.inStock ? 'IN' : 'OUT'}
                   </button>
@@ -164,7 +178,7 @@ export default function SellerProducts() {
                   <button type="button" className="btn btn-ghost" onClick={() => startEdit(p)}>
                     Edit
                   </button>
-                  <button type="button" className="btn btn-ghost danger" onClick={() => deleteProduct(p.id)}>
+                  <button type="button" className="btn btn-ghost danger" onClick={() => void deleteProduct(p.id)}>
                     Delete
                   </button>
                 </td>

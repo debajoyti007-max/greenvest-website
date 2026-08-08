@@ -8,6 +8,23 @@ import {
   type ReactNode,
 } from 'react'
 import {
+  createOrder,
+  deleteAllOrdersApi,
+  deleteProductApi,
+  fetchOrders,
+  fetchProducts,
+  insertProduct,
+  setAllProductsInStock,
+  subscribeOrders,
+  updateOrderStatusApi,
+  upsertProduct,
+  verifyUtrApi,
+} from '../lib/api'
+import { MIN_ORDER_AMOUNT } from '../lib/business'
+import { calcDeliveryFee } from '../lib/delivery'
+import { isSupabaseConfigured } from '../lib/supabase'
+import {
+  clearLocalShopData,
   ensureSeeded,
   getCart,
   getLang,
@@ -23,11 +40,19 @@ import {
 import type { CartItem, Grade, Lang, Order, OrderStatus, Product } from '../types'
 import { useAuth } from './AuthContext'
 
+interface PlaceOrderOpts {
+  address: string
+  phone: string
+  pin: string
+  utr: string
+}
+
 interface StoreContextValue {
   products: Product[]
   cart: CartItem[]
   orders: Order[]
   lang: Lang
+  loading: boolean
   setLang: (lang: Lang) => void
   addToCart: (productId: string, grade: Grade, qty?: number) => void
   updateCartQty: (productId: string, grade: Grade, qty: number) => void
@@ -36,38 +61,82 @@ interface StoreContextValue {
   cartCount: number
   cartTotal: number
   priceFor: (p: Product, grade: Grade) => number
-  placeOrder: (opts: { address: string; phone: string; utr: string }) => Order | null
-  updateProduct: (product: Product) => void
-  addProduct: (product: Omit<Product, 'id'>) => void
-  deleteProduct: (id: string) => void
-  toggleStock: (id: string) => void
-  updateOrderStatus: (id: string, status: OrderStatus) => void
-  verifyUtr: (id: string, verified: boolean) => void
-  refresh: () => void
+  placeOrder: (opts: PlaceOrderOpts) => Promise<Order | null>
+  updateProduct: (product: Product) => Promise<void>
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>
+  deleteProduct: (id: string) => Promise<void>
+  toggleStock: (id: string) => Promise<void>
+  morningReset: () => Promise<void>
+  updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>
+  verifyUtr: (id: string, verified: boolean) => Promise<void>
+  resetDemo: () => Promise<void>
+  refresh: () => Promise<void>
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
+  const { user, mode } = useAuth()
+  const cloud = mode === 'cloud' && isSupabaseConfigured
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [lang, setLangState] = useState<Lang>('en')
+  const [loading, setLoading] = useState(true)
 
-  const refresh = useCallback(() => {
+  const refreshLocal = useCallback(() => {
     ensureSeeded()
     setProducts(getProducts())
     setCart(getCart())
     setOrders(getOrders())
-    setLangState(getLang())
+    const l = getLang()
+    setLangState(l)
+    document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
+    document.body.classList.toggle('lang-bn', l === 'bn')
+    setLoading(false)
   }, [])
 
+  const refreshCloud = useCallback(async () => {
+    try {
+      const prods = await fetchProducts()
+      setProducts(prods)
+      setCart(getCart())
+      const l = getLang()
+      setLangState(l)
+      document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
+      document.body.classList.toggle('lang-bn', l === 'bn')
+      if (user) {
+        const ords = await fetchOrders()
+        setOrders(ords)
+      } else {
+        setOrders([])
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
+  const refresh = useCallback(async () => {
+    if (cloud) await refreshCloud()
+    else refreshLocal()
+  }, [cloud, refreshCloud, refreshLocal])
+
   useEffect(() => {
-    refresh()
-    const onStore = () => refresh()
+    void refresh()
+  }, [refresh])
+
+  useEffect(() => {
+    const onStore = () => {
+      if (!cloud) refreshLocal()
+      else {
+        setCart(getCart())
+        setLangState(getLang())
+      }
+    }
     const onStorage = (e: StorageEvent) => {
-      if (!e.key || e.key.startsWith('gv_')) refresh()
+      if (!e.key || e.key.startsWith('gv_')) onStore()
     }
     window.addEventListener(STORE_EVENT, onStore)
     window.addEventListener('storage', onStorage)
@@ -75,11 +144,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(STORE_EVENT, onStore)
       window.removeEventListener('storage', onStorage)
     }
-  }, [refresh])
+  }, [cloud, refreshLocal])
+
+  useEffect(() => {
+    if (!cloud || !user) return
+    return subscribeOrders(() => {
+      void refreshCloud()
+    })
+  }, [cloud, user, refreshCloud])
 
   const setLang = useCallback((l: Lang) => {
     persistLang(l)
     setLangState(l)
+    document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
+    document.body.classList.toggle('lang-bn', l === 'bn')
   }, [])
 
   const priceFor = useCallback((p: Product, grade: Grade) => {
@@ -131,14 +209,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [cart, products, priceFor])
 
   const placeOrder = useCallback(
-    (opts: { address: string; phone: string; utr: string }) => {
+    async (opts: PlaceOrderOpts) => {
       if (!user) return null
       const currentCart = getCart()
-      const currentProducts = getProducts()
       if (currentCart.length === 0) return null
 
+      const catalog = cloud ? products : getProducts()
       const items = currentCart.map((c) => {
-        const p = currentProducts.find((x) => x.id === c.productId)!
+        const p = catalog.find((x) => x.id === c.productId)
+        if (!p) throw new Error('Product missing from cart')
         return {
           productId: c.productId,
           name: p.name,
@@ -149,7 +228,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       })
 
-      const total = items.reduce((s, i) => s + i.unitPrice * i.qty, 0)
+      const subtotal = items.reduce((s, i) => s + i.unitPrice * i.qty, 0)
+      if (subtotal < MIN_ORDER_AMOUNT) return null
+      const { fee: deliveryFee } = calcDeliveryFee(opts.pin)
+      const total = subtotal + deliveryFee
       const now = new Date().toISOString()
       const order: Order = {
         id: uid('ord'),
@@ -157,6 +239,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         userName: user.name,
         userEmail: user.email,
         items,
+        subtotal,
+        deliveryFee,
         total,
         advanceAmount: Math.ceil(total * 0.5),
         utr: opts.utr.trim(),
@@ -164,8 +248,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         status: 'advance_paid',
         address: opts.address.trim(),
         phone: opts.phone.trim(),
+        pin: opts.pin.replace(/\D/g, ''),
         createdAt: now,
         updatedAt: now,
+      }
+
+      if (cloud) {
+        await createOrder(order)
+        saveCart([])
+        setCart([])
+        await refreshCloud()
+        return order
       }
 
       const nextOrders = [order, ...getOrders()]
@@ -175,55 +268,125 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCart([])
       return order
     },
-    [user, priceFor],
+    [user, cloud, products, priceFor, refreshCloud],
   )
 
-  const updateProduct = useCallback((product: Product) => {
-    const next = getProducts().map((p) => (p.id === product.id ? product : p))
+  const updateProduct = useCallback(
+    async (product: Product) => {
+      if (cloud) {
+        const saved = await upsertProduct(product)
+        setProducts((prev) => prev.map((p) => (p.id === saved.id ? saved : p)))
+        return
+      }
+      const next = getProducts().map((p) => (p.id === product.id ? product : p))
+      saveProducts(next)
+      setProducts(next)
+    },
+    [cloud],
+  )
+
+  const addProduct = useCallback(
+    async (product: Omit<Product, 'id'>) => {
+      if (cloud) {
+        const saved = await insertProduct(product)
+        setProducts((prev) => [...prev, saved])
+        return
+      }
+      const next = [...getProducts(), { ...product, id: uid('p') }]
+      saveProducts(next)
+      setProducts(next)
+    },
+    [cloud],
+  )
+
+  const deleteProduct = useCallback(
+    async (id: string) => {
+      if (cloud) {
+        await deleteProductApi(id)
+        setProducts((prev) => prev.filter((p) => p.id !== id))
+        return
+      }
+      const next = getProducts().filter((p) => p.id !== id)
+      saveProducts(next)
+      setProducts(next)
+    },
+    [cloud],
+  )
+
+  const toggleStock = useCallback(
+    async (id: string) => {
+      const current = products.find((p) => p.id === id)
+      if (!current) return
+      await updateProduct({ ...current, inStock: !current.inStock })
+    },
+    [products, updateProduct],
+  )
+
+  const morningReset = useCallback(async () => {
+    if (cloud) {
+      await setAllProductsInStock()
+      await refreshCloud()
+      return
+    }
+    const next = getProducts().map((p) => ({ ...p, inStock: true }))
     saveProducts(next)
     setProducts(next)
-  }, [])
+  }, [cloud, refreshCloud])
 
-  const addProduct = useCallback((product: Omit<Product, 'id'>) => {
-    const next = [...getProducts(), { ...product, id: uid('p') }]
-    saveProducts(next)
-    setProducts(next)
-  }, [])
+  const updateOrderStatus = useCallback(
+    async (id: string, status: OrderStatus) => {
+      if (cloud) {
+        await updateOrderStatusApi(id, status)
+        await refreshCloud()
+        return
+      }
+      const next = getOrders().map((o) =>
+        o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o,
+      )
+      saveOrders(next)
+      setOrders(next)
+    },
+    [cloud, refreshCloud],
+  )
 
-  const deleteProduct = useCallback((id: string) => {
-    const next = getProducts().filter((p) => p.id !== id)
-    saveProducts(next)
-    setProducts(next)
-  }, [])
+  const verifyUtr = useCallback(
+    async (id: string, verified: boolean) => {
+      if (cloud) {
+        await verifyUtrApi(id, verified)
+        await refreshCloud()
+        return
+      }
+      const next = getOrders().map((o) =>
+        o.id === id
+          ? {
+              ...o,
+              utrVerified: verified,
+              status: verified ? ('confirmed' as OrderStatus) : o.status,
+              updatedAt: new Date().toISOString(),
+            }
+          : o,
+      )
+      saveOrders(next)
+      setOrders(next)
+    },
+    [cloud, refreshCloud],
+  )
 
-  const toggleStock = useCallback((id: string) => {
-    const next = getProducts().map((p) => (p.id === id ? { ...p, inStock: !p.inStock } : p))
-    saveProducts(next)
-    setProducts(next)
-  }, [])
-
-  const updateOrderStatus = useCallback((id: string, status: OrderStatus) => {
-    const next = getOrders().map((o) =>
-      o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o,
-    )
-    saveOrders(next)
-    setOrders(next)
-  }, [])
-
-  const verifyUtr = useCallback((id: string, verified: boolean) => {
-    const next = getOrders().map((o) =>
-      o.id === id
-        ? {
-            ...o,
-            utrVerified: verified,
-            status: verified ? ('confirmed' as OrderStatus) : o.status,
-            updatedAt: new Date().toISOString(),
-          }
-        : o,
-    )
-    saveOrders(next)
-    setOrders(next)
-  }, [])
+  const resetDemo = useCallback(async () => {
+    if (cloud && user?.role === 'admin') {
+      try {
+        await deleteAllOrdersApi()
+      } catch (err) {
+        console.error(err)
+      }
+      saveCart([])
+      setCart([])
+      await refreshCloud()
+      return
+    }
+    clearLocalShopData()
+    refreshLocal()
+  }, [cloud, user?.role, refreshCloud, refreshLocal])
 
   const value = useMemo(
     () => ({
@@ -231,6 +394,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cart,
       orders,
       lang,
+      loading,
       setLang,
       addToCart,
       updateCartQty,
@@ -244,8 +408,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addProduct,
       deleteProduct,
       toggleStock,
+      morningReset,
       updateOrderStatus,
       verifyUtr,
+      resetDemo,
       refresh,
     }),
     [
@@ -253,6 +419,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cart,
       orders,
       lang,
+      loading,
       setLang,
       addToCart,
       updateCartQty,
@@ -266,8 +433,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addProduct,
       deleteProduct,
       toggleStock,
+      morningReset,
       updateOrderStatus,
       verifyUtr,
+      resetDemo,
       refresh,
     ],
   )

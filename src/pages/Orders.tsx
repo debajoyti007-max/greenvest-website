@@ -1,6 +1,7 @@
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
+import { t } from '../lib/i18n'
 
 export default function Orders() {
   const { user } = useAuth()
@@ -12,12 +13,12 @@ export default function Orders() {
 
   return (
     <div className="page">
-      <h1>{lang === 'bn' ? 'আমার অর্ডার' : 'My orders'}</h1>
+      <h1>{t(lang, 'myOrders')}</h1>
       {mine.length === 0 ? (
         <div className="empty-block">
-          <p>{lang === 'bn' ? 'এখনো কোনো অর্ডার নেই।' : 'No orders yet.'}</p>
+          <p>{t(lang, 'noOrders')}</p>
           <Link to="/" className="btn btn-primary">
-            {lang === 'bn' ? 'কেনাকাটা শুরু' : 'Start shopping'}
+            {t(lang, 'startShopping')}
           </Link>
         </div>
       ) : (
@@ -34,23 +35,34 @@ export default function Orders() {
               <ul>
                 {o.items.map((it) => (
                   <li key={`${it.productId}-${it.grade}`}>
-                    {it.emoji} {it.name} · Grade {it.grade} × {it.qty} — ৳{it.unitPrice * it.qty}
+                    {it.emoji} {it.name} · {t(lang, 'grade')} {it.grade} × {it.qty} — ৳
+                    {it.unitPrice * it.qty}
                   </li>
                 ))}
               </ul>
+              <p className="muted">
+                {o.address}
+                {o.pin ? ` · PIN ${o.pin}` : ''} · {o.phone}
+              </p>
               <footer>
                 <span>
-                  {lang === 'bn' ? 'মোট' : 'Total'}: <strong>৳{o.total}</strong>
+                  {t(lang, 'subtotal')}: ৳{o.subtotal ?? o.total}
                 </span>
                 <span>
-                  {lang === 'bn' ? 'অগ্রিম' : 'Advance'}: ৳{o.advanceAmount}
+                  {t(lang, 'delivery')}: ৳{o.deliveryFee ?? 0}
+                </span>
+                <span>
+                  {t(lang, 'total')}: <strong>৳{o.total}</strong>
+                </span>
+                <span>
+                  {t(lang, 'advance')}: ৳{o.advanceAmount}
                 </span>
                 <span>
                   UTR: {o.utr}{' '}
                   {o.utrVerified ? (
-                    <em className="ok">{lang === 'bn' ? 'যাচাইকৃত' : 'verified'}</em>
+                    <em className="ok">{t(lang, 'verified')}</em>
                   ) : (
-                    <em className="wait">{lang === 'bn' ? 'অপেক্ষমাণ' : 'pending'}</em>
+                    <em className="wait">{t(lang, 'pending')}</em>
                   )}
                 </span>
               </footer>
