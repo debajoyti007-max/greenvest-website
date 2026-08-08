@@ -129,6 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         if (error) {
           const msg = error.message || 'Login failed'
+          if (/rate limit|over_email/i.test(msg)) {
+            return {
+              ok: false,
+              error:
+                'Email sending limit reached. Wait ~1 hour, or ask admin to turn OFF Confirm email in Supabase.',
+            }
+          }
           // Supabase returns this when email confirm is ON and not confirmed yet
           if (/invalid login credentials/i.test(msg)) {
             return {
@@ -172,7 +179,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
           options: { data: { name: name.trim() } },
         })
-        if (error) return { ok: false, error: error.message }
+        if (error) {
+          const msg = error.message || 'Signup failed'
+          if (/rate limit|over_email/i.test(msg)) {
+            return {
+              ok: false,
+              error:
+                'Email sending limit reached (Supabase free mail). Wait ~1 hour, or admin must turn OFF Confirm email so signup works without email.',
+            }
+          }
+          return { ok: false, error: msg }
+        }
         if (!data.user) return { ok: false, error: 'Signup failed' }
         if (data.session) {
           const profile = await fetchProfile(data.user.id)
@@ -230,7 +247,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
         redirectTo,
       })
-      if (error) return { ok: false, error: error.message }
+      if (error) {
+        const msg = error.message || 'Reset failed'
+        if (/rate limit|over_email/i.test(msg)) {
+          return {
+            ok: false,
+            error: 'Email sending limit reached. Wait about 1 hour and try again.',
+          }
+        }
+        return { ok: false, error: msg }
+      }
       return { ok: true }
     },
     [cloud],
