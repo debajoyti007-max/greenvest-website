@@ -1348,6 +1348,20 @@ img {
 
 .seller-links {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 1.25rem 0;
+}
+
+.seller-filters {
+  margin-bottom: 1rem;
+}
+
+.seller-product-search {
+  margin: 1rem 0;
+  max-width: 360px;
+}
+  display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
 }

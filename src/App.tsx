@@ -17,6 +17,7 @@ import Terms from './pages/Terms'
 import SellerHome from './pages/seller/SellerHome'
 import SellerOrders from './pages/seller/SellerOrders'
 import SellerProducts from './pages/seller/SellerProducts'
+import SellerCustomers from './pages/seller/SellerCustomers'
 import type { Role } from './types'
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
@@ -72,6 +73,14 @@ function AppRoutes() {
           element={
             <RequireRole roles={['seller', 'admin']}>
               <SellerOrders />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="seller/customers"
+          element={
+            <RequireRole roles={['seller', 'admin']}>
+              <SellerCustomers />
             </RequireRole>
           }
         />

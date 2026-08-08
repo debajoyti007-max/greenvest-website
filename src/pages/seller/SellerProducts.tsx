@@ -27,10 +27,21 @@ export default function SellerProducts() {
   const [form, setForm] = useState(emptyForm)
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoError, setPhotoError] = useState('')
+  const [query, setQuery] = useState('')
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
   }
+
+  const filtered = products.filter((p) => {
+    const q = query.trim().toLowerCase()
+    if (!q) return true
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.bnName.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q)
+    )
+  })
 
   const startEdit = (p: Product) => {
     setEditing(p)
@@ -199,6 +210,15 @@ export default function SellerProducts() {
         </div>
       </form>
 
+      <label className="search-field seller-product-search">
+        <span className="sr-only">{lang === 'bn' ? 'সার্চ' : 'Search'}</span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={lang === 'bn' ? 'প্রোডাক্ট খুঁজুন…' : 'Search products…'}
+        />
+      </label>
+
       <div className="table-wrap">
         <table className="data-table">
           <thead>
@@ -211,7 +231,7 @@ export default function SellerProducts() {
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
+            {filtered.map((p) => (
               <tr key={p.id}>
                 <td className="emoji-cell">
                   <img
