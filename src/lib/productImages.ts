@@ -39,75 +39,77 @@ export function resolveProductImage(id: string, imageUrl?: string, name?: string
     return imageUrl
   }
 
-  const query = `${name || ''} ${id || ''} ${imageUrl || ''}`.toLowerCase()
+  // 2. Strict name & ID query (excludes imageUrl so old tomato links never contaminate search)
+  const nameQuery = `${name || ''} ${id || ''}`.toLowerCase()
 
-  // 2. Smart keyword matching by English and Bengali vegetable names
-  if (query.includes('bitter') || query.includes('করলা') || query.includes('উচ্ছে') || query.includes('bittergourd')) {
+  if (nameQuery.includes('bitter') || nameQuery.includes('করলা') || nameQuery.includes('উচ্ছে') || nameQuery.includes('bittergourd') || id === 'p19') {
     return PRODUCT_IMAGES.p19
   }
-  if (query.includes('coriander') || query.includes('ধনে') || query.includes('dhania')) {
+  if (nameQuery.includes('coriander') || nameQuery.includes('ধনে') || nameQuery.includes('dhania') || id === 'p16') {
     return PRODUCT_IMAGES.p16
   }
-  if (query.includes('bottle') || query.includes('লাউ') || query.includes('bottlegourd')) {
+  if (nameQuery.includes('bottle') || nameQuery.includes('লাউ') || nameQuery.includes('bottlegourd') || id === 'p18') {
     return PRODUCT_IMAGES.p18
   }
-  if (query.includes('spinach') || query.includes('পালং') || query.includes('শাক')) {
+  if (nameQuery.includes('spinach') || nameQuery.includes('পালং') || nameQuery.includes('শাক') || id === 'p4') {
     return PRODUCT_IMAGES.p4
   }
-  if (query.includes('cabbage') || query.includes('বাঁধাকপি')) {
+  if (nameQuery.includes('cabbage') || nameQuery.includes('বাঁধাকপি') || id === 'p10') {
     return PRODUCT_IMAGES.p10
   }
-  if (query.includes('cauliflower') || query.includes('ফুলকপি')) {
+  if (nameQuery.includes('cauliflower') || nameQuery.includes('ফুলকপি') || id === 'p8') {
     return PRODUCT_IMAGES.p8
   }
-  if (query.includes('capsicum') || query.includes('ক্যাপসিকাম')) {
+  if (nameQuery.includes('capsicum') || nameQuery.includes('ক্যাপসিকাম') || id === 'p11') {
     return PRODUCT_IMAGES.p11
   }
-  if (query.includes('brinjal') || query.includes('বেগুন') || query.includes('बैंगন')) {
+  if (nameQuery.includes('brinjal') || nameQuery.includes('বেগুন') || nameQuery.includes('बैंगন') || id === 'p9') {
     return PRODUCT_IMAGES.p9
   }
-  if (query.includes('chili') || query.includes('মরিচ') || query.includes('লঙ্কা')) {
+  if (nameQuery.includes('chili') || nameQuery.includes('মরিচ') || nameQuery.includes('লঙ্কা') || id === 'p7') {
     return PRODUCT_IMAGES.p7
   }
-  if (query.includes('cucumber') || query.includes('শসা')) {
+  if (nameQuery.includes('cucumber') || nameQuery.includes('শসা') || id === 'p6') {
     return PRODUCT_IMAGES.p6
   }
-  if (query.includes('carrot') || query.includes('গাজর')) {
+  if (nameQuery.includes('carrot') || nameQuery.includes('গাজর') || id === 'p5') {
     return PRODUCT_IMAGES.p5
   }
-  if (query.includes('garlic') || query.includes('রসুন')) {
+  if (nameQuery.includes('garlic') || nameQuery.includes('রসুন') || id === 'p12') {
     return PRODUCT_IMAGES.p12
   }
-  if (query.includes('ginger') || query.includes('আদা')) {
+  if (nameQuery.includes('ginger') || nameQuery.includes('আদা') || id === 'p13') {
     return PRODUCT_IMAGES.p13
   }
-  if (query.includes('okra') || query.includes('ঢেঁড়স') || query.includes('ভেন্ডি')) {
+  if (nameQuery.includes('okra') || nameQuery.includes('ঢেঁড়স') || nameQuery.includes('ভেন্ডি') || id === 'p14') {
     return PRODUCT_IMAGES.p14
   }
-  if (query.includes('beans') || query.includes('শিম')) {
+  if (nameQuery.includes('beans') || nameQuery.includes('শিম') || id === 'p15') {
     return PRODUCT_IMAGES.p15
   }
-  if (query.includes('lemon') || query.includes('লেবু')) {
+  if (nameQuery.includes('lemon') || nameQuery.includes('লেবু') || id === 'p17') {
     return PRODUCT_IMAGES.p17
   }
-  if (query.includes('radish') || query.includes('মুলা')) {
+  if (nameQuery.includes('radish') || nameQuery.includes('মুলা') || id === 'p20') {
     return PRODUCT_IMAGES.p20
   }
-  if (query.includes('peas') || query.includes('মটর')) {
+  if (nameQuery.includes('peas') || nameQuery.includes('মটর') || id === 'p21') {
     return PRODUCT_IMAGES.p21
   }
-  if (query.includes('potato') || query.includes('আলু')) {
+  if (nameQuery.includes('potato') || nameQuery.includes('আলু') || id === 'p2') {
     return PRODUCT_IMAGES.p2
   }
-  if (query.includes('onion') || query.includes('পেঁয়াজ')) {
+  if (nameQuery.includes('onion') || nameQuery.includes('পেঁয়াজ') || id === 'p3') {
     return PRODUCT_IMAGES.p3
   }
-  if (query.includes('tomato') || query.includes('টমেটো')) {
+  if (nameQuery.includes('tomato') || nameQuery.includes('টমেটো') || id === 'p1') {
     return PRODUCT_IMAGES.p1
   }
 
-  // 3. Fallback by explicit ID
-  if (PRODUCT_IMAGES[id]) return PRODUCT_IMAGES[id]
+  // 3. Fallback to valid /veg/ image path if provided
+  if (imageUrl?.startsWith('/veg/')) {
+    return asset(imageUrl)
+  }
 
   // 4. Default fallback hero photo
   return HERO_IMAGE
