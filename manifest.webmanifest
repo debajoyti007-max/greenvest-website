@@ -1,0 +1,17 @@
+{
+  "name": "GreenVest – তাজা সবজি",
+  "short_name": "GreenVest",
+  "description": "GreenVest — fresh vegetables with grade A/B/C, min order ₹500, delivery in 12–24 hours.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#166534",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
