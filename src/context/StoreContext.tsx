@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from 'react'
 import {
+  bulkUpdateOrderStatusApi,
+  checkDuplicateUtrApi,
   createOrder,
   deleteProductApi,
   fetchOrders,
@@ -69,6 +71,8 @@ interface StoreContextValue {
   toggleStock: (id: string) => Promise<void>
   morningReset: () => Promise<void>
   updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>
+  bulkUpdateOrderStatus: (ids: string[], status: OrderStatus) => Promise<void>
+  checkDuplicateUtr: (utr: string) => Promise<boolean>
   verifyUtr: (id: string, verified: boolean) => Promise<void>
   refresh: () => Promise<void>
 }
@@ -393,6 +397,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setProducts(next)
   }, [cloud, refreshCloud])
 
+  const checkDuplicateUtr = useCallback(
+    async (utr: string): Promise<boolean> => {
+      const clean = utr.trim()
+      if (clean.length < 6) return false
+      if (cloud) {
+        return checkDuplicateUtrApi(clean)
+      }
+      const existing = getOrders()
+      return existing.some((o) => o.utr === clean && o.status !== 'cancelled')
+    },
+    [cloud],
+  )
+
   const updateOrderStatus = useCallback(
     async (id: string, status: OrderStatus) => {
       if (cloud) {
@@ -400,8 +417,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await refreshCloud()
         return
       }
+      const target = getOrders().find((o) => o.id === id)
       const next = getOrders().map((o) =>
         o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o,
+      )
+      saveOrders(next)
+      setOrders(next)
+
+      if (target && status === 'cancelled' && target.status !== 'cancelled') {
+        const catalog = getProducts()
+        const updatedCatalog = catalog.map((p) => {
+          const item = target.items.find((i) => i.productId === p.id)
+          if (!item) return p
+          const newQty = (p.stockQty ?? 0) + item.qty
+          return { ...p, stockQty: newQty, inStock: true }
+        })
+        saveProducts(updatedCatalog)
+        setProducts(updatedCatalog)
+      }
+    },
+    [cloud, refreshCloud],
+  )
+
+  const bulkUpdateOrderStatus = useCallback(
+    async (ids: string[], status: OrderStatus) => {
+      if (ids.length === 0) return
+      if (cloud) {
+        await bulkUpdateOrderStatusApi(ids, status)
+        await refreshCloud()
+        return
+      }
+      const next = getOrders().map((o) =>
+        ids.includes(o.id) ? { ...o, status, updatedAt: new Date().toISOString() } : o,
       )
       saveOrders(next)
       setOrders(next)
@@ -455,6 +502,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toggleStock,
       morningReset,
       updateOrderStatus,
+      bulkUpdateOrderStatus,
+      checkDuplicateUtr,
       verifyUtr,
       refresh,
     }),
@@ -480,6 +529,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toggleStock,
       morningReset,
       updateOrderStatus,
+      bulkUpdateOrderStatus,
+      checkDuplicateUtr,
       verifyUtr,
       refresh,
     ],

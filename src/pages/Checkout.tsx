@@ -11,7 +11,7 @@ import type { DeliverySlot } from '../types'
 
 export default function Checkout() {
   const { user } = useAuth()
-  const { cart, cartTotal, lang, placeOrder, orders } = useStore()
+  const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr } = useStore()
   const navigate = useNavigate()
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
@@ -100,6 +100,15 @@ export default function Checkout() {
         lang === 'bn'
           ? `সর্বনিম্ন অর্ডার ৳${MIN_ORDER_AMOUNT}`
           : `Minimum order is ₹${MIN_ORDER_AMOUNT}`,
+      )
+      return
+    }
+    const isDup = await checkDuplicateUtr(utr.trim())
+    if (isDup) {
+      setError(
+        lang === 'bn'
+          ? 'এই UTR নম্বরটি আগেই ব্যবহৃত হয়েছে। নতুন UTR নম্বর দিন।'
+          : 'This UTR number has already been used for another order.',
       )
       return
     }

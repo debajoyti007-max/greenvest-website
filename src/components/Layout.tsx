@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import ConfigBanner from './ConfigBanner'
+import NetworkStatus from './NetworkStatus'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { t } from '../lib/i18n'
@@ -22,6 +23,7 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
+      <NetworkStatus />
       <ConfigBanner />
       <header className="site-header">
         <div className="header-inner">
@@ -54,6 +56,9 @@ export default function Layout() {
             <NavLink to="/cart" onClick={closeMenu}>
               {t(lang, 'cart')}
               {cartCount > 0 && <span className="badge">{cartCount}</span>}
+            </NavLink>
+            <NavLink to="/track" onClick={closeMenu}>
+              {lang === 'bn' ? 'ট্র্যাক' : 'Track'}
             </NavLink>
             {user && (
               <NavLink to="/orders" onClick={closeMenu}>
@@ -115,6 +120,7 @@ export default function Layout() {
             <strong>GreenVest</strong> — {t(lang, 'footerLine')}
           </p>
           <nav className="footer-links" aria-label="Legal">
+            <Link to="/track">{lang === 'bn' ? 'ট্র্যাকিং' : 'Track Order'}</Link>
             <Link to="/contact">{t(lang, 'contact')}</Link>
             <Link to="/privacy">{t(lang, 'privacy')}</Link>
             <Link to="/terms">{t(lang, 'terms')}</Link>

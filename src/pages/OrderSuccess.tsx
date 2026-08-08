@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/AuthContext'
@@ -12,6 +12,7 @@ export default function OrderSuccess() {
   const { user } = useAuth()
   const { orders, lang } = useStore()
   const notified = useRef(false)
+  const [copied, setCopied] = useState(false)
 
   const order = user ? orders.find((o) => o.id === id && o.userId === user.id) : undefined
 
@@ -20,6 +21,18 @@ export default function OrderSuccess() {
     notified.current = true
     openSellerOrderWhatsApp(order)
   }, [order])
+
+  const copySummary = async () => {
+    if (!order) return
+    const text = `GreenVest Order: ${order.id}\nCustomer: ${order.userName} (${order.phone})\nTotal: ৳${order.total} (Advance ৳${order.advanceAmount})\nUTR: ${order.utr}\nAddress: ${order.address} (PIN ${order.pin})`
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
+    }
+  }
 
   if (!user) return <Navigate to="/auth" replace />
 
@@ -64,11 +77,20 @@ export default function OrderSuccess() {
           UTR: <code>{order.utr}</code> · <em className="wait">{t(lang, 'utrPending')}</em>
         </p>
       </div>
-      <div className="form-actions">
+      <div className="form-actions" style={{ flexWrap: 'wrap', gap: '0.6rem' }}>
         <button type="button" className="btn btn-primary" onClick={() => openSellerOrderWhatsApp(order)}>
-          {t(lang, 'notifySellerWa')}
+          {lang === 'bn' ? '💬 WhatsApp এ রশিদ ও UTR পাঠান' : '💬 Send Receipt to WhatsApp'}
         </button>
-        <Link to="/orders" className="btn btn-secondary">
+        <button type="button" className="btn btn-secondary" onClick={copySummary}>
+          {copied
+            ? lang === 'bn'
+              ? '✓ কপি হয়েছে'
+              : '✓ Copied'
+            : lang === 'bn'
+              ? '📋 রশিদের টেক্সট কপি করুন'
+              : '📋 Copy Receipt Text'}
+        </button>
+        <Link to="/orders" className="btn btn-ghost">
           {t(lang, 'viewMyOrders')}
         </Link>
         <Link to="/" className="btn btn-ghost">

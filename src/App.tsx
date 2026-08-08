@@ -1,25 +1,28 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import SetupRequired, { shouldBlockApp } from './components/SetupRequired'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { StoreProvider } from './context/StoreContext'
-import AdminUsers from './pages/admin/AdminUsers'
-import Auth from './pages/Auth'
-import Cart from './pages/Cart'
-import Checkout from './pages/Checkout'
-import Contact from './pages/Contact'
-import OrderSuccess from './pages/OrderSuccess'
-import Orders from './pages/Orders'
-import Privacy from './pages/Privacy'
-import Refund from './pages/Refund'
-import ResetPassword from './pages/ResetPassword'
-import Shop from './pages/Shop'
-import Terms from './pages/Terms'
-import SellerHome from './pages/seller/SellerHome'
-import SellerOrders from './pages/seller/SellerOrders'
-import SellerProducts from './pages/seller/SellerProducts'
-import SellerCustomers from './pages/seller/SellerCustomers'
 import type { Role } from './types'
+
+const Shop = lazy(() => import('./pages/Shop'))
+const Cart = lazy(() => import('./pages/Cart'))
+const Checkout = lazy(() => import('./pages/Checkout'))
+const Orders = lazy(() => import('./pages/Orders'))
+const OrderSuccess = lazy(() => import('./pages/OrderSuccess'))
+const TrackOrder = lazy(() => import('./pages/TrackOrder'))
+const Auth = lazy(() => import('./pages/Auth'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const Contact = lazy(() => import('./pages/Contact'))
+const Privacy = lazy(() => import('./pages/Privacy'))
+const Terms = lazy(() => import('./pages/Terms'))
+const Refund = lazy(() => import('./pages/Refund'))
+const SellerHome = lazy(() => import('./pages/seller/SellerHome'))
+const SellerProducts = lazy(() => import('./pages/seller/SellerProducts'))
+const SellerOrders = lazy(() => import('./pages/seller/SellerOrders'))
+const SellerCustomers = lazy(() => import('./pages/seller/SellerCustomers'))
+const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
 
@@ -41,62 +44,65 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<Shop />} />
-        <Route path="cart" element={<Cart />} />
-        <Route path="checkout" element={<Checkout />} />
-        <Route path="orders" element={<Orders />} />
-        <Route path="orders/success/:id" element={<OrderSuccess />} />
-        <Route path="auth" element={<Auth />} />
-        <Route path="auth/reset" element={<ResetPassword />} />
-        <Route path="contact" element={<Contact />} />
-        <Route path="privacy" element={<Privacy />} />
-        <Route path="terms" element={<Terms />} />
-        <Route path="refund" element={<Refund />} />
-        <Route
-          path="seller"
-          element={
-            <RequireRole roles={['seller', 'admin']}>
-              <SellerHome />
-            </RequireRole>
-          }
-        />
-        <Route
-          path="seller/products"
-          element={
-            <RequireRole roles={['seller', 'admin']}>
-              <SellerProducts />
-            </RequireRole>
-          }
-        />
-        <Route
-          path="seller/orders"
-          element={
-            <RequireRole roles={['seller', 'admin']}>
-              <SellerOrders />
-            </RequireRole>
-          }
-        />
-        <Route
-          path="seller/customers"
-          element={
-            <RequireRole roles={['seller', 'admin']}>
-              <SellerCustomers />
-            </RequireRole>
-          }
-        />
-        <Route
-          path="admin"
-          element={
-            <RequireRole roles={['admin']}>
-              <AdminUsers />
-            </RequireRole>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+    <Suspense fallback={<div className="page narrow" style={{ textAlign: 'center', padding: '3rem 1rem' }}>Loading…</div>}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Shop />} />
+          <Route path="cart" element={<Cart />} />
+          <Route path="checkout" element={<Checkout />} />
+          <Route path="track" element={<TrackOrder />} />
+          <Route path="orders" element={<Orders />} />
+          <Route path="orders/success/:id" element={<OrderSuccess />} />
+          <Route path="auth" element={<Auth />} />
+          <Route path="auth/reset" element={<ResetPassword />} />
+          <Route path="contact" element={<Contact />} />
+          <Route path="privacy" element={<Privacy />} />
+          <Route path="terms" element={<Terms />} />
+          <Route path="refund" element={<Refund />} />
+          <Route
+            path="seller"
+            element={
+              <RequireRole roles={['seller', 'admin']}>
+                <SellerHome />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="seller/products"
+            element={
+              <RequireRole roles={['seller', 'admin']}>
+                <SellerProducts />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="seller/orders"
+            element={
+              <RequireRole roles={['seller', 'admin']}>
+                <SellerOrders />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="seller/customers"
+            element={
+              <RequireRole roles={['seller', 'admin']}>
+                <SellerCustomers />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="admin"
+            element={
+              <RequireRole roles={['admin']}>
+                <AdminUsers />
+              </RequireRole>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </Suspense>
   )
 }
 

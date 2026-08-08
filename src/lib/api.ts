@@ -290,6 +290,29 @@ export async function updateOrderStatusApi(id: string, status: OrderStatus): Pro
   if (error) throw error
 }
 
+export async function bulkUpdateOrderStatusApi(ids: string[], status: OrderStatus): Promise<void> {
+  if (ids.length === 0) return
+  const client = requireClient()
+  const { error } = await client
+    .from('orders')
+    .update({ status, updated_at: new Date().toISOString() })
+    .in('id', ids)
+  if (error) throw error
+}
+
+export async function checkDuplicateUtrApi(utr: string): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return false
+  const clean = utr.trim()
+  if (clean.length < 6) return false
+  const { data } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('utr', clean)
+    .neq('status', 'cancelled')
+    .limit(1)
+  return Boolean(data && data.length > 0)
+}
+
 export async function verifyUtrApi(id: string, verified: boolean): Promise<void> {
   const client = requireClient()
   const patch: Record<string, unknown> = {
@@ -308,7 +331,11 @@ export function subscribeOrders(onChange: () => void) {
     .channel('orders-live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => onChange())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => onChange())
-    .subscribe()
+    .subscribe((status) => {
+      if (status === 'TIMED_OUT' || status === 'CLOSED') {
+        setTimeout(() => void channel.subscribe(), 2000)
+      }
+    })
   return () => {
     void client.removeChannel(channel)
   }

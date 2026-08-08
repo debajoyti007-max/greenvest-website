@@ -43,6 +43,54 @@ export function printOrderInvoice(order: Order) {
   w.document.close()
 }
 
+/** Print receipt formatted for 58mm/80mm Bluetooth thermal receipt printers. */
+export function printThermalReceipt(order: Order) {
+  const rows = order.items
+    .map(
+      (it) =>
+        `<div>${it.name.slice(0, 14)} (G${it.grade}) x${it.qty} = ৳${it.unitPrice * it.qty}</div>`,
+    )
+    .join('')
+
+  const slot = order.deliverySlot
+    ? DELIVERY_SLOTS[order.deliverySlot].en
+    : 'Standard'
+
+  const html = `<!DOCTYPE html><html><head><title>Thermal Receipt ${order.id}</title>
+  <style>
+    @page { size: 58mm auto; margin: 0; }
+    body { font-family: monospace; width: 58mm; padding: 4px; margin: 0; font-size: 11px; color: #000; }
+    .c { text-align: center; }
+    .b { font-weight: bold; }
+    .hr { border-bottom: 1px dashed #000; margin: 4px 0; }
+  </style></head><body>
+  <div class="c b">GREENVEST</div>
+  <div class="c">Fresh Vegetables</div>
+  <div class="hr"></div>
+  <div>ID: ${order.id}</div>
+  <div>Date: ${new Date(order.createdAt).toLocaleDateString()}</div>
+  <div>Cust: ${order.userName.slice(0, 16)}</div>
+  <div>Ph: ${order.phone}</div>
+  <div>Slot: ${slot}</div>
+  <div class="hr"></div>
+  ${rows}
+  <div class="hr"></div>
+  <div>Subtotal: ৳${order.subtotal}</div>
+  <div>Delivery: ৳${order.deliveryFee}</div>
+  <div class="b">Total: ৳${order.total}</div>
+  <div>Advance: ৳${order.advanceAmount}</div>
+  <div>UTR: ${order.utr}</div>
+  <div class="hr"></div>
+  <div class="c">Thank You!</div>
+  <script>window.onload=()=>window.print()</script>
+  </body></html>`
+
+  const w = window.open('', '_blank', 'width=320,height=600')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
+}
+
 /** Print packing / delivery list grouped by morning & evening slots. */
 export function printPackingList(orders: Order[], lang: 'en' | 'bn' = 'en') {
   const active = orders.filter(

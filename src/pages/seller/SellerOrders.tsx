@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
-import { printOrderInvoice } from '../../lib/printOrder'
+import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
 import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled']
@@ -40,8 +40,9 @@ const statusBn: Record<OrderStatus, string> = {
 
 export default function SellerOrders() {
   const { user } = useAuth()
-  const { orders, lang, updateOrderStatus, verifyUtr } = useStore()
+  const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr } = useStore()
   const [filter, setFilter] = useState<Filter>('all')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
@@ -57,6 +58,26 @@ export default function SellerOrders() {
       return true
     })
   }, [orders, filter])
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filtered.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(filtered.map((o) => o.id))
+    }
+  }
+
+  const handleBulkStatus = async (status: OrderStatus) => {
+    if (selectedIds.length === 0) return
+    await bulkUpdateOrderStatus(selectedIds, status)
+    setSelectedIds([])
+  }
 
   const filters: { id: Filter; en: string; bn: string }[] = [
     { id: 'all', en: 'All', bn: 'সব' },
@@ -88,14 +109,51 @@ export default function SellerOrders() {
         ))}
       </div>
 
+      {filtered.length > 0 && (
+        <div className="bulk-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.75rem 0 1rem', padding: '0.6rem 0.85rem', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: '10px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>
+            <input
+              type="checkbox"
+              checked={selectedIds.length === filtered.length && filtered.length > 0}
+              onChange={toggleSelectAll}
+            />
+            {lang === 'bn' ? 'সব নির্বাচন' : 'Select all'} ({selectedIds.length})
+          </label>
+          {selectedIds.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => void handleBulkStatus('confirmed')}
+              >
+                {lang === 'bn' ? '✓ কনফার্ম করুন' : 'Mark Confirmed'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void handleBulkStatus('delivered')}
+              >
+                {lang === 'bn' ? '🚚 ডেলিভারড করুন' : 'Mark Delivered'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <p className="empty">{lang === 'bn' ? 'এই ফিল্টারে অর্ডার নেই।' : 'No orders in this filter.'}</p>
       ) : (
         <div className="order-list">
           {filtered.map((o) => (
             <article key={o.id} className="order-card seller-order">
-              <header>
-                <div>
+              <header style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(o.id)}
+                  onChange={() => toggleSelect(o.id)}
+                  style={{ marginTop: '0.2rem', cursor: 'pointer' }}
+                />
+                <div style={{ flex: 1 }}>
                   <strong>{o.id}</strong>
                   <span className="muted">
                     {o.userName} · {o.phone}
@@ -141,7 +199,7 @@ export default function SellerOrders() {
                       : 'Verify UTR'}
                 </button>
               </div>
-              <div className="seller-order-actions">
+              <div className="seller-order-actions" style={{ flexWrap: 'wrap', gap: '0.4rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => openWhatsApp(o, lang)}>
                   WhatsApp
                 </button>
@@ -153,7 +211,10 @@ export default function SellerOrders() {
                   Maps
                 </button>
                 <button type="button" className="btn btn-ghost" onClick={() => printOrderInvoice(o)}>
-                  {lang === 'bn' ? 'প্রিন্ট' : 'Print'}
+                  {lang === 'bn' ? 'ইনভয়েস' : 'Invoice'}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => printThermalReceipt(o)}>
+                  {lang === 'bn' ? '🖨️ থার্মাল রিসিপ্ট' : '🖨️ Thermal Slip'}
                 </button>
               </div>
               <label className="status-select">
