@@ -17,6 +17,7 @@ import {
   insertProduct,
   setAllProductsInStock,
   subscribeOrders,
+  subscribeProducts,
   updateOrderStatusApi,
   upsertProduct,
   verifyUtrApi,
@@ -183,6 +184,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('storage', onStorage)
     }
   }, [cloud, refreshLocal])
+
+  useEffect(() => {
+    if (!cloud) return
+    return subscribeProducts(async () => {
+      try {
+        const prods = await fetchProducts()
+        setProducts(prods)
+      } catch { /* */ }
+    })
+  }, [cloud])
 
   useEffect(() => {
     if (!cloud || !user) return

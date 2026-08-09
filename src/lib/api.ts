@@ -342,6 +342,21 @@ export function subscribeOrders(onChange: () => void) {
   const channel = client
     .channel('orders-live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => onChange())
+    .subscribe((status) => {
+      if (status === 'TIMED_OUT' || status === 'CLOSED') {
+        setTimeout(() => void channel.subscribe(), 2000)
+      }
+    })
+  return () => {
+    void client.removeChannel(channel)
+  }
+}
+
+export function subscribeProducts(onChange: () => void) {
+  if (!isSupabaseConfigured || !supabase) return () => {}
+  const client = supabase
+  const channel = client
+    .channel('products-live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => onChange())
     .subscribe((status) => {
       if (status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -352,6 +367,7 @@ export function subscribeOrders(onChange: () => void) {
     void client.removeChannel(channel)
   }
 }
+
 
 export async function fetchAddresses(userId: string): Promise<Address[]> {
   if (!supabase) return []
