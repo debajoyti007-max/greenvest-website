@@ -1,4 +1,4 @@
-import{d as e}from"./index-DN3E4iPY.js";function t(t){let n=t.items.map(e=>`<tr><td>${e.emoji} ${e.name} (G${e.grade})</td><td>${e.qty}</td><td>৳${e.unitPrice}</td><td>৳${e.unitPrice*e.qty}</td></tr>`).join(``),r=t.deliverySlot?e[t.deliverySlot].en:`—`,i=`<!DOCTYPE html><html><head><title>Invoice ${t.id}</title>
+import{d as e}from"./index-Duas90FY.js";function t(t){let n=t.items.map(e=>`<tr><td>${e.emoji} ${e.name} (G${e.grade})</td><td>${e.qty}</td><td>৳${e.unitPrice}</td><td>৳${e.unitPrice*e.qty}</td></tr>`).join(``),r=t.deliverySlot?e[t.deliverySlot].en:`—`,i=`<!DOCTYPE html><html><head><title>Invoice ${t.id}</title>
   <style>
     body{font-family:'Hind Siliguri','Noto Sans Bengali','Nirmala UI',system-ui,sans-serif;padding:24px;color:#111}
     h1{margin:0 0 4px} .muted{color:#666;font-size:14px}
