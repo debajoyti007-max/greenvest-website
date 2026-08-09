@@ -444,7 +444,4 @@ BEGIN
 END;
 $$;
 
--- Seed one welcome coupon: FRESH50, flat ₹50 off, min order ₹500, max 100 uses.
-INSERT INTO coupons (code, discount_type, discount_value, min_order, max_uses)
-VALUES ('FRESH50', 'flat', 50, 500, 100)
-ON CONFLICT (code) DO NOTHING;
+
