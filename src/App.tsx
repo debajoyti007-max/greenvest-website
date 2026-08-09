@@ -12,6 +12,7 @@ const Checkout = lazy(() => import('./pages/Checkout'))
 const Orders = lazy(() => import('./pages/Orders'))
 const OrderSuccess = lazy(() => import('./pages/OrderSuccess'))
 const TrackOrder = lazy(() => import('./pages/TrackOrder'))
+const Profile = lazy(() => import('./pages/Profile'))
 const Auth = lazy(() => import('./pages/Auth'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Contact = lazy(() => import('./pages/Contact'))
@@ -53,6 +54,7 @@ function AppRoutes() {
           <Route path="track" element={<TrackOrder />} />
           <Route path="orders" element={<Orders />} />
           <Route path="orders/success/:id" element={<OrderSuccess />} />
+          <Route path="profile" element={<Profile />} />
           <Route path="auth" element={<Auth />} />
           <Route path="auth/reset" element={<ResetPassword />} />
           <Route path="contact" element={<Contact />} />

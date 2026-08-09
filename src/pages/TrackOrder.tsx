@@ -7,8 +7,10 @@ import type { Order } from '../types'
 
 export default function TrackOrder() {
   const { orders, lang } = useStore()
+  const [orderId, setOrderId] = useState('')
   const [phone, setPhone] = useState('')
   const [utr, setUtr] = useState('')
+  const [searchByPhone, setSearchByPhone] = useState(false)
   const [matched, setMatched] = useState<Order | null>(null)
   const [searched, setSearched] = useState(false)
   const [error, setError] = useState('')
@@ -18,6 +20,20 @@ export default function TrackOrder() {
     setError('')
     setMatched(null)
     setSearched(true)
+
+    if (orderId.trim()) {
+      const found = orders.find((o) => o.id === orderId.trim())
+      if (found) {
+        setMatched(found)
+      } else {
+        setError(
+          lang === 'bn'
+            ? 'কোনো ম্যাচিং অর্ডার পাওয়া যায়নি।'
+            : 'No matching order found.',
+        )
+      }
+      return
+    }
 
     const cleanPhone = phone.replace(/\D/g, '').slice(-10)
     const cleanUtr = utr.trim().toLowerCase()
@@ -58,26 +74,66 @@ export default function TrackOrder() {
       </p>
 
       <form className="form" onSubmit={onTrack}>
-        <label>
-          {lang === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Number'}
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="e.g. 8170859653"
-            required
-          />
-        </label>
-        <label>
-          {lang === 'bn' ? 'UTR কোড / পেমেন্ট রেফারেন্স' : 'UTR Code / Payment Ref'}
-          <input
-            type="text"
-            value={utr}
-            onChange={(e) => setUtr(e.target.value)}
-            placeholder="e.g. 4210984512"
-            required
-          />
-        </label>
+        {searchByPhone ? (
+          <>
+            <label>
+              {lang === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Number'}
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. 8170859653"
+                required
+              />
+            </label>
+            <label>
+              {lang === 'bn' ? 'UTR কোড / পেমেন্ট রেফারেন্স' : 'UTR Code / Payment Ref'}
+              <input
+                type="text"
+                value={utr}
+                onChange={(e) => setUtr(e.target.value)}
+                placeholder="e.g. 4210984512"
+                required
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setSearchByPhone(false)
+                setPhone('')
+                setUtr('')
+              }}
+              style={{ marginBottom: '1rem' }}
+            >
+              {lang === 'bn' ? 'অর্ডার আইডি দিয়ে খুঁজুন' : 'Search by Order ID'}
+            </button>
+          </>
+        ) : (
+          <>
+            <label>
+              {lang === 'bn' ? 'অর্ডার আইডি' : 'Order ID'}
+              <input
+                type="text"
+                value={orderId}
+                onChange={(e) => setOrderId(e.target.value)}
+                placeholder="e.g. ORD-abc123"
+                required
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setSearchByPhone(true)
+                setOrderId('')
+              }}
+              style={{ marginBottom: '1rem' }}
+            >
+              {lang === 'bn' ? 'অর্ডার আইডি নেই? ফোন + UTR দিয়ে খুঁজুন' : "Don't have Order ID? Search by Phone + UTR"}
+            </button>
+          </>
+        )}
         {error && <p className="form-error">{error}</p>}
         <button type="submit" className="btn btn-primary">
           {lang === 'bn' ? 'স্ট্যাটাস দেখুন' : 'Track Order'}
@@ -94,7 +150,13 @@ export default function TrackOrder() {
             <span className={`status status-${matched.status}`}>{matched.status.replace('_', ' ')}</span>
           </header>
 
-          <OrderTimeline order={matched} lang={lang} />
+          <OrderTimeline 
+            order={matched} 
+            lang={lang} 
+            createdAt={matched.createdAt} 
+            updatedAt={(matched as any).updatedAt} 
+            deliverySlot={(matched as any).deliverySlot} 
+          />
 
           <ul>
             {matched.items.map((it) => (

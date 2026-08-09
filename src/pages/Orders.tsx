@@ -8,7 +8,7 @@ import type { Order } from '../types'
 
 export default function Orders() {
   const { user } = useAuth()
-  const { orders, lang, reorderFromOrder } = useStore()
+  const { orders, lang, reorderFromOrder, updateOrderStatus } = useStore()
   const navigate = useNavigate()
   const [msg, setMsg] = useState('')
 
@@ -56,7 +56,13 @@ export default function Orders() {
                 </div>
                 <span className={`status status-${o.status}`}>{o.status.replace('_', ' ')}</span>
               </header>
-              <OrderTimeline order={o} lang={lang} />
+              <OrderTimeline 
+                order={o} 
+                lang={lang} 
+                createdAt={o.createdAt} 
+                updatedAt={(o as any).updatedAt} 
+                deliverySlot={(o as any).deliverySlot} 
+              />
               <ul>
                 {o.items.map((it) => (
                   <li key={`${it.productId}-${it.grade}`}>
@@ -95,10 +101,23 @@ export default function Orders() {
                 </span>
               </footer>
               {o.status !== 'cancelled' && (
-                <div className="form-actions" style={{ marginTop: '0.75rem' }}>
+                <div className="form-actions" style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => onReorder(o)}>
                     {lang === 'bn' ? 'আবার অর্ডার' : 'Reorder'}
                   </button>
+                  {(o.status === 'pending' || o.status === 'advance_paid') && (Date.now() - new Date(o.createdAt).getTime() < 30 * 60 * 1000) && (
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary warn" 
+                      onClick={() => {
+                        if (confirm('Are you sure?')) {
+                          updateOrderStatus(o.id, 'cancelled')
+                        }
+                      }}
+                    >
+                      Cancel Order
+                    </button>
+                  )}
                 </div>
               )}
             </article>

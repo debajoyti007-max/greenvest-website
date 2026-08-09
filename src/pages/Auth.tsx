@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { isValidIndianPhone, cleanDigits } from '../lib/phone'
 import { t } from '../lib/i18n'
+import { supabase } from '../lib/supabase'
 import type { Role } from '../types'
 
 function redirectFor(role: Role) {
@@ -26,6 +27,7 @@ export default function Auth() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showPass, setShowPass] = useState(false)
 
   if (loading) {
     return (
@@ -98,12 +100,7 @@ export default function Auth() {
         navigate(redirectFor(res.user.role))
         return
       }
-      setMode('login')
-      setInfo(
-        lang === 'bn'
-          ? 'অ্যাকাউন্ট তৈরি হয়েছে। ইমেইলে কনফার্ম লিংক খুলে তারপর লগইন করুন (লিংক না এলে অ্যাডমিনকে বলুন)।'
-          : 'Account created. Open the confirm link in your email, then log in (if no email arrives, ask admin).',
-      )
+      await doLogin(email, password)
     } finally {
       setBusy(false)
     }
@@ -186,6 +183,14 @@ export default function Auth() {
             required
             autoComplete="username"
           />
+          {mode !== 'forgot' && !email.includes('@') && cleanDigits(email).length > 0 && (
+            <p style={{ marginTop: '0.2rem', fontSize: '0.85rem', color: cleanDigits(email).length === 10 && /^[6-9]/.test(cleanDigits(email)) ? 'green' : 'red' }}>
+              {cleanDigits(email).length < 10 && '❌ Enter 10 digits'}
+              {cleanDigits(email).length === 10 && /^[6-9]/.test(cleanDigits(email)) && '✅ Valid number'}
+              {cleanDigits(email).length === 10 && !/^[6-9]/.test(cleanDigits(email)) && '❌ Must start with 6-9'}
+              {cleanDigits(email).length > 10 && '❌ Too many digits'}
+            </p>
+          )}
         </label>
         {/* Extra phone field in signup — lets user confirm/correct their number */}
         {mode === 'signup' && (
@@ -210,18 +215,35 @@ export default function Auth() {
           </label>
         )}
         {mode !== 'forgot' && (
-          <label>
+          <label style={{ position: 'relative' }}>
             {lang === 'bn' ? 'পাসওয়ার্ড বা পিন (কমপক্ষে ৬টি সংকেত)' : 'PIN / Password (min 6 chars)'}
             <input
               name="password"
-              type="password"
+              type={showPass ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••"
               required
               minLength={6}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              style={{ paddingRight: '40px' }}
             />
+            <button
+              type="button"
+              onClick={() => setShowPass(!showPass)}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                bottom: '10px',
+                cursor: 'pointer',
+                border: 'none',
+                background: 'transparent',
+                fontSize: '1.2rem',
+                padding: '4px'
+              }}
+            >
+              {showPass ? '🙈' : '👁️'}
+            </button>
           </label>
         )}
         {mode !== 'forgot' && (
@@ -243,6 +265,25 @@ export default function Auth() {
                   : 'Send reset link'
                 : t(lang, 'createAccount')}
         </button>
+        {mode !== 'forgot' && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ marginTop: '1rem', width: '100%' }}
+            disabled={!supabase || busy}
+            onClick={async () => {
+              if (!supabase) return
+              setBusy(true)
+              const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+              if (error) {
+                setError(error.message)
+                setBusy(false)
+              }
+            }}
+          >
+            🔵 Continue with Google
+          </button>
+        )}
       </form>
 
       {mode === 'login' && (
