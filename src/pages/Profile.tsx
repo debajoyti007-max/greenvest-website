@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import type { Address } from '../types'
 
 export default function Profile() {
-  const { user, logout } = useAuth()
+  const { user, logout, updateUserProfile } = useAuth()
   const { orders, fetchAddresses, deleteAddress, lang, setLang } = useStore()
 
   const [addresses, setAddresses] = useState<Address[]>([])
@@ -35,9 +35,7 @@ export default function Profile() {
     if (!user || !nameVal.trim()) return
     setSaving(true)
     try {
-      if (supabase) {
-        await supabase.from('profiles').update({ name: nameVal.trim() }).eq('id', user.id)
-      }
+      await updateUserProfile({ name: nameVal.trim() })
       setEditingName(false)
     } catch (e) {
       alert(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.')
@@ -49,9 +47,7 @@ export default function Profile() {
     if (!user || !phoneVal.trim()) return
     setSaving(true)
     try {
-      if (supabase) {
-        await supabase.from('profiles').update({ phone: phoneVal.trim() }).eq('id', user.id)
-      }
+      await updateUserProfile({ phone: phoneVal.trim() })
       setEditingPhone(false)
     } catch (e) {
       alert(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.')

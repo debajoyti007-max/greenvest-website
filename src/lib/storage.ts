@@ -73,7 +73,19 @@ export function saveProducts(products: Product[]) {
 }
 
 export function getOrders(): Order[] {
-  return read(KEYS.orders, [])
+  const all = read<Order[]>(KEYS.orders, [])
+  const eightHoursAgo = Date.now() - 8 * 60 * 60 * 1000
+  const valid = all.filter((o) => {
+    if (o.status === 'cancelled') {
+      const time = new Date(o.updatedAt || o.createdAt).getTime()
+      if (time < eightHoursAgo) return false
+    }
+    return true
+  })
+  if (valid.length !== all.length) {
+    write(KEYS.orders, valid)
+  }
+  return valid
 }
 
 export function saveOrders(orders: Order[]) {

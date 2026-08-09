@@ -35,6 +35,7 @@ interface AuthContextValue {
   resetPassword: (email: string) => Promise<AuthResult>
   updatePassword: (password: string) => Promise<AuthResult>
   setUserRole: (userId: string, role: Role) => Promise<void>
+  updateUserProfile: (data: { name?: string; phone?: string }) => Promise<void>
   refresh: () => Promise<void>
 }
 
@@ -381,6 +382,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [cloud, allowLocal, user?.id],
   )
 
+  const updateUserProfile = useCallback(
+    async (data: { name?: string; phone?: string }) => {
+      if (!user) return
+      const cleanName = data.name !== undefined ? data.name.trim() : user.name
+      const cleanPhone = data.phone !== undefined ? data.phone.trim() : (user.phone || '')
+
+      if (cloud && supabase) {
+        const payload: Record<string, string> = {}
+        if (data.name !== undefined) payload.name = cleanName
+        if (data.phone !== undefined) payload.phone = cleanPhone
+        const { error } = await supabase.from('profiles').update(payload).eq('id', user.id)
+        if (error) throw error
+      } else if (allowLocal) {
+        const all = getUsers()
+        const next = all.map((u) => (u.id === user.id ? { ...u, name: cleanName, phone: cleanPhone } : u))
+        saveUsers(next)
+        setUsers(next)
+      }
+
+      setUser((prev) => (prev ? { ...prev, name: cleanName, phone: cleanPhone } : null))
+    },
+    [user, cloud, allowLocal],
+  )
+
   const value = useMemo(
     () => ({
       user,
@@ -394,6 +419,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       updatePassword,
       setUserRole,
+      updateUserProfile,
       refresh,
     }),
     [
@@ -407,6 +433,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       updatePassword,
       setUserRole,
+      updateUserProfile,
       refresh,
     ],
   )

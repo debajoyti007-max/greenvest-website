@@ -215,6 +215,17 @@ create policy "order_items_insert_own" on public.order_items
     )
   );
 
+-- Auto cleanup function for cancelled orders older than 8 hours
+create or replace function public.cleanup_old_cancelled_orders()
+returns void
+language sql
+security definer
+as $$
+  delete from public.orders
+  where status = 'cancelled'
+    and (updated_at < now() - interval '8 hours' or created_at < now() - interval '8 hours');
+$$;
+
 -- Realtime for live seller updates
 do $$
 begin

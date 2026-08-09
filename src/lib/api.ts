@@ -241,6 +241,17 @@ export async function setAllProductsInStock(): Promise<void> {
 
 export async function fetchOrders(): Promise<Order[]> {
   const client = requireClient()
+  const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
+  try {
+    await client
+      .from('orders')
+      .delete()
+      .eq('status', 'cancelled')
+      .lt('created_at', eightHoursAgo)
+  } catch {
+    /* ignore deletion errors if user lacks admin delete policy */
+  }
+
   const { data, error } = await client
     .from('orders')
     .select('*, order_items(*)')
