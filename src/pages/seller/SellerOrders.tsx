@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
@@ -17,9 +17,363 @@ const suffix = (n: number) => {
   return 'th'
 }
 
-function openMaps(address: string, pin: string) {
-  const q = encodeURIComponent(`${address} ${pin}`.trim())
-  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, '_blank', 'noopener,noreferrer')
+function playAlert() {
+  try {
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.value = 800
+    gain.gain.value = 0.3
+    osc.start()
+    osc.stop(ctx.currentTime + 0.15)
+    setTimeout(() => {
+      const osc2 = ctx.createOscillator()
+      const gain2 = ctx.createGain()
+      osc2.connect(gain2)
+      gain2.connect(ctx.destination)
+      osc2.frequency.value = 1000
+      gain2.gain.value = 0.3
+      osc2.start()
+      osc2.stop(ctx.currentTime + 0.2)
+    }, 180)
+  } catch { /* */ }
+}
+
+function isToday(iso: string) {
+  return new Date(iso).toDateString() === new Date().toDateString()
+}
+
+function isCancelledOld(order: Order) {
+  if (order.status !== 'cancelled') return false
+  return Date.now() - new Date(order.updatedAt || order.createdAt).getTime() > 12 * 60 * 60 * 1000
+}
+
+const statusBn: Record<OrderStatus, string> = {
+  pending: 'অপেক্ষমাণ',
+  advance_paid: 'অগ্রিম দেওয়া',
+  confirmed: 'কনফার্ম',
+  delivered: 'ডেলিভারড',
+  cancelled: 'বাতিল',
+}
+
+const statusIcon: Record<OrderStatus, string> = {
+  pending: '⏳',
+  advance_paid: '💵',
+  confirmed: '✅',
+  delivered: '🚚',
+  cancelled: '❌',
+}
+
+export default function SellerOrders() {
+  const { user } = useAuth()
+  const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr } = useStore()
+  const [filter, setFilter] = useState<Filter>('active')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const prevCount = useRef(orders.length)
+
+  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+    return <Navigate to="/" replace />
+  }
+
+  // S1: Sound alert on new order
+  useEffect(() => {
+    if (orders.length > prevCount.current) {
+      playAlert()
+      if ('vibrate' in navigator) navigator.vibrate([200, 100, 200])
+    }
+    prevCount.current = orders.length
+  }, [orders.length])
+
+  // S3: One-tap accept (verify UTR + confirm + WhatsApp)
+  const handleAcceptOrder = async (o: Order) => {
+    if (!o.utrVerified) await verifyUtr(o.id, true)
+    await updateOrderStatus(o.id, 'confirmed')
+    window.open(orderStatusWhatsAppUrl(o, 'confirmed'), '_blank', 'noopener,noreferrer')
+  }
+
+  const handleMarkDelivered = async (o: Order) => {
+    await updateOrderStatus(o.id, 'delivered')
+    window.open(orderStatusWhatsAppUrl(o, 'delivered'), '_blank', 'noopener,noreferrer')
+  }
+
+  const handleCancel = async (o: Order) => {
+    if (!confirm(lang === 'bn' ? 'বাতিল করবেন?' : 'Cancel this order?')) return
+    await updateOrderStatus(o.id, 'cancelled')
+    window.open(orderStatusWhatsAppUrl(o, 'cancelled'), '_blank', 'noopener,noreferrer')
+  }
+
+  const handleVerifyUtr = async (o: Order) => {
+    const next = !o.utrVerified
+    await verifyUtr(o.id, next)
+    if (next) window.open(paymentVerifiedWhatsAppUrl(o, lang), '_blank', 'noopener,noreferrer')
+  }
+
+  // S7: Today's summary
+  const todayOrders = useMemo(() => orders.filter(o => isToday(o.createdAt)), [orders])
+  const todayStats = useMemo(() => {
+    const active = todayOrders.filter(o => o.status !== 'cancelled' && o.status !== 'delivered')
+    const delivered = todayOrders.filter(o => o.status === 'delivered')
+    const revenue = todayOrders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + o.total, 0)
+    const pending = todayOrders.filter(o => !o.utrVerified && o.status !== 'cancelled')
+    return { total: todayOrders.length, active: active.length, delivered: delivered.length, revenue, pendingUtr: pending.length }
+  }, [todayOrders])
+
+  const filtered = useMemo(() => {
+    const sorted = [...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    return sorted.filter(o => {
+      if (filter !== 'cancelled' && isCancelledOld(o)) return false
+      if (filter === 'utr') return !o.utrVerified && o.status !== 'cancelled'
+      if (filter === 'today') return isToday(o.createdAt)
+      if (filter === 'active') return o.status !== 'delivered' && o.status !== 'cancelled'
+      if (filter === 'done') return o.status === 'delivered'
+      if (filter === 'cancelled') return o.status === 'cancelled'
+      return true
+    })
+  }, [orders, filter])
+
+  const toggleSelect = (id: string) => setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
+  const toggleSelectAll = () => setSelectedIds(selectedIds.length === filtered.length ? [] : filtered.map(o => o.id))
+  const handleBulkStatus = async (status: OrderStatus) => {
+    if (selectedIds.length === 0) return
+    await bulkUpdateOrderStatus(selectedIds, status)
+    setSelectedIds([])
+  }
+
+  const filters: { id: Filter; en: string; bn: string; count?: number }[] = [
+    { id: 'active', en: 'Active', bn: 'চলমান', count: orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length },
+    { id: 'utr', en: 'UTR ⏳', bn: 'UTR বাকি', count: orders.filter(o => !o.utrVerified && o.status !== 'cancelled').length },
+    { id: 'today', en: 'Today', bn: 'আজ', count: todayOrders.length },
+    { id: 'all', en: 'All', bn: 'সব' },
+    { id: 'done', en: 'Done', bn: 'ডেলিভারড' },
+    { id: 'cancelled', en: 'Archived', bn: 'আর্কাইভ' },
+  ]
+
+  const cs: React.CSSProperties = { background: 'var(--white, #fff)', borderRadius: '12px', border: '1px solid var(--line, #e5e7eb)' }
+
+  return (
+    <div className="page" style={{ maxWidth: '800px', margin: '0 auto' }}>
+      <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ fontSize: '1.2rem', margin: 0 }}>{lang === 'bn' ? '📋 অর্ডার' : '📋 Orders'}</h1>
+        <Link to="/seller" className="btn btn-ghost" style={{ fontSize: '0.85rem' }}>
+          {lang === 'bn' ? '← ড্যাশবোর্ড' : '← Dashboard'}
+        </Link>
+      </div>
+
+      {/* S7: Today's Summary Bar */}
+      <div style={{ ...cs, padding: '0.75rem 1rem', margin: '0.75rem 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
+        <div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--primary)' }}>{todayStats.total}</div>
+          <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{lang === 'bn' ? 'আজ মোট' : 'Today'}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#f59e0b' }}>{todayStats.active}</div>
+          <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{lang === 'bn' ? 'চলমান' : 'Active'}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#22c55e' }}>{todayStats.delivered}</div>
+          <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{lang === 'bn' ? 'ডেলিভারড' : 'Done'}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--primary)' }}>₹{todayStats.revenue}</div>
+          <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{lang === 'bn' ? 'আয়' : 'Revenue'}</div>
+        </div>
+      </div>
+
+      {/* Filter chips */}
+      <div style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', padding: '0.25rem 0', marginBottom: '0.75rem' }}>
+        {filters.map(f => (
+          <button key={f.id} type="button"
+            onClick={() => setFilter(f.id)}
+            style={{
+              padding: '0.4rem 0.75rem', borderRadius: '20px', border: 'none', cursor: 'pointer',
+              fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+              background: filter === f.id ? 'var(--primary, #166534)' : '#f3f4f6',
+              color: filter === f.id ? 'white' : '#374151',
+            }}>
+            {lang === 'bn' ? f.bn : f.en}{f.count !== undefined ? ` (${f.count})` : ''}
+          </button>
+        ))}
+      </div>
+
+      {/* Bulk toolbar */}
+      {filtered.length > 0 && (
+        <div style={{ ...cs, padding: '0.5rem 0.75rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontWeight: 600 }}>
+            <input type="checkbox" checked={selectedIds.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} />
+            {selectedIds.length > 0 ? `${selectedIds.length} selected` : (lang === 'bn' ? 'সব নির্বাচন' : 'Select all')}
+          </label>
+          {selectedIds.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.3rem' }}>
+              <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => void handleBulkStatus('confirmed')}>
+                ✅ {lang === 'bn' ? 'কনফার্ম' : 'Confirm'}
+              </button>
+              <button type="button" className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => void handleBulkStatus('delivered')}>
+                🚚 {lang === 'bn' ? 'ডেলিভারড' : 'Delivered'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Order list */}
+      {filtered.length === 0 ? (
+        <p style={{ textAlign: 'center', color: '#9ca3af', padding: '2rem' }}>{lang === 'bn' ? 'এই ফিল্টারে অর্ডার নেই।' : 'No orders here.'}</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {filtered.map(o => {
+            const balance = o.total - o.advanceAmount
+            const expanded = expandedId === o.id
+            const custOrders = orders.filter(x => (x.userId === o.userId || x.phone === o.phone) && x.status !== 'cancelled' && new Date(x.createdAt).getTime() <= new Date(o.createdAt).getTime())
+            const historyCount = custOrders.length
+
+            return (
+              <article key={o.id} style={{ ...cs, overflow: 'hidden' }}>
+                {/* Compact header - always visible */}
+                <div
+                  onClick={() => setExpandedId(expanded ? null : o.id)}
+                  style={{ padding: '0.75rem 1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <input type="checkbox" checked={selectedIds.includes(o.id)} onChange={(e) => { e.stopPropagation(); toggleSelect(o.id) }} style={{ cursor: 'pointer' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{o.userName}</span>
+                      {/* S8: Quick call */}
+                      <a href={`tel:${o.phone}`} onClick={e => e.stopPropagation()} style={{ fontSize: '0.85rem', textDecoration: 'none' }}>📞</a>
+                      {historyCount <= 1
+                        ? <span style={{ fontSize: '0.7rem', padding: '1px 6px', background: '#dcfce7', color: '#166534', borderRadius: '10px' }}>🆕</span>
+                        : <span style={{ fontSize: '0.7rem', padding: '1px 6px', background: '#e0e7ff', color: '#3730a3', borderRadius: '10px' }}>🔁{historyCount}{suffix(historyCount)}</span>
+                      }
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#6b7280', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span>{o.items.map(i => i.emoji).join('')} ₹{o.total}</span>
+                      <span>·</span>
+                      <span>{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      {o.deliverySlot && <span>· {o.deliverySlot === 'morning' ? '🌅' : '🌆'}</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+                    <span style={{
+                      fontSize: '0.7rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 600,
+                      background: o.status === 'delivered' ? '#dcfce7' : o.status === 'cancelled' ? '#fef2f2' : o.status === 'confirmed' ? '#dbeafe' : '#fef9c3',
+                      color: o.status === 'delivered' ? '#166534' : o.status === 'cancelled' ? '#991b1b' : o.status === 'confirmed' ? '#1e40af' : '#854d0e',
+                    }}>
+                      {statusIcon[o.status]} {lang === 'bn' ? statusBn[o.status] : o.status.replace('_', ' ')}
+                    </span>
+                    {!o.utrVerified && o.status !== 'cancelled' && (
+                      <span style={{ fontSize: '0.65rem', color: '#dc2626' }}>UTR ⏳</span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{expanded ? '▲' : '▼'}</span>
+                </div>
+
+                {/* S3: Quick action buttons - always visible for active orders */}
+                {o.status !== 'delivered' && o.status !== 'cancelled' && (
+                  <div style={{ padding: '0 1rem 0.6rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    {(o.status === 'pending' || o.status === 'advance_paid') && (
+                      <button type="button" onClick={() => void handleAcceptOrder(o)}
+                        style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: '#22c55e', color: 'white' }}>
+                        ✅ {lang === 'bn' ? 'অর্ডার গ্রহণ' : 'Accept Order'}
+                      </button>
+                    )}
+                    {o.status === 'confirmed' && (
+                      <button type="button" onClick={() => void handleMarkDelivered(o)}
+                        style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: '#3b82f6', color: 'white' }}>
+                        🚚 {lang === 'bn' ? 'ডেলিভারড' : 'Mark Delivered'}
+                      </button>
+                    )}
+                    {(o.status === 'pending' || o.status === 'advance_paid') && (
+                      <button type="button" onClick={() => void handleCancel(o)}
+                        style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #fca5a5', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', background: '#fef2f2', color: '#dc2626' }}>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* S4: Balance due for delivered orders */}
+                {o.status === 'delivered' && balance > 0 && (
+                  <div style={{ padding: '0 1rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '0.3rem 0.75rem', borderRadius: '8px' }}>
+                      💰 {lang === 'bn' ? `বাকি: ₹${balance}` : `Balance: ₹${balance}`}
+                    </span>
+                  </div>
+                )}
+
+                {/* Expanded details */}
+                {expanded && (
+                  <div style={{ borderTop: '1px solid var(--line, #e5e7eb)', padding: '0.75rem 1rem' }}>
+                    {/* Items */}
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      {o.items.map(it => (
+                        <div key={`${it.productId}-${it.grade}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.2rem 0' }}>
+                          <span>{it.emoji} {it.name} · Grade {it.grade} × {it.qty}</span>
+                          <span style={{ fontWeight: 600 }}>₹{it.unitPrice * it.qty}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Address */}
+                    <div style={{ fontSize: '0.85rem', color: '#374151', marginBottom: '0.5rem', padding: '0.5rem', background: '#f9fafb', borderRadius: '8px' }}>
+                      📍 {o.address} · PIN {o.pin || '—'}
+                      {o.deliverySlot ? ` · ${o.deliverySlot === 'morning' ? (lang === 'bn' ? 'সকাল' : 'Morning') : (lang === 'bn' ? 'সন্ধ্যা' : 'Evening')}` : ''}
+                    </div>
+
+                    {/* Money */}
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                      <span>{lang === 'bn' ? 'মোট' : 'Total'}: <b>₹{o.total}</b></span>
+                      <span>{lang === 'bn' ? 'অগ্রিম' : 'Advance'}: ₹{o.advanceAmount}</span>
+                      <span style={{ color: balance > 0 ? '#dc2626' : '#22c55e', fontWeight: 600 }}>
+                        {lang === 'bn' ? 'বাকি' : 'Balance'}: ₹{balance}
+                      </span>
+                    </div>
+
+                    {/* UTR */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.85rem' }}>UTR: <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{o.utr}</code></span>
+                      <button type="button" onClick={() => void handleVerifyUtr(o)}
+                        style={{
+                          padding: '0.25rem 0.6rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
+                          background: o.utrVerified ? '#dcfce7' : '#fef9c3', color: o.utrVerified ? '#166534' : '#854d0e'
+                        }}>
+                        {o.utrVerified ? '✅ Verified' : '⏳ Verify'}
+                      </button>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                      <a href={`tel:${o.phone}`} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534' }}>📞 Call</a>
+                      <button type="button" onClick={() => openWhatsApp(o, lang)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', cursor: 'pointer', color: '#166534' }}>💬 WhatsApp</button>
+                      <button type="button" onClick={() => window.open(riderDispatchWhatsAppUrl(o), '_blank', 'noopener,noreferrer')} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: '0.8rem', cursor: 'pointer', color: '#1e40af' }}>🛵 Rider</button>
+                      <button type="button" onClick={() => openMaps(o.address, o.pin || '')} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🗺️ Maps</button>
+                      <button type="button" onClick={() => printOrderInvoice(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🧾</button>
+                      <button type="button" onClick={() => printThermalReceipt(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🖨️</button>
+                    </div>
+
+                    {/* Status dropdown (advanced) */}
+                    <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{lang === 'bn' ? 'স্ট্যাটাস:' : 'Status:'}</span>
+                      <select value={o.status} onChange={e => {
+                        const s = e.target.value as OrderStatus
+                        void updateOrderStatus(o.id, s)
+                        if (['confirmed', 'delivered', 'cancelled'].includes(s)) {
+                          window.open(orderStatusWhatsAppUrl(o, s), '_blank', 'noopener,noreferrer')
+                        }
+                      }} style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                        {STATUSES.map(s => <option key={s} value={s}>{statusIcon[s]} {lang === 'bn' ? statusBn[s] : s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </article>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function openWhatsApp(order: Order, lang: 'en' | 'bn') {
@@ -32,255 +386,7 @@ function openWhatsApp(order: Order, lang: 'en' | 'bn') {
   window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer')
 }
 
-function openRiderWhatsApp(order: Order) {
-  window.open(riderDispatchWhatsAppUrl(order), '_blank', 'noopener,noreferrer')
-}
-
-function isToday(iso: string) {
-  const d = new Date(iso)
-  const n = new Date()
-  return d.toDateString() === n.toDateString()
-}
-
-/** Check if order was cancelled more than 12 hours ago */
-function isCancelledOld(order: Order) {
-  if (order.status !== 'cancelled') return false
-  const elapsed = Date.now() - new Date(order.updatedAt || order.createdAt).getTime()
-  return elapsed > 12 * 60 * 60 * 1000 // 12 hours
-}
-
-const statusBn: Record<OrderStatus, string> = {
-  pending: 'অপেক্ষমাণ',
-  advance_paid: 'অগ্রিম দেওয়া',
-  confirmed: 'কনফার্ম',
-  delivered: 'ডেলিভারড',
-  cancelled: 'বাতিল',
-}
-
-export default function SellerOrders() {
-  const { user } = useAuth()
-  const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr } = useStore()
-  const [filter, setFilter] = useState<Filter>('all')
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
-    return <Navigate to="/" replace />
-  }
-
-  const handleVerifyUtr = async (order: Order) => {
-    const nextState = !order.utrVerified
-    await verifyUtr(order.id, nextState)
-    // Auto-prompt WhatsApp confirmation to customer when verified
-    if (nextState) {
-      window.open(paymentVerifiedWhatsAppUrl(order, lang), '_blank', 'noopener,noreferrer')
-    }
-  }
-
-  const filtered = useMemo(() => {
-    const sorted = [...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    return sorted.filter((o) => {
-      // 12-hour rule: Cancelled orders older than 12 hours are archived unless explicitly looking at "cancelled" tab
-      if (filter !== 'cancelled' && isCancelledOld(o)) return false
-      if (filter === 'utr') return !o.utrVerified && o.status !== 'cancelled'
-      if (filter === 'today') return isToday(o.createdAt)
-      if (filter === 'active') return o.status !== 'delivered' && o.status !== 'cancelled'
-      if (filter === 'done') return o.status === 'delivered'
-      if (filter === 'cancelled') return o.status === 'cancelled'
-      return true
-    })
-  }, [orders, filter])
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
-  }
-
-  const toggleSelectAll = () => {
-    if (selectedIds.length === filtered.length) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(filtered.map((o) => o.id))
-    }
-  }
-
-  const handleBulkStatus = async (status: OrderStatus) => {
-    if (selectedIds.length === 0) return
-    await bulkUpdateOrderStatus(selectedIds, status)
-    setSelectedIds([])
-  }
-
-  const filters: { id: Filter; en: string; bn: string }[] = [
-    { id: 'all', en: 'All', bn: 'সব' },
-    { id: 'utr', en: 'UTR pending', bn: 'UTR বাকি' },
-    { id: 'today', en: 'Today', bn: 'আজ' },
-    { id: 'active', en: 'Active', bn: 'চলমান' },
-    { id: 'done', en: 'Delivered', bn: 'ডেলিভারড' },
-    { id: 'cancelled', en: 'Cancelled (Archived)', bn: 'বাতিল (আর্কাইভ)' },
-  ]
-
-  return (
-    <div className="page">
-      <div className="page-head">
-        <h1>{lang === 'bn' ? 'অর্ডার ম্যানেজমেন্ট' : 'Order management'}</h1>
-        <Link to="/seller" className="btn btn-ghost">
-          {lang === 'bn' ? '← ড্যাশবোর্ড' : '← Dashboard'}
-        </Link>
-      </div>
-
-      <div className="cat-filters seller-filters">
-        {filters.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            className={`chip ${filter === f.id ? 'active' : ''}`}
-            onClick={() => setFilter(f.id)}
-          >
-            {lang === 'bn' ? f.bn : f.en}
-          </button>
-        ))}
-      </div>
-
-      {filtered.length > 0 && (
-        <div className="bulk-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.75rem 0 1rem', padding: '0.6rem 0.85rem', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: '10px', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>
-            <input
-              type="checkbox"
-              checked={selectedIds.length === filtered.length && filtered.length > 0}
-              onChange={toggleSelectAll}
-            />
-            {lang === 'bn' ? 'সব নির্বাচন' : 'Select all'} ({selectedIds.length})
-          </label>
-          {selectedIds.length > 0 && (
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => void handleBulkStatus('confirmed')}
-              >
-                {lang === 'bn' ? '✓ কনফার্ম করুন' : 'Mark Confirmed'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void handleBulkStatus('delivered')}
-              >
-                {lang === 'bn' ? '🚚 ডেলিভারড করুন' : 'Mark Delivered'}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {filtered.length === 0 ? (
-        <p className="empty">{lang === 'bn' ? 'এই ফিল্টারে অর্ডার নেই।' : 'No orders in this filter.'}</p>
-      ) : (
-        <div className="order-list">
-          {filtered.map((o) => (
-            <article key={o.id} className="order-card seller-order">
-              <header style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(o.id)}
-                  onChange={() => toggleSelect(o.id)}
-                  style={{ marginTop: '0.2rem', cursor: 'pointer' }}
-                />
-                <div style={{ flex: 1 }}>
-                  <strong>{o.id}</strong>
-                  <span className="muted" style={{ marginLeft: '8px' }}>
-                    {o.userName} · {o.phone}
-                    {(() => {
-                      const custOrders = orders.filter(x => (x.userId === o.userId || x.phone === o.phone) && x.status !== 'cancelled' && new Date(x.createdAt).getTime() <= new Date(o.createdAt).getTime())
-                      const historyCount = custOrders.length
-                      if (historyCount <= 1) return <span style={{ marginLeft: '6px', fontSize: '0.8rem', padding: '2px 6px', background: '#dcfce7', color: '#166534', borderRadius: '12px' }}>🆕 New</span>
-                      return <span style={{ marginLeft: '6px', fontSize: '0.8rem', padding: '2px 6px', background: '#e0e7ff', color: '#3730a3', borderRadius: '12px' }}>🔁 {historyCount}{suffix(historyCount)} order</span>
-                    })()}
-                  </span>
-                  <div className="muted">{new Date(o.createdAt).toLocaleString()}</div>
-                </div>
-                <span className={`status status-${o.status}`}>
-                  {lang === 'bn' ? statusBn[o.status] : o.status.replace('_', ' ')}
-                </span>
-              </header>
-              <ul>
-                {o.items.map((it) => (
-                  <li key={`${it.productId}-${it.grade}`}>
-                    {it.emoji} {it.name} · Grade {it.grade} × {it.qty} — ₹{it.unitPrice * it.qty}
-                  </li>
-                ))}
-              </ul>
-              <p>
-                {o.address} · PIN {o.pin || '—'}
-                {o.deliverySlot
-                  ? ` · ${o.deliverySlot === 'morning' ? (lang === 'bn' ? 'সকাল' : 'Morning') : lang === 'bn' ? 'সন্ধ্যা' : 'Evening'}`
-                  : ''}
-              </p>
-              <p className="muted">
-                {lang === 'bn' ? 'মোট' : 'Total'} ₹{o.total} · {lang === 'bn' ? 'অগ্রিম' : 'Advance'} ₹
-                {o.advanceAmount}
-              </p>
-              <div className="utr-row">
-                <span>
-                  UTR: <code>{o.utr}</code>
-                </span>
-                <button
-                  type="button"
-                  className={`btn ${o.utrVerified ? 'btn-secondary' : 'btn-primary'}`}
-                  onClick={() => void handleVerifyUtr(o)}
-                >
-                  {o.utrVerified
-                    ? lang === 'bn'
-                      ? 'যাচাই সরান'
-                      : 'Unverify UTR'
-                    : lang === 'bn'
-                      ? 'UTR যাচাই + জানান'
-                      : 'Verify UTR + Send WhatsApp'}
-                </button>
-              </div>
-              <div className="seller-order-actions" style={{ flexWrap: 'wrap', gap: '0.4rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => openWhatsApp(o, lang)}>
-                  💬 Customer WhatsApp
-                </button>
-                <button type="button" className="btn btn-primary" onClick={() => openRiderWhatsApp(o)}>
-                  🛵 Send to Rider (WhatsApp)
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => openMaps(o.address, o.pin || '')}
-                >
-                  Maps
-                </button>
-                <button type="button" className="btn btn-ghost" onClick={() => printOrderInvoice(o)}>
-                  {lang === 'bn' ? 'ইনভয়েস' : 'Invoice'}
-                </button>
-                <button type="button" className="btn btn-ghost" onClick={() => printThermalReceipt(o)}>
-                  {lang === 'bn' ? '🖨️ থার্মাল রিসিপ্ট' : '🖨️ Thermal Slip'}
-                </button>
-              </div>
-              <label className="status-select">
-                {lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}
-                <select
-                  value={o.status}
-                  onChange={(e) => {
-                    const newStatus = e.target.value as OrderStatus
-                    void updateOrderStatus(o.id, newStatus)
-                    if (['confirmed', 'delivered', 'cancelled'].includes(newStatus)) {
-                      window.open(orderStatusWhatsAppUrl(o, newStatus), '_blank', 'noopener,noreferrer')
-                    }
-                  }}
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {lang === 'bn' ? statusBn[s] : s}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </article>
-          ))}
-        </div>
-      )}
-    </div>
-  )
+function openMaps(address: string, pin: string) {
+  const q = encodeURIComponent(`${address} ${pin}`.trim())
+  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, '_blank', 'noopener,noreferrer')
 }
