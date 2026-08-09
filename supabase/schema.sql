@@ -185,7 +185,7 @@ create policy "orders_staff_update" on public.orders
 drop policy if exists "orders_admin_delete" on public.orders;
 create policy "orders_admin_delete" on public.orders
   for delete to authenticated
-  using (public.current_role() = 'admin');
+  using (public.current_role() in ('seller', 'admin'));
 
 -- Order items
 drop policy if exists "order_items_select" on public.order_items;

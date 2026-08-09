@@ -67,6 +67,11 @@ export default function Layout() {
                 {t(lang, 'orders')}
               </NavLink>
             )}
+            {user && (
+              <NavLink to="/profile" onClick={closeMenu}>
+                {lang === 'bn' ? '👤 প্রোফাইল' : '👤 Profile'}
+              </NavLink>
+            )}
             {(user?.role === 'seller' || user?.role === 'admin') && (
               <NavLink to="/seller" onClick={closeMenu}>
                 {t(lang, 'seller')}
@@ -98,7 +103,7 @@ export default function Layout() {
             </div>
             {user ? (
               <div className="user-chip">
-                <span className="user-name">{user.name}</span>
+                <Link to="/profile" className="user-name" onClick={closeMenu} style={{ textDecoration: 'none', color: 'inherit' }}>{user.name}</Link>
                 <button type="button" className="btn btn-ghost" onClick={handleLogout}>
                   {t(lang, 'logout')}
                 </button>
@@ -133,8 +138,8 @@ export default function Layout() {
           </nav>
           <p className="muted footer-note">
             {lang === 'bn'
-              ? 'মিনিমাম ৳৫০০ · ডেলিভারি ১২–২৪ ঘণ্টা · ম্যানুয়াল UTR'
-              : 'Min ₹500 · Delivery 12–24 hours · Manual UTR only'}
+              ? 'মিনিমাম ৳৫০০ · লোকাল ৬–৮ ঘণ্টা · ম্যানুয়াল UTR'
+              : 'Min ₹500 · Local 6–8h · Manual UTR only'}
           </p>
         </div>
       </footer>

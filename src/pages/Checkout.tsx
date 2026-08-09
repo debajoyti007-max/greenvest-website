@@ -22,6 +22,7 @@ export default function Checkout() {
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [prefilled, setPrefilled] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [zones, setZones] = useState<DeliveryZone[]>([])
@@ -129,6 +130,7 @@ export default function Checkout() {
       )
       return
     }
+    setSubmitting(true)
     try {
       if (saveAddressToDb) {
         await saveAddress({ user_id: user.id, label: 'Saved', address, phone, pin, is_default: savedAddresses.length === 0 })
@@ -137,7 +139,16 @@ export default function Checkout() {
       if (order) navigate(`/orders/success/${order.id}`)
       else setError(lang === 'bn' ? 'অর্ডার হয়নি' : 'Could not place order')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Order failed')
+      const raw = err instanceof Error ? err.message : 'Order failed'
+      if (/row-level security|policy/i.test(raw)) {
+        setError(lang === 'bn' ? 'অর্ডার করার অনুমতি নেই। আবার লগইন করুন।' : 'Permission denied. Please log out and log in again.')
+      } else if (/network|fetch|timeout/i.test(raw)) {
+        setError(lang === 'bn' ? 'ইন্টারনেট সমস্যা। আবার চেষ্টা করুন।' : 'Network error. Check your internet and try again.')
+      } else {
+        setError(raw)
+      }
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -371,8 +382,8 @@ export default function Checkout() {
             {couponSuccess && <p style={{ color: '#16a34a', margin: 0 }}>{couponSuccess}</p>}
           </div>
 
-          <button type="submit" className="btn btn-primary">
-            {t(lang, 'placeOrder')}
+          <button type="submit" className="btn btn-primary" disabled={submitting}>
+            {submitting ? (lang === 'bn' ? '⏳ অর্ডার হচ্ছে...' : '⏳ Placing order...') : t(lang, 'placeOrder')}
           </button>
         </form>
       </div>

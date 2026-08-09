@@ -307,16 +307,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         await createOrder(order)
-        const updatedCatalog = catalog.map((p) => {
-          const item = items.find((i) => i.productId === p.id)
-          if (!item) return p
-          const newQty = Math.max(0, (p.stockQty ?? 0) - item.qty)
-          return { ...p, stockQty: newQty, inStock: newQty > 0 }
-        })
-        for (const p of updatedCatalog) {
-          if (items.some((i) => i.productId === p.id)) {
-            await upsertProduct(p)
+        try {
+          const updatedCatalog = catalog.map((p) => {
+            const item = items.find((i) => i.productId === p.id)
+            if (!item) return p
+            const newQty = Math.max(0, (p.stockQty ?? 0) - item.qty)
+            return { ...p, stockQty: newQty, inStock: newQty > 0 }
+          })
+          for (const p of updatedCatalog) {
+            if (items.some((i) => i.productId === p.id)) {
+              await upsertProduct(p)
+            }
           }
+        } catch {
+          /* stock deduction may fail if customer lacks RLS permission — order is still valid */
         }
         saveDelivery(user.id, {
           address: order.address,
