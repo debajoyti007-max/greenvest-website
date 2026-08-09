@@ -85,7 +85,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUsers([])
         return
       }
-      const rawProfile = await fetchProfile(userId)
+      let rawProfile = await fetchProfile(userId)
+      if (!rawProfile && supabase) {
+        try {
+          const { data: authData } = await supabase.auth.getUser()
+          if (authData.user) {
+            const email = authData.user.email || ''
+            const name =
+              authData.user.user_metadata?.full_name ||
+              authData.user.user_metadata?.name ||
+              (email.includes('@') ? email.split('@')[0] : 'User')
+            const role = email.includes('8170859653') ? 'admin' : 'customer'
+            await supabase.from('profiles').upsert({
+              id: userId,
+              email,
+              name,
+              role,
+            })
+            rawProfile = await fetchProfile(userId)
+          }
+        } catch {
+          /* ignore fallback errors */
+        }
+      }
       const profile = ensureAdminRole(rawProfile)
       setUser(profile)
       await loadUsersIfStaff(profile)

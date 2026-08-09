@@ -310,7 +310,12 @@ export default function Auth() {
               setBusy(true)
               const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
               if (error) {
-                setError(error.message)
+                const msg = error.message || 'Google login failed'
+                if (/provider is not enabled|unsupported provider/i.test(msg)) {
+                  setError('Google login is not enabled in your Supabase project. Enable Google in Supabase → Authentication → Providers.')
+                } else {
+                  setError(msg)
+                }
                 setBusy(false)
               }
             }}
