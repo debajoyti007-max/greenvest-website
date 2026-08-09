@@ -1,6 +1,21 @@
 import type { Order } from '../types'
 import { SUPPORT_WHATSAPP } from './business'
 
+export function formatWhatsAppPhone(phone?: string): string {
+  if (!phone) return SUPPORT_WHATSAPP
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `91${digits}`
+  }
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits
+  }
+  if (digits.startsWith('0')) {
+    return `91${digits.slice(1)}`
+  }
+  return digits.length > 0 ? digits : SUPPORT_WHATSAPP
+}
+
 /** Build WhatsApp deep-link so seller gets a new-order ping. */
 export function sellerOrderWhatsAppUrl(order: Order) {
   const lines = [
@@ -46,7 +61,7 @@ export function riderDispatchWhatsAppUrl(order: Order) {
 
 /** Payment Verified WhatsApp message to customer */
 export function paymentVerifiedWhatsAppUrl(order: Order, lang: 'en' | 'bn' = 'en') {
-  const phone = order.phone.replace(/\D/g, '').replace(/^0/, '91')
+  const phone = formatWhatsAppPhone(order.phone)
   const text =
     lang === 'bn'
       ? `✅ পেমেন্ট নিশ্চিত হয়েছে!\nনমস্কার ${order.userName}, আপনার অর্ডার ${order.id}-এর পেমেন্ট যাচাই করা হয়েছে (মোট ₹${order.total})। তাজা সবজি প্যাক করা হচ্ছে!`
@@ -60,7 +75,7 @@ export function supportWhatsAppUrl(message?: string) {
 }
 
 export function orderStatusWhatsAppUrl(order: Order, status: import('../types').OrderStatus) {
-  const phone = order.phone.replace(/\D/g, '').replace(/^0/, '91')
+  const phone = formatWhatsAppPhone(order.phone)
   let msg = ''
   if (status === 'confirmed') {
     msg = `✅ Your order #${order.id} is confirmed! We are packing your fresh veggies.`

@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
-import { orderStatusWhatsAppUrl, paymentVerifiedWhatsAppUrl, riderDispatchWhatsAppUrl } from '../../lib/whatsapp'
+import { formatWhatsAppPhone, orderStatusWhatsAppUrl, paymentVerifiedWhatsAppUrl, riderDispatchWhatsAppUrl } from '../../lib/whatsapp'
 import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled']
@@ -383,7 +383,7 @@ export default function SellerOrders() {
 }
 
 function openWhatsApp(order: Order, lang: 'en' | 'bn') {
-  const phone = order.phone.replace(/\D/g, '').replace(/^0/, '91')
+  const phone = formatWhatsAppPhone(order.phone)
   const text = encodeURIComponent(
     lang === 'bn'
       ? `GreenVest অর্ডার ${order.id}\nনমস্কার ${order.userName}, মোট ₹${order.total}। UTR: ${order.utr}। স্ট্যাটাস: ${order.status}।`

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
+import { formatWhatsAppPhone } from '../../lib/whatsapp'
 import type { Order } from '../../types'
 
 type CustomerRow = {
@@ -16,7 +17,7 @@ type CustomerRow = {
 }
 
 function waCustomer(phone: string, name: string) {
-  const digits = phone.replace(/\D/g, '').replace(/^0/, '91')
+  const digits = formatWhatsAppPhone(phone)
   const text = encodeURIComponent(
     `নমস্কার ${name}, GreenVest থেকে বলছি। আপনার অর্ডার নিয়ে যোগাযোগ।`,
   )
