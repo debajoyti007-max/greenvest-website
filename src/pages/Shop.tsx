@@ -24,6 +24,7 @@ function ProductCard({
   onPick: (p: Product, grade: Grade) => void
 }) {
   const [cardGrade, setCardGrade] = useState<Grade>('B')
+  const [showGradeInfo, setShowGradeInfo] = useState(false)
   const img = resolveProductImage(p.id, p.imageUrl, `${p.name} ${p.bnName}`)
   const low =
     p.inStock && p.stockQty != null && p.stockQty > 0 && p.stockQty <= LOW_STOCK_QTY
@@ -79,10 +80,16 @@ function ProductCard({
           <span className="price">₹{priceMap[cardGrade]}</span>
           <span className="grade-price-label">
             {lang === 'bn' ? `গ্রেড ${cardGrade}` : `Grade ${cardGrade}`}
-            <span className="grade-info-tip" title="A = Premium · B = Daily · C = Budget">ℹ️</span>
+            <span className="grade-info-tip" onClick={() => setShowGradeInfo(!showGradeInfo)} style={{ cursor: 'pointer' }}>ℹ️</span>
           </span>
         </div>
-
+        {showGradeInfo && (
+          <div style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', background: '#f0fdf4', borderRadius: '6px', marginBottom: '0.4rem', lineHeight: 1.6 }}>
+            <div><strong>A</strong> — {lang === 'bn' ? 'প্রিমিয়াম মানের' : 'Premium quality'} · ₹{priceMap.A}/{p.unit}</div>
+            <div><strong>B</strong> — {lang === 'bn' ? 'দৈনন্দিন ব্যবহার' : 'Good daily use'} · ₹{priceMap.B}/{p.unit}</div>
+            <div><strong>C</strong> — {lang === 'bn' ? 'সাশ্রয়ী' : 'Budget friendly'} · ₹{priceMap.C}/{p.unit}</div>
+          </div>
+        )}
         <button
           type="button"
           className="btn btn-primary"
