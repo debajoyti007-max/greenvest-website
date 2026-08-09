@@ -39,7 +39,9 @@ export default function Profile() {
         await supabase.from('profiles').update({ name: nameVal.trim() }).eq('id', user.id)
       }
       setEditingName(false)
-    } catch { /* */ }
+    } catch (e) {
+      alert(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.')
+    }
     setSaving(false)
   }
 
@@ -51,7 +53,9 @@ export default function Profile() {
         await supabase.from('profiles').update({ phone: phoneVal.trim() }).eq('id', user.id)
       }
       setEditingPhone(false)
-    } catch { /* */ }
+    } catch (e) {
+      alert(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.')
+    }
     setSaving(false)
   }
 

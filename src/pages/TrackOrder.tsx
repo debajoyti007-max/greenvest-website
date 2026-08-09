@@ -172,7 +172,7 @@ export default function TrackOrder() {
 
           <footer>
             <span>
-              {t(lang, 'total')}: <strong>৳{matched.total}</strong>
+              {t(lang, 'total')}: <strong>₹{matched.total}</strong>
             </span>
             <span>
               UTR: {matched.utr}{' '}

@@ -215,7 +215,7 @@ export default function SellerProducts() {
             </select>
           </label>
           <label>
-            Grade A ৳
+            Grade A ₹
             <input
               type="number"
               value={form.pA}
@@ -223,7 +223,7 @@ export default function SellerProducts() {
             />
           </label>
           <label>
-            Grade B ৳
+            Grade B ₹
             <input
               type="number"
               value={form.pB}
@@ -231,7 +231,7 @@ export default function SellerProducts() {
             />
           </label>
           <label>
-            Grade C ৳
+            Grade C ₹
             <input
               type="number"
               value={form.pC}
@@ -347,7 +347,7 @@ export default function SellerProducts() {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span>৳{p.pA} / ৳{p.pB} / ৳{p.pC}</span>
+                        <span>₹{p.pA} / ₹{p.pB} / ₹{p.pC}</span>
                         <button type="button" className="btn btn-ghost" style={{padding: '2px 6px', fontSize: '12px'}} onClick={() => {
                           setQuickPriceId(p.id)
                           setQuickPrices({ pA: p.pA, pB: p.pB, pC: p.pC })

@@ -342,21 +342,30 @@ export default function Checkout() {
           </label>
           <label>
             {t(lang, 'utrLabel')}
-            <input
-              value={utr}
-              onChange={(e) => setUtr(e.target.value)}
-              onFocus={async () => {
-                try {
-                  const text = await navigator.clipboard.readText()
-                  if (text && /^\\d{12,}$/.test(text.trim())) {
-                    setUtr(text.trim())
-                    setUtrPasted(true)
-                  }
-                } catch (err) {}
-              }}
-              placeholder={lang === 'bn' ? 'যেমন 123456789012' : 'e.g. 123456789012'}
-              required
-            />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                value={utr}
+                onChange={(e) => setUtr(e.target.value)}
+                placeholder={lang === 'bn' ? 'যেমন 123456789012' : 'e.g. 123456789012'}
+                required
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText()
+                    if (text && /^\\d{12,}$/.test(text.trim())) {
+                      setUtr(text.trim())
+                      setUtrPasted(true)
+                    }
+                  } catch (err) {}
+                }}
+              >
+                📋 {lang === 'bn' ? 'পেস্ট' : 'Paste'}
+              </button>
+            </div>
           </label>
           {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '-0.5rem' }}>UTR auto-filled from clipboard</p>}
           {error && <p className="form-error">{error}</p>}

@@ -5,7 +5,7 @@ export function printOrderInvoice(order: Order) {
   const rows = order.items
     .map(
       (it) =>
-        `<tr><td>${it.emoji} ${it.name} (G${it.grade})</td><td>${it.qty}</td><td>৳${it.unitPrice}</td><td>৳${it.unitPrice * it.qty}</td></tr>`,
+        `<tr><td>${it.emoji} ${it.name} (G${it.grade})</td><td>${it.qty}</td><td>₹${it.unitPrice}</td><td>₹${it.unitPrice * it.qty}</td></tr>`,
     )
     .join('')
 
@@ -28,10 +28,10 @@ export function printOrderInvoice(order: Order) {
   <table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
   <tbody>${rows}</tbody></table>
   <div class="tot">
-    <div>Subtotal: ৳${order.subtotal}</div>
-    <div>Delivery: ৳${order.deliveryFee}</div>
-    <div><strong>Total: ৳${order.total}</strong></div>
-    <div>Advance (50%): ৳${order.advanceAmount}</div>
+    <div>Subtotal: ₹${order.subtotal}</div>
+    <div>Delivery: ₹${order.deliveryFee}</div>
+    <div><strong>Total: ₹${order.total}</strong></div>
+    <div>Advance (50%): ₹${order.advanceAmount}</div>
     <div>UTR: ${order.utr} ${order.utrVerified ? '(verified)' : '(pending)'}</div>
   </div>
   <script>window.onload=()=>window.print()</script>
@@ -48,7 +48,7 @@ export function printThermalReceipt(order: Order) {
   const rows = order.items
     .map(
       (it) =>
-        `<div>${it.name.slice(0, 14)} (G${it.grade}) x${it.qty} = ৳${it.unitPrice * it.qty}</div>`,
+        `<div>${it.name.slice(0, 14)} (G${it.grade}) x${it.qty} = ₹${it.unitPrice * it.qty}</div>`,
     )
     .join('')
 
@@ -75,10 +75,10 @@ export function printThermalReceipt(order: Order) {
   <div class="hr"></div>
   ${rows}
   <div class="hr"></div>
-  <div>Subtotal: ৳${order.subtotal}</div>
-  <div>Delivery: ৳${order.deliveryFee}</div>
-  <div class="b">Total: ৳${order.total}</div>
-  <div>Advance: ৳${order.advanceAmount}</div>
+  <div>Subtotal: ₹${order.subtotal}</div>
+  <div>Delivery: ₹${order.deliveryFee}</div>
+  <div class="b">Total: ₹${order.total}</div>
+  <div>Advance: ₹${order.advanceAmount}</div>
   <div>UTR: ${order.utr}</div>
   <div class="hr"></div>
   <div class="c">Thank You!</div>

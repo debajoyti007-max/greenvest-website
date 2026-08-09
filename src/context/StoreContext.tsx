@@ -218,8 +218,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addToCart = useCallback((productId: string, grade: Grade, qty = 1) => {
+    const p = products.find((x) => x.id === productId)
     const current = getCart()
     const idx = current.findIndex((c) => c.productId === productId && c.grade === grade)
+    const currentQty = idx >= 0 ? current[idx].qty : 0
+    if (p && p.stockQty !== undefined && currentQty + qty > p.stockQty) return
+
     let next: CartItem[]
     if (idx >= 0) {
       next = current.map((c, i) => (i === idx ? { ...c, qty: c.qty + qty } : c))
@@ -228,15 +232,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     saveCart(next)
     setCart(next)
-  }, [])
+  }, [products])
 
   const updateCartQty = useCallback((productId: string, grade: Grade, qty: number) => {
+    const p = products.find((x) => x.id === productId)
+    const finalQty = (p && p.stockQty !== undefined) ? Math.min(qty, p.stockQty) : qty
+
     const next = getCart()
-      .map((c) => (c.productId === productId && c.grade === grade ? { ...c, qty } : c))
+      .map((c) => (c.productId === productId && c.grade === grade ? { ...c, qty: finalQty } : c))
       .filter((c) => c.qty > 0)
     saveCart(next)
     setCart(next)
-  }, [])
+  }, [products])
 
   const removeFromCart = useCallback((productId: string, grade: Grade) => {
     const next = getCart().filter((c) => !(c.productId === productId && c.grade === grade))

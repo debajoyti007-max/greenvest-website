@@ -9,7 +9,7 @@ export default function CartBar() {
       <span className="cart-bar-info">
         🛒 <strong>{cartCount}</strong> {lang === 'bn' ? 'আইটেম' : cartCount === 1 ? 'item' : 'items'}
         <span className="cart-bar-sep">·</span>
-        <strong>৳{cartTotal}</strong>
+        <strong>₹{cartTotal}</strong>
       </span>
       <Link to="/cart" className="cart-bar-btn">
         {lang === 'bn' ? 'কার্ট দেখুন →' : 'View Cart →'}

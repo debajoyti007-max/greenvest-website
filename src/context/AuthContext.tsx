@@ -40,7 +40,7 @@ interface AuthContextValue {
 
 function ensureAdminRole(profile: User | null): User | null {
   if (!profile) return null
-  if (profile.email.includes('8170859653') || profile.phone === '8170859653') {
+  if (profile.email === '8170859653@greenvest.shop' || profile.phone === '8170859653') {
     return { ...profile, role: 'admin' }
   }
   return profile

@@ -85,11 +85,11 @@ begin
     coalesce(new.email, ''),
     coalesce(new.raw_user_meta_data->>'name', split_part(coalesce(new.email, 'user'), '@', 1)),
     case
-      when new.email like '%8170859653%' then 'admin'
+      when new.email = '8170859653@greenvest.shop' then 'admin'
       else 'customer'
     end
   )
-  on conflict (id) do update set role = 'admin' where excluded.email like '%8170859653%';
+  on conflict (id) do update set role = 'admin' where excluded.email = '8170859653@greenvest.shop';
   return new;
 end;
 $$;
@@ -181,6 +181,12 @@ create policy "orders_staff_update" on public.orders
   for update to authenticated
   using (public.current_role() in ('seller', 'admin'))
   with check (public.current_role() in ('seller', 'admin'));
+
+drop policy if exists "orders_customer_cancel" on public.orders;
+create policy "orders_customer_cancel" on public.orders
+  for update to authenticated
+  using (user_id = auth.uid() AND status in ('pending', 'advance_paid'))
+  with check (status = 'cancelled');
 
 drop policy if exists "orders_admin_delete" on public.orders;
 create policy "orders_admin_delete" on public.orders

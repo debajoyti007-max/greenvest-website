@@ -24,7 +24,7 @@ export default function OrderSuccess() {
 
   const copySummary = async () => {
     if (!order) return
-    const text = `GreenVest Order: ${order.id}\nCustomer: ${order.userName} (${order.phone})\nTotal: ৳${order.total} (Advance ৳${order.advanceAmount})\nUTR: ${order.utr}\nAddress: ${order.address} (PIN ${order.pin})`
+    const text = `GreenVest Order: ${order.id}\nCustomer: ${order.userName} (${order.phone})\nTotal: ₹${order.total} (Advance ₹${order.advanceAmount})\nUTR: ${order.utr}\nAddress: ${order.address} (PIN ${order.pin})`
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -76,7 +76,7 @@ export default function OrderSuccess() {
           ))}
         </ul>
         <p>
-          {t(lang, 'total')}: <strong>৳{order.total}</strong> ({t(lang, 'advance')} ৳
+          {t(lang, 'total')}: <strong>₹{order.total}</strong> ({t(lang, 'advance')} ₹
           {order.advanceAmount})
         </p>
         <p>

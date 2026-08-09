@@ -288,7 +288,10 @@ export async function createOrder(order: Order): Promise<Order> {
     unit_price: it.unitPrice,
   }))
   const { error: itemsError } = await client.from('order_items').insert(items)
-  if (itemsError) throw itemsError
+  if (itemsError) {
+    await client.from('orders').delete().eq('id', order.id)
+    throw itemsError
+  }
 
   return order
 }

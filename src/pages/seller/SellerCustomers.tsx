@@ -106,7 +106,7 @@ export default function SellerCustomers() {
                     {!c.email.endsWith('@greenvest.shop') && <div className="muted">{c.email}</div>}
                   </td>
                   <td>{c.orders}</td>
-                  <td>৳{c.spent}</td>
+                  <td>₹{c.spent}</td>
                   <td className="muted">{new Date(c.lastOrderAt).toLocaleString()}</td>
                   <td className="actions">
                     <button
