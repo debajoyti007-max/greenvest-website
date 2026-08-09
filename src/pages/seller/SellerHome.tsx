@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { showToast } from '../../components/Toast'
 import { useAuth } from '../../context/AuthContext'
@@ -12,9 +12,22 @@ function dayKey(d: Date) {
 
 export default function SellerHome() {
   const { user } = useAuth()
-  const { products, orders, lang, morningReset } = useStore()
+  const { products, orders, lang, morningReset, fetchDailyReport, saveDailyReport } = useStore()
   const [sheet, setSheet] = useState<string | null>(null)
   const [mandiCost, setMandiCost] = useState<number | ''>('')
+  const [savedProfit, setSavedProfit] = useState<number | null>(null)
+
+  useEffect(() => {
+    let active = true
+    const todayStr = new Date().toISOString().split('T')[0]
+    fetchDailyReport(todayStr).then(report => {
+      if (active && report) {
+        setMandiCost(report.mandi_cost)
+        setSavedProfit(report.profit)
+      }
+    })
+    return () => { active = false }
+  }, [fetchDailyReport])
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
@@ -77,6 +90,24 @@ export default function SellerHome() {
         ? `মন্ডি সোর্সিং — ${new Date().toLocaleDateString('bn-IN')}\n`
         : `Mandi sourcing — ${new Date().toLocaleDateString()}\n`
     setSheet(header + sourcingLines.join('\n'))
+  }
+
+  const handleSaveReport = async () => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    const cost = Number(mandiCost) || 0
+    const profit = todaySales - cost
+    const totalCancelled = todayOrders.filter(o => o.status === 'cancelled').length
+    await saveDailyReport({
+      report_date: todayStr,
+      total_orders: todayOrders.length,
+      total_revenue: todaySales,
+      total_cancelled: totalCancelled,
+      mandi_cost: cost,
+      delivery_cost: 0,
+      profit
+    })
+    setSavedProfit(profit)
+    showToast(lang === 'bn' ? 'রিপোর্ট সেভ হয়েছে!' : 'Report saved!', '📈')
   }
 
   const copySheet = async () => {
@@ -171,14 +202,22 @@ export default function SellerHome() {
         </div>
       </div>
 
-      <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--white)', borderRadius: '8px', border: '1px solid var(--line)', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+      <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--white)', borderRadius: '8px', border: '1px solid var(--line)', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
           {lang === 'bn' ? "আজকের মন্ডি খরচ: ₹" : "Today's Mandi Cost: ₹"}
           <input type="number" value={mandiCost} onChange={e => setMandiCost(e.target.value ? Number(e.target.value) : '')} style={{width: '100px', padding: '4px'}} />
         </label>
-        {typeof mandiCost === 'number' && (
+        <button type="button" className="btn btn-secondary" onClick={handleSaveReport}>
+          {lang === 'bn' ? 'সেভ করুন' : 'Save'}
+        </button>
+        {savedProfit !== null && (
           <div style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
-            {lang === 'bn' ? "আজকের লাভ: ₹" : "Today's Profit: ₹"}{todaySales - mandiCost}
+            {lang === 'bn' ? "সেভ করা লাভ: ₹" : "Saved Profit: ₹"}{savedProfit}
+          </div>
+        )}
+        {typeof mandiCost === 'number' && savedProfit === null && (
+          <div style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
+            {lang === 'bn' ? "আজকের লাভ (আনসেভড): ₹" : "Today's Profit (Unsaved): ₹"}{todaySales - mandiCost}
           </div>
         )}
       </div>

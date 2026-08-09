@@ -20,6 +20,13 @@ import {
   updateOrderStatusApi,
   upsertProduct,
   verifyUtrApi,
+  fetchAddresses as fetchAddressesApi,
+  saveAddress as saveAddressApi,
+  deleteAddress as deleteAddressApi,
+  validateCoupon as validateCouponApi,
+  saveDailyReport as saveDailyReportApi,
+  fetchDailyReport as fetchDailyReportApi,
+  fetchDeliveryZones as fetchDeliveryZonesApi,
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
@@ -38,7 +45,7 @@ import {
   STORE_EVENT,
   uid,
 } from '../lib/storage'
-import type { CartItem, Grade, Lang, Order, OrderStatus, Product } from '../types'
+import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone } from '../types'
 import { useAuth } from './AuthContext'
 
 interface PlaceOrderOpts {
@@ -47,6 +54,8 @@ interface PlaceOrderOpts {
   pin: string
   utr: string
   deliverySlot: import('../types').DeliverySlot
+  discountAmount?: number
+  zones?: DeliveryZone[]
 }
 
 interface StoreContextValue {
@@ -75,6 +84,13 @@ interface StoreContextValue {
   checkDuplicateUtr: (utr: string) => Promise<boolean>
   verifyUtr: (id: string, verified: boolean) => Promise<void>
   refresh: () => Promise<void>
+  fetchAddresses: (userId: string) => Promise<Address[]>
+  saveAddress: (addr: Address) => Promise<void>
+  deleteAddress: (id: number) => Promise<void>
+  validateCoupon: (code: string, orderTotal: number) => Promise<Coupon | null>
+  saveDailyReport: (report: DailyReport) => Promise<void>
+  fetchDailyReport: (date: string) => Promise<DailyReport | null>
+  fetchDeliveryZones: () => Promise<DeliveryZone[]>
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null)
@@ -252,8 +268,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       const subtotal = items.reduce((s, i) => s + i.unitPrice * i.qty, 0)
       if (subtotal < MIN_ORDER_AMOUNT) return null
-      const { fee: deliveryFee } = calcDeliveryFee(opts.pin)
-      const total = subtotal + deliveryFee
+      const { fee: deliveryFee } = calcDeliveryFee(opts.pin, opts.zones)
+      const total = Math.max(0, subtotal + deliveryFee - (opts.discountAmount || 0))
       const now = new Date().toISOString()
       const order: Order = {
         id: uid('ord'),
@@ -499,6 +515,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud, refreshCloud],
   )
 
+  const fetchAddresses = useCallback(async (userId: string) => {
+    if (!cloud) return []
+    return fetchAddressesApi(userId)
+  }, [cloud])
+
+  const saveAddress = useCallback(async (addr: Address) => {
+    if (!cloud) return
+    return saveAddressApi(addr)
+  }, [cloud])
+
+  const deleteAddress = useCallback(async (id: number) => {
+    if (!cloud) return
+    return deleteAddressApi(id)
+  }, [cloud])
+
+  const validateCoupon = useCallback(async (code: string, orderTotal: number) => {
+    if (!cloud) return null
+    return validateCouponApi(code, orderTotal)
+  }, [cloud])
+
+  const saveDailyReport = useCallback(async (report: DailyReport) => {
+    if (!cloud) return
+    return saveDailyReportApi(report)
+  }, [cloud])
+
+  const fetchDailyReport = useCallback(async (date: string) => {
+    if (!cloud) return null
+    return fetchDailyReportApi(date)
+  }, [cloud])
+
+  const fetchDeliveryZones = useCallback(async () => {
+    if (!cloud) return []
+    return fetchDeliveryZonesApi()
+  }, [cloud])
+
   const value = useMemo(
     () => ({
       products,
@@ -526,6 +577,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       checkDuplicateUtr,
       verifyUtr,
       refresh,
+      fetchAddresses,
+      saveAddress,
+      deleteAddress,
+      validateCoupon,
+      saveDailyReport,
+      fetchDailyReport,
+      fetchDeliveryZones,
     }),
     [
       products,
@@ -553,6 +611,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       checkDuplicateUtr,
       verifyUtr,
       refresh,
+      fetchAddresses,
+      saveAddress,
+      deleteAddress,
+      validateCoupon,
+      saveDailyReport,
+      fetchDailyReport,
+      fetchDeliveryZones,
     ],
   )
 

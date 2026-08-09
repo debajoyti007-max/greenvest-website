@@ -1,4 +1,8 @@
 import type {
+  Address,
+  Coupon,
+  DailyReport,
+  DeliveryZone,
   DeliverySlot,
   Grade,
   Order,
@@ -347,4 +351,61 @@ export function subscribeOrders(onChange: () => void) {
   return () => {
     void client.removeChannel(channel)
   }
+}
+
+export async function fetchAddresses(userId: string): Promise<Address[]> {
+  if (!supabase) return []
+  try {
+    const { data, error } = await supabase.from('addresses').select('*').eq('user_id', userId)
+    if (error) return []
+    return data || []
+  } catch { return [] }
+}
+
+export async function saveAddress(addr: Address): Promise<void> {
+  if (!supabase) return
+  try {
+    await supabase.from('addresses').upsert(addr)
+  } catch {}
+}
+
+export async function deleteAddress(id: number): Promise<void> {
+  if (!supabase) return
+  try {
+    await supabase.from('addresses').delete().eq('id', id)
+  } catch {}
+}
+
+export async function validateCoupon(code: string, orderTotal: number): Promise<Coupon | null> {
+  if (!supabase) return null
+  try {
+    const { data, error } = await supabase.rpc('validate_coupon', { code_val: code, total_val: orderTotal })
+    if (error || !data) return null
+    return data as Coupon
+  } catch { return null }
+}
+
+export async function saveDailyReport(report: DailyReport): Promise<void> {
+  if (!supabase) return
+  try {
+    await supabase.from('daily_reports').upsert(report, { onConflict: 'report_date' })
+  } catch {}
+}
+
+export async function fetchDailyReport(date: string): Promise<DailyReport | null> {
+  if (!supabase) return null
+  try {
+    const { data, error } = await supabase.from('daily_reports').select('*').eq('report_date', date).maybeSingle()
+    if (error) return null
+    return data as DailyReport
+  } catch { return null }
+}
+
+export async function fetchDeliveryZones(): Promise<DeliveryZone[]> {
+  if (!supabase) return []
+  try {
+    const { data, error } = await supabase.from('delivery_zones').select('*').eq('active', true)
+    if (error) return []
+    return data || []
+  } catch { return [] }
 }

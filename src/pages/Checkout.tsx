@@ -7,11 +7,11 @@ import { calcDeliveryFee, getSlotCutoffStatus } from '../lib/delivery'
 import { t, zoneLabel } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
-import type { DeliverySlot } from '../types'
+import type { DeliverySlot, Address, Coupon, DeliveryZone } from '../types'
 
 export default function Checkout() {
   const { user } = useAuth()
-  const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr } = useStore()
+  const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr, fetchAddresses, fetchDeliveryZones, saveAddress, validateCoupon } = useStore()
   const navigate = useNavigate()
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
@@ -23,9 +23,25 @@ export default function Checkout() {
   const [copied, setCopied] = useState(false)
   const [prefilled, setPrefilled] = useState(false)
 
-  const delivery = useMemo(() => calcDeliveryFee(pin), [pin])
-  const grandTotal = cartTotal + delivery.fee
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
+  const [zones, setZones] = useState<DeliveryZone[]>([])
+  const [saveAddressToDb, setSaveAddressToDb] = useState(false)
+  const [couponCode, setCouponCode] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null)
+  const [couponSuccess, setCouponSuccess] = useState('')
+
+  const delivery = useMemo(() => calcDeliveryFee(pin, zones), [pin, zones])
+  const discountAmount = appliedCoupon?.discount ?? 0
+  const grandTotal = Math.max(0, cartTotal + delivery.fee - discountAmount)
   const advance = Math.ceil(grandTotal * 0.5)
+
+  useEffect(() => {
+    if (!user) return
+    let active = true
+    fetchAddresses(user.id).then(addrs => { if (active) setSavedAddresses(addrs) })
+    fetchDeliveryZones().then(z => { if (active) setZones(z) })
+    return () => { active = false }
+  }, [user, fetchAddresses, fetchDeliveryZones])
 
   useEffect(() => {
     if (!user) return
@@ -114,7 +130,10 @@ export default function Checkout() {
       return
     }
     try {
-      const order = await placeOrder({ address, phone, pin, utr, deliverySlot: slot })
+      if (saveAddressToDb) {
+        await saveAddress({ user_id: user.id, label: 'Saved', address, phone, pin, is_default: savedAddresses.length === 0 })
+      }
+      const order = await placeOrder({ address, phone, pin, utr, deliverySlot: slot, discountAmount, zones })
       if (order) navigate(`/orders/success/${order.id}`)
       else setError(lang === 'bn' ? 'অর্ডার হয়নি' : 'Could not place order')
     } catch (err) {
@@ -192,6 +211,12 @@ export default function Checkout() {
               <dt>{t(lang, 'total')}</dt>
               <dd>₹{grandTotal}</dd>
             </div>
+            {discountAmount > 0 && (
+              <div>
+                <dt>{lang === 'bn' ? 'কুপন ছাড়' : 'Coupon Discount'}</dt>
+                <dd style={{ color: '#16a34a' }}>-₹{discountAmount}</dd>
+              </div>
+            )}
             <div>
               <dt>{lang === 'bn' ? 'অগ্রিম পাঠান (৫০%)' : 'Pay this advance (50%)'}</dt>
               <dd className="accent">₹{advance}</dd>
@@ -200,6 +225,26 @@ export default function Checkout() {
         </div>
 
         <form className="form" onSubmit={onSubmit}>
+          {savedAddresses.length > 0 && (
+            <label>
+              {lang === 'bn' ? 'সংরক্ষিত ঠিকানা নির্বাচন করুন' : 'Select a saved address'}
+              <select onChange={e => {
+                if (!e.target.value) return
+                const addr = savedAddresses.find(a => a.id === Number(e.target.value))
+                if (addr) {
+                  setAddress(addr.address)
+                  setPhone(addr.phone)
+                  setPin(addr.pin)
+                  setPrefilled(true)
+                }
+              }}>
+                <option value="">{lang === 'bn' ? 'নতুন ঠিকানা লিখুন...' : 'Enter new address...'}</option>
+                {savedAddresses.map(a => (
+                  <option key={a.id} value={a.id}>{a.label || a.address.slice(0, 30)} - {a.pin}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             {t(lang, 'deliveryAddress')}
             <textarea
@@ -280,6 +325,10 @@ export default function Checkout() {
               placeholder={lang === 'bn' ? '১০ সংখ্যার মোবাইল' : '10-digit mobile'}
             />
           </label>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '-0.5rem' }}>
+            <input type="checkbox" checked={saveAddressToDb} onChange={e => setSaveAddressToDb(e.target.checked)} />
+            {lang === 'bn' ? 'ভবিষ্যতের জন্য এই ঠিকানা সংরক্ষণ করুন' : 'Save this address for future'}
+          </label>
           <label>
             {t(lang, 'utrLabel')}
             <input
@@ -300,6 +349,28 @@ export default function Checkout() {
           </label>
           {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '-0.5rem' }}>UTR auto-filled from clipboard</p>}
           {error && <p className="form-error">{error}</p>}
+          
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexDirection: 'column' }}>
+            <label>{lang === 'bn' ? 'কুপন কোড' : 'Coupon Code'}</label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input value={couponCode} onChange={e => setCouponCode(e.target.value)} placeholder="e.g. SAVE10" />
+              <button type="button" className="btn btn-secondary" onClick={async () => {
+                setError('')
+                setCouponSuccess('')
+                if (!couponCode) return
+                const c = await validateCoupon(couponCode, cartTotal)
+                if (c && c.valid) {
+                  setAppliedCoupon(c)
+                  setCouponSuccess(c.message || (lang === 'bn' ? 'কুপন প্রয়োগ করা হয়েছে!' : 'Coupon applied!'))
+                } else {
+                  setAppliedCoupon(null)
+                  setError(lang === 'bn' ? 'অবৈধ বা মেয়াদোত্তীর্ণ কুপন' : 'Invalid or expired coupon')
+                }
+              }}>{lang === 'bn' ? 'প্রয়োগ' : 'Apply'}</button>
+            </div>
+            {couponSuccess && <p style={{ color: '#16a34a', margin: 0 }}>{couponSuccess}</p>}
+          </div>
+
           <button type="submit" className="btn btn-primary">
             {t(lang, 'placeOrder')}
           </button>

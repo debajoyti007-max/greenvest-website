@@ -1,8 +1,19 @@
+import type { DeliveryZone as DbDeliveryZone } from '../types'
+
 /** Delivery zones by PIN prefix (West Bengal). */
 export type DeliveryZone = 'local' | 'nearby' | 'far' | 'standard'
 
-export function calcDeliveryFee(pin: string): { fee: number; zone: DeliveryZone } {
+export function calcDeliveryFee(pin: string, zones?: DbDeliveryZone[]): { fee: number; zone: DeliveryZone | string } {
   const p = pin.replace(/\D/g, '')
+  
+  if (zones && zones.length > 0) {
+    const sortedZones = [...zones].sort((a, b) => b.pin_prefix.length - a.pin_prefix.length)
+    const match = sortedZones.find(z => p.startsWith(z.pin_prefix))
+    if (match) {
+      return { fee: match.fee, zone: match.zone }
+    }
+  }
+
   if (p.length < 3) return { fee: 40, zone: 'standard' }
   // Local Nandakumar / nearby PINs
   if (p.startsWith('72163')) return { fee: 30, zone: 'local' }
