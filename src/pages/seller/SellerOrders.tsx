@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import { showToast } from '../../components/Toast'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
@@ -114,6 +115,18 @@ export default function SellerOrders() {
     const next = !o.utrVerified
     await verifyUtr(o.id, next)
     if (next) window.open(paymentVerifiedWhatsAppUrl(o, lang), '_blank', 'noopener,noreferrer')
+  }
+
+  const handleRejectUtr = async (o: Order) => {
+    if (!confirm(lang === 'bn' ? 'ভুল UTR হলে অর্ডার বাতিল করবেন?' : 'Reject invalid UTR and cancel order?')) return
+    await updateOrderStatus(o.id, 'cancelled')
+    const phone = formatWhatsAppPhone(o.phone)
+    const msg = encodeURIComponent(
+      lang === 'bn'
+        ? `❌ আপনার অর্ডার ${o.id}-এর UTR (${o.utr}) ব্যাংক স্টেটমেন্টে পাওয়া যায়নি। অনুগ্রহ করে সঠিক UTR পাঠান।`
+        : `❌ Your UTR (${o.utr}) for Order #${o.id} could not be verified in bank records. Please send your correct 12-digit UTR.`
+    )
+    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank', 'noopener,noreferrer')
   }
 
   // S7: Today's summary
@@ -337,14 +350,32 @@ export default function SellerOrders() {
 
                     {/* UTR */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.85rem' }}>UTR: <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{o.utr}</code></span>
+                      <span style={{ fontSize: '0.85rem' }}>UTR: <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{o.utr}</code></span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(o.utr)
+                            showToast(lang === 'bn' ? 'UTR কপি হয়েছে' : 'UTR copied!')
+                          } catch {}
+                        }}
+                        style={{ padding: '0.2rem 0.6rem', borderRadius: '6px', border: '1px solid var(--line, #e5e7eb)', background: '#fff', fontSize: '0.75rem', cursor: 'pointer' }}
+                      >
+                        📋 {lang === 'bn' ? 'কপি' : 'Copy'}
+                      </button>
                       <button type="button" onClick={() => void handleVerifyUtr(o)}
                         style={{
                           padding: '0.25rem 0.6rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
                           background: o.utrVerified ? '#dcfce7' : '#fef9c3', color: o.utrVerified ? '#166534' : '#854d0e'
                         }}>
-                        {o.utrVerified ? '✅ Verified' : '⏳ Verify'}
+                        {o.utrVerified ? '✅ Verified' : '⏳ Verify UTR'}
                       </button>
+                      {!o.utrVerified && o.status !== 'cancelled' && (
+                        <button type="button" onClick={() => void handleRejectUtr(o)}
+                          style={{ padding: '0.25rem 0.6rem', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', color: '#dc2626', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}>
+                          ❌ {lang === 'bn' ? 'ভুল UTR' : 'Reject UTR'}
+                        </button>
+                      )}
                     </div>
 
                     {/* Action buttons */}
