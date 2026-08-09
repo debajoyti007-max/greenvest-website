@@ -64,6 +64,7 @@ type ProfileRow = {
   email: string
   name: string
   role: Role
+  phone?: string | null
   created_at: string
 }
 
@@ -161,12 +162,19 @@ function mapOrder(row: OrderRow): Order {
 }
 
 function mapProfile(row: ProfileRow): User {
+  // Derive phone from email if not explicitly stored (legacy accounts)
+  const derivedPhone =
+    row.phone ||
+    (row.email.endsWith('@greenvest.shop')
+      ? row.email.replace('@greenvest.shop', '')
+      : undefined)
   return {
     id: row.id,
     email: row.email,
     password: '',
     name: row.name,
     role: row.role,
+    phone: derivedPhone || undefined,
     createdAt: row.created_at,
   }
 }

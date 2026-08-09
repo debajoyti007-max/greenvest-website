@@ -9,6 +9,8 @@ import { catLabel, t } from '../lib/i18n'
 import { HERO_IMAGE, resolveProductImage } from '../lib/productImages'
 import type { Grade, Lang, Product } from '../types'
 
+const GRADES: Grade[] = ['A', 'B', 'C']
+
 function ProductCard({
   p,
   lang,
@@ -18,11 +20,15 @@ function ProductCard({
   p: Product
   lang: Lang
   added: string | null
-  onPick: (p: Product) => void
+  onPick: (p: Product, grade: Grade) => void
 }) {
+  const [cardGrade, setCardGrade] = useState<Grade>('B')
   const img = resolveProductImage(p.id, p.imageUrl, `${p.name} ${p.bnName}`)
   const low =
     p.inStock && p.stockQty != null && p.stockQty > 0 && p.stockQty <= LOW_STOCK_QTY
+
+  const priceMap: Record<Grade, number> = { A: p.pA, B: p.pB, C: p.pC }
+
   return (
     <article className={`product-tile premium-tile ${p.inStock ? '' : 'out'}`}>
       <div className="product-media photo">
@@ -52,21 +58,34 @@ function ProductCard({
         <p className="muted">
           {lang === 'bn' ? p.name : p.bnName} · {p.unit}
         </p>
-        <div className="price-row">
-          <span className="price">৳{p.pB}</span>
-          <span className="grade-prices">
-            <span>A ৳{p.pA}</span>
-            <span>B ৳{p.pB}</span>
-            <span>C ৳{p.pC}</span>
-          </span>
+
+        {/* Grade segment toggle */}
+        <div className="card-grade-toggle">
+          {GRADES.map((g) => (
+            <button
+              key={g}
+              type="button"
+              className={`card-grade-btn ${cardGrade === g ? 'active' : ''}`}
+              onClick={() => setCardGrade(g)}
+              aria-pressed={cardGrade === g}
+            >
+              {g}
+            </button>
+          ))}
         </div>
+
+        <div className="price-row">
+          <span className="price">₹{priceMap[cardGrade]}</span>
+          <span className="grade-price-label">{lang === 'bn' ? `গ্রেড ${cardGrade}` : `Grade ${cardGrade}`}</span>
+        </div>
+
         <button
           type="button"
           className="btn btn-primary"
           disabled={!p.inStock}
-          onClick={() => onPick(p)}
+          onClick={() => onPick(p, cardGrade)}
         >
-          {added === p.id ? t(lang, 'added') : t(lang, 'chooseGrade')}
+          {added === p.id ? t(lang, 'added') : t(lang, 'addToCart')}
         </button>
       </div>
     </article>
@@ -74,7 +93,7 @@ function ProductCard({
 }
 
 export default function Shop() {
-  const { products, lang, addToCart, priceFor, loading } = useStore()
+  const { products, lang, addToCart, priceFor, cartTotal, loading } = useStore()
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState<Product | null>(null)
@@ -102,10 +121,14 @@ export default function Shop() {
   const available = filtered.filter((p) => p.inStock)
   const unavailable = filtered.filter((p) => !p.inStock)
 
-  const openPick = (p: Product) => {
+  // Progress bar
+  const progressPct = Math.min(100, Math.round((cartTotal / MIN_ORDER_AMOUNT) * 100))
+  const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
+
+  const openPick = (p: Product, preGrade: Grade = 'B') => {
     if (!p.inStock) return
     setPicked(p)
-    setGrade('B')
+    setGrade(preGrade)
   }
 
   const confirmAdd = () => {
@@ -129,13 +152,14 @@ export default function Shop() {
   return (
     <div className="page shop-page">
       <section className="hero-full" style={{ backgroundImage: `url(${HERO_IMAGE})` }}>
-        <div className="hero-full-shade" />
+        {/* Stronger gradient overlay for contrast */}
+        <div className="hero-full-shade hero-shade-strong" />
         <div className="hero-full-copy hero-animated">
           <p className="hero-kicker hero-anim-1">{t(lang, 'farmToDoor')}</p>
           <h1 className="brand-hero light hero-anim-2">GreenVest</h1>
           <p className="hero-sub hero-anim-3">
             {lang === 'bn'
-              ? `গ্রেড A/B/C · মিনিমাম ৳${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
+              ? `গ্রেড A/B/C · মিনিমাম ₹${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
               : `Grade A/B/C · Min ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW}`}
           </p>
           <button type="button" className="btn btn-primary hero-cta hero-anim-4" onClick={scrollToGrid}>
@@ -177,7 +201,24 @@ export default function Shop() {
       </div>
 
       <div className="shop-body" id="veg-grid">
-        <p className="friendly-tip">{t(lang, 'tipMin')}</p>
+        {/* Cart minimum progress bar */}
+        <div className="cart-progress-wrap">
+          <div className="cart-progress-header">
+            <span className="cart-progress-label">
+              {cartTotal === 0
+                ? (lang === 'bn' ? '🛒 কার্টে কিছু নেই' : '🛒 Cart is empty')
+                : progressPct >= 100
+                  ? (lang === 'bn' ? '🎉 মিনিমাম পূরণ হয়েছে!' : '🎉 Minimum reached!')
+                  : (lang === 'bn'
+                      ? `আর মাত্র ₹${shortfall} যোগ করুন — বিনামূল্যে ডেলিভারি পান!`
+                      : `Add ₹${shortfall} more for free delivery!`)}
+            </span>
+            <span className="cart-progress-amount">₹{cartTotal} / ₹{MIN_ORDER_AMOUNT}</span>
+          </div>
+          <div className="cart-progress-track" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="cart-progress-fill" style={{ width: `${progressPct}%` }} />
+          </div>
+        </div>
 
         <div className="toolbar">
           <label className="search-field">
@@ -224,7 +265,7 @@ export default function Shop() {
               ) : (
                 <div className="product-grid premium-grid">
                   {available.map((p) => (
-                    <ProductCard key={p.id} p={p} lang={lang} added={added} onPick={openPick} />
+                    <ProductCard key={p.id} p={p} lang={lang} added={added} onPick={(prod, g) => openPick(prod, g)} />
                   ))}
                 </div>
               )}
@@ -243,7 +284,7 @@ export default function Shop() {
                 </p>
                 <div className="product-grid premium-grid">
                   {unavailable.map((p) => (
-                    <ProductCard key={p.id} p={p} lang={lang} added={added} onPick={openPick} />
+                    <ProductCard key={p.id} p={p} lang={lang} added={added} onPick={(prod, g) => openPick(prod, g)} />
                   ))}
                 </div>
               </section>
@@ -282,7 +323,7 @@ export default function Shop() {
                   className={`grade-btn ${grade === g ? 'active' : ''}`}
                   onClick={() => setGrade(g)}
                 >
-                  {t(lang, 'grade')} {g} · ৳{priceFor(picked, g)}
+                  {t(lang, 'grade')} {g} · ₹{priceFor(picked, g)}
                 </button>
               ))}
             </div>

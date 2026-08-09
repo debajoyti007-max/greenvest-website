@@ -28,7 +28,7 @@ export default function Cart() {
       <h1>{t(lang, 'yourCart')}</h1>
       <p className="hint">
         {lang === 'bn'
-          ? `সর্বনিম্ন অর্ডার ৳${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
+          ? `সর্বনিম্ন অর্ডার ₹${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
           : `Minimum order ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW}`}
       </p>
       <ul className="cart-list">
@@ -42,7 +42,7 @@ export default function Cart() {
               <div className="cart-info">
                 <strong>{lang === 'bn' ? p.bnName : p.name}</strong>
                 <span>
-                  {t(lang, 'grade')} {item.grade} · ৳{priceFor(p, item.grade)}/{p.unit}
+                  {t(lang, 'grade')} {item.grade} · ₹{priceFor(p, item.grade)}/{p.unit}
                 </span>
               </div>
               <div className="qty-controls">
@@ -60,7 +60,7 @@ export default function Cart() {
                   +
                 </button>
               </div>
-              <div className="cart-line">৳{line}</div>
+              <div className="cart-line">₹{line}</div>
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -76,16 +76,16 @@ export default function Cart() {
       <div className="cart-summary">
         <div>
           <span>{t(lang, 'total')}</span>
-          <strong>৳{cartTotal}</strong>
+          <strong>₹{cartTotal}</strong>
         </div>
         <div>
           <span>{t(lang, 'advance')}</span>
-          <strong>৳{Math.ceil(cartTotal * 0.5)}</strong>
+          <strong>₹{Math.ceil(cartTotal * 0.5)}</strong>
         </div>
         {!canCheckout && (
           <p className="form-error">
             {lang === 'bn'
-              ? `আরও ৳${shortfall} যোগ করুন (মিনিমাম ৳${MIN_ORDER_AMOUNT})`
+              ? `আরও ₹${shortfall} যোগ করুন (মিনিমাম ₹${MIN_ORDER_AMOUNT})`
               : `Add ₹${shortfall} more to reach the ₹${MIN_ORDER_AMOUNT} minimum`}
           </p>
         )}

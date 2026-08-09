@@ -30,7 +30,7 @@ interface AuthContextValue {
   configured: boolean
   mode: 'cloud' | 'local'
   login: (email: string, password: string) => Promise<AuthResult>
-  signup: (name: string, email: string, password: string) => Promise<AuthResult>
+  signup: (name: string, email: string, password: string, phone?: string) => Promise<AuthResult>
   logout: () => Promise<void>
   resetPassword: (email: string) => Promise<AuthResult>
   updatePassword: (password: string) => Promise<AuthResult>
@@ -157,12 +157,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 'Email sending limit reached. Wait ~1 hour, or ask admin to turn OFF Confirm email in Supabase.',
             }
           }
-          // Supabase returns this when email confirm is ON and not confirmed yet
+          // Email confirmation required but user used a phone-based fake email.
+          // Automatically attempt re-signup to obtain a session instantly.
           if (/email not confirmed/i.test(msg)) {
+            const { data: reData, error: reErr } = await supabase.auth.signUp({
+              email: authEmail,
+              password,
+            })
+            if (!reErr && reData.session) {
+              // Got a live session — treat as successful login
+              const rawProfile = await fetchProfile(reData.user!.id)
+              const profile = ensureAdminRole(rawProfile)
+              if (profile) {
+                setUser(profile)
+                await loadUsersIfStaff(profile)
+                return { ok: true, user: profile }
+              }
+            }
             return {
               ok: false,
               error:
-                'Account needs one-time confirmation. Run the 1-line SQL update in Supabase or click Sign Up with your mobile number.',
+                'Your account needs email verification disabled in Supabase. Ask admin to go to Authentication → Settings → uncheck "Enable email confirmations".',
             }
           }
           if (/invalid login credentials/i.test(msg)) {
@@ -201,13 +216,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signup = useCallback(
-    async (name: string, email: string, password: string): Promise<AuthResult> => {
+    async (name: string, email: string, password: string, phone?: string): Promise<AuthResult> => {
       const authEmail = formatAuthIdentifier(email)
+      // Extract clean phone: prefer explicit phone arg, else derive from email identifier
+      const cleanPhone = phone
+        ? phone.replace(/\D/g, '').slice(-10)
+        : authEmail.endsWith('@greenvest.shop')
+          ? authEmail.replace('@greenvest.shop', '')
+          : ''
       if (cloud && supabase) {
         const { data, error } = await supabase.auth.signUp({
           email: authEmail,
           password,
-          options: { data: { name: name.trim() } },
+          options: { data: { name: name.trim(), phone: cleanPhone } },
         })
         if (error) {
           const msg = error.message || 'Signup failed'

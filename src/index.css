@@ -337,6 +337,13 @@ img {
     linear-gradient(90deg, rgba(15, 42, 26, 0.55) 0%, transparent 55%);
 }
 
+/* Stronger variant for better text contrast on bright/light hero images */
+.hero-shade-strong {
+  background:
+    linear-gradient(180deg, rgba(10, 30, 20, 0.45) 0%, rgba(10, 30, 20, 0.85) 100%),
+    linear-gradient(90deg, rgba(10, 30, 20, 0.65) 0%, transparent 60%) !important;
+}
+
 .hero-full-copy {
   position: relative;
   z-index: 1;
@@ -831,6 +838,102 @@ img {
   font-size: 0.75rem;
   color: var(--muted);
   margin-bottom: 0.25rem;
+}
+
+/* Grade price label next to the main price */
+.grade-price-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--green-600);
+  background: var(--green-50, #f0fdf4);
+  border: 1px solid var(--green-200, #bbf7d0);
+  border-radius: 6px;
+  padding: 0.1rem 0.45rem;
+  align-self: center;
+}
+
+/* —— Per-card Grade Toggle —— */
+.card-grade-toggle {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.55rem;
+}
+
+.card-grade-btn {
+  flex: 1;
+  padding: 0.3rem 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s, transform 0.1s;
+  letter-spacing: 0.04em;
+}
+
+.card-grade-btn:hover {
+  border-color: var(--green-400, #4ade80);
+  color: var(--green-700);
+}
+
+.card-grade-btn.active {
+  background: var(--green-600);
+  border-color: var(--green-600);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.28);
+}
+
+.card-grade-btn:active {
+  transform: scale(0.96);
+}
+
+/* —— Cart Minimum Progress Bar —— */
+.cart-progress-wrap {
+  margin: 0 0 1.25rem;
+  padding: 0.9rem 1rem 0.85rem;
+  border-radius: 14px;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+}
+
+.cart-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.cart-progress-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #14532d;
+  line-height: 1.35;
+}
+
+.cart-progress-amount {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--green-700);
+  white-space: nowrap;
+}
+
+.cart-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 99px;
+  background: #d1fae5;
+  overflow: hidden;
+}
+
+.cart-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--green-500), var(--green-700));
+  transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 6px rgba(22, 163, 74, 0.4);
 }
 
 .product-tile .btn {
