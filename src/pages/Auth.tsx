@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { isValidIndianPhone, cleanDigits } from '../lib/phone'
 import { t } from '../lib/i18n'
-import { supabase } from '../lib/supabase'
 import type { Role } from '../types'
 
 function redirectFor(role: Role) {
@@ -299,30 +298,6 @@ export default function Auth() {
                   : 'Send reset link'
                 : t(lang, 'createAccount')}
         </button>
-        {mode !== 'forgot' && (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ marginTop: '1rem', width: '100%' }}
-            disabled={!supabase || busy}
-            onClick={async () => {
-              if (!supabase) return
-              setBusy(true)
-              const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
-              if (error) {
-                const msg = error.message || 'Google login failed'
-                if (/provider is not enabled|unsupported provider/i.test(msg)) {
-                  setError('Google login is not enabled in your Supabase project. Enable Google in Supabase → Authentication → Providers.')
-                } else {
-                  setError(msg)
-                }
-                setBusy(false)
-              }
-            }}
-          >
-            🔵 Continue with Google
-          </button>
-        )}
       </form>
 
       {mode === 'login' && (
