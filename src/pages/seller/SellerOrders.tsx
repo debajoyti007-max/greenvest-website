@@ -68,7 +68,7 @@ const statusIcon: Record<OrderStatus, string> = {
 
 export default function SellerOrders() {
   const { user } = useAuth()
-  const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr } = useStore()
+  const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr, deleteOrder } = useStore()
   const [filter, setFilter] = useState<Filter>('active')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -86,6 +86,11 @@ export default function SellerOrders() {
     }
     prevCount.current = orders.length
   }, [orders.length])
+
+  const handleDeleteOrder = async (id: string) => {
+    if (!confirm(lang === 'bn' ? 'অর্ডারটি ডাটাবেস থেকে স্থায়ীভাবে মুছে ফেলতে চান?' : 'Permanently delete this order from the database?')) return
+    await deleteOrder(id)
+  }
 
   // S3: One-tap accept (verify UTR + confirm + WhatsApp)
   const handleAcceptOrder = async (o: Order) => {
@@ -350,6 +355,7 @@ export default function SellerOrders() {
                       <button type="button" onClick={() => openMaps(o.address, o.pin || '')} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🗺️ Maps</button>
                       <button type="button" onClick={() => printOrderInvoice(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🧾</button>
                       <button type="button" onClick={() => printThermalReceipt(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🖨️</button>
+                      <button type="button" onClick={() => void handleDeleteOrder(o.id)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#fef2f2', border: '1px solid #fca5a5', fontSize: '0.8rem', cursor: 'pointer', color: '#dc2626', marginLeft: 'auto' }}>🗑️ {lang === 'bn' ? 'মুছে ফেলুন' : 'Delete DB'}</button>
                     </div>
 
                     {/* Status dropdown (advanced) */}

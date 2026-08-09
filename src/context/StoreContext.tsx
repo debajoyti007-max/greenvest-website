@@ -19,6 +19,7 @@ import {
   subscribeOrders,
   subscribeProducts,
   updateOrderStatusApi,
+  deleteOrderApi,
   upsertProduct,
   verifyUtrApi,
   fetchAddresses as fetchAddressesApi,
@@ -84,6 +85,7 @@ interface StoreContextValue {
   bulkUpdateOrderStatus: (ids: string[], status: OrderStatus) => Promise<void>
   checkDuplicateUtr: (utr: string) => Promise<boolean>
   verifyUtr: (id: string, verified: boolean) => Promise<void>
+  deleteOrder: (id: string) => Promise<void>
   refresh: () => Promise<void>
   fetchAddresses: (userId: string) => Promise<Address[]>
   saveAddress: (addr: Address) => Promise<void>
@@ -526,6 +528,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud, refreshCloud],
   )
 
+  const deleteOrder = useCallback(
+    async (id: string) => {
+      if (cloud) {
+        await deleteOrderApi(id)
+        await refreshCloud()
+        return
+      }
+      const next = getOrders().filter((o) => o.id !== id)
+      saveOrders(next)
+      setOrders(next)
+    },
+    [cloud, refreshCloud],
+  )
+
   const fetchAddresses = useCallback(async (userId: string) => {
     if (!cloud) return []
     return fetchAddressesApi(userId)
@@ -587,6 +603,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       bulkUpdateOrderStatus,
       checkDuplicateUtr,
       verifyUtr,
+      deleteOrder,
       refresh,
       fetchAddresses,
       saveAddress,
@@ -621,6 +638,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       bulkUpdateOrderStatus,
       checkDuplicateUtr,
       verifyUtr,
+      deleteOrder,
       refresh,
       fetchAddresses,
       saveAddress,
