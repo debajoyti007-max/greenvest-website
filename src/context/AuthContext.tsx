@@ -103,6 +103,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refresh = useCallback(async () => {
+    if (localStorage.getItem('gv_remember') === '0' && !sessionStorage.getItem('gv_session_only')) {
+      if (cloud && supabase) await supabase.auth.signOut()
+      else setSessionUserId(null)
+      setUser(null)
+      setUsers([])
+      setLoading(false)
+      return
+    }
+
     if (cloud && supabase) {
       const { data } = await supabase.auth.getSession()
       await applyCloudSession(data.session?.user.id ?? null)
@@ -123,7 +132,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh()
     if (cloud && supabase) {
       const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-        void applyCloudSession(session?.user.id ?? null)
+        if (_event === 'SIGNED_OUT') {
+          setUser(null)
+          setUsers([])
+        } else if (_event === 'TOKEN_REFRESHED' || session) {
+          void applyCloudSession(session?.user.id ?? null)
+        }
       })
       return () => sub.subscription.unsubscribe()
     }

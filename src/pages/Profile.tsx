@@ -263,6 +263,13 @@ export default function Profile() {
           style={{ width: '100%', border: '1px solid #fca5a5', color: '#dc2626', background: '#fef2f2', padding: '0.75rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
           {lang === 'bn' ? '🚪 লগআউট' : '🚪 Logout'}
         </button>
+        <button onClick={async () => {
+          if (supabase) await supabase.auth.signOut({ scope: 'global' })
+          await logout()
+        }}
+          style={{ width: '100%', border: '1px solid #fca5a5', color: '#dc2626', background: 'transparent', padding: '0.5rem', borderRadius: '12px', cursor: 'pointer', fontSize: '0.85rem' }}>
+          {lang === 'bn' ? 'সব ডিভাইস থেকে লগআউট করুন' : 'Logout from all devices'}
+        </button>
       </section>
     </div>
   )

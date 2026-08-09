@@ -28,6 +28,7 @@ export default function Auth() {
   const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
   const [showPass, setShowPass] = useState(false)
+  const [remember, setRemember] = useState(true)
 
   if (loading) {
     return (
@@ -52,6 +53,8 @@ export default function Auth() {
         )
         return
       }
+      if (!remember) sessionStorage.setItem('gv_session_only', '1')
+      localStorage.setItem('gv_remember', remember ? '1' : '0')
       navigate(redirectFor(res.user!.role))
     } finally {
       setBusy(false)
@@ -97,6 +100,8 @@ export default function Auth() {
         return
       }
       if (res.user) {
+        if (!remember) sessionStorage.setItem('gv_session_only', '1')
+        localStorage.setItem('gv_remember', remember ? '1' : '0')
         navigate(redirectFor(res.user.role))
         return
       }
@@ -246,9 +251,38 @@ export default function Auth() {
             </button>
           </label>
         )}
+        {mode === 'signup' && password.length > 0 && (
+          <div style={{ marginTop: '0.2rem', marginBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '4px', height: '4px', marginTop: '4px' }}>
+              {[1, 2, 3, 4, 5].map((i) => {
+                let score = 0;
+                if (password.length >= 6) score++;
+                if (password.length >= 8) score++;
+                if (/[A-Z]/.test(password)) score++;
+                if (/[0-9]/.test(password)) score++;
+                if (/[^a-zA-Z0-9]/.test(password)) score++;
+                const color = score <= 1 ? 'red' : score <= 3 ? 'orange' : 'green';
+                return (
+                  <div key={i} style={{ flex: 1, background: i <= score ? color : '#e5e7eb', borderRadius: '2px', transition: 'background 0.3s' }} />
+                )
+              })}
+            </div>
+            <div style={{ fontSize: '0.75rem', marginTop: '4px', textAlign: 'right', color: 'var(--text-light)' }}>
+              {(() => {
+                let score = 0;
+                if (password.length >= 6) score++;
+                if (password.length >= 8) score++;
+                if (/[A-Z]/.test(password)) score++;
+                if (/[0-9]/.test(password)) score++;
+                if (/[^a-zA-Z0-9]/.test(password)) score++;
+                return score <= 1 ? 'Weak' : score <= 3 ? 'Fair' : 'Strong';
+              })()}
+            </div>
+          </div>
+        )}
         {mode !== 'forgot' && (
           <label className="remember-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.4rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-            <input type="checkbox" defaultChecked name="remember" />
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} name="remember" />
             <span>{lang === 'bn' ? 'লগইন তথ্য ব্রাউজারে সেভ রাখুন' : 'Save password & stay logged in'}</span>
           </label>
         )}

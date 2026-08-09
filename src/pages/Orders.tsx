@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/AuthContext'
@@ -12,9 +12,54 @@ export default function Orders() {
   const navigate = useNavigate()
   const [msg, setMsg] = useState('')
 
+  const [activeTab, setActiveTab] = useState<'recent' | 'archived'>('recent')
+  const [archivedIds, setArchivedIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('gv_archived_orders') || '[]') } catch { return [] }
+  })
+  const [clearedIds, setClearedIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('gv_cleared_orders') || '[]') } catch { return [] }
+  })
+  const [showCleared, setShowCleared] = useState(false)
+
+  useEffect(() => {
+    localStorage.setItem('gv_archived_orders', JSON.stringify(archivedIds))
+  }, [archivedIds])
+
+  useEffect(() => {
+    localStorage.setItem('gv_cleared_orders', JSON.stringify(clearedIds))
+  }, [clearedIds])
+
   if (!user) return <Navigate to="/auth" replace />
 
   const mine = orders.filter((o) => o.userId === user.id)
+
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+  
+  const recentOrders: typeof mine = [];
+  const archivedOrders: typeof mine = [];
+  const clearedOrders: typeof mine = [];
+
+  mine.forEach((o) => {
+    const isCompleted = o.status === 'delivered' || o.status === 'cancelled';
+    const isOld = (Date.now() - new Date(o.createdAt).getTime()) >= SEVEN_DAYS;
+    
+    const isManuallyArchived = archivedIds.includes(o.id);
+    const isCleared = clearedIds.includes(o.id);
+
+    if (isCleared) {
+      clearedOrders.push(o);
+    } else if ((isOld && isCompleted) || (isCompleted && isManuallyArchived)) {
+      archivedOrders.push(o);
+    } else {
+      recentOrders.push(o);
+    }
+  });
+
+  const displayOrders = activeTab === 'recent' 
+    ? recentOrders 
+    : mine.filter(o => archivedOrders.includes(o) || (showCleared && clearedOrders.includes(o)));
+
+  const archivedCount = archivedOrders.length + (showCleared ? clearedOrders.length : 0);
 
   const onReorder = (o: Order) => {
     const { added, skipped } = reorderFromOrder(o)
@@ -38,16 +83,75 @@ export default function Orders() {
     <div className="page">
       <h1>{t(lang, 'myOrders')}</h1>
       {msg && <p className="hint">{msg}</p>}
-      {mine.length === 0 ? (
+
+      {mine.length > 0 && (
+        <div style={{ display: 'flex', gap: '1.5rem', borderBottom: '1px solid #e5e7eb', marginBottom: '1.5rem' }}>
+          <button 
+            type="button"
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              padding: '0.75rem 0',
+              borderBottom: activeTab === 'recent' ? '2px solid var(--primary, #000)' : '2px solid transparent',
+              cursor: 'pointer',
+              fontWeight: activeTab === 'recent' ? 'bold' : 'normal',
+              color: activeTab === 'recent' ? 'inherit' : '#6b7280'
+            }}
+            onClick={() => setActiveTab('recent')}
+          >
+            Recent
+          </button>
+          <button 
+            type="button"
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              padding: '0.75rem 0',
+              borderBottom: activeTab === 'archived' ? '2px solid var(--primary, #000)' : '2px solid transparent',
+              cursor: 'pointer',
+              fontWeight: activeTab === 'archived' ? 'bold' : 'normal',
+              color: activeTab === 'archived' ? 'inherit' : '#6b7280'
+            }}
+            onClick={() => setActiveTab('archived')}
+          >
+            Archived ({archivedCount})
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'archived' && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center' }}>
+          <label style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showCleared} onChange={e => setShowCleared(e.target.checked)} /> 
+            Show cleared
+          </label>
+          {archivedOrders.length > 0 && (
+            <button 
+              type="button"
+              className="btn btn-secondary" 
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+              onClick={() => {
+                setClearedIds(prev => [...new Set([...prev, ...archivedOrders.map(o => o.id)])])
+              }}
+            >
+              Clear All
+            </button>
+          )}
+        </div>
+      )}
+
+      {displayOrders.length === 0 ? (
         <div className="empty-block">
-          <p>{t(lang, 'noOrders')}</p>
-          <Link to="/" className="btn btn-primary">
-            {t(lang, 'startShopping')}
-          </Link>
+          <p>{activeTab === 'recent' ? 'No recent orders.' : 'No archived orders.'}</p>
+          {mine.length === 0 && (
+            <Link to="/" className="btn btn-primary">
+              {t(lang, 'startShopping')}
+            </Link>
+          )}
         </div>
       ) : (
         <div className="order-list">
-          {mine.map((o) => (
+          {displayOrders.map((o) => (
             <article key={o.id} className="order-card">
               <header>
                 <div>
@@ -100,12 +204,14 @@ export default function Orders() {
                   )}
                 </span>
               </footer>
-              {o.status !== 'cancelled' && (
-                <div className="form-actions" style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => onReorder(o)}>
-                    {lang === 'bn' ? 'আবার অর্ডার' : 'Reorder'}
-                  </button>
-                  {(o.status === 'pending' || o.status === 'advance_paid') && (Date.now() - new Date(o.createdAt).getTime() < 30 * 60 * 1000) && (
+              {(o.status !== 'cancelled' || (activeTab === 'recent' && !archivedIds.includes(o.id))) && (
+                <div className="form-actions" style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {o.status !== 'cancelled' && (
+                    <button type="button" className="btn btn-secondary" onClick={() => onReorder(o)}>
+                      {lang === 'bn' ? 'আবার অর্ডার' : 'Reorder'}
+                    </button>
+                  )}
+                  {o.status !== 'cancelled' && (o.status === 'pending' || o.status === 'advance_paid') && (Date.now() - new Date(o.createdAt).getTime() < 30 * 60 * 1000) && (
                     <button 
                       type="button" 
                       className="btn btn-secondary warn" 
@@ -116,6 +222,16 @@ export default function Orders() {
                       }}
                     >
                       Cancel Order
+                    </button>
+                  )}
+                  {activeTab === 'recent' && (o.status === 'delivered' || o.status === 'cancelled') && !archivedIds.includes(o.id) && (
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.85rem', marginLeft: 'auto' }}
+                      onClick={() => setArchivedIds(prev => [...new Set([...prev, o.id])])}
+                    >
+                      📁 Archive
                     </button>
                   )}
                 </div>
