@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [master, main, feature/bengali-i18n-supabase]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
