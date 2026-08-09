@@ -138,3 +138,128 @@ export function printPackingList(orders: Order[], lang: 'en' | 'bn' = 'en') {
   w.document.write(html)
   w.document.close()
 }
+
+/** Print dedicated Delivery Rider Manifest Sheet with PIN grouping, item breakdown, and balance collection tracking. */
+export function printRiderManifest(orders: Order[], lang: 'en' | 'bn' = 'en') {
+  const active = orders.filter(
+    (o) => o.status !== 'cancelled' && o.status !== 'delivered',
+  )
+  if (active.length === 0) {
+    alert(lang === 'bn' ? 'ডেলিভারির জন্য কোনো সক্রিয় অর্ডার নেই।' : 'No active orders for delivery.')
+    return
+  }
+
+  // Group by PIN
+  const pinGroups = new Map<string, Order[]>()
+  active.forEach((o) => {
+    const pin = o.pin || 'Other'
+    if (!pinGroups.has(pin)) pinGroups.set(pin, [])
+    pinGroups.get(pin)!.push(o)
+  })
+
+  let totalBalanceToCollect = 0
+
+  let bodyHtml = ''
+  for (const [pin, list] of pinGroups.entries()) {
+    const rows = list
+      .map((o, idx) => {
+        const balance = Math.max(0, o.total - o.advanceAmount)
+        totalBalanceToCollect += balance
+        const itemsStr = o.items
+          .map((it) => `${it.emoji} ${it.name} (${it.grade}) ×${it.qty}`)
+          .join(', ')
+        const slot =
+          o.deliverySlot === 'morning'
+            ? '🌅 Morning'
+            : o.deliverySlot === 'evening'
+            ? '🌆 Evening'
+            : 'Standard'
+        return `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>
+            <strong>${o.userName}</strong><br/>
+            <span class="muted">${o.phone}</span>
+          </td>
+          <td>
+            ${o.address}<br/>
+            <span class="badge">${slot}</span>
+          </td>
+          <td><small>${itemsStr}</small></td>
+          <td>₹${o.total}</td>
+          <td>₹${o.advanceAmount}</td>
+          <td class="bal">₹${balance}</td>
+          <td class="check">[ &nbsp; ]</td>
+        </tr>
+      `
+      })
+      .join('')
+
+    bodyHtml += `
+      <div class="zone-header">📍 PIN Zone: ${pin} (${list.length} orders)</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:30px">#</th>
+            <th>Customer</th>
+            <th>Address & Slot</th>
+            <th>Items</th>
+            <th>Total</th>
+            <th>Advance</th>
+            <th>Collect</th>
+            <th style="width:60px">Done</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `
+  }
+
+  const title = lang === 'bn' ? 'রাইডার ডেলিভারি শিট' : 'Rider Delivery Manifest'
+  const dateStr = new Date().toLocaleDateString('en-IN', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+  const html = `<!DOCTYPE html><html><head><title>${title}</title>
+  <style>
+    body{font-family:'Hind Siliguri','Noto Sans Bengali',system-ui,sans-serif;padding:20px;color:#111;font-size:13px}
+    h1{margin:0 0 4px;font-size:22px;color:#166534} .muted{color:#666;font-size:12px}
+    .header-box{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #166534;padding-bottom:10px;margin-bottom:16px}
+    .zone-header{font-size:15px;font-weight:bold;margin:16px 0 8px;background:#f0fdf4;padding:6px 10px;border-left:4px solid #166534;border-radius:4px}
+    table{width:100%;border-collapse:collapse;margin-bottom:12px}
+    th,td{border:1px solid #d1d5db;padding:8px;text-align:left;vertical-align:top}
+    th{background:#f9fafb;font-size:11px;text-transform:uppercase;color:#374151}
+    .bal{font-weight:bold;color:#dc2626}
+    .badge{display:inline-block;font-size:10px;padding:2px 6px;background:#e0f2fe;color:#0369a1;border-radius:4px;margin-top:2px}
+    .check{text-align:center;font-weight:bold;font-size:14px}
+    .summary-box{margin-top:20px;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;display:flex;justify-content:space-between;font-size:14px;font-weight:bold;color:#991b1b}
+    .sig-area{margin-top:30px;display:flex;justify-content:space-between;padding-top:20px;border-top:1px dashed #ccc}
+  </style></head><body>
+  <div class="header-box">
+    <div>
+      <h1>🌿 GreenVest ${title}</h1>
+      <div class="muted">Date: ${dateStr} · Active Orders: ${active.length}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:16px;font-weight:bold;color:#dc2626">Total Cash to Collect: ₹${totalBalanceToCollect}</div>
+    </div>
+  </div>
+  ${bodyHtml}
+  <div class="summary-box">
+    <span>Total Orders to Deliver: ${active.length}</span>
+    <span>Total Cash/UPI Balance to Collect: ₹${totalBalanceToCollect}</span>
+  </div>
+  <div class="sig-area">
+    <div>Rider Name & Signature: _______________________</div>
+    <div>Seller Approval: _______________________</div>
+  </div>
+  <script>window.onload=()=>window.print()</script>
+  </body></html>`
+
+  const w = window.open('', '_blank', 'width=900,height=1000')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
+}

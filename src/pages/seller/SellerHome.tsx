@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { showToast } from '../../components/Toast'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
-import { printPackingList } from '../../lib/printOrder'
+import { printPackingList, printRiderManifest } from '../../lib/printOrder'
 
 function dayKey(d: Date) {
   return d.toDateString()
@@ -14,7 +14,6 @@ export default function SellerHome() {
   const { products, orders, lang, morningReset, fetchDailyReport, saveDailyReport } = useStore()
   const [sheet, setSheet] = useState<string | null>(null)
   const [mandiCost, setMandiCost] = useState<number | ''>('')
-  const [savedProfit, setSavedProfit] = useState<number | null>(null)
 
   useEffect(() => {
     let active = true
@@ -22,7 +21,6 @@ export default function SellerHome() {
     fetchDailyReport(todayStr).then(report => {
       if (active && report) {
         setMandiCost(report.mandi_cost)
-        setSavedProfit(report.profit)
       }
     })
     return () => { active = false }
@@ -97,7 +95,6 @@ export default function SellerHome() {
       delivery_cost: 0,
       profit
     })
-    setSavedProfit(profit)
     showToast(lang === 'bn' ? 'রিপোর্ট সেভ হয়েছে!' : 'Report saved!', '📈')
   }
 
@@ -183,19 +180,21 @@ export default function SellerHome() {
       <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--white)', borderRadius: '8px', border: '1px solid var(--line)', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
           {lang === 'bn' ? "আজকের মন্ডি খরচ: ₹" : "Today's Mandi Cost: ₹"}
-          <input type="number" value={mandiCost} onChange={e => setMandiCost(e.target.value ? Number(e.target.value) : '')} style={{width: '100px', padding: '4px'}} />
+          <input type="number" value={mandiCost} onChange={e => setMandiCost(e.target.value ? Number(e.target.value) : '')} style={{width: '100px', padding: '4px', borderRadius: '4px', border: '1px solid var(--line)'}} />
         </label>
         <button type="button" className="btn btn-secondary" onClick={handleSaveReport}>
-          {lang === 'bn' ? 'সেভ করুন' : 'Save'}
+          {lang === 'bn' ? 'সেভ করুন' : 'Save Report'}
         </button>
-        {savedProfit !== null && (
-          <div style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
-            {lang === 'bn' ? "সেভ করা লাভ: ₹" : "Saved Profit: ₹"}{savedProfit}
-          </div>
-        )}
-        {typeof mandiCost === 'number' && savedProfit === null && (
-          <div style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
-            {lang === 'bn' ? "আজকের লাভ (আনসেভড): ₹" : "Today's Profit (Unsaved): ₹"}{todaySales - mandiCost}
+        {typeof mandiCost === 'number' && mandiCost >= 0 && (
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ fontWeight: 'bold', color: '#166534' }}>
+              {lang === 'bn' ? "আজকের নিট লাভ: ₹" : "Net Profit: ₹"}{todaySales - mandiCost}
+            </div>
+            {todaySales > 0 && (
+              <span style={{ fontSize: '0.85rem', padding: '2px 8px', background: '#dcfce7', color: '#15803d', borderRadius: '12px', fontWeight: 600 }}>
+                Margin: {(((todaySales - mandiCost) / todaySales) * 100).toFixed(1)}%
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -219,6 +218,14 @@ export default function SellerHome() {
           onClick={() => printPackingList(orders, lang)}
         >
           {lang === 'bn' ? 'প্যাকিং লিস্ট (সকাল/সন্ধ্যা)' : 'Packing list (AM/PM)'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => printRiderManifest(orders, lang)}
+          style={{ background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af', fontWeight: 600 }}
+        >
+          {lang === 'bn' ? '🛵 রাইডার ডেলিভারি শিট' : '🛵 Rider Manifest Sheet'}
         </button>
         <button
           type="button"
