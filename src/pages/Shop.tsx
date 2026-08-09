@@ -2,10 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import { showToast } from '../components/Toast'
-<<<<<<< HEAD
 import { useAuth } from '../context/AuthContext'
-=======
->>>>>>> feature/bengali-i18n-supabase
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
@@ -97,12 +94,8 @@ function ProductCard({
 }
 
 export default function Shop() {
-<<<<<<< HEAD
   const { user } = useAuth()
   const { products, orders, lang, addToCart, priceFor, cartTotal, reorderFromOrder, loading } = useStore()
-=======
-  const { products, lang, addToCart, priceFor, cartTotal, loading } = useStore()
->>>>>>> feature/bengali-i18n-supabase
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState<Product | null>(null)
@@ -228,7 +221,6 @@ export default function Shop() {
       </div>
 
       <div className="shop-body" id="veg-grid">
-<<<<<<< HEAD
         {/* Repeat Last Order banner for returning customers */}
         {lastOrder && (
           <div className="repeat-order-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '1px solid #86efac', borderRadius: '14px', padding: '0.85rem 1.1rem', marginBottom: '1.25rem' }}>
@@ -252,9 +244,6 @@ export default function Shop() {
             </button>
           </div>
         )}
-
-=======
->>>>>>> feature/bengali-i18n-supabase
         {/* Cart minimum progress bar */}
         <div className="cart-progress-wrap">
           <div className="cart-progress-header">
