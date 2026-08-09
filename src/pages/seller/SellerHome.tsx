@@ -3,7 +3,6 @@ import { Link, Navigate } from 'react-router-dom'
 import { showToast } from '../../components/Toast'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
-import { LOW_STOCK_QTY } from '../../lib/business'
 import { printPackingList } from '../../lib/printOrder'
 
 function dayKey(d: Date) {
@@ -55,14 +54,6 @@ export default function SellerHome() {
   const active = orders.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled').length
   const inStock = products.filter((p) => p.inStock && !p.archived).length
   const outStock = products.filter((p) => !p.archived && !p.inStock)
-  const lowStock = products.filter(
-    (p) =>
-      !p.archived &&
-      p.inStock &&
-      p.stockQty != null &&
-      p.stockQty > 0 &&
-      p.stockQty <= LOW_STOCK_QTY,
-  )
   const uniqueCustomers = new Set(
     orders.filter((o) => o.status !== 'cancelled').map((o) => o.userId || o.phone),
   ).size
@@ -146,19 +137,6 @@ export default function SellerHome() {
         </div>
       )}
 
-      {lowStock.length > 0 && (
-        <div className="alert warn low-stock-alert">
-          <strong>{lang === 'bn' ? 'লো স্টক' : 'Low stock'}</strong>
-          <span>
-            {lowStock
-              .map(
-                (p) =>
-                  `${lang === 'bn' ? p.bnName : p.name} (${p.stockQty} ${p.unit})`,
-              )
-              .join(', ')}
-          </span>
-        </div>
-      )}
 
       {outStock.length > 0 && (
         <div className="alert warn">

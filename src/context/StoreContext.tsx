@@ -219,10 +219,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const addToCart = useCallback((productId: string, grade: Grade, qty = 1) => {
     const p = products.find((x) => x.id === productId)
+    if (p && !p.inStock) return
+
     const current = getCart()
     const idx = current.findIndex((c) => c.productId === productId && c.grade === grade)
-    const currentQty = idx >= 0 ? current[idx].qty : 0
-    if (p && p.stockQty !== undefined && currentQty + qty > p.stockQty) return
 
     let next: CartItem[]
     if (idx >= 0) {
@@ -235,15 +235,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [products])
 
   const updateCartQty = useCallback((productId: string, grade: Grade, qty: number) => {
-    const p = products.find((x) => x.id === productId)
-    const finalQty = (p && p.stockQty !== undefined) ? Math.min(qty, p.stockQty) : qty
-
     const next = getCart()
-      .map((c) => (c.productId === productId && c.grade === grade ? { ...c, qty: finalQty } : c))
+      .map((c) => (c.productId === productId && c.grade === grade ? { ...c, qty } : c))
       .filter((c) => c.qty > 0)
     saveCart(next)
     setCart(next)
-  }, [products])
+  }, [])
 
   const removeFromCart = useCallback((productId: string, grade: Grade) => {
     const next = getCart().filter((c) => !(c.productId === productId && c.grade === grade))
@@ -303,7 +300,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         advanceAmount: Math.ceil(total * 0.5),
         utr: opts.utr.trim(),
         utrVerified: false,
-        status: 'advance_paid',
+        status: 'pending',
         address: opts.address.trim(),
         phone: opts.phone.trim(),
         pin: opts.pin.replace(/\D/g, ''),
@@ -314,21 +311,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         await createOrder(order)
-        try {
-          const updatedCatalog = catalog.map((p) => {
-            const item = items.find((i) => i.productId === p.id)
-            if (!item) return p
-            const newQty = Math.max(0, (p.stockQty ?? 0) - item.qty)
-            return { ...p, stockQty: newQty, inStock: newQty > 0 }
-          })
-          for (const p of updatedCatalog) {
-            if (items.some((i) => i.productId === p.id)) {
-              await upsertProduct(p)
-            }
-          }
-        } catch {
-          /* stock deduction may fail if customer lacks RLS permission — order is still valid */
-        }
         saveDelivery(user.id, {
           address: order.address,
           phone: order.phone,
@@ -340,15 +322,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await refreshCloud()
         return order
       }
-
-      const updatedCatalog = catalog.map((p) => {
-        const item = items.find((i) => i.productId === p.id)
-        if (!item) return p
-        const newQty = Math.max(0, (p.stockQty ?? 0) - item.qty)
-        return { ...p, stockQty: newQty, inStock: newQty > 0 }
-      })
-      saveProducts(updatedCatalog)
-      setProducts(updatedCatalog)
 
       const nextOrders = [order, ...getOrders()]
       saveOrders(nextOrders)
@@ -477,24 +450,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await refreshCloud()
         return
       }
-      const target = getOrders().find((o) => o.id === id)
       const next = getOrders().map((o) =>
         o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o,
       )
       saveOrders(next)
       setOrders(next)
-
-      if (target && status === 'cancelled' && target.status !== 'cancelled') {
-        const catalog = getProducts()
-        const updatedCatalog = catalog.map((p) => {
-          const item = target.items.find((i) => i.productId === p.id)
-          if (!item) return p
-          const newQty = (p.stockQty ?? 0) + item.qty
-          return { ...p, stockQty: newQty, inStock: true }
-        })
-        saveProducts(updatedCatalog)
-        setProducts(updatedCatalog)
-      }
     },
     [cloud, refreshCloud],
   )

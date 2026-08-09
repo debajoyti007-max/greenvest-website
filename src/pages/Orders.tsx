@@ -158,7 +158,17 @@ export default function Orders() {
                   <strong>{o.id}</strong>
                   <span className="muted">{new Date(o.createdAt).toLocaleString()}</span>
                 </div>
-                <span className={`status status-${o.status}`}>{o.status.replace('_', ' ')}</span>
+                <span className={`status status-${o.status}`}>
+                  {o.status === 'pending'
+                    ? (lang === 'bn' ? '⏳ পেন্ডিং (যাচাই বাকি)' : '⏳ Pending Approval')
+                    : o.status === 'advance_paid'
+                    ? (lang === 'bn' ? '💵 অগ্রিম দেয়া হয়েছে' : '💵 Advance Paid')
+                    : o.status === 'confirmed'
+                    ? (lang === 'bn' ? '✅ কনফার্মড' : '✅ Confirmed')
+                    : o.status === 'delivered'
+                    ? (lang === 'bn' ? '🚚 ডেলিভারড' : '🚚 Delivered')
+                    : (lang === 'bn' ? '❌ বাতিল' : '❌ Cancelled')}
+                </span>
               </header>
               <OrderTimeline 
                 order={o} 

@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
-import { LOW_STOCK_QTY, SEASON_LABELS } from '../../lib/business'
+import { SEASON_LABELS } from '../../lib/business'
 import { t } from '../../lib/i18n'
 import { uploadProductImage } from '../../lib/imageUpload'
 import { resolveProductImage } from '../../lib/productImages'
@@ -322,15 +322,6 @@ export default function SellerProducts() {
                     <div className="muted">
                       {lang === 'bn' ? p.name : p.bnName}
                       {p.season && p.season !== 'all' ? ` · ${SEASON_LABELS[p.season][lang]}` : ''}
-                      {p.stockQty != null ? ` · qty ${p.stockQty}` : ''}
-                      {p.inStock &&
-                      p.stockQty != null &&
-                      p.stockQty > 0 &&
-                      p.stockQty <= LOW_STOCK_QTY
-                        ? lang === 'bn'
-                          ? ' · লো স্টক'
-                          : ' · low'
-                        : ''}
                     </div>
                   </td>
                   <td>
