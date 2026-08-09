@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import { showToast } from '../../components/Toast'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { LOW_STOCK_QTY } from '../../lib/business'
@@ -137,14 +138,14 @@ export default function SellerHome() {
       <div className="dash-grid">
         <div className="stat">
           <span>{lang === 'bn' ? 'আজকের বিক্রি' : "Today's sales"}</span>
-          <strong>৳{todaySales}</strong>
+          <strong>₹{todaySales}</strong>
           <em className="muted">
             {todayOrders.length} {lang === 'bn' ? 'অর্ডার' : 'orders'}
           </em>
         </div>
         <div className="stat">
-          <span>{lang === 'bn' ? 'গততকালের বিক্রি' : "Yesterday's sales"}</span>
-          <strong>৳{yesterdaySales}</strong>
+          <span>{lang === 'bn' ? 'গতকালের বিক্রি' : "Yesterday's sales"}</span>
+          <strong>₹{yesterdaySales}</strong>
           <em className="muted">
             {yesterdayOrders.length} {lang === 'bn' ? 'অর্ডার' : 'orders'}
           </em>
@@ -159,7 +160,7 @@ export default function SellerHome() {
         </div>
         <div className="stat">
           <span>{lang === 'bn' ? 'যাচাইকৃত অগ্রিম' : 'Verified advance'}</span>
-          <strong>৳{revenue}</strong>
+          <strong>₹{revenue}</strong>
         </div>
         <div className="stat">
           <span>{lang === 'bn' ? 'স্টকে / কাস্টমার' : 'In stock / customers'}</span>
@@ -189,8 +190,21 @@ export default function SellerHome() {
         >
           {lang === 'bn' ? 'প্যাকিং লিস্ট (সকাল/সন্ধ্যা)' : 'Packing list (AM/PM)'}
         </button>
-        <button type="button" className="btn btn-ghost" onClick={onMorningReset}>
-          {lang === 'bn' ? 'সকালের স্টক রিসেট' : 'Morning stock reset'}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => {
+            onMorningReset()
+            showToast(
+              lang === 'bn'
+                ? '🌅 সকালের স্টক রিসেট সম্পন্ন হয়েছে!'
+                : '🌅 6 AM Morning Stock Reset Complete!',
+              '🥬'
+            )
+          }}
+          style={{ background: '#f0fdf4', borderColor: '#86efac', color: '#166534', fontWeight: 700 }}
+        >
+          {lang === 'bn' ? '🌅 6 AM সকালের স্টক রিসেট' : '🌅 6 AM Morning Stock Reset'}
         </button>
       </div>
 

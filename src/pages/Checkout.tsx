@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_SLOTS, DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
-import { calcDeliveryFee } from '../lib/delivery'
+import { calcDeliveryFee, getSlotCutoffStatus } from '../lib/delivery'
 import { t, zoneLabel } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
@@ -98,7 +98,7 @@ export default function Checkout() {
     if (cartTotal < MIN_ORDER_AMOUNT) {
       setError(
         lang === 'bn'
-          ? `সর্বনিম্ন অর্ডার ৳${MIN_ORDER_AMOUNT}`
+          ? `সর্বনিম্ন অর্ডার ₹${MIN_ORDER_AMOUNT}`
           : `Minimum order is ₹${MIN_ORDER_AMOUNT}`,
       )
       return
@@ -142,7 +142,7 @@ export default function Checkout() {
           </p>
           <p className="hint pay-eta">
             {lang === 'bn'
-              ? `মিনিমাম অর্ডার ৳${MIN_ORDER_AMOUNT} · সময় ${DELIVERY_WINDOW_BN}`
+              ? `মিনিমাম অর্ডার ₹${MIN_ORDER_AMOUNT} · সময় ${DELIVERY_WINDOW_BN}`
               : `Min order ₹${MIN_ORDER_AMOUNT} · ETA ${DELIVERY_WINDOW}`}
           </p>
 
@@ -172,21 +172,21 @@ export default function Checkout() {
           <dl className="totals">
             <div>
               <dt>{t(lang, 'subtotal')}</dt>
-              <dd>৳{cartTotal}</dd>
+              <dd>₹{cartTotal}</dd>
             </div>
             <div>
               <dt>
                 {t(lang, 'delivery')} ({zoneLabel(lang, delivery.zone)})
               </dt>
-              <dd>৳{delivery.fee}</dd>
+              <dd>₹{delivery.fee}</dd>
             </div>
             <div>
               <dt>{t(lang, 'total')}</dt>
-              <dd>৳{grandTotal}</dd>
+              <dd>₹{grandTotal}</dd>
             </div>
             <div>
               <dt>{lang === 'bn' ? 'অগ্রিম পাঠান (৫০%)' : 'Pay this advance (50%)'}</dt>
-              <dd className="accent">৳{advance}</dd>
+              <dd className="accent">₹{advance}</dd>
             </div>
           </dl>
         </div>
@@ -213,28 +213,45 @@ export default function Checkout() {
             />
           </label>
           <p className="hint">
-            {t(lang, 'zone')}: {zoneLabel(lang, delivery.zone)} · {t(lang, 'fee')} ৳{delivery.fee}
+            {t(lang, 'zone')}: {zoneLabel(lang, delivery.zone)} · {t(lang, 'fee')} ₹{delivery.fee}
           </p>
           <fieldset className="slot-fieldset">
             <legend>{lang === 'bn' ? 'ডেলিভারি স্লট' : 'Delivery slot'}</legend>
-            <label className="slot-option">
-              <input
-                type="radio"
-                name="slot"
-                checked={slot === 'morning'}
-                onChange={() => setSlot('morning')}
-              />
-              {DELIVERY_SLOTS.morning[lang]}
-            </label>
-            <label className="slot-option">
-              <input
-                type="radio"
-                name="slot"
-                checked={slot === 'evening'}
-                onChange={() => setSlot('evening')}
-              />
-              {DELIVERY_SLOTS.evening[lang]}
-            </label>
+            {(() => {
+              const cutoff = getSlotCutoffStatus()
+              return (
+                <>
+                  <label className="slot-option">
+                    <input
+                      type="radio"
+                      name="slot"
+                      checked={slot === 'morning'}
+                      onChange={() => setSlot('morning')}
+                    />
+                    <span>{DELIVERY_SLOTS.morning[lang]}</span>
+                    {cutoff.morningNotice && (
+                      <span className="slot-badge-warn" style={{ fontSize: '0.74rem', color: '#b45309', background: '#fef3c7', padding: '0.1rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
+                        {cutoff.morningNotice}
+                      </span>
+                    )}
+                  </label>
+                  <label className="slot-option">
+                    <input
+                      type="radio"
+                      name="slot"
+                      checked={slot === 'evening'}
+                      onChange={() => setSlot('evening')}
+                    />
+                    <span>{DELIVERY_SLOTS.evening[lang]}</span>
+                    {cutoff.eveningNotice && (
+                      <span className="slot-badge-warn" style={{ fontSize: '0.74rem', color: '#b45309', background: '#fef3c7', padding: '0.1rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
+                        {cutoff.eveningNotice}
+                      </span>
+                    )}
+                  </label>
+                </>
+              )
+            })()}
           </fieldset>
           <label>
             {t(lang, 'phone')}

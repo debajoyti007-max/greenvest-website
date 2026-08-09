@@ -3,11 +3,12 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
+import { paymentVerifiedWhatsAppUrl, riderDispatchWhatsAppUrl } from '../../lib/whatsapp'
 import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled']
 
-type Filter = 'all' | 'utr' | 'today' | 'active' | 'done'
+type Filter = 'all' | 'utr' | 'today' | 'active' | 'done' | 'cancelled'
 
 function openMaps(address: string, pin: string) {
   const q = encodeURIComponent(`${address} ${pin}`.trim())
@@ -18,16 +19,27 @@ function openWhatsApp(order: Order, lang: 'en' | 'bn') {
   const phone = order.phone.replace(/\D/g, '').replace(/^0/, '91')
   const text = encodeURIComponent(
     lang === 'bn'
-      ? `GreenVest অর্ডার ${order.id}\nনমস্কার ${order.userName}, মোট ৳${order.total}। UTR: ${order.utr}। স্ট্যাটাস: ${order.status}।`
-      : `GreenVest order ${order.id}\nHi ${order.userName}, total ৳${order.total}. UTR: ${order.utr}. Status: ${order.status}.`,
+      ? `GreenVest অর্ডার ${order.id}\nনমস্কার ${order.userName}, মোট ₹${order.total}। UTR: ${order.utr}। স্ট্যাটাস: ${order.status}।`
+      : `GreenVest order ${order.id}\nHi ${order.userName}, total ₹${order.total}. UTR: ${order.utr}. Status: ${order.status}.`,
   )
   window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer')
+}
+
+function openRiderWhatsApp(order: Order) {
+  window.open(riderDispatchWhatsAppUrl(order), '_blank', 'noopener,noreferrer')
 }
 
 function isToday(iso: string) {
   const d = new Date(iso)
   const n = new Date()
   return d.toDateString() === n.toDateString()
+}
+
+/** Check if order was cancelled more than 12 hours ago */
+function isCancelledOld(order: Order) {
+  if (order.status !== 'cancelled') return false
+  const elapsed = Date.now() - new Date(order.updatedAt || order.createdAt).getTime()
+  return elapsed > 12 * 60 * 60 * 1000 // 12 hours
 }
 
 const statusBn: Record<OrderStatus, string> = {
@@ -48,13 +60,25 @@ export default function SellerOrders() {
     return <Navigate to="/" replace />
   }
 
+  const handleVerifyUtr = async (order: Order) => {
+    const nextState = !order.utrVerified
+    await verifyUtr(order.id, nextState)
+    // Auto-prompt WhatsApp confirmation to customer when verified
+    if (nextState) {
+      window.open(paymentVerifiedWhatsAppUrl(order, lang), '_blank', 'noopener,noreferrer')
+    }
+  }
+
   const filtered = useMemo(() => {
     const sorted = [...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     return sorted.filter((o) => {
+      // 12-hour rule: Cancelled orders older than 12 hours are archived unless explicitly looking at "cancelled" tab
+      if (filter !== 'cancelled' && isCancelledOld(o)) return false
       if (filter === 'utr') return !o.utrVerified && o.status !== 'cancelled'
       if (filter === 'today') return isToday(o.createdAt)
       if (filter === 'active') return o.status !== 'delivered' && o.status !== 'cancelled'
       if (filter === 'done') return o.status === 'delivered'
+      if (filter === 'cancelled') return o.status === 'cancelled'
       return true
     })
   }, [orders, filter])
@@ -85,6 +109,7 @@ export default function SellerOrders() {
     { id: 'today', en: 'Today', bn: 'আজ' },
     { id: 'active', en: 'Active', bn: 'চলমান' },
     { id: 'done', en: 'Delivered', bn: 'ডেলিভারড' },
+    { id: 'cancelled', en: 'Cancelled (Archived)', bn: 'বাতিল (আর্কাইভ)' },
   ]
 
   return (
@@ -167,7 +192,7 @@ export default function SellerOrders() {
               <ul>
                 {o.items.map((it) => (
                   <li key={`${it.productId}-${it.grade}`}>
-                    {it.emoji} {it.name} · Grade {it.grade} × {it.qty} — ৳{it.unitPrice * it.qty}
+                    {it.emoji} {it.name} · Grade {it.grade} × {it.qty} — ₹{it.unitPrice * it.qty}
                   </li>
                 ))}
               </ul>
@@ -178,7 +203,7 @@ export default function SellerOrders() {
                   : ''}
               </p>
               <p className="muted">
-                {lang === 'bn' ? 'মোট' : 'Total'} ৳{o.total} · {lang === 'bn' ? 'অগ্রিম' : 'Advance'} ৳
+                {lang === 'bn' ? 'মোট' : 'Total'} ₹{o.total} · {lang === 'bn' ? 'অগ্রিম' : 'Advance'} ₹
                 {o.advanceAmount}
               </p>
               <div className="utr-row">
@@ -188,20 +213,23 @@ export default function SellerOrders() {
                 <button
                   type="button"
                   className={`btn ${o.utrVerified ? 'btn-secondary' : 'btn-primary'}`}
-                  onClick={() => void verifyUtr(o.id, !o.utrVerified)}
+                  onClick={() => void handleVerifyUtr(o)}
                 >
                   {o.utrVerified
                     ? lang === 'bn'
                       ? 'যাচাই সরান'
                       : 'Unverify UTR'
                     : lang === 'bn'
-                      ? 'UTR যাচাই'
-                      : 'Verify UTR'}
+                      ? 'UTR যাচাই + জানান'
+                      : 'Verify UTR + Send WhatsApp'}
                 </button>
               </div>
               <div className="seller-order-actions" style={{ flexWrap: 'wrap', gap: '0.4rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => openWhatsApp(o, lang)}>
-                  WhatsApp
+                  💬 Customer WhatsApp
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => openRiderWhatsApp(o)}>
+                  🛵 Send to Rider (WhatsApp)
                 </button>
                 <button
                   type="button"

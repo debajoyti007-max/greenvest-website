@@ -60,7 +60,7 @@ export default function Orders() {
               <ul>
                 {o.items.map((it) => (
                   <li key={`${it.productId}-${it.grade}`}>
-                    {it.emoji} {it.name} · {t(lang, 'grade')} {it.grade} × {it.qty} — ৳
+                    {it.emoji} {it.name} · {t(lang, 'grade')} {it.grade} × {it.qty} — ₹
                     {it.unitPrice * it.qty}
                   </li>
                 ))}
@@ -74,16 +74,16 @@ export default function Orders() {
               </p>
               <footer>
                 <span>
-                  {t(lang, 'subtotal')}: ৳{o.subtotal ?? o.total}
+                  {t(lang, 'subtotal')}: ₹{o.subtotal ?? o.total}
                 </span>
                 <span>
-                  {t(lang, 'delivery')}: ৳{o.deliveryFee ?? 0}
+                  {t(lang, 'delivery')}: ₹{o.deliveryFee ?? 0}
                 </span>
                 <span>
-                  {t(lang, 'total')}: <strong>৳{o.total}</strong>
+                  {t(lang, 'total')}: <strong>₹{o.total}</strong>
                 </span>
                 <span>
-                  {t(lang, 'advance')}: ৳{o.advanceAmount}
+                  {t(lang, 'advance')}: ₹{o.advanceAmount}
                 </span>
                 <span>
                   UTR: {o.utr}{' '}

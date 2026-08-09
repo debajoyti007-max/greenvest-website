@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import { showToast } from '../components/Toast'
+import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
@@ -93,12 +94,31 @@ function ProductCard({
 }
 
 export default function Shop() {
-  const { products, lang, addToCart, priceFor, cartTotal, loading } = useStore()
+  const { user } = useAuth()
+  const { products, orders, lang, addToCart, priceFor, cartTotal, reorderFromOrder, loading } = useStore()
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState<Product | null>(null)
   const [grade, setGrade] = useState<Grade>('B')
   const [added, setAdded] = useState<string | null>(null)
+
+  const lastOrder = useMemo(() => {
+    if (!user) return null
+    return orders
+      .filter((o) => o.userId === user.id && o.status !== 'cancelled')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] || null
+  }, [user, orders])
+
+  const handleRepeatOrder = () => {
+    if (!lastOrder) return
+    const { added: count } = reorderFromOrder(lastOrder)
+    showToast(
+      lang === 'bn'
+        ? `আগের অর্ডারের ${count} টি সবজি কার্টে যোগ হয়েছে!`
+        : `${count} items from last order added to cart!`,
+      '🔁'
+    )
+  }
 
   const shopProducts = useMemo(() => products.filter((p) => !p.archived), [products])
 
@@ -201,6 +221,30 @@ export default function Shop() {
       </div>
 
       <div className="shop-body" id="veg-grid">
+        {/* Repeat Last Order banner for returning customers */}
+        {lastOrder && (
+          <div className="repeat-order-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '1px solid #86efac', borderRadius: '14px', padding: '0.85rem 1.1rem', marginBottom: '1.25rem' }}>
+            <div>
+              <strong style={{ color: '#166534', fontSize: '0.95rem', display: 'block', marginBottom: '0.15rem' }}>
+                {lang === 'bn' ? '🔁 আগের অর্ডার পুনরাবৃত্তি করুন' : '🔁 Repeat Your Last Order'}
+              </strong>
+              <span style={{ fontSize: '0.82rem', color: '#15803d' }}>
+                {lang === 'bn'
+                  ? `${lastOrder.items.length}টি আইটেম (${lastOrder.items.map((i) => i.name).join(', ')})`
+                  : `${lastOrder.items.length} items (${lastOrder.items.map((i) => i.name).join(', ')})`}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleRepeatOrder}
+              style={{ whiteSpace: 'nowrap', padding: '0.45rem 0.9rem', fontSize: '0.88rem' }}
+            >
+              {lang === 'bn' ? '১-ট্যাপ যোগ করুন' : '1-Tap Re-order'}
+            </button>
+          </div>
+        )}
+
         {/* Cart minimum progress bar */}
         <div className="cart-progress-wrap">
           <div className="cart-progress-header">
