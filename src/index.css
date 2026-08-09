@@ -2027,3 +2027,48 @@ button.linkish {
   animation: pageIn 0.3s ease both;
 }
 
+/* New elements for Task 1, 2, 3 */
+.cart-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.cart-suggestions button {
+  background: var(--green-50);
+  border: 1px solid var(--green-100);
+  color: var(--green-800);
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.cart-suggestions button:hover {
+  background: var(--green-100);
+  border-color: var(--green-500);
+}
+
+.grade-info-tip {
+  margin-left: 0.25rem;
+  cursor: help;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.season-banner {
+  background: linear-gradient(135deg, var(--green-50), var(--green-100));
+  border: 1px solid var(--green-500);
+  color: var(--green-900);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  font-weight: 600;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

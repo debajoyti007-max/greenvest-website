@@ -35,6 +35,8 @@ export default function SellerProducts() {
   const [photoError, setPhotoError] = useState('')
   const [query, setQuery] = useState('')
   const [section, setSection] = useState<Section>('active')
+  const [quickPriceId, setQuickPriceId] = useState<string | null>(null)
+  const [quickPrices, setQuickPrices] = useState({ pA: 0, pB: 0, pC: 0 })
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
@@ -332,7 +334,26 @@ export default function SellerProducts() {
                     </div>
                   </td>
                   <td>
-                    ৳{p.pA} / ৳{p.pB} / ৳{p.pC}
+                    {quickPriceId === p.id ? (
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <input type="number" value={quickPrices.pA} onChange={e => setQuickPrices({...quickPrices, pA: Number(e.target.value)})} style={{width: '60px', padding: '2px'}} />
+                        <input type="number" value={quickPrices.pB} onChange={e => setQuickPrices({...quickPrices, pB: Number(e.target.value)})} style={{width: '60px', padding: '2px'}} />
+                        <input type="number" value={quickPrices.pC} onChange={e => setQuickPrices({...quickPrices, pC: Number(e.target.value)})} style={{width: '60px', padding: '2px'}} />
+                        <button type="button" className="btn btn-primary" style={{padding: '2px 6px', fontSize: '12px'}} onClick={() => {
+                          void updateProduct({ ...p, pA: quickPrices.pA, pB: quickPrices.pB, pC: quickPrices.pC })
+                          setQuickPriceId(null)
+                        }}>Save</button>
+                        <button type="button" className="btn btn-ghost" style={{padding: '2px 6px', fontSize: '12px'}} onClick={() => setQuickPriceId(null)}>X</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span>৳{p.pA} / ৳{p.pB} / ৳{p.pC}</span>
+                        <button type="button" className="btn btn-ghost" style={{padding: '2px 6px', fontSize: '12px'}} onClick={() => {
+                          setQuickPriceId(p.id)
+                          setQuickPrices({ pA: p.pA, pB: p.pB, pC: p.pC })
+                        }}>Quick Price</button>
+                      </div>
+                    )}
                   </td>
                   <td>
                     {!p.archived && (

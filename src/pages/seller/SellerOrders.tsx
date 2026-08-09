@@ -3,12 +3,19 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
-import { paymentVerifiedWhatsAppUrl, riderDispatchWhatsAppUrl } from '../../lib/whatsapp'
+import { orderStatusWhatsAppUrl, paymentVerifiedWhatsAppUrl, riderDispatchWhatsAppUrl } from '../../lib/whatsapp'
 import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled']
 
 type Filter = 'all' | 'utr' | 'today' | 'active' | 'done' | 'cancelled'
+
+const suffix = (n: number) => {
+  if (n % 10 === 1 && n % 100 !== 11) return 'st'
+  if (n % 10 === 2 && n % 100 !== 12) return 'nd'
+  if (n % 10 === 3 && n % 100 !== 13) return 'rd'
+  return 'th'
+}
 
 function openMaps(address: string, pin: string) {
   const q = encodeURIComponent(`${address} ${pin}`.trim())
@@ -180,10 +187,16 @@ export default function SellerOrders() {
                 />
                 <div style={{ flex: 1 }}>
                   <strong>{o.id}</strong>
-                  <span className="muted">
+                  <span className="muted" style={{ marginLeft: '8px' }}>
                     {o.userName} · {o.phone}
+                    {(() => {
+                      const custOrders = orders.filter(x => (x.userId === o.userId || x.phone === o.phone) && x.status !== 'cancelled' && new Date(x.createdAt).getTime() <= new Date(o.createdAt).getTime())
+                      const historyCount = custOrders.length
+                      if (historyCount <= 1) return <span style={{ marginLeft: '6px', fontSize: '0.8rem', padding: '2px 6px', background: '#dcfce7', color: '#166534', borderRadius: '12px' }}>🆕 New</span>
+                      return <span style={{ marginLeft: '6px', fontSize: '0.8rem', padding: '2px 6px', background: '#e0e7ff', color: '#3730a3', borderRadius: '12px' }}>🔁 {historyCount}{suffix(historyCount)} order</span>
+                    })()}
                   </span>
-                  <span className="muted">{new Date(o.createdAt).toLocaleString()}</span>
+                  <div className="muted">{new Date(o.createdAt).toLocaleString()}</div>
                 </div>
                 <span className={`status status-${o.status}`}>
                   {lang === 'bn' ? statusBn[o.status] : o.status.replace('_', ' ')}
@@ -249,7 +262,13 @@ export default function SellerOrders() {
                 {lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}
                 <select
                   value={o.status}
-                  onChange={(e) => void updateOrderStatus(o.id, e.target.value as OrderStatus)}
+                  onChange={(e) => {
+                    const newStatus = e.target.value as OrderStatus
+                    void updateOrderStatus(o.id, newStatus)
+                    if (['confirmed', 'delivered', 'cancelled'].includes(newStatus)) {
+                      window.open(orderStatusWhatsAppUrl(o, newStatus), '_blank', 'noopener,noreferrer')
+                    }
+                  }}
                 >
                   {STATUSES.map((s) => (
                     <option key={s} value={s}>

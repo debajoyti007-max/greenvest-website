@@ -58,3 +58,17 @@ export function supportWhatsAppUrl(message?: string) {
   const text = encodeURIComponent(message || 'Hello GreenVest')
   return `https://wa.me/${SUPPORT_WHATSAPP}?text=${text}`
 }
+
+export function orderStatusWhatsAppUrl(order: Order, status: import('../types').OrderStatus) {
+  const phone = order.phone.replace(/\D/g, '').replace(/^0/, '91')
+  let msg = ''
+  if (status === 'confirmed') {
+    msg = `✅ Your order #${order.id} is confirmed! We are packing your fresh veggies.`
+  } else if (status === 'delivered') {
+    const bal = order.total - order.advanceAmount
+    msg = `🚚 Your order #${order.id} has been delivered! Balance due: ₹${bal}. Thank you!`
+  } else if (status === 'cancelled') {
+    msg = `❌ Your order #${order.id} has been cancelled. Refund of ₹${order.advanceAmount} will be processed.`
+  }
+  return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+}

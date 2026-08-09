@@ -15,8 +15,9 @@ export default function Checkout() {
   const navigate = useNavigate()
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
-  const [pin, setPin] = useState('721601')
+  const [pin, setPin] = useState('721632')
   const [utr, setUtr] = useState('')
+  const [utrPasted, setUtrPasted] = useState(false)
   const [slot, setSlot] = useState<DeliverySlot>('morning')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
@@ -166,6 +167,13 @@ export default function Checkout() {
                   ? 'PhonePe / GPay / Paytm / যেকোনো UPI অ্যাপ'
                   : 'Works on PhonePe, GPay, Paytm & all UPI apps'}
               </p>
+              <a
+                href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=Order+Advance`}
+                className="btn btn-primary"
+                style={{ marginTop: '0.5rem', display: 'block', textAlign: 'center' }}
+              >
+                Pay ₹{advance} via UPI App
+              </a>
             </div>
           </div>
 
@@ -208,12 +216,12 @@ export default function Checkout() {
               value={pin}
               onChange={(e) => setPin(e.target.value)}
               inputMode="numeric"
-              placeholder="721601"
+              placeholder="721632"
               required
             />
           </label>
           <p className="hint">
-            {t(lang, 'zone')}: {zoneLabel(lang, delivery.zone)} · {t(lang, 'fee')} ₹{delivery.fee}
+            {t(lang, 'zone')}: {zoneLabel(lang, delivery.zone)} · {t(lang, 'fee')} ₹{delivery.fee} · {lang === 'bn' ? 'ডেলিভারি সময়' : 'ETA'}: {delivery.zone === 'local' ? '6-8 hours' : delivery.zone === 'nearby' ? '12-18 hours' : delivery.zone === 'far' ? '18-24 hours' : '12-24 hours'}
           </p>
           <fieldset className="slot-fieldset">
             <legend>{lang === 'bn' ? 'ডেলিভারি স্লট' : 'Delivery slot'}</legend>
@@ -229,6 +237,11 @@ export default function Checkout() {
                       onChange={() => setSlot('morning')}
                     />
                     <span>{DELIVERY_SLOTS.morning[lang]}</span>
+                    {cutoff.morningCountdown && !cutoff.morningNotice && (
+                      <span style={{ fontSize: '0.85rem', color: '#16a34a', marginLeft: '0.4rem' }}>
+                        — {cutoff.morningCountdown}
+                      </span>
+                    )}
                     {cutoff.morningNotice && (
                       <span className="slot-badge-warn" style={{ fontSize: '0.74rem', color: '#b45309', background: '#fef3c7', padding: '0.1rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
                         {cutoff.morningNotice}
@@ -243,6 +256,11 @@ export default function Checkout() {
                       onChange={() => setSlot('evening')}
                     />
                     <span>{DELIVERY_SLOTS.evening[lang]}</span>
+                    {cutoff.eveningCountdown && !cutoff.eveningNotice && (
+                      <span style={{ fontSize: '0.85rem', color: '#16a34a', marginLeft: '0.4rem' }}>
+                        — {cutoff.eveningCountdown}
+                      </span>
+                    )}
                     {cutoff.eveningNotice && (
                       <span className="slot-badge-warn" style={{ fontSize: '0.74rem', color: '#b45309', background: '#fef3c7', padding: '0.1rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
                         {cutoff.eveningNotice}
@@ -267,10 +285,20 @@ export default function Checkout() {
             <input
               value={utr}
               onChange={(e) => setUtr(e.target.value)}
+              onFocus={async () => {
+                try {
+                  const text = await navigator.clipboard.readText()
+                  if (text && /^\\d{12,}$/.test(text.trim())) {
+                    setUtr(text.trim())
+                    setUtrPasted(true)
+                  }
+                } catch (err) {}
+              }}
               placeholder={lang === 'bn' ? 'যেমন 123456789012' : 'e.g. 123456789012'}
               required
             />
           </label>
+          {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '-0.5rem' }}>UTR auto-filled from clipboard</p>}
           {error && <p className="form-error">{error}</p>}
           <button type="submit" className="btn btn-primary">
             {t(lang, 'placeOrder')}

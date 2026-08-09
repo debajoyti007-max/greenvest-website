@@ -14,6 +14,7 @@ export default function SellerHome() {
   const { user } = useAuth()
   const { products, orders, lang, morningReset } = useStore()
   const [sheet, setSheet] = useState<string | null>(null)
+  const [mandiCost, setMandiCost] = useState<number | ''>('')
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
@@ -168,6 +169,18 @@ export default function SellerHome() {
             {inStock} · {uniqueCustomers}
           </strong>
         </div>
+      </div>
+
+      <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--white)', borderRadius: '8px', border: '1px solid var(--line)', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+          {lang === 'bn' ? "আজকের মন্ডি খরচ: ₹" : "Today's Mandi Cost: ₹"}
+          <input type="number" value={mandiCost} onChange={e => setMandiCost(e.target.value ? Number(e.target.value) : '')} style={{width: '100px', padding: '4px'}} />
+        </label>
+        {typeof mandiCost === 'number' && (
+          <div style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
+            {lang === 'bn' ? "আজকের লাভ: ₹" : "Today's Profit: ₹"}{todaySales - mandiCost}
+          </div>
+        )}
       </div>
 
       <div className="seller-links">

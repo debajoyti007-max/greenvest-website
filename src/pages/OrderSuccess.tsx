@@ -34,6 +34,12 @@ export default function OrderSuccess() {
     }
   }
 
+  const shareWhatsAppCustomer = () => {
+    if (!order) return
+    const text = `GreenVest Order #${order.id}\nTotal: ₹${order.total}\nAdvance Paid: ₹${order.advanceAmount}\nBalance: ₹${order.total - order.advanceAmount}\nSlot: ${order.deliverySlot}\nStatus: ${order.status}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
   if (!user) return <Navigate to="/auth" replace />
 
   if (!order) {
@@ -80,6 +86,9 @@ export default function OrderSuccess() {
       <div className="form-actions" style={{ flexWrap: 'wrap', gap: '0.6rem' }}>
         <button type="button" className="btn btn-primary" onClick={() => openSellerOrderWhatsApp(order)}>
           {lang === 'bn' ? '💬 WhatsApp এ রশিদ ও UTR পাঠান' : '💬 Send Receipt to WhatsApp'}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={shareWhatsAppCustomer}>
+          📲 Share on WhatsApp
         </button>
         <button type="button" className="btn btn-secondary" onClick={copySummary}>
           {copied

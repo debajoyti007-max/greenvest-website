@@ -77,7 +77,10 @@ function ProductCard({
 
         <div className="price-row">
           <span className="price">₹{priceMap[cardGrade]}</span>
-          <span className="grade-price-label">{lang === 'bn' ? `গ্রেড ${cardGrade}` : `Grade ${cardGrade}`}</span>
+          <span className="grade-price-label">
+            {lang === 'bn' ? `গ্রেড ${cardGrade}` : `Grade ${cardGrade}`}
+            <span className="grade-info-tip" title="A = Premium · B = Daily · C = Budget">ℹ️</span>
+          </span>
         </div>
 
         <button
@@ -144,6 +147,20 @@ export default function Shop() {
   // Progress bar
   const progressPct = Math.min(100, Math.round((cartTotal / MIN_ORDER_AMOUNT) * 100))
   const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
+
+  const currentMonth = new Date().getMonth()
+  const currentSeason = (currentMonth >= 2 && currentMonth <= 4) ? 'summer' : (currentMonth >= 5 && currentMonth <= 8) ? 'rainy' : 'winter'
+  const seasonalInStock = available.filter(p => p.season === currentSeason)
+  
+  const suggestions = useMemo(() => {
+    if (cartTotal >= 300 && cartTotal < MIN_ORDER_AMOUNT) {
+      return available
+        .filter(p => priceFor(p, 'B') >= shortfall)
+        .sort((a, b) => priceFor(a, 'B') - priceFor(b, 'B'))
+        .slice(0, 2)
+    }
+    return []
+  }, [cartTotal, MIN_ORDER_AMOUNT, available, shortfall, priceFor])
 
   const openPick = (p: Product, preGrade: Grade = 'B') => {
     if (!p.inStock) return
@@ -261,6 +278,15 @@ export default function Shop() {
           <div className="cart-progress-track" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100}>
             <div className="cart-progress-fill" style={{ width: `${progressPct}%` }} />
           </div>
+          {suggestions.length > 0 && (
+            <div className="cart-suggestions">
+              {suggestions.map(p => (
+                <button key={p.id} type="button" onClick={() => addToCart(p.id, 'B', 1)}>
+                  + {lang === 'bn' ? 'যোগ করুন' : 'Add'} {lang === 'bn' ? p.bnName : p.name} {p.unit} (₹{priceFor(p, 'B')}) {lang === 'bn' ? `₹${MIN_ORDER_AMOUNT} পৌঁছাতে` : `to reach ₹${MIN_ORDER_AMOUNT}`}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="toolbar">
@@ -296,6 +322,14 @@ export default function Shop() {
           </p>
         ) : (
           <>
+            {seasonalInStock.length > 0 && category === 'All' && search === '' && (
+              <div className="season-banner">
+                {currentSeason === 'summer' ? '☀️' : currentSeason === 'rainy' ? '🌧️' : '❄️'} 
+                {lang === 'bn' ? 
+                  (currentSeason === 'summer' ? ' গ্রীষ্মকালীন' : currentSeason === 'rainy' ? ' বর্ষাকালীন' : ' শীতকালীন') + ` স্পেশাল (${seasonalInStock.length})` 
+                  : ` ${currentSeason.charAt(0).toUpperCase() + currentSeason.slice(1)} Season Specials (${seasonalInStock.length})`}
+              </div>
+            )}
             <section className="shop-section">
               <h2 className="section-title">
                 {lang === 'bn' ? 'আজকের স্টক' : 'Available today'}

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -7,6 +8,7 @@ import { t } from '../lib/i18n'
 export default function Cart() {
   const { user } = useAuth()
   const { cart, products, lang, priceFor, updateCartQty, removeFromCart, cartTotal } = useStore()
+  const [showGrades, setShowGrades] = useState(false)
 
   const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
   const canCheckout = cartTotal >= MIN_ORDER_AMOUNT
@@ -74,6 +76,18 @@ export default function Cart() {
       </ul>
 
       <div className="cart-summary">
+        <div style={{ marginBottom: '1rem', textAlign: 'left' }}>
+          <button type="button" onClick={() => setShowGrades(!showGrades)} style={{ background: 'none', border: 'none', color: '#16a34a', cursor: 'pointer', padding: 0, fontWeight: 500 }}>
+            ℹ️ What is Grade A/B/C?
+          </button>
+          {showGrades && (
+            <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: '#4b5563', lineHeight: 1.5 }}>
+              <div><strong>A</strong> = Premium quality</div>
+              <div><strong>B</strong> = Good daily use</div>
+              <div><strong>C</strong> = Budget friendly</div>
+            </div>
+          )}
+        </div>
         <div>
           <span>{t(lang, 'total')}</span>
           <strong>₹{cartTotal}</strong>
