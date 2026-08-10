@@ -1,4 +1,4 @@
-import { useState, useRef, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -16,7 +16,7 @@ function redirectFor(role: Role) {
 type Mode = 'login' | 'signup' | 'forgot'
 
 export default function Auth() {
-  const { user, login, signup, resetPassword, checkAccountExists, loading } = useAuth()
+  const { user, login, signup, resetPassword, loading } = useAuth()
   const { lang } = useStore()
   const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('login')
@@ -28,10 +28,6 @@ export default function Auth() {
   const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
   const [showPass, setShowPass] = useState(false)
-
-  // Real-time account existence indicator
-  const [accountStatus, setAccountStatus] = useState<'idle' | 'checking' | 'exists' | 'not_found'>('idle')
-  const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   if (loading) {
     return (
@@ -50,33 +46,12 @@ export default function Auth() {
     return digits ? `${digits}@greenvest.shop` : trimmed
   }
 
-  // Real-time account check (debounced 600ms)
   const handleIdentifierChange = (val: string) => {
     setEmailOrPhone(val)
-    setAccountStatus('idle')
     if (mode === 'signup' && !val.includes('@')) {
       const d = cleanDigits(val)
       if (isValidIndianPhone(val)) setPhone(d.slice(-10))
     }
-
-    // Debounce account check
-    if (checkTimer.current) clearTimeout(checkTimer.current)
-    const trimmed = val.trim()
-    if (trimmed.length < 3) { setAccountStatus('idle'); return }
-    const isEmail = trimmed.includes('@')
-    const digits = cleanDigits(trimmed)
-    const isValidPhone = digits.length === 10 && /^[6-9]/.test(digits)
-    if (!isEmail && !isValidPhone) { setAccountStatus('idle'); return }
-
-    setAccountStatus('checking')
-    checkTimer.current = setTimeout(async () => {
-      try {
-        const exists = await checkAccountExists(trimmed)
-        setAccountStatus(exists ? 'exists' : 'not_found')
-      } catch {
-        setAccountStatus('idle')
-      }
-    }, 600)
   }
 
   const onSubmit = async (e: FormEvent) => {
@@ -95,37 +70,12 @@ export default function Auth() {
         const res = await login(targetMail, password.trim())
 
         if (!res.ok) {
-          // Smart error: check if account exists to give specific message
-          let accountExists = accountStatus === 'exists'
-          if (accountStatus !== 'exists' && accountStatus !== 'not_found') {
-            try { accountExists = await checkAccountExists(cleanId) } catch { /* ignore */ }
-          }
-
-          if (!accountExists) {
-            // SUGGESTION #4: Auto-create account and login
-            const autoName = cleanId.includes('@')
-              ? cleanId.split('@')[0].replace(/[^a-zA-Z0-9]/g, ' ').trim() || 'Customer'
-              : `User ${cleanDigits(cleanId).slice(-4)}`
-            const signupRes = await signup(autoName, targetMail, password.trim(), cleanDigits(cleanId).slice(-10) || undefined)
-            if (signupRes.ok && signupRes.user) {
-              setInfo(lang === 'bn'
-                ? '✅ নতুন অ্যাকাউন্ট তৈরি হয়েছে ও অটো লগইন হয়েছে!'
-                : '✅ New account created & logged in automatically!')
-              navigate(redirectFor(signupRes.user.role))
-              return
-            }
-            // If auto-signup also fails, show helpful error
-            setError(lang === 'bn'
-              ? '❌ এই নম্বর/ইমেইলে কোনো অ্যাকাউন্ট নেই। সাইন আপ করুন!'
-              : '❌ No account found with this number/email. Please Sign Up first!')
-            setMode('signup')
-            setName(autoName)
-          } else {
-            // Account exists but wrong PIN
-            setError(lang === 'bn'
-              ? '🔑 পিন ভুল হয়েছে! সঠিক ৪-সংখ্যার পিন দিন অথবা "পিন রিসেট" করুন।'
-              : '🔑 Wrong PIN! Enter the correct 4-digit PIN or use "Forgot PIN?" to reset.')
-          }
+          setError(
+            res.error ||
+              (lang === 'bn'
+                ? 'মোবাইল নম্বর/জিমেইল বা পিন ভুল হয়েছে। অ্যাকাউন্ট না থাকলে "সাইন আপ" করুন।'
+                : 'Incorrect Mobile/Email or PIN. If you do not have an account, please click Sign Up.')
+          )
           return
         }
         navigate(redirectFor(res.user!.role))
@@ -174,14 +124,6 @@ export default function Auth() {
     // ───── SIGNUP MODE ─────
     if (!name.trim()) {
       setError(lang === 'bn' ? 'নাম দিন' : 'Name required')
-      return
-    }
-
-    // SUGGESTION #5: Warn about duplicate/similar emails
-    if (accountStatus === 'exists') {
-      setError(lang === 'bn'
-        ? '⚠️ এই নম্বর/ইমেইলে ইতিমধ্যেই অ্যাকাউন্ট আছে! লগইন করুন।'
-        : '⚠️ An account already exists with this number/email! Switch to Login tab.')
       return
     }
 
@@ -273,7 +215,6 @@ export default function Auth() {
           />
           {emailOrPhone.trim().length > 0 && (
             <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-              {/* Format validation */}
               {isEmailFormat ? (
                 <span style={{ color: 'green' }}>✅ Valid Gmail / Email format</span>
               ) : (
@@ -282,19 +223,6 @@ export default function Auth() {
                   {digits.length === 10 && /^[6-9]/.test(digits) && '✅ Valid mobile number'}
                   {digits.length === 10 && !/^[6-9]/.test(digits) && '❌ Must start with 6-9'}
                 </span>
-              )}
-              {/* SUGGESTION #3: Real-time account existence indicator */}
-              {accountStatus === 'checking' && (
-                <span style={{ color: '#6b7280', fontStyle: 'italic' }}>🔍 {lang === 'bn' ? 'অ্যাকাউন্ট চেক হচ্ছে...' : 'Checking account...'}</span>
-              )}
-              {accountStatus === 'exists' && (
-                <span style={{ color: '#166534', fontWeight: 600 }}>✅ {lang === 'bn' ? 'অ্যাকাউন্ট পাওয়া গেছে — লগইন করুন!' : 'Account found — ready to Login!'}</span>
-              )}
-              {accountStatus === 'not_found' && mode === 'login' && (
-                <span style={{ color: '#b45309', fontWeight: 600 }}>⚠️ {lang === 'bn' ? 'কোনো অ্যাকাউন্ট নেই — অটো সাইন আপ হবে' : 'No account yet — will auto-create on Login'}</span>
-              )}
-              {accountStatus === 'not_found' && mode === 'signup' && (
-                <span style={{ color: '#166534', fontWeight: 600 }}>🆕 {lang === 'bn' ? 'নতুন অ্যাকাউন্ট তৈরি হবে' : 'New account — ready to Sign Up!'}</span>
               )}
             </div>
           )}
@@ -397,9 +325,7 @@ export default function Auth() {
           {busy
             ? lang === 'bn' ? 'অপেক্ষা করুন...' : 'Please wait...'
             : mode === 'login'
-            ? (accountStatus === 'not_found'
-              ? (lang === 'bn' ? '🚀 অটো সাইন আপ ও লগইন' : '🚀 Auto Sign Up & Login')
-              : t(lang, 'login'))
+            ? t(lang, 'login')
             : mode === 'signup'
             ? t(lang, 'signup')
             : (lang === 'bn' ? 'ইউজারনেম যাচাই ও পিন রিসেট করুন' : 'Verify Username & Reset PIN')}
