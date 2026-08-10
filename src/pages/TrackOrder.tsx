@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, type FormEvent } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import { useStore } from '../context/StoreContext'
 import { formatOrderId } from '../lib/business'
@@ -8,10 +8,40 @@ import type { Order } from '../types'
 
 export default function TrackOrder() {
   const { orders, lang } = useStore()
+  const [searchParams] = useSearchParams()
   const [query, setQuery] = useState('')
   const [matched, setMatched] = useState<Order | null>(null)
   const [searched, setSearched] = useState(false)
   const [error, setError] = useState('')
+
+  // Auto-track if URL contains ?id=849201 or ?order=849201
+  useEffect(() => {
+    const paramId = searchParams.get('id') || searchParams.get('order') || searchParams.get('num')
+    if (paramId && orders.length > 0) {
+      setQuery(paramId)
+      const rawInput = paramId.trim().toLowerCase().replace(/^#/, '')
+      const digitsOnly = rawInput.replace(/\D/g, '')
+
+      const found = orders.find((o) => {
+        const oIdRaw = o.id.toLowerCase()
+        const oIdFormatted = formatOrderId(o.id).toLowerCase()
+        const oPhoneDigits = o.phone.replace(/\D/g, '').slice(-10)
+        const oUtr = (o.utr || '').trim().toLowerCase()
+
+        if (oIdRaw === rawInput || oIdFormatted === rawInput || oIdFormatted === `ord-${rawInput}`) return true
+        if (rawInput.length >= 4 && (oIdRaw.endsWith(rawInput) || oIdFormatted.endsWith(rawInput))) return true
+        if (digitsOnly.length >= 4 && oIdRaw.replace(/\D/g, '').endsWith(digitsOnly)) return true
+        if (digitsOnly.length >= 10 && (oPhoneDigits === digitsOnly || (o.userEmail && o.userEmail.includes(digitsOnly)))) return true
+        if (oUtr && (oUtr === rawInput || oUtr.includes(rawInput))) return true
+        return false
+      })
+
+      if (found) {
+        setMatched(found)
+        setSearched(true)
+      }
+    }
+  }, [searchParams, orders])
 
   const onTrack = (e: FormEvent) => {
     e.preventDefault()
