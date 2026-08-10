@@ -209,7 +209,7 @@ export default function Auth() {
             type="text"
             value={emailOrPhone}
             onChange={(e) => handleIdentifierChange(e.target.value)}
-            placeholder={lang === 'bn' ? 'যেমন 8170859653 বা name@gmail.com' : 'e.g. 8170859653 or name@gmail.com'}
+            placeholder={lang === 'bn' ? 'আপনার ১০-সংখ্যার মোবাইল বা name@gmail.com' : 'Your 10-digit mobile or name@gmail.com'}
             required
             autoComplete="username"
           />
@@ -241,7 +241,7 @@ export default function Auth() {
               type="tel"
               value={phone}
               onChange={(e) => setPhone(cleanDigits(e.target.value).slice(0, 10))}
-              placeholder="e.g. 8170859653"
+              placeholder={lang === 'bn' ? 'আপনার ১০-সংখ্যার মোবাইল নম্বর' : 'Enter 10-digit mobile number'}
               maxLength={10}
               pattern="[6-9][0-9]{9}"
               title="10-digit Indian mobile number starting with 6-9"

@@ -91,12 +91,12 @@ export default function TrackOrder() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={lang === 'bn' ? 'যেমন: 849201 বা 8170859653' : 'e.g. 849201 or 8170859653'}
+            placeholder={lang === 'bn' ? '৪-৬ ডিজিটের নম্বর বা মোবাইল নম্বর দিন' : 'Enter 4-6 digit number or mobile number'}
             required
             style={{ fontSize: '1.05rem', fontWeight: 600 }}
           />
           <span style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.2rem', display: 'block' }}>
-            💡 {lang === 'bn' ? 'অর্ডারের যেকোনো ৪ থেকে ৬ টি সংখ্যা লিখুন (যেমন 849201)' : 'Type any 4 to 6 numbers of your order (e.g. 849201)'}
+            💡 {lang === 'bn' ? 'অর্ডারের ৪ থেকে ৬ টি নম্বর বা ১০-সংখ্যার ফোন নম্বর দিন' : 'Type your 4 to 6 digit order number or mobile number'}
           </span>
         </label>
 
