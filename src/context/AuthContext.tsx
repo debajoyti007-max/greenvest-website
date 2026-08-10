@@ -533,22 +533,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAccountExists = useCallback(
     async (email: string): Promise<boolean> => {
       const authEmail = formatAuthIdentifier(email)
+      const normalEmail = email.trim().toLowerCase()
+
+      // 1️⃣ Always check local/seeded users first (works without auth)
+      ensureSeeded()
+      const localUsers = getUsers()
+      const localMatch = localUsers.some(
+        (u) =>
+          u.email.toLowerCase() === authEmail.toLowerCase() ||
+          u.email.toLowerCase() === normalEmail
+      )
+      if (localMatch) return true
+
+      // 2️⃣ Check in-memory users state (already loaded after any login)
+      const memMatch = users.some(
+        (u) =>
+          u.email.toLowerCase() === authEmail.toLowerCase() ||
+          u.email.toLowerCase() === normalEmail
+      )
+      if (memMatch) return true
+
+      // 3️⃣ Try Supabase (may fail due to RLS for unauthenticated)
       if (cloud && supabase) {
         try {
           const found = await checkAccountExistsByEmail(authEmail)
-          return !!found
+          if (found) return true
+          // Also try with original email if different
+          if (authEmail !== normalEmail) {
+            const found2 = await checkAccountExistsByEmail(normalEmail)
+            if (found2) return true
+          }
         } catch {
-          return false
+          /* RLS may block — that's OK, local check already ran */
         }
       }
-      if (allowLocal) {
-        ensureSeeded()
-        const all = getUsers()
-        return all.some((u) => u.email.toLowerCase() === authEmail.toLowerCase())
-      }
+
       return false
     },
-    [cloud, allowLocal],
+    [cloud, users],
   )
 
   const value = useMemo(
