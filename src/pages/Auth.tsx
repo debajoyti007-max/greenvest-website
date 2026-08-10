@@ -220,17 +220,23 @@ export default function Auth() {
         )}
         {mode !== 'forgot' && (
           <label style={{ position: 'relative' }}>
-            {lang === 'bn' ? 'পাসওয়ার্ড বা পিন (কমপক্ষে ৬টি সংকেত)' : 'PIN / Password (min 6 chars)'}
+            <span style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>{lang === 'bn' ? '🔑 ৪-সংখ্যার সিকিউরিটি পিন (PIN)' : '🔑 4-Digit Quick PIN'}</span>
+              <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>
+                {lang === 'bn' ? 'সহজ ৪ সংখ্যা' : 'Easy 4 digits'}
+              </span>
+            </span>
             <input
               name="password"
               type={showPass ? 'text' : 'password'}
+              inputMode="numeric"
+              maxLength={4}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••"
+              onChange={(e) => setPassword(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder={lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234'}
               required
-              minLength={6}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              style={{ paddingRight: '40px' }}
+              style={{ paddingRight: '40px', letterSpacing: '0.2rem', fontWeight: 'bold' }}
             />
             <button
               type="button"
