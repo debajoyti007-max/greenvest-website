@@ -115,38 +115,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyCloudSession = useCallback(
     async (userId: string | null) => {
       if (!userId) {
+        // Fall back to local session before dropping user
+        const localId = getSessionUserId()
+        if (localId) {
+          ensureSeeded()
+          const all = getUsers()
+          const found = all.find((u) => u.id === localId) || null
+          if (found) {
+            const profile = ensureAdminRole(found)
+            setUser(profile)
+            await loadUsersIfStaff(profile)
+            return
+          }
+        }
+        if (user) return
         setUser(null)
         setUsers([])
         return
       }
-      let rawProfile = await fetchProfile(userId)
-      if (!rawProfile && supabase) {
-        try {
-          const { data: authData } = await supabase.auth.getUser()
-          if (authData.user) {
-            const email = authData.user.email || ''
-            const name =
-              authData.user.user_metadata?.full_name ||
-              authData.user.user_metadata?.name ||
-              (email.includes('@') ? email.split('@')[0] : 'User')
-            const role = email.includes('8170859653') || email.includes('debajoyti007') ? 'admin' : 'customer'
-            await supabase.from('profiles').upsert({
-              id: userId,
-              email,
-              name,
-              role,
-            })
-            rawProfile = await fetchProfile(userId)
-          }
-        } catch {
-          /* ignore fallback errors */
-        }
+
+      let rawProfile: User | null = null
+      try {
+        rawProfile = await fetchProfile(userId)
+      } catch {
+        rawProfile = null
       }
+
+      if (!rawProfile) {
+        ensureSeeded()
+        const localId = getSessionUserId()
+        const all = getUsers()
+        const found = all.find((u) => u.id === userId || u.id === localId)
+        if (found) rawProfile = found
+      }
+
       const profile = ensureAdminRole(rawProfile)
-      setUser(profile)
-      await loadUsersIfStaff(profile)
+      if (profile) {
+        setUser(profile)
+        await loadUsersIfStaff(profile)
+      }
     },
-    [loadUsersIfStaff],
+    [user, loadUsersIfStaff],
   )
 
   const refreshLocal = useCallback(() => {
@@ -155,18 +164,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const all = getUsers()
     setUsers(all)
     if (!id) {
-      setUser(null)
+      if (!user) setUser(null)
     } else {
       const found = all.find((u) => u.id === id) || null
-      setUser(found ? ensureAdminRole(found) : null)
+      if (found) setUser(ensureAdminRole(found))
     }
-  }, [])
+  }, [user])
 
   const refresh = useCallback(async () => {
     setLoading(true)
     if (cloud && supabase) {
-      const { data } = await supabase.auth.getSession()
-      await applyCloudSession(data.session?.user.id ?? null)
+      try {
+        const { data } = await supabase.auth.getSession()
+        await applyCloudSession(data.session?.user.id ?? null)
+      } catch {
+        /* Keep existing user session if network/session check fails */
+      }
       setLoading(false)
       return
     }
@@ -175,8 +188,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
-    setUser(null)
-    setUsers([])
     setLoading(false)
   }, [cloud, allowLocal, refreshLocal, applyCloudSession])
 
@@ -185,8 +196,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (cloud && supabase) {
       const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
         if (_event === 'SIGNED_OUT') {
-          setUser(null)
-          setUsers([])
+          // Only clear user on explicit logout
+          const localId = getSessionUserId()
+          if (!localId) {
+            setUser(null)
+            setUsers([])
+          }
         } else if (_event === 'TOKEN_REFRESHED' || session) {
           void applyCloudSession(session?.user.id ?? null)
         }

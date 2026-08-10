@@ -25,31 +25,37 @@ export default function AdminUsers() {
   const isProtectedAdmin = (email: string) => email.toLowerCase().replace('@greenvest.shop', '@gmail.com').includes('debajoyti007')
 
   const handleResetPin = async (u: { id: string; name: string; phone?: string; email: string }) => {
-    if (!window.confirm(
+    const inputPin = window.prompt(
       lang === 'bn'
-        ? `${u.name}-এর পিন রিসেট করবেন? ইউজারকে নতুন পিন সেট করতে হবে।`
-        : `Reset PIN for ${u.name}? User will need to set a new PIN via Forgot PIN.`
-    )) return
+        ? `${u.name}-এর জন্য নতুন ৪-সংখ্যার সিকিউরিটি পিন দিন:`
+        : `Enter new 4-digit security PIN for ${u.name}:`,
+      '1234',
+    )
+    if (!inputPin) return
+    const cleanPin = inputPin.replace(/\D/g, '').slice(0, 4)
+    if (cleanPin.length !== 4) {
+      alert(lang === 'bn' ? 'পিন অবশ্যই ৪ সংখ্যার হতে হবে' : 'PIN must be exactly 4 digits')
+      return
+    }
 
     setResettingPinId(u.id)
     try {
-      // Reset to temp PIN "0000"
-      await adminResetUserPin(u.id, '0000')
+      await adminResetUserPin(u.id, cleanPin)
 
       // Send in-app notification to user
       sendNotification(
         u.id,
-        lang === 'bn' ? '🔑 পিন রিসেট হয়েছে' : '🔑 PIN Reset by Admin',
+        lang === 'bn' ? '🔑 নতুন সিকিউরিটি পিন সেট করা হয়েছে' : '🔑 Security PIN Updated',
         lang === 'bn'
-          ? 'আপনার পিন অ্যাডমিন দ্বারা রিসেট হয়েছে। অস্থায়ী পিন "0000" দিয়ে লগইন করুন এবং Profile থেকে নতুন পিন সেট করুন।'
-          : 'Your PIN was reset by Admin. Login with temporary PIN "0000" and set a new PIN from your Profile page.'
+          ? `আপনার অ্যাকাউন্ট সিকিউরিটি পিন আপডেট করা হয়েছে। আপনার পিন: ${cleanPin}`
+          : `Your account security PIN has been updated to: ${cleanPin}`,
       )
 
       showToast(
         lang === 'bn'
-          ? `✅ ${u.name}-এর পিন রিসেট হয়েছে। ইউজারকে নোটিফিকেশন পাঠানো হয়েছে।`
-          : `✅ PIN reset for ${u.name}. User notified to set new PIN.`,
-        '🔑'
+          ? `✅ ${u.name}-এর পিন আপডেট করা হয়েছে: ${cleanPin}`
+          : `✅ PIN for ${u.name} updated to: ${cleanPin}`,
+        '🔑',
       )
 
       // Optionally send WhatsApp
@@ -57,9 +63,9 @@ export default function AdminUsers() {
       if (phoneStr) {
         const waDigits = formatWhatsAppPhone(phoneStr)
         const msg = encodeURIComponent(
-          `নমস্কার ${u.name}, GreenVest-এ আপনার পিন রিসেট করা হয়েছে।\nঅস্থায়ী পিন: 0000\nলগইন করে নতুন পিন সেট করুন: https://greenvest.shop/auth`
+          `নমস্কার ${u.name}, GreenVest-এ আপনার লগইন পিন আপডেট করা হয়েছে: ${cleanPin}\nলগইন করুন: https://greenvest.shop/auth`,
         )
-        if (window.confirm(lang === 'bn' ? 'হোয়াটসঅ্যাপে জানাবেন?' : 'Notify via WhatsApp?')) {
+        if (window.confirm(lang === 'bn' ? 'হোয়াটসঅ্যাপে গ্রাহককে জানাবেন?' : 'Notify customer via WhatsApp?')) {
           window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
         }
       }
