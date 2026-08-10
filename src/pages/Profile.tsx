@@ -3,11 +3,12 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabase'
+import { saveDelivery } from '../lib/storage'
 import type { Address } from '../types'
 
 export default function Profile() {
   const { user, logout, updateUserProfile } = useAuth()
-  const { orders, fetchAddresses, deleteAddress, lang, setLang } = useStore()
+  const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang } = useStore()
 
   const [addresses, setAddresses] = useState<Address[]>([])
   const [loadingAddrs, setLoadingAddrs] = useState(true)
@@ -17,6 +18,9 @@ export default function Profile() {
   const [nameVal, setNameVal] = useState('')
   const [phoneVal, setPhoneVal] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addrInput, setAddrInput] = useState('')
 
   useEffect(() => {
     if (user) {
@@ -51,6 +55,29 @@ export default function Profile() {
       setEditingPhone(false)
     } catch (e) {
       alert(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.')
+    }
+    setSaving(false)
+  }
+
+  const handleSaveAddress = async () => {
+    if (!user || !addrInput.trim()) return
+    setSaving(true)
+    try {
+      await saveAddress({
+        user_id: user.id,
+        label: 'Home Delivery',
+        address: addrInput.trim(),
+        phone: phoneVal || user.phone || '',
+        pin: '721632',
+        is_default: true,
+      })
+      saveDelivery(user.id, { address: addrInput.trim(), phone: phoneVal || user.phone || '', pin: '721632' })
+      const updated = await fetchAddresses(user.id)
+      setAddresses(updated)
+      setAddrInput('')
+      setShowAddForm(false)
+    } catch (e) {
+      alert(lang === 'bn' ? 'ঠিকানা আপডেট ব্যর্থ হয়েছে' : 'Address save failed')
     }
     setSaving(false)
   }
@@ -221,14 +248,57 @@ export default function Profile() {
         )}
       </section>
 
-      {/* Saved Addresses */}
+      {/* Saved Delivery Address Section with Edit / Add */}
       <section>
-        <h3 style={{ margin: '0 0 0.75rem' }}>{lang === 'bn' ? '📍 সংরক্ষিত ঠিকানা' : '📍 Saved Addresses'}</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <h3 style={{ margin: 0 }}>{lang === 'bn' ? '📍 সংরক্ষিত ডেলিভারি ঠিকানা' : '📍 Saved Delivery Address'}</h3>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowAddForm(!showAddForm)}
+            style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+          >
+            {showAddForm ? '✕' : (lang === 'bn' ? '✏️ সম্পাদনা / নতুন' : '✏️ Edit / Add')}
+          </button>
+        </div>
+
+        {showAddForm && (
+          <div style={{ ...cardStyle, marginBottom: '0.85rem', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+              {lang === 'bn' ? 'নতুন ডেলিভারি ঠিকানা লিখুন:' : 'Enter Delivery Address:'}
+            </label>
+            <input
+              type="text"
+              value={addrInput}
+              onChange={(e) => setAddrInput(e.target.value)}
+              placeholder={lang === 'bn' ? 'বাড়ি, পারা, ল্যান্ডমার্ক, এলাকা' : 'House, Para, Landmark, Area'}
+              style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '0.5rem' }}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleSaveAddress}
+                disabled={saving}
+              >
+                {saving ? '...' : (lang === 'bn' ? 'সংরক্ষণ করুন' : 'Save Address')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowAddForm(false)}
+              >
+                {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {loadingAddrs ? (
           <p style={{ color: 'var(--text-light)' }}>{lang === 'bn' ? 'লোড হচ্ছে...' : 'Loading...'}</p>
         ) : addresses.length === 0 ? (
           <p style={{ ...cardStyle, color: 'var(--text-light)', fontStyle: 'italic', borderStyle: 'dashed' }}>
-            {lang === 'bn' ? 'কোনো সংরক্ষিত ঠিকানা নেই' : 'No saved addresses yet. Save one during checkout!'}
+            {lang === 'bn' ? 'কোনো সংরক্ষিত ঠিকানা নেই। কেনাকাটার সময় অটো সংরক্ষণ হবে।' : 'No saved address yet. It will automatically save when you place an order!'}
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -237,7 +307,7 @@ export default function Profile() {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{addr.label} {addr.is_default && '⭐'}</div>
                   <div style={{ color: 'var(--text-light)', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={addr.address}>{addr.address}</div>
-                  <div style={{ color: 'var(--text-light)', fontSize: '0.8rem' }}>📱 {addr.phone} · PIN {addr.pin}</div>
+                  <div style={{ color: 'var(--text-light)', fontSize: '0.8rem' }}>📱 {addr.phone}</div>
                 </div>
                 <button onClick={() => handleDeleteAddress(addr.id)} style={{ background: '#fef2f2', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#dc2626', padding: '0.4rem 0.6rem', borderRadius: '8px', flexShrink: 0 }}>
                   🗑️
