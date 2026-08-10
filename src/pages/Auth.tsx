@@ -20,7 +20,7 @@ export default function Auth() {
   const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [emailOrPhone, setEmailOrPhone] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -38,16 +38,24 @@ export default function Auth() {
 
   if (user) return <Navigate to={redirectFor(user.role)} replace />
 
-  const doLogin = async (mail: string, pass: string) => {
+  const getTargetEmail = (raw: string) => {
+    const trimmed = raw.trim()
+    if (trimmed.includes('@')) return trimmed
+    const digits = cleanDigits(trimmed)
+    return digits ? `${digits}@greenvest.shop` : trimmed
+  }
+
+  const doLogin = async (identifier: string, pass: string) => {
     setError('')
     setInfo('')
     setBusy(true)
     try {
-      const res = await login(mail, pass)
+      const targetMail = getTargetEmail(identifier)
+      const res = await login(targetMail, pass)
       if (!res.ok) {
         setError(
           res.error ||
-            (lang === 'bn' ? 'লগইন ব্যর্থ — ফোন নম্বর/পিন নম্বর চেক করুন' : 'Login failed — check mobile & 4-digit PIN'),
+            (lang === 'bn' ? 'লগইন ব্যর্থ — ফোন নম্বর/জিমেইল ও পিন চেক করুন' : 'Login failed — check mobile/Gmail & 4-digit PIN'),
         )
         return
       }
@@ -63,7 +71,7 @@ export default function Auth() {
     setInfo('')
 
     if (mode === 'login') {
-      await doLogin(email, password)
+      await doLogin(emailOrPhone, password)
       return
     }
 
@@ -72,19 +80,18 @@ export default function Auth() {
         setError(lang === 'bn' ? 'অ্যাকাউন্টের নাম (ইউজারনেম) লিখুন' : 'Enter your registered Username / Full Name')
         return
       }
-      const digits = cleanDigits(email)
-      if (digits.length < 10) {
-        setError(lang === 'bn' ? '১০ সংখ্যার নিবন্ধিত মোবাইল নম্বর দিন' : 'Enter registered 10-digit mobile number')
+      const targetMail = getTargetEmail(emailOrPhone)
+      if (!targetMail) {
+        setError(lang === 'bn' ? 'মোবাইল নম্বর বা জিমেইল দিন' : 'Enter mobile number or Gmail address')
         return
       }
       setBusy(true)
       try {
-        const targetEmail = `${digits}@greenvest.shop`
-        await resetPassword(targetEmail)
+        await resetPassword(targetMail)
         setInfo(
           lang === 'bn'
-            ? `✅ অ্যাকাউন্টের নাম (${name.trim()}) ও ফোন (${digits}) ভেরিফাই করা হয়েছে! আপনার নতুন ৪-সংখ্যার পিন দিয়ে লগইন করুন।`
-            : `✅ Verified account (${name.trim()}) for mobile ${digits}! You can now login with your new 4-digit PIN.`
+            ? `✅ অ্যাকাউন্টের নাম (${name.trim()}) ও আইডি (${emailOrPhone.trim()}) ভেরিফাই করা হয়েছে! আপনার নতুন ৪-সংখ্যার পিন দিয়ে লগইন করুন।`
+            : `✅ Verified account (${name.trim()}) for ${emailOrPhone.trim()}! You can now login with your new 4-digit PIN.`
         )
         setMode('login')
       } catch (err) {
@@ -101,7 +108,8 @@ export default function Auth() {
     }
     setBusy(true)
     try {
-      const res = await signup(name, email, password, phone)
+      const targetMail = getTargetEmail(emailOrPhone)
+      const res = await signup(name, targetMail, password, phone || cleanDigits(emailOrPhone))
       if (!res.ok) {
         setError(res.error || (lang === 'bn' ? 'সাইন আপ ব্যর্থ' : 'Signup failed'))
         return
@@ -114,11 +122,14 @@ export default function Auth() {
     }
   }
 
+  const isEmailFormat = emailOrPhone.includes('@')
+  const digits = cleanDigits(emailOrPhone)
+
   return (
     <div className="page narrow auth-page">
       <h1 className="brand-hero compact">GreenVest</h1>
       <p className="lede center">
-        {mode === 'login' && (lang === 'bn' ? 'লগইন করুন (ফোন ও ৪-সংখ্যার পিন)' : 'Login with Mobile & 4-Digit PIN')}
+        {mode === 'login' && (lang === 'bn' ? 'লগইন করুন (মোবাইল/জিমেইল ও ৪-সংখ্যার পিন)' : 'Login with Mobile / Gmail & 4-Digit PIN')}
         {mode === 'signup' && (lang === 'bn' ? 'নতুন অ্যাকাউন্ট খুলুন' : 'Create an Account')}
         {mode === 'forgot' && (lang === 'bn' ? 'পিন রিসেট ভেরিফিকেশন' : 'Security Verification to Reset PIN')}
       </p>
@@ -171,29 +182,34 @@ export default function Auth() {
         )}
 
         <label>
-          {lang === 'bn' ? '১০ সংখ্যার মোবাইল নম্বর' : '10-Digit Mobile Number'}
+          {lang === 'bn' ? 'মোবাইল নম্বর বা জিমেইল (Gmail / Phone)' : 'Mobile Number or Gmail Address'}
           <input
             name="username"
             type="text"
-            value={email}
+            value={emailOrPhone}
             onChange={(e) => {
               const val = e.target.value
-              setEmail(val)
-              if (mode === 'signup') {
-                const digits = cleanDigits(val)
-                if (isValidIndianPhone(val)) setPhone(digits.slice(-10))
+              setEmailOrPhone(val)
+              if (mode === 'signup' && !val.includes('@')) {
+                const d = cleanDigits(val)
+                if (isValidIndianPhone(val)) setPhone(d.slice(-10))
               }
             }}
-            placeholder={lang === 'bn' ? 'যেমন 8170859653' : 'e.g. 8170859653'}
+            placeholder={lang === 'bn' ? 'যেমন 8170859653 বা name@gmail.com' : 'e.g. 8170859653 or name@gmail.com'}
             required
             autoComplete="username"
           />
-          {!email.includes('@') && cleanDigits(email).length > 0 && (
-            <p style={{ marginTop: '0.2rem', fontSize: '0.85rem', color: cleanDigits(email).length === 10 && /^[6-9]/.test(cleanDigits(email)) ? 'green' : 'red' }}>
-              {cleanDigits(email).length < 10 && '❌ Enter 10 digits'}
-              {cleanDigits(email).length === 10 && /^[6-9]/.test(cleanDigits(email)) && '✅ Valid mobile number'}
-              {cleanDigits(email).length === 10 && !/^[6-9]/.test(cleanDigits(email)) && '❌ Must start with 6-9'}
-              {cleanDigits(email).length > 10 && '❌ Too many digits'}
+          {emailOrPhone.trim().length > 0 && (
+            <p style={{ marginTop: '0.2rem', fontSize: '0.85rem' }}>
+              {isEmailFormat ? (
+                <span style={{ color: 'green' }}>✅ Valid Gmail / Email format</span>
+              ) : (
+                <span style={{ color: digits.length === 10 && /^[6-9]/.test(digits) ? 'green' : 'red' }}>
+                  {digits.length < 10 && '❌ Enter 10-digit mobile or valid Gmail'}
+                  {digits.length === 10 && /^[6-9]/.test(digits) && '✅ Valid mobile number'}
+                  {digits.length === 10 && !/^[6-9]/.test(digits) && '❌ Must start with 6-9'}
+                </span>
+              )}
             </p>
           )}
         </label>
