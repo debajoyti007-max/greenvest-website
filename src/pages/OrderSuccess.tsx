@@ -6,6 +6,8 @@ import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN } from '../lib/business'
 import { t } from '../lib/i18n'
 import { openSellerOrderWhatsApp } from '../lib/whatsapp'
+import { printOrderInvoice } from '../lib/printOrder'
+import { showToast } from '../components/Toast'
 
 export default function OrderSuccess() {
   const { id } = useParams()
@@ -20,7 +22,13 @@ export default function OrderSuccess() {
     if (!order || notified.current) return
     notified.current = true
     openSellerOrderWhatsApp(order)
-  }, [order])
+    showToast(
+      lang === 'bn'
+        ? `🎉 অর্ডার #${order.id.slice(0, 6)} সফলভাবে সম্পন্ন হয়েছে! রসিদ ও নোটিফিকেশন চেক করুন।`
+        : `🎉 Order #${order.id.slice(0, 6)} placed! Check live notification bell for updates.`,
+      '🔔'
+    )
+  }, [order, lang])
 
   const copySummary = async () => {
     if (!order) return
@@ -36,9 +44,9 @@ export default function OrderSuccess() {
 
   const shareWhatsAppCustomer = () => {
     if (!order) return
-    const text = `GreenVest Order #${order.id}\nTotal: ₹${order.total}\nAdvance Paid: ₹${order.advanceAmount}\nBalance: ₹${order.total - order.advanceAmount}\nSlot: ${order.deliverySlot}\nStatus: ${order.status}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-  };
+    const text = `GreenVest Order #${order.id}\nTotal: ₹${order.total}\nAdvance Paid: ₹${order.advanceAmount}\nBalance: ₹${order.total - order.advanceAmount}\nStatus: ${order.status}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
 
   if (!user) return <Navigate to="/auth" replace />
 
@@ -64,6 +72,13 @@ export default function OrderSuccess() {
           ? `সেলার UTR যাচাই করার পর ডেলিভারি ${DELIVERY_WINDOW_BN}-এর মধ্যে।`
           : `After UTR verification, delivery arrives within ${DELIVERY_WINDOW}.`}
       </p>
+
+      {/* Live Notification Indicator Badge */}
+      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.65rem 0.85rem', borderRadius: '10px', fontSize: '0.85rem', color: '#166534', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <span>🔔</span>
+        <span>{lang === 'bn' ? 'লাইভ আপডেট নোটিফিকেশন বেল (উপরে)-এ চেক করতে পারেন!' : 'Live order status updates sent to your Notification Bell (top right)!'}</span>
+      </div>
+
       <div className="order-card">
         <strong>{order.id}</strong>
         <p className="muted">{new Date(order.createdAt).toLocaleString()}</p>
@@ -83,9 +98,13 @@ export default function OrderSuccess() {
           UTR: <code>{order.utr}</code> · <em className="wait">{t(lang, 'utrPending')}</em>
         </p>
       </div>
+
       <div className="form-actions" style={{ flexWrap: 'wrap', gap: '0.6rem' }}>
-        <button type="button" className="btn btn-primary" onClick={() => openSellerOrderWhatsApp(order)}>
-          {lang === 'bn' ? '💬 WhatsApp এ রশিদ ও UTR পাঠান' : '💬 Send Receipt to WhatsApp'}
+        <button type="button" className="btn btn-primary" onClick={() => printOrderInvoice(order)}>
+          📄 {lang === 'bn' ? 'অফিসিয়াল PDF রসিদ ডাউনলোড / প্রিন্ট' : 'Download / Print PDF Invoice'}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={() => openSellerOrderWhatsApp(order)}>
+          💬 {lang === 'bn' ? 'WhatsApp এ রসিদ ও UTR পাঠান' : 'Send Receipt to WhatsApp'}
         </button>
         <button type="button" className="btn btn-secondary" onClick={shareWhatsAppCustomer}>
           📲 Share on WhatsApp
@@ -99,12 +118,6 @@ export default function OrderSuccess() {
               ? '📋 রশিদের টেক্সট কপি করুন'
               : '📋 Copy Receipt Text'}
         </button>
-        <Link to="/orders" className="btn btn-ghost">
-          {t(lang, 'viewMyOrders')}
-        </Link>
-        <Link to="/" className="btn btn-ghost">
-          {t(lang, 'keepShopping')}
-        </Link>
       </div>
     </div>
   )
