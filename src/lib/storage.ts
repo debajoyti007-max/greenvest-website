@@ -214,6 +214,10 @@ export function saveDelivery(userId: string, data: SavedDelivery) {
 }
 
 export function uid(prefix = 'id') {
+  if (prefix === 'ord') {
+    const num = Math.floor(100000 + Math.random() * 900000)
+    return `ORD-${num}`
+  }
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 

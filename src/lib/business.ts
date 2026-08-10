@@ -53,3 +53,20 @@ export function formatDisplayContact(email: string, phone?: string): string {
   }
   return email
 }
+
+/** Formats any long or short Order ID into a clean 4-6 digit reference (e.g. ORD-849201). */
+export function formatOrderId(id: string): string {
+  if (!id) return ''
+  const clean = id.trim()
+  if (/^ORD-\d{4,6}$/i.test(clean)) return clean.toUpperCase()
+  if (/^\d{4,6}$/.test(clean)) return `ORD-${clean}`
+  const digits = clean.replace(/\D/g, '')
+  if (digits.length >= 6) return `ORD-${digits.slice(-6)}`
+  return `ORD-${clean.slice(-6).toUpperCase()}`
+}
+
+/** Generates a simple, unique 6-digit numeric Order ID (e.g. ORD-849201). */
+export function generateShortOrderId(): string {
+  const num = Math.floor(100000 + Math.random() * 900000)
+  return `ORD-${num}`
+}
