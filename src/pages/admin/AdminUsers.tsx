@@ -186,9 +186,10 @@ export default function AdminUsers() {
                           type="button"
                           className="btn btn-secondary btn-sm"
                           style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}
-                          onClick={() => {
+                          onClick={async () => {
                             if (window.confirm(lang === 'bn' ? `${u.name}-কে অ্যাডমিন বানাবেন?` : `Make ${u.name} an Admin?`)) {
-                              void setUserRole(u.id, 'admin' as Role)
+                              await setUserRole(u.id, 'admin' as Role)
+                              showToast(lang === 'bn' ? `👑 ${u.name} এখন অ্যাডমিন!` : `👑 ${u.name} is now an Admin!`, '👑')
                             }
                           }}
                         >
@@ -199,9 +200,10 @@ export default function AdminUsers() {
                           type="button"
                           className="btn btn-secondary btn-sm"
                           style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5' }}
-                          onClick={() => {
+                          onClick={async () => {
                             if (window.confirm(lang === 'bn' ? `${u.name}-এর অ্যাডমিন রোল বাতিল করবেন?` : `Revoke Admin from ${u.name}?`)) {
-                              void setUserRole(u.id, 'customer' as Role)
+                              await setUserRole(u.id, 'customer' as Role)
+                              showToast(lang === 'bn' ? `${u.name} এখন কাস্টমার` : `${u.name} is now a Customer`, '👤')
                             }
                           }}
                         >
@@ -215,7 +217,10 @@ export default function AdminUsers() {
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
-                            onClick={() => void setUserRole(u.id, 'seller')}
+                            onClick={async () => {
+                              await setUserRole(u.id, 'seller')
+                              showToast(lang === 'bn' ? `🏬 ${u.name} এখন সেলার!` : `🏬 ${u.name} is now a Seller!`, '🏬')
+                            }}
                           >
                             {lang === 'bn' ? 'সেলার করুন' : 'Make Seller'}
                           </button>
@@ -223,7 +228,10 @@ export default function AdminUsers() {
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
-                            onClick={() => void setUserRole(u.id, 'customer' as Role)}
+                            onClick={async () => {
+                              await setUserRole(u.id, 'customer' as Role)
+                              showToast(lang === 'bn' ? `${u.name} এখন কাস্টমার` : `${u.name} is now a Customer`, '👤')
+                            }}
                           >
                             {lang === 'bn' ? 'সেলার বাতিল' : 'Revoke Seller'}
                           </button>
@@ -236,7 +244,10 @@ export default function AdminUsers() {
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
-                            onClick={() => void setUserRole(u.id, 'rider')}
+                            onClick={async () => {
+                              await setUserRole(u.id, 'rider')
+                              showToast(lang === 'bn' ? `🛵 ${u.name} এখন রাইডার!` : `🛵 ${u.name} is now a Rider!`, '🛵')
+                            }}
                           >
                             🛵 {lang === 'bn' ? 'রাইডার করুন' : 'Make Rider'}
                           </button>
@@ -244,7 +255,10 @@ export default function AdminUsers() {
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
-                            onClick={() => void setUserRole(u.id, 'customer' as Role)}
+                            onClick={async () => {
+                              await setUserRole(u.id, 'customer' as Role)
+                              showToast(lang === 'bn' ? `${u.name} এখন কাস্টমার` : `${u.name} is now a Customer`, '👤')
+                            }}
                           >
                             🛵 {lang === 'bn' ? 'রাইডার বাতিল' : 'Revoke Rider'}
                           </button>

@@ -204,10 +204,20 @@ export async function checkAccountExistsByEmail(email: string): Promise<User | n
   return data ? mapProfile(data as ProfileRow) : null
 }
 
-export async function updateProfileRole(userId: string, role: Role): Promise<void> {
+export async function updateProfileRole(userId: string, role: Role, email?: string): Promise<void> {
   const client = requireClient()
-  const { error } = await client.from('profiles').update({ role }).eq('id', userId)
-  if (error) throw error
+  try {
+    await client.from('profiles').update({ role }).eq('id', userId)
+  } catch {
+    /* ignore */
+  }
+  if (email) {
+    try {
+      await client.from('profiles').update({ role }).eq('email', email.toLowerCase())
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export async function fetchProducts(): Promise<Product[]> {

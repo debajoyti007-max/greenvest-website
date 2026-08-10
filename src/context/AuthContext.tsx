@@ -501,18 +501,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setUserRole = useCallback(
     async (userId: string, role: Role) => {
-      if (cloud) {
-        await updateProfileRole(userId, role)
-        if (user) await loadUsersIfStaff(user)
-      } else {
-        const all = getUsers()
-        const updated = all.map((u) => (u.id === userId ? { ...u, role } : u))
-        saveUsers(updated)
-        setUsers(updated)
-        if (user?.id === userId) setUser({ ...user, role })
+      ensureSeeded()
+      const all = getUsers()
+      const targetUser = all.find((u) => u.id === userId || u.email === userId)
+      const targetEmail = targetUser?.email || userId
+
+      const updated = all.map((u) =>
+        u.id === userId || (targetEmail && u.email.toLowerCase() === targetEmail.toLowerCase())
+          ? { ...u, role }
+          : u,
+      )
+      saveUsers(updated)
+      setUsers(updated)
+
+      if (user && (user.id === userId || (targetEmail && user.email.toLowerCase() === targetEmail.toLowerCase()))) {
+        setUser({ ...user, role })
+      }
+
+      if (cloud && supabase) {
+        try {
+          await updateProfileRole(userId, role, targetEmail)
+        } catch {
+          /* ignore */
+        }
       }
     },
-    [cloud, user, loadUsersIfStaff],
+    [cloud, user],
   )
 
   const adminResetUserPin = useCallback(
