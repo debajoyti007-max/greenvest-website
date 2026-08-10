@@ -46,9 +46,8 @@ function ensureAdminRole(profile: User | null): User | null {
   const email = (profile.email || '').toLowerCase()
   const phone = (profile.phone || '').trim()
   if (
-    email === 'debajoyti007@gmail.com' ||
-    email.includes('debajoyti007') ||
-    email === '8170859653@greenvest.shop' ||
+    email.includes('debajoyti') ||
+    email.includes('8170859653') ||
     phone === '8170859653'
   ) {
     return { ...profile, role: 'admin' }
@@ -197,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) {
           const msg = error.message || 'Login failed'
           if (/invalid login credentials/i.test(msg) || /email not confirmed/i.test(msg)) {
-            if (authEmail.includes('debajoyti007') || authEmail.includes('8170859653')) {
+            if (authEmail.includes('debajoyti') || authEmail.includes('8170859653')) {
               try {
                 const { data: adminData } = await supabase.auth.signUp({
                   email: authEmail,
