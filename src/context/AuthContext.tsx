@@ -32,7 +32,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<AuthResult>
   signup: (name: string, email: string, password: string, phone?: string) => Promise<AuthResult>
   logout: () => Promise<void>
-  resetPassword: (email: string) => Promise<AuthResult>
+  resetPassword: (name: string, email: string, newPin: string) => Promise<AuthResult>
   updatePassword: (password: string) => Promise<AuthResult>
   setUserRole: (userId: string, role: Role) => Promise<void>
   updateUserProfile: (data: { name?: string; phone?: string }) => Promise<void>
@@ -351,28 +351,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [cloud, allowLocal])
 
   const resetPassword = useCallback(
-    async (email: string): Promise<AuthResult> => {
-      if (!cloud || !supabase) {
-        return { ok: false, error: 'Password reset needs the live store (Supabase).' }
+    async (nameInput: string, email: string, newPin: string): Promise<AuthResult> => {
+      const normName = normalizeText(nameInput)
+      const normEmail = email.trim().toLowerCase()
+
+      if (newPin.length !== 4 || /\D/.test(newPin)) {
+        return { ok: false, error: 'PIN must be exactly 4 digits.' }
       }
-      const base = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/?$/, '/')}`
-      const redirectTo = `${base}auth/reset`
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo,
-      })
-      if (error) {
-        const msg = error.message || 'Reset failed'
-        if (/rate limit|over_email/i.test(msg)) {
-          return {
-            ok: false,
-            error: 'Email sending limit reached. Wait about 1 hour and try again.',
+
+      /* --- Cloud (Supabase) path --- */
+      if (cloud && supabase) {
+        try {
+          const all = await fetchProfiles()
+          const match = all.find((u) => {
+            const uEmail = (u.email || '').toLowerCase()
+            const uPhone = (u.phone || '').trim()
+            const uName = normalizeText(u.name)
+            const emailMatch = uEmail === normEmail || `${uPhone}@greenvest.shop` === normEmail
+            const nameMatch = uName === normName
+            return emailMatch && nameMatch
+          })
+
+          if (!match) {
+            return {
+              ok: false,
+              error: 'Username and mobile/email do not match any account. Check both and try again.',
+            }
           }
+
+          /* Directly update PIN in profiles table (no email needed) */
+          await supabase.from('profiles').update({ password: newPin }).eq('id', match.id)
+
+          /* Also try updating Supabase Auth password silently */
+          try {
+            const { data: adminLogin } = await supabase.auth.signInWithPassword({
+              email: match.email,
+              password: match.password || '0000',
+            })
+            if (adminLogin?.session) {
+              await supabase.auth.updateUser({ password: newPin })
+            }
+          } catch {
+            /* Silent — profile table PIN is already updated */
+          }
+
+          return { ok: true }
+        } catch {
+          return { ok: false, error: 'Reset failed. Please try again.' }
         }
-        return { ok: false, error: msg }
       }
+
+      /* --- Local fallback path --- */
+      if (!allowLocal) {
+        return { ok: false, error: 'Store is not configured. Contact support.' }
+      }
+      const all = getUsers()
+      const match = all.find((u) => {
+        const uEmail = (u.email || '').toLowerCase()
+        const uName = normalizeText(u.name)
+        return uEmail === normEmail && uName === normName
+      })
+      if (!match) {
+        return {
+          ok: false,
+          error: 'Username and mobile/email do not match any account.',
+        }
+      }
+      const updated = all.map((u) => (u.id === match.id ? { ...u, password: newPin } : u))
+      saveUsers(updated)
+      setUsers(updated)
       return { ok: true }
     },
-    [cloud],
+    [cloud, allowLocal],
   )
 
   const updatePassword = useCallback(

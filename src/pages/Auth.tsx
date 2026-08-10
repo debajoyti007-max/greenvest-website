@@ -89,16 +89,24 @@ export default function Auth() {
         setError(lang === 'bn' ? 'মোবাইল নম্বর বা জিমেইল দিন' : 'Enter mobile number or Gmail address')
         return
       }
+      if (password.length !== 4) {
+        setError(lang === 'bn' ? 'নতুন ৪-সংখ্যার পিন দিন' : 'Enter a new 4-digit PIN')
+        return
+      }
       setBusy(true)
       try {
-        await resetPassword(targetMail)
+        const res = await resetPassword(cleanName, targetMail, password)
+        if (!res.ok) {
+          setError(res.error || (lang === 'bn' ? 'রিসেট ব্যর্থ হয়েছে' : 'Reset failed'))
+          return
+        }
         setInfo(
           lang === 'bn'
-            ? `✅ অ্যাকাউন্টের নাম (${cleanName}) ও আইডি (${cleanId}) ভেরিফাই করা হয়েছে! আপনার নতুন ৪-সংখ্যার পিন দিয়ে লগইন করুন।`
-            : `✅ Verified account (${cleanName}) for ${cleanId}! You can now login with your new 4-digit PIN.`
+            ? `✅ পিন রিসেট সফল হয়েছে! আপনার নতুন ৪-সংখ্যার পিন দিয়ে লগইন করুন।`
+            : `✅ PIN reset successful! Login now with your new 4-digit PIN.`
         )
         setMode('login')
-      } catch (err) {
+      } catch {
         setError(lang === 'bn' ? 'রিসেট ব্যর্থ হয়েছে' : 'Reset failed')
       } finally {
         setBusy(false)
