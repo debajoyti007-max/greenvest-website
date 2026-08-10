@@ -36,10 +36,86 @@ function write<T>(key: string, value: T) {
   window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key } }))
 }
 
-/** Local DEV catalog bootstrap (no demo accounts). */
+export const DEFAULT_USERS: User[] = [
+  {
+    id: 'admin-debajoyti-007',
+    name: 'Debajoyti (Admin)',
+    email: 'debajoyti007@gmail.com',
+    password: '9191',
+    role: 'admin',
+    phone: '8170859653',
+    createdAt: '2026-08-01T00:00:00.000Z',
+  },
+  {
+    id: 'u-debajoyti3',
+    name: 'Debajoyti Barman',
+    email: 'debajoyti3@gmail.com',
+    password: '9191',
+    role: 'customer',
+    createdAt: '2026-08-02T00:00:00.000Z',
+  },
+  {
+    id: 'u-swayam-phone',
+    name: 'SWAYAM',
+    email: '6370225641@greenvest.shop',
+    password: '1234',
+    role: 'customer',
+    phone: '6370225641',
+    createdAt: '2026-08-03T00:00:00.000Z',
+  },
+  {
+    id: 'u-swayam-email',
+    name: 'SWAYAM',
+    email: 'swayamstar9@gmail.com',
+    password: '1234',
+    role: 'customer',
+    createdAt: '2026-08-04T00:00:00.000Z',
+  },
+  {
+    id: 'u-anjali',
+    name: 'Anjali Barman',
+    email: 'anjalibarman0007@gmail.com',
+    password: '1234',
+    role: 'customer',
+    createdAt: '2026-08-05T00:00:00.000Z',
+  },
+  {
+    id: 'u-kumarjyoti',
+    name: 'Kumar Jyoti Singha',
+    email: 'kumarjyotisingha8@gmail.com',
+    password: '1234',
+    role: 'customer',
+    createdAt: '2026-08-06T00:00:00.000Z',
+  },
+  {
+    id: 'u-m-phone',
+    name: 'm',
+    email: '1234569870@greenvest.shop',
+    password: '1234',
+    role: 'customer',
+    phone: '1234569870',
+    createdAt: '2026-08-07T00:00:00.000Z',
+  },
+  {
+    id: 'u-demo-customer',
+    name: 'Demo Customer',
+    email: 'customer@demo.com',
+    password: '1234',
+    role: 'customer',
+    createdAt: '2026-08-08T00:00:00.000Z',
+  },
+]
+
+/** Local catalog & user accounts bootstrap. */
 export function ensureSeeded() {
+  const existingUsers = read<User[]>(KEYS.users, [])
+  const map = new Map<string, User>()
+  DEFAULT_USERS.forEach((u) => map.set(u.email.toLowerCase(), u))
+  existingUsers.forEach((u) => map.set(u.email.toLowerCase(), u))
+  const mergedUsers = Array.from(map.values())
+  write(KEYS.users, mergedUsers)
+
   if (localStorage.getItem(KEYS.seeded) === '1') {
-    if (!localStorage.getItem(KEYS.users)) write(KEYS.users, [] as User[])
     const products = read<Product[]>(KEYS.products, [])
     const needsRefresh =
       products.length < SEED_PRODUCTS.length ||
@@ -49,7 +125,6 @@ export function ensureSeeded() {
     }
     return
   }
-  write(KEYS.users, [] as User[])
   write(KEYS.products, SEED_PRODUCTS)
   write(KEYS.orders, [] as Order[])
   write(KEYS.cart, [] as CartItem[])
@@ -57,7 +132,9 @@ export function ensureSeeded() {
 }
 
 export function getUsers(): User[] {
-  return read(KEYS.users, [])
+  ensureSeeded()
+  const list = read<User[]>(KEYS.users, DEFAULT_USERS)
+  return list.length > 0 ? list : DEFAULT_USERS
 }
 
 export function saveUsers(users: User[]) {

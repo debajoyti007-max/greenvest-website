@@ -97,15 +97,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const map = new Map<string, User>()
     // 1. Add local & seeded demo users first
     localUsers.forEach((u) => {
-      map.set(u.id, u)
+      if (u.email) map.set(u.email.toLowerCase(), u)
     })
-    // 2. Add cloud profiles (overriding local if id matches)
+    // 2. Add cloud profiles (overriding local if email matches)
     cloudUsers.forEach((u) => {
-      map.set(u.id, u)
+      if (u.email) map.set(u.email.toLowerCase(), u)
     })
     // 3. Ensure current active logged in profile is present
-    if (profile) {
-      map.set(profile.id, profile)
+    if (profile && profile.email) {
+      map.set(profile.email.toLowerCase(), profile)
     }
 
     const merged = Array.from(map.values())
