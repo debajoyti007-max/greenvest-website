@@ -7,11 +7,11 @@ import { calcDeliveryFee } from '../lib/delivery'
 import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
-import type { Address, Coupon, DeliveryZone } from '../types'
+import type { Address, DeliveryZone } from '../types'
 
 export default function Checkout() {
   const { user } = useAuth()
-  const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr, fetchAddresses, fetchDeliveryZones, saveAddress, validateCoupon } = useStore()
+  const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr, fetchAddresses, fetchDeliveryZones, saveAddress } = useStore()
   const navigate = useNavigate()
 
   const [house, setHouse] = useState('')
@@ -31,13 +31,9 @@ export default function Checkout() {
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [zones, setZones] = useState<DeliveryZone[]>([])
   const [saveAddressToDb, setSaveAddressToDb] = useState(false)
-  const [couponCode, setCouponCode] = useState('')
-  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null)
-  const [couponSuccess, setCouponSuccess] = useState('')
 
   const delivery = useMemo(() => calcDeliveryFee('', zones), [zones])
-  const discountAmount = appliedCoupon?.discount ?? 0
-  const grandTotal = Math.max(0, cartTotal + delivery.fee - discountAmount)
+  const grandTotal = cartTotal + delivery.fee
   const advance = Math.ceil(grandTotal * 0.5)
 
   useEffect(() => {
@@ -156,7 +152,7 @@ export default function Checkout() {
       if (saveAddressToDb) {
         await saveAddress({ user_id: user.id, label: 'Saved', address: fullAddress, phone, pin: '721632', is_default: savedAddresses.length === 0 })
       }
-      const order = await placeOrder({ address: fullAddress, phone, pin: '721632', utr, deliverySlot: 'morning', discountAmount, zones })
+      const order = await placeOrder({ address: fullAddress, phone, pin: '721632', utr, deliverySlot: 'morning', discountAmount: 0, zones })
       if (order) navigate(`/orders/success/${order.id}`)
       else setError(lang === 'bn' ? 'অর্ডার হয়নি' : 'Could not place order')
     } catch (err) {
@@ -243,12 +239,6 @@ export default function Checkout() {
               <dt>{t(lang, 'total')}</dt>
               <dd>₹{grandTotal}</dd>
             </div>
-            {discountAmount > 0 && (
-              <div>
-                <dt>{lang === 'bn' ? 'কুপন ছাড়' : 'Coupon Discount'}</dt>
-                <dd style={{ color: '#16a34a' }}>-₹{discountAmount}</dd>
-              </div>
-            )}
             <div>
               <dt>{lang === 'bn' ? 'অগ্রিম পাঠান (৫০%)' : 'Pay this advance (50%)'}</dt>
               <dd className="accent">₹{advance}</dd>
@@ -368,27 +358,6 @@ export default function Checkout() {
           </label>
           {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '-0.5rem' }}>UTR auto-filled from clipboard</p>}
           {error && <p className="form-error">{error}</p>}
-          
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexDirection: 'column' }}>
-            <label>{lang === 'bn' ? 'কুপন কোড' : 'Coupon Code'}</label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input value={couponCode} onChange={e => setCouponCode(e.target.value)} placeholder="e.g. SAVE10" />
-              <button type="button" className="btn btn-secondary" onClick={async () => {
-                setError('')
-                setCouponSuccess('')
-                if (!couponCode) return
-                const c = await validateCoupon(couponCode, cartTotal)
-                if (c && c.valid) {
-                  setAppliedCoupon(c)
-                  setCouponSuccess(c.message || (lang === 'bn' ? 'কুপন প্রয়োগ করা হয়েছে!' : 'Coupon applied!'))
-                } else {
-                  setAppliedCoupon(null)
-                  setError(lang === 'bn' ? 'অবৈধ বা মেয়াদোত্তীর্ণ কুপন' : 'Invalid or expired coupon')
-                }
-              }}>{lang === 'bn' ? 'প্রয়োগ' : 'Apply'}</button>
-            </div>
-            {couponSuccess && <p style={{ color: '#16a34a', margin: 0 }}>{couponSuccess}</p>}
-          </div>
 
           <button type="submit" className="btn btn-primary" disabled={submitting}>
             {submitting ? (lang === 'bn' ? '⏳ অর্ডার হচ্ছে...' : '⏳ Placing order...') : t(lang, 'placeOrder')}
