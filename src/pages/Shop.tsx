@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
@@ -39,7 +39,7 @@ function ProductCard({
   const gradeLabels: Record<Grade, { en: string; bn: string }> = {
     A: { en: 'A (Premium)', bn: 'A (প্রিমিয়াম)' },
     B: { en: 'B (Standard)', bn: 'B (দৈনন্দিন)' },
-    C: { en: 'C (Budget)', bn: 'C (সাশ্রয়ী)' },
+    C: { en: 'C (Saasgoti)', bn: 'C (সাশ্রয়ী)' },
   }
 
   return (
@@ -63,61 +63,72 @@ function ProductCard({
           </span>
         )}
         {p.season && p.season !== 'all' && (
-          <span className="season-badge">{SEASON_LABELS[p.season][lang]}</span>
+          <span className="stock-badge season-badge">
+            {SEASON_LABELS[p.season]?.[lang] || p.season}
+          </span>
         )}
       </div>
-      <div className="product-body">
-        <h2>{lang === 'bn' ? p.bnName : p.name}</h2>
-        <p className="muted">
-          {lang === 'bn' ? p.name : p.bnName} · {p.unit}
-        </p>
 
-        {/* Grade segment toggle */}
-        <div className="card-grade-toggle">
+      <div className="product-info">
+        <h3>{lang === 'bn' ? p.bnName : p.name}</h3>
+        <p className="subtle">{catLabel(lang, p.category)}</p>
+
+        {/* Grade selector chips */}
+        <div className="grade-selector" style={{ display: 'flex', gap: '0.25rem', margin: '0.4rem 0' }}>
           {GRADES.map((g) => (
             <button
               key={g}
               type="button"
-              className={`card-grade-btn ${cardGrade === g ? 'active' : ''}`}
+              className={`grade-chip ${cardGrade === g ? 'active' : ''}`}
               onClick={() => setCardGrade(g)}
-              aria-pressed={cardGrade === g}
+              style={{
+                fontSize: '0.75rem',
+                padding: '0.25rem 0.5rem',
+                borderRadius: '6px',
+                border: cardGrade === g ? '2px solid var(--green-600)' : '1px solid #d1d5db',
+                background: cardGrade === g ? 'var(--green-50)' : 'white',
+                fontWeight: cardGrade === g ? 'bold' : 'normal',
+                cursor: 'pointer',
+              }}
             >
-              {g}
+              Grade {g}
             </button>
           ))}
         </div>
 
-        <div className="price-row">
-          <span className="price">₹{priceMap[cardGrade]}</span>
-          <span className="grade-price-label">
-            {gradeLabels[cardGrade][lang]}
-            <span className="grade-info-tip" onClick={() => setShowGradeInfo(!showGradeInfo)} style={{ cursor: 'pointer' }}> ℹ️</span>
+        <div className="price-row" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <span className="price" style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--green-700)' }}>
+            ₹{priceMap[cardGrade]} <small style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>/ {p.unit}</small>
           </span>
+          <button
+            type="button"
+            className="info-btn"
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.8rem', color: '#6b7280' }}
+            onClick={() => setShowGradeInfo(!showGradeInfo)}
+          >
+            ℹ️
+          </button>
         </div>
 
         {showGradeInfo && (
-          <div style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', background: '#f0fdf4', borderRadius: '6px', marginBottom: '0.4rem', lineHeight: 1.6 }}>
-            <div><strong>A (Premium)</strong> — {lang === 'bn' ? 'তাজা ও সেরা কোয়ালিটি' : 'Fresh & premium quality'} · ₹{priceMap.A}/{p.unit}</div>
-            <div><strong>B (Standard)</strong> — {lang === 'bn' ? 'দৈনন্দিন রান্নায় ব্যবহার্য' : 'Good for daily cooking'} · ₹{priceMap.B}/{p.unit}</div>
-            <div><strong>C (Budget)</strong> — {lang === 'bn' ? 'সাশ্রয়ী বাজার মূল্য' : 'Economical budget price'} · ₹{priceMap.C}/{p.unit}</div>
-          </div>
+          <p className="grade-desc" style={{ fontSize: '0.75rem', color: '#4b5563', margin: '0.25rem 0', fontStyle: 'italic' }}>
+            {gradeLabels[cardGrade][lang]}
+          </p>
         )}
 
         {cartQty > 0 ? (
-          <div className="card-stepper">
+          <div className="qty-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
             <button
               type="button"
-              className="btn btn-secondary stepper-btn"
+              className="btn btn-secondary btn-sm"
               onClick={() => onUpdateQty(p.id, cardGrade, cartQty - 1)}
             >
-              −
+              -
             </button>
-            <span className="stepper-qty-badge">
-              <strong>{cartQty}</strong> {p.unit}
-            </span>
+            <span style={{ fontWeight: 'bold' }}>{cartQty}</span>
             <button
               type="button"
-              className="btn btn-secondary stepper-btn"
+              className="btn btn-secondary btn-sm"
               onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1)}
             >
               +
@@ -126,7 +137,8 @@ function ProductCard({
         ) : (
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-primary btn-sm add-btn"
+            style={{ width: '100%', marginTop: '0.5rem' }}
             disabled={!p.inStock}
             onClick={() => onAdd(p, cardGrade)}
           >
@@ -145,6 +157,11 @@ export default function Shop() {
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState<Product | null>(null)
   const [grade, setGrade] = useState<Grade>('B')
+
+  // Auto-redirect rider away from Shop to Rider Live Delivery View
+  if (user?.role === 'rider') {
+    return <Navigate to="/rider" replace />
+  }
 
   const lastOrder = useMemo(() => {
     if (!user) return null

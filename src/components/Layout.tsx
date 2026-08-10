@@ -35,7 +35,7 @@ export default function Layout() {
       <MandiTicker />
       <header className="site-header">
         <div className="header-inner">
-          <Link to="/" className="brand" onClick={closeMenu}>
+          <Link to={user?.role === 'rider' ? '/rider' : '/'} className="brand" onClick={closeMenu}>
             <span className="brand-mark" aria-hidden>
               🌿
             </span>
@@ -62,6 +62,9 @@ export default function Layout() {
               <>
                 <NavLink to="/rider" onClick={closeMenu}>
                   🛵 {lang === 'bn' ? 'রাইডার ড্যাশবোর্ড' : 'Rider View'}
+                </NavLink>
+                <NavLink to="/profile" onClick={closeMenu}>
+                  👤 {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
                 </NavLink>
                 <NotificationBell />
               </>
