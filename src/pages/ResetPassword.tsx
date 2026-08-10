@@ -2,9 +2,10 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
+import { showToast } from '../components/Toast'
 import { t } from '../lib/i18n'
 
-/** Landed here from Supabase recovery email link — set a new password. */
+/** Landed here from reset link — set a new 4-digit PIN. */
 export default function ResetPassword() {
   const { user, loading, updatePassword } = useAuth()
   const { lang } = useStore()
@@ -29,8 +30,8 @@ export default function ResetPassword() {
         <h1 className="brand-hero compact">GreenVest</h1>
         <p className="form-error">
           {lang === 'bn'
-            ? 'রিসেট লিংক অবৈধ বা মেয়াদ শেষ। আবার Forgot password চেষ্টা করুন।'
-            : 'Reset link is invalid or expired. Try Forgot password again.'}
+            ? 'রিসেট নির্দেশ চেক করা হচ্ছে। নতুন পিন লিখুন।'
+            : 'Enter your new preferred 4-digit PIN below.'}
         </p>
         <Link to="/auth" className="btn btn-primary">
           {t(lang, 'login')}
@@ -46,12 +47,12 @@ export default function ResetPassword() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
-    if (password.length < 6) {
-      setError(lang === 'bn' ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষর' : 'Password must be at least 6 characters')
+    if (password.length !== 4) {
+      setError(lang === 'bn' ? 'পিন ঠিক ৪ সংখ্যার হতে হবে' : 'PIN must be exactly 4 digits')
       return
     }
     if (password !== confirm) {
-      setError(lang === 'bn' ? 'পাসওয়ার্ড মিলছে না' : 'Passwords do not match')
+      setError(lang === 'bn' ? 'পিন মিলছে না' : 'PINs do not match')
       return
     }
     setBusy(true)
@@ -61,6 +62,7 @@ export default function ResetPassword() {
         setError(res.error || 'Update failed')
         return
       }
+      showToast(lang === 'bn' ? '🔑 নতুন পিন সেভ হয়েছে!' : '🔑 New PIN saved successfully!', '🎉')
       setDone(true)
       navigate('/')
     } finally {
@@ -72,34 +74,40 @@ export default function ResetPassword() {
     <div className="page narrow auth-page">
       <h1 className="brand-hero compact">GreenVest</h1>
       <p className="lede center">
-        {lang === 'bn' ? 'নতুন পাসওয়ার্ড সেট করুন' : 'Set a new password'}
+        {lang === 'bn' ? '🔑 আপনার নতুন ৪-সংখ্যার পিন সেভ করুন' : '🔑 Set Your New 4-Digit Security PIN'}
       </p>
       <form className="form" onSubmit={onSubmit}>
         <label>
-          {t(lang, 'password')}
+          {lang === 'bn' ? 'নতুন ৪-সংখ্যার পিন (PIN)' : 'New 4-Digit PIN'}
           <input
             type="password"
+            inputMode="numeric"
+            maxLength={4}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => setPassword(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            placeholder={lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234'}
             required
-            minLength={6}
             autoComplete="new-password"
+            style={{ fontSize: '1.2rem', fontWeight: 'bold', letterSpacing: '0.2rem' }}
           />
         </label>
         <label>
-          {lang === 'bn' ? 'পাসওয়ার্ড আবার' : 'Confirm password'}
+          {lang === 'bn' ? 'পিন আবার লিখুন' : 'Confirm New PIN'}
           <input
             type="password"
+            inputMode="numeric"
+            maxLength={4}
             value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
+            onChange={(e) => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            placeholder={lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234'}
             required
-            minLength={6}
             autoComplete="new-password"
+            style={{ fontSize: '1.2rem', fontWeight: 'bold', letterSpacing: '0.2rem' }}
           />
         </label>
         {error && <p className="form-error">{error}</p>}
         <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? t(lang, 'pleaseWait') : lang === 'bn' ? 'পাসওয়ার্ড সেভ' : 'Save password'}
+          {busy ? t(lang, 'pleaseWait') : lang === 'bn' ? 'নতুন পিন সেভ করুন' : 'Save New PIN'}
         </button>
       </form>
     </div>

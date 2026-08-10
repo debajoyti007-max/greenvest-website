@@ -4,10 +4,11 @@ import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabase'
 import { saveDelivery } from '../lib/storage'
+import { showToast } from '../components/Toast'
 import type { Address } from '../types'
 
 export default function Profile() {
-  const { user, logout, updateUserProfile } = useAuth()
+  const { user, logout, updateUserProfile, updatePassword, adminResetUserPin } = useAuth()
   const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang } = useStore()
 
   const [addresses, setAddresses] = useState<Address[]>([])
@@ -21,6 +22,9 @@ export default function Profile() {
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [addrInput, setAddrInput] = useState('')
+
+  const [showPinForm, setShowPinForm] = useState(false)
+  const [newPinVal, setNewPinVal] = useState('')
 
   useEffect(() => {
     if (user) {
@@ -41,7 +45,7 @@ export default function Profile() {
     try {
       await updateUserProfile({ name: nameVal.trim() })
       setEditingName(false)
-    } catch (e) {
+    } catch {
       alert(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.')
     }
     setSaving(false)
@@ -53,8 +57,26 @@ export default function Profile() {
     try {
       await updateUserProfile({ phone: phoneVal.trim() })
       setEditingPhone(false)
-    } catch (e) {
+    } catch {
       alert(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.')
+    }
+    setSaving(false)
+  }
+
+  const handleUpdateMyPin = async () => {
+    if (!user || newPinVal.length !== 4) {
+      alert(lang === 'bn' ? '৪ সংখ্যার পিন দিন' : 'PIN must be 4 digits')
+      return
+    }
+    setSaving(true)
+    try {
+      await updatePassword(newPinVal)
+      await adminResetUserPin(user.id, newPinVal)
+      showToast(lang === 'bn' ? '🔑 আপনার নতুন ৪-সংখ্যার পিন সেভ হয়েছে!' : '🔑 New 4-digit PIN saved!', '🎉')
+      setNewPinVal('')
+      setShowPinForm(false)
+    } catch {
+      alert(lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed')
     }
     setSaving(false)
   }
@@ -76,7 +98,7 @@ export default function Profile() {
       setAddresses(updated)
       setAddrInput('')
       setShowAddForm(false)
-    } catch (e) {
+    } catch {
       alert(lang === 'bn' ? 'ঠিকানা আপডেট ব্যর্থ হয়েছে' : 'Address save failed')
     }
     setSaving(false)
@@ -318,9 +340,61 @@ export default function Profile() {
         )}
       </section>
 
-      {/* Preferences & Actions */}
+      {/* Preferences & Security Actions */}
       <section style={{ display: 'flex', gap: '0.75rem', flexDirection: 'column' }}>
-        <h3 style={{ margin: 0 }}>{lang === 'bn' ? '⚙️ সেটিংস' : '⚙️ Settings'}</h3>
+        <h3 style={{ margin: 0 }}>{lang === 'bn' ? '⚙️ সেটিংস ও অ্যাকাউন্ট সিকিউরিটি' : '⚙️ Settings & Security'}</h3>
+
+        {/* Change PIN Option */}
+        <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <strong>🔑 {lang === 'bn' ? 'আমার সিকিউরিটি পিন পরিবর্তন করুন' : 'Change My Security PIN'}</strong>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{lang === 'bn' ? 'নতুন পছন্দসই ৪-সংখ্যার পিন সেভ করুন' : 'Set your own preferred 4-digit PIN'}</div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowPinForm(!showPinForm)}
+            >
+              {showPinForm ? '✕' : (lang === 'bn' ? '🔑 পরিবর্তন করুন' : '🔑 Change PIN')}
+            </button>
+          </div>
+
+          {showPinForm && (
+            <div style={{ marginTop: '0.5rem', background: '#f0fdf4', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                {lang === 'bn' ? 'নতুন ৪-সংখ্যার সিকিউরিটি পিন (PIN) লিখুন:' : 'Enter New 4-Digit Security PIN:'}
+              </label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={newPinVal}
+                onChange={(e) => setNewPinVal(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder={lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234'}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '0.5rem', fontSize: '1.2rem', fontWeight: 'bold', letterSpacing: '0.2rem' }}
+              />
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={handleUpdateMyPin}
+                  disabled={saving}
+                >
+                  {saving ? '...' : (lang === 'bn' ? 'নতুন পিন সেভ করুন' : 'Save New PIN')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowPinForm(false)}
+                >
+                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>{lang === 'bn' ? 'ভাষা' : 'Language'}</div>
           <button onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
