@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
 import { formatWhatsAppPhone, orderStatusWhatsAppUrl, paymentVerifiedWhatsAppUrl, riderDispatchWhatsAppUrl } from '../../lib/whatsapp'
+import OrderChat from '../../components/OrderChat'
 import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled']
@@ -269,7 +270,7 @@ export default function SellerOrders() {
                       <span>{o.items.map(i => i.emoji).join('')} ₹{o.total}</span>
                       <span>·</span>
                       <span>{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      {o.deliverySlot && <span>· {o.deliverySlot === 'morning' ? '🌅' : '🌆'}</span>}
+                      <span>· 12–24h Delivery</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
@@ -387,6 +388,11 @@ export default function SellerOrders() {
                       <button type="button" onClick={() => printOrderInvoice(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🧾</button>
                       <button type="button" onClick={() => printThermalReceipt(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🖨️</button>
                       <button type="button" onClick={() => void handleDeleteOrder(o.id)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#fef2f2', border: '1px solid #fca5a5', fontSize: '0.8rem', cursor: 'pointer', color: '#dc2626', marginLeft: 'auto' }}>🗑️ {lang === 'bn' ? 'মুছে ফেলুন' : 'Delete DB'}</button>
+                    </div>
+
+                    {/* Order Chat */}
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <OrderChat orderId={o.id} role="seller" lang={lang} />
                     </div>
 
                     {/* Status dropdown (advanced) */}

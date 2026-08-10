@@ -8,20 +8,22 @@ import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/bu
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'
 import { HERO_IMAGE, resolveProductImage } from '../lib/productImages'
-import type { Grade, Lang, Product } from '../types'
+import type { Grade, Lang, Product, CartItem } from '../types'
 
 const GRADES: Grade[] = ['A', 'B', 'C']
 
 function ProductCard({
   p,
   lang,
-  added,
-  onPick,
+  cart,
+  onAdd,
+  onUpdateQty,
 }: {
   p: Product
   lang: Lang
-  added: string | null
-  onPick: (p: Product, grade: Grade) => void
+  cart: CartItem[]
+  onAdd: (p: Product, grade: Grade) => void
+  onUpdateQty: (productId: string, grade: Grade, qty: number) => void
 }) {
   const [cardGrade, setCardGrade] = useState<Grade>('B')
   const [showGradeInfo, setShowGradeInfo] = useState(false)
@@ -30,6 +32,15 @@ function ProductCard({
     p.inStock && p.stockQty != null && p.stockQty > 0 && p.stockQty <= LOW_STOCK_QTY
 
   const priceMap: Record<Grade, number> = { A: p.pA, B: p.pB, C: p.pC }
+
+  const cartItem = cart.find((c) => c.productId === p.id && c.grade === cardGrade)
+  const cartQty = cartItem ? cartItem.qty : 0
+
+  const gradeLabels: Record<Grade, { en: string; bn: string }> = {
+    A: { en: 'A (Premium)', bn: 'A (প্রিমিয়াম)' },
+    B: { en: 'B (Standard)', bn: 'B (দৈনন্দিন)' },
+    C: { en: 'C (Budget)', bn: 'C (সাশ্রয়ী)' },
+  }
 
   return (
     <article className={`product-tile premium-tile ${p.inStock ? '' : 'out'}`}>
@@ -79,25 +90,49 @@ function ProductCard({
         <div className="price-row">
           <span className="price">₹{priceMap[cardGrade]}</span>
           <span className="grade-price-label">
-            {lang === 'bn' ? `গ্রেড ${cardGrade}` : `Grade ${cardGrade}`}
-            <span className="grade-info-tip" onClick={() => setShowGradeInfo(!showGradeInfo)} style={{ cursor: 'pointer' }}>ℹ️</span>
+            {gradeLabels[cardGrade][lang]}
+            <span className="grade-info-tip" onClick={() => setShowGradeInfo(!showGradeInfo)} style={{ cursor: 'pointer' }}> ℹ️</span>
           </span>
         </div>
+
         {showGradeInfo && (
           <div style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem', background: '#f0fdf4', borderRadius: '6px', marginBottom: '0.4rem', lineHeight: 1.6 }}>
-            <div><strong>A</strong> — {lang === 'bn' ? 'প্রিমিয়াম মানের' : 'Premium quality'} · ₹{priceMap.A}/{p.unit}</div>
-            <div><strong>B</strong> — {lang === 'bn' ? 'দৈনন্দিন ব্যবহার' : 'Good daily use'} · ₹{priceMap.B}/{p.unit}</div>
-            <div><strong>C</strong> — {lang === 'bn' ? 'সাশ্রয়ী' : 'Budget friendly'} · ₹{priceMap.C}/{p.unit}</div>
+            <div><strong>A (Premium)</strong> — {lang === 'bn' ? 'তাজা ও সেরা কোয়ালিটি' : 'Fresh & premium quality'} · ₹{priceMap.A}/{p.unit}</div>
+            <div><strong>B (Standard)</strong> — {lang === 'bn' ? 'দৈনন্দিন রান্নায় ব্যবহার্য' : 'Good for daily cooking'} · ₹{priceMap.B}/{p.unit}</div>
+            <div><strong>C (Budget)</strong> — {lang === 'bn' ? 'সাশ্রয়ী বাজার মূল্য' : 'Economical budget price'} · ₹{priceMap.C}/{p.unit}</div>
           </div>
         )}
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={!p.inStock}
-          onClick={() => onPick(p, cardGrade)}
-        >
-          {added === p.id ? t(lang, 'added') : t(lang, 'addToCart')}
-        </button>
+
+        {cartQty > 0 ? (
+          <div className="card-stepper">
+            <button
+              type="button"
+              className="btn btn-secondary stepper-btn"
+              onClick={() => onUpdateQty(p.id, cardGrade, cartQty - 1)}
+            >
+              −
+            </button>
+            <span className="stepper-qty-badge">
+              <strong>{cartQty}</strong> {p.unit}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary stepper-btn"
+              onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1)}
+            >
+              +
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!p.inStock}
+            onClick={() => onAdd(p, cardGrade)}
+          >
+            + {t(lang, 'addToCart')}
+          </button>
+        )}
       </div>
     </article>
   )
@@ -105,12 +140,11 @@ function ProductCard({
 
 export default function Shop() {
   const { user } = useAuth()
-  const { products, orders, lang, addToCart, priceFor, cartTotal, reorderFromOrder, loading } = useStore()
+  const { products, orders, cart, lang, addToCart, updateCartQty, priceFor, cartTotal, reorderFromOrder, loading } = useStore()
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState<Product | null>(null)
   const [grade, setGrade] = useState<Grade>('B')
-  const [added, setAdded] = useState<string | null>(null)
 
   const lastOrder = useMemo(() => {
     if (!user) return null
@@ -169,16 +203,20 @@ export default function Shop() {
     return []
   }, [cartTotal, MIN_ORDER_AMOUNT, available, shortfall, priceFor])
 
-  const openPick = (p: Product, preGrade: Grade = 'B') => {
+  const handleAddDirect = (p: Product, g: Grade) => {
     if (!p.inStock) return
-    setPicked(p)
-    setGrade(preGrade)
+    addToCart(p.id, g, 1)
+    showToast(
+      lang === 'bn'
+        ? `${p.bnName} (গ্রেড ${g}) কার্টে যোগ হয়েছে!`
+        : `${p.name} (Grade ${g}) added to cart!`,
+      p.emoji || '✅'
+    )
   }
 
   const confirmAdd = () => {
     if (!picked) return
     addToCart(picked.id, grade, 1)
-    setAdded(picked.id)
     setPicked(null)
     showToast(
       lang === 'bn'
@@ -186,7 +224,6 @@ export default function Shop() {
         : `${picked.name} added to cart!`,
       picked.emoji || '✅'
     )
-    setTimeout(() => setAdded(null), 900)
   }
 
   const scrollToGrid = () => {
@@ -196,7 +233,6 @@ export default function Shop() {
   return (
     <div className="page shop-page">
       <section className="hero-full" style={{ backgroundImage: `url(${HERO_IMAGE})` }}>
-        {/* Stronger gradient overlay for contrast */}
         <div className="hero-full-shade hero-shade-strong" />
         <div className="hero-full-copy hero-animated">
           <p className="hero-kicker hero-anim-1">{t(lang, 'farmToDoor')}</p>
@@ -349,7 +385,14 @@ export default function Shop() {
               ) : (
                 <div className="product-grid premium-grid">
                   {available.map((p) => (
-                    <ProductCard key={p.id} p={p} lang={lang} added={added} onPick={(prod, g) => openPick(prod, g)} />
+                    <ProductCard
+                      key={p.id}
+                      p={p}
+                      lang={lang}
+                      cart={cart}
+                      onAdd={handleAddDirect}
+                      onUpdateQty={updateCartQty}
+                    />
                   ))}
                 </div>
               )}
@@ -368,7 +411,14 @@ export default function Shop() {
                 </p>
                 <div className="product-grid premium-grid">
                   {unavailable.map((p) => (
-                    <ProductCard key={p.id} p={p} lang={lang} added={added} onPick={(prod, g) => openPick(prod, g)} />
+                    <ProductCard
+                      key={p.id}
+                      p={p}
+                      lang={lang}
+                      cart={cart}
+                      onAdd={handleAddDirect}
+                      onUpdateQty={updateCartQty}
+                    />
                   ))}
                 </div>
               </section>

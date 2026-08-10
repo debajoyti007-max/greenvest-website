@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
+import OrderChat from '../components/OrderChat'
+import FreshnessRating from '../components/FreshnessRating'
 import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -214,6 +216,16 @@ export default function Orders() {
                   )}
                 </span>
               </footer>
+
+              {o.status === 'delivered' && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  <FreshnessRating orderId={o.id} lang={lang} />
+                </div>
+              )}
+
+              <div style={{ marginTop: '0.75rem' }}>
+                <OrderChat orderId={o.id} role="customer" lang={lang} />
+              </div>
               {(o.status !== 'cancelled' || (activeTab === 'recent' && !archivedIds.includes(o.id))) && (
                 <div className="form-actions" style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {o.status !== 'cancelled' && (

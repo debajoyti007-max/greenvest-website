@@ -23,6 +23,7 @@ const SellerHome = lazy(() => import('./pages/seller/SellerHome'))
 const SellerProducts = lazy(() => import('./pages/seller/SellerProducts'))
 const SellerOrders = lazy(() => import('./pages/seller/SellerOrders'))
 const SellerCustomers = lazy(() => import('./pages/seller/SellerCustomers'))
+const RiderView = lazy(() => import('./pages/RiderView'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
@@ -90,6 +91,14 @@ function AppRoutes() {
             element={
               <RequireRole roles={['seller', 'admin']}>
                 <SellerCustomers />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="rider"
+            element={
+              <RequireRole roles={['seller', 'admin']}>
+                <RiderView />
               </RequireRole>
             }
           />

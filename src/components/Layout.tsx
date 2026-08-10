@@ -8,6 +8,9 @@ import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { t } from '../lib/i18n'
 
+import MandiTicker from './MandiTicker'
+import NotificationBell from './NotificationBell'
+
 export default function Layout() {
   const { user, logout } = useAuth()
   const { cartCount, lang, setLang } = useStore()
@@ -27,6 +30,7 @@ export default function Layout() {
     <div className="app-shell">
       <NetworkStatus />
       <ConfigBanner />
+      <MandiTicker />
       <header className="site-header">
         <div className="header-inner">
           <Link to="/" className="brand" onClick={closeMenu}>
@@ -62,6 +66,7 @@ export default function Layout() {
             <NavLink to="/track" onClick={closeMenu}>
               {lang === 'bn' ? 'ট্র্যাক' : 'Track'}
             </NavLink>
+            <NotificationBell />
             {user && (
               <NavLink to="/orders" onClick={closeMenu}>
                 {t(lang, 'orders')}

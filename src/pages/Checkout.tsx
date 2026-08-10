@@ -2,23 +2,27 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { DELIVERY_SLOTS, DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
-import { calcDeliveryFee, getSlotCutoffStatus } from '../lib/delivery'
-import { t, zoneLabel } from '../lib/i18n'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
+import { calcDeliveryFee } from '../lib/delivery'
+import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
-import type { DeliverySlot, Address, Coupon, DeliveryZone } from '../types'
+import type { Address, Coupon, DeliveryZone } from '../types'
 
 export default function Checkout() {
   const { user } = useAuth()
   const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr, fetchAddresses, fetchDeliveryZones, saveAddress, validateCoupon } = useStore()
   const navigate = useNavigate()
-  const [address, setAddress] = useState('')
+
+  const [house, setHouse] = useState('')
+  const [landmark, setLandmark] = useState('')
+  const [area, setArea] = useState('')
+  const [geoCoords, setGeoCoords] = useState('')
+  const [detectingGps, setDetectingGps] = useState(false)
+
   const [phone, setPhone] = useState('')
-  const [pin, setPin] = useState('721632')
   const [utr, setUtr] = useState('')
   const [utrPasted, setUtrPasted] = useState(false)
-  const [slot, setSlot] = useState<DeliverySlot>('morning')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [prefilled, setPrefilled] = useState(false)
@@ -31,7 +35,7 @@ export default function Checkout() {
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null)
   const [couponSuccess, setCouponSuccess] = useState('')
 
-  const delivery = useMemo(() => calcDeliveryFee(pin, zones), [pin, zones])
+  const delivery = useMemo(() => calcDeliveryFee('', zones), [zones])
   const discountAmount = appliedCoupon?.discount ?? 0
   const grandTotal = Math.max(0, cartTotal + delivery.fee - discountAmount)
   const advance = Math.ceil(grandTotal * 0.5)
@@ -48,10 +52,8 @@ export default function Checkout() {
     if (!user) return
     const saved = getSavedDelivery(user.id)
     if (saved?.address) {
-      setAddress(saved.address)
+      setHouse(saved.address)
       setPhone(saved.phone || '')
-      if (saved.pin) setPin(saved.pin)
-      if (saved.deliverySlot) setSlot(saved.deliverySlot)
       setPrefilled(true)
       return
     }
@@ -59,10 +61,8 @@ export default function Checkout() {
       .filter((o) => o.userId === user.id && o.status !== 'cancelled')
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     if (last) {
-      setAddress(last.address)
+      setHouse(last.address)
       setPhone(last.phone)
-      if (last.pin) setPin(last.pin)
-      if (last.deliverySlot) setSlot(last.deliverySlot)
       setPrefilled(true)
       return
     }
@@ -98,15 +98,36 @@ export default function Checkout() {
     }
   }
 
+  const handleDetectGps = () => {
+    if (!navigator.geolocation) {
+      setError(lang === 'bn' ? 'আপনার ব্রাউজারে GPS সাপোর্ট নেই' : 'Geolocation is not supported by your browser')
+      return
+    }
+    setDetectingGps(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        const mapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+        setGeoCoords(mapUrl)
+        if (!area) setArea(lang === 'bn' ? 'GPS অবস্থান সংরক্ষিত' : 'GPS Location Saved')
+        setDetectingGps(false)
+      },
+      () => {
+        setDetectingGps(false)
+        setError(lang === 'bn' ? 'GPS অবস্থান পাওয়া যায়নি' : 'Unable to detect GPS position')
+      }
+    )
+  }
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
-    if (!address.trim() || !phone.trim() || !utr.trim() || !pin.trim()) {
-      setError(lang === 'bn' ? 'সব ঘর পূরণ করুন' : 'Please fill all fields')
-      return
-    }
-    if (pin.replace(/\D/g, '').length < 6) {
-      setError(lang === 'bn' ? 'সঠিক PIN দিন (৬ সংখ্যা)' : 'Enter a valid 6-digit PIN')
+
+    const fullAddress = `${house.trim()} ${landmark.trim() ? `(Near: ${landmark.trim()})` : ''} ${area.trim()} ${geoCoords ? `[Maps: ${geoCoords}]` : ''}`.trim()
+
+    if (!fullAddress || !phone.trim() || !utr.trim()) {
+      setError(lang === 'bn' ? 'সব ঘর পূরণ করুন' : 'Please fill all required fields')
       return
     }
     if (utr.trim().length < 8) {
@@ -133,9 +154,9 @@ export default function Checkout() {
     setSubmitting(true)
     try {
       if (saveAddressToDb) {
-        await saveAddress({ user_id: user.id, label: 'Saved', address, phone, pin, is_default: savedAddresses.length === 0 })
+        await saveAddress({ user_id: user.id, label: 'Saved', address: fullAddress, phone, pin: '721632', is_default: savedAddresses.length === 0 })
       }
-      const order = await placeOrder({ address, phone, pin, utr, deliverySlot: slot, discountAmount, zones })
+      const order = await placeOrder({ address: fullAddress, phone, pin: '721632', utr, deliverySlot: 'morning', discountAmount, zones })
       if (order) navigate(`/orders/success/${order.id}`)
       else setError(lang === 'bn' ? 'অর্ডার হয়নি' : 'Could not place order')
     } catch (err) {
@@ -214,7 +235,7 @@ export default function Checkout() {
             </div>
             <div>
               <dt>
-                {t(lang, 'delivery')} ({zoneLabel(lang, delivery.zone)})
+                {t(lang, 'delivery')}
               </dt>
               <dd>₹{delivery.fee}</dd>
             </div>
@@ -243,90 +264,68 @@ export default function Checkout() {
                 if (!e.target.value) return
                 const addr = savedAddresses.find(a => a.id === Number(e.target.value))
                 if (addr) {
-                  setAddress(addr.address)
+                  setHouse(addr.address)
                   setPhone(addr.phone)
-                  setPin(addr.pin)
                   setPrefilled(true)
                 }
               }}>
                 <option value="">{lang === 'bn' ? 'নতুন ঠিকানা লিখুন...' : 'Enter new address...'}</option>
                 {savedAddresses.map(a => (
-                  <option key={a.id} value={a.id}>{a.label || a.address.slice(0, 30)} - {a.pin}</option>
+                  <option key={a.id} value={a.id}>{a.label || a.address.slice(0, 35)}</option>
                 ))}
               </select>
             </label>
           )}
+
+          {/* Option 2: GPS Auto-Location Button */}
+          <div className="gps-detector-box" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.85rem 1rem', borderRadius: '12px', marginBottom: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleDetectGps}
+              disabled={detectingGps}
+              style={{ width: '100%', background: '#16a34a' }}
+            >
+              📍 {detectingGps ? (lang === 'bn' ? '⏳ অবস্থান চিহ্নিত করা হচ্ছে...' : '⏳ Detecting GPS...') : (lang === 'bn' ? 'আমার বর্তমান অবস্থান চিহ্নিত করুন (GPS)' : 'Auto-Fill My Location (GPS)')}
+            </button>
+            {geoCoords && <p className="hint" style={{ color: '#16a34a', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>✓ {lang === 'bn' ? 'GPS অবস্থান সফলভাবে পিন করা হয়েছে!' : 'GPS coordinates linked for delivery rider!'}</p>}
+          </div>
+
+          {/* Option 1: Guided 3-Field Address Box */}
           <label>
-            {t(lang, 'deliveryAddress')}
-            <textarea
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              rows={3}
-              required
-              placeholder={lang === 'bn' ? 'বাড়ি / রোড / এলাকা' : 'House / road / area'}
-            />
-          </label>
-          <label>
-            {t(lang, 'pinCode')}
+            🏡 {lang === 'bn' ? 'বাড়ি / শপ / পারা নাম' : 'House / Shop / Para Name'}
             <input
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              inputMode="numeric"
-              placeholder="721632"
+              value={house}
+              onChange={(e) => setHouse(e.target.value)}
               required
+              placeholder={lang === 'bn' ? 'যেমন: কয়েল বাগান, বিশ্বাস বাড়ি / House #12' : 'e.g. Biswas House, House #12'}
             />
           </label>
-          <p className="hint">
-            {t(lang, 'zone')}: {zoneLabel(lang, delivery.zone)} · {t(lang, 'fee')} ₹{delivery.fee} · {lang === 'bn' ? 'ডেলিভারি সময়' : 'ETA'}: {delivery.zone === 'local' ? '6-8 hours' : delivery.zone === 'nearby' ? '12-18 hours' : delivery.zone === 'far' ? '18-24 hours' : '12-24 hours'}
-          </p>
-          <fieldset className="slot-fieldset">
-            <legend>{lang === 'bn' ? 'ডেলিভারি স্লট' : 'Delivery slot'}</legend>
-            {(() => {
-              const cutoff = getSlotCutoffStatus()
-              return (
-                <>
-                  <label className="slot-option">
-                    <input
-                      type="radio"
-                      name="slot"
-                      checked={slot === 'morning'}
-                      onChange={() => setSlot('morning')}
-                    />
-                    <span>{DELIVERY_SLOTS.morning[lang]}</span>
-                    {cutoff.morningCountdown && !cutoff.morningNotice && (
-                      <span style={{ fontSize: '0.85rem', color: '#16a34a', marginLeft: '0.4rem' }}>
-                        — {cutoff.morningCountdown}
-                      </span>
-                    )}
-                    {cutoff.morningNotice && (
-                      <span className="slot-badge-warn" style={{ fontSize: '0.74rem', color: '#b45309', background: '#fef3c7', padding: '0.1rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
-                        {cutoff.morningNotice}
-                      </span>
-                    )}
-                  </label>
-                  <label className="slot-option">
-                    <input
-                      type="radio"
-                      name="slot"
-                      checked={slot === 'evening'}
-                      onChange={() => setSlot('evening')}
-                    />
-                    <span>{DELIVERY_SLOTS.evening[lang]}</span>
-                    {cutoff.eveningCountdown && !cutoff.eveningNotice && (
-                      <span style={{ fontSize: '0.85rem', color: '#16a34a', marginLeft: '0.4rem' }}>
-                        — {cutoff.eveningCountdown}
-                      </span>
-                    )}
-                    {cutoff.eveningNotice && (
-                      <span className="slot-badge-warn" style={{ fontSize: '0.74rem', color: '#b45309', background: '#fef3c7', padding: '0.1rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
-                        {cutoff.eveningNotice}
-                      </span>
-                    )}
-                  </label>
-                </>
-              )
-            })()}
-          </fieldset>
+
+          <label>
+            🏛️ {lang === 'bn' ? 'কাছের পরিচিত চিহ্নিত স্থান (ল্যান্ডমার্ক)' : 'Nearby Famous Landmark'}
+            <input
+              value={landmark}
+              onChange={(e) => setLandmark(e.target.value)}
+              placeholder={lang === 'bn' ? 'যেমন: প্রাইমারি স্কুলের পাশে / হাসপাতাল মোড়' : 'e.g. Near Primary School / Hospital More'}
+            />
+          </label>
+
+          <label>
+            📍 {lang === 'bn' ? 'গ্রাম / শহর / এলাকা' : 'Village / Town / Area Name'}
+            <input
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              required
+              placeholder={lang === 'bn' ? 'যেমন: কাঁথি শহর / সাবাজপুট' : 'e.g. Contai Town / Sabajput'}
+            />
+          </label>
+
+          {/* 12-24 Hour Guaranteed Delivery Timeframe Banner */}
+          <div className="delivery-timeframe-box" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.85rem 1rem', borderRadius: '12px', fontSize: '0.9rem', color: '#166534' }}>
+            ⚡ <strong>{lang === 'bn' ? 'ডেলিভারি সময়:' : 'Delivery Timeframe:'}</strong> {lang === 'bn' ? `অর্ডার করার ${DELIVERY_WINDOW_BN}-এর মধ্যে সরাসরি ডোরস্টেপ ডেলিভারি।` : `Guaranteed doorstep delivery within ${DELIVERY_WINDOW}.`}
+          </div>
+
           <label>
             {t(lang, 'phone')}
             <input
@@ -356,7 +355,7 @@ export default function Checkout() {
                 onClick={async () => {
                   try {
                     const text = await navigator.clipboard.readText()
-                    if (text && /^\\d{12,}$/.test(text.trim())) {
+                    if (text && /^\d{12,}$/.test(text.trim())) {
                       setUtr(text.trim())
                       setUtrPasted(true)
                     }
