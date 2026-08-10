@@ -4,7 +4,6 @@ import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { formatWhatsAppPhone } from '../../lib/whatsapp'
 import { showToast } from '../../components/Toast'
-import type { Order } from '../../types'
 
 type CustomerRow = {
   key: string
@@ -16,6 +15,7 @@ type CustomerRow = {
   spent: number
   lastOrderAt: string
   lastAddress: string
+  role: string
   isBlocked?: boolean
 }
 
@@ -27,56 +27,77 @@ function waCustomer(phone: string, name: string) {
   window.open(`https://wa.me/${digits}?text=${text}`, '_blank', 'noopener,noreferrer')
 }
 
-function buildCustomers(orders: Order[]): CustomerRow[] {
-  const map = new Map<string, CustomerRow>()
-  for (const o of orders) {
-    if (o.status === 'cancelled') continue
-    const key = o.userId || o.phone || o.userEmail
-    const prev = map.get(key)
-    const spentAdd = o.utrVerified ? o.total : 0
-    if (!prev) {
-      map.set(key, {
-        key,
-        userId: o.userId,
-        name: o.userName,
-        email: o.userEmail,
-        phone: o.phone,
-        orders: 1,
-        spent: spentAdd,
-        lastOrderAt: o.createdAt,
-        lastAddress: o.address,
-      })
-    } else {
-      prev.orders += 1
-      prev.spent += spentAdd
-      if (o.createdAt > prev.lastOrderAt) {
-        prev.lastOrderAt = o.createdAt
-        prev.lastAddress = o.address
-        prev.phone = o.phone
-        prev.name = o.userName
-      }
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => b.lastOrderAt.localeCompare(a.lastOrderAt))
-}
-
 export default function SellerCustomers() {
   const { user, users, adminResetUserPin, toggleBlockUser } = useAuth()
-  const { orders, lang } = useStore()
+  const { orders, lang, sendNotification } = useStore()
+
   const [resetModalUser, setResetModalUser] = useState<{ id: string; name: string; phone: string } | null>(null)
   const [newPin, setNewPin] = useState('1234')
+
+  const [notifModalTarget, setNotifModalTarget] = useState<{ id: string | 'all'; name: string } | null>(null)
+  const [notifTitle, setNotifTitle] = useState('')
+  const [notifMessage, setNotifMessage] = useState('')
+  const [sendingNotif, setSendingNotif] = useState(false)
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
   }
 
-  const customers = useMemo(() => {
-    const raw = buildCustomers(orders)
-    return raw.map(c => {
-      const matched = users.find(u => u.id === c.userId || u.email === c.email || u.phone === c.phone)
-      return { ...c, userId: matched?.id || c.userId, isBlocked: matched?.isBlocked }
+  // Combine users from AuthContext + Orders
+  const customerList: CustomerRow[] = useMemo(() => {
+    const userMap = new Map<string, CustomerRow>()
+
+    // 1. Add registered users
+    users.forEach((u) => {
+      userMap.set(u.id, {
+        key: u.id,
+        userId: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone || '',
+        orders: 0,
+        spent: 0,
+        lastOrderAt: u.createdAt,
+        lastAddress: 'No address saved yet',
+        role: u.role,
+        isBlocked: u.isBlocked,
+      })
     })
-  }, [orders, users])
+
+    // 2. Aggregate orders
+    orders.forEach((o) => {
+      if (o.status === 'cancelled') return
+      const key = o.userId || o.phone || o.userEmail
+      const existing = userMap.get(key) || userMap.get(o.userId)
+      const spentAdd = o.utrVerified ? o.total : 0
+
+      if (existing) {
+        existing.orders += 1
+        existing.spent += spentAdd
+        if (o.createdAt > existing.lastOrderAt) {
+          existing.lastOrderAt = o.createdAt
+          existing.lastAddress = o.address
+          existing.phone = existing.phone || o.phone
+          existing.name = existing.name || o.userName
+        }
+      } else {
+        userMap.set(key, {
+          key,
+          userId: o.userId,
+          name: o.userName,
+          email: o.userEmail,
+          phone: o.phone,
+          orders: 1,
+          spent: spentAdd,
+          lastOrderAt: o.createdAt,
+          lastAddress: o.address,
+          role: 'customer',
+        })
+      }
+    })
+
+    return Array.from(userMap.values()).sort((a, b) => b.lastOrderAt.localeCompare(a.lastOrderAt))
+  }, [users, orders])
 
   const handleResetPin = async () => {
     if (!resetModalUser) return
@@ -87,10 +108,9 @@ export default function SellerCustomers() {
     await adminResetUserPin(resetModalUser.id, newPin)
     showToast(lang === 'bn' ? `🔑 ${resetModalUser.name}-এর পিন রিসেট হয়েছে: ${newPin}` : `🔑 PIN reset for ${resetModalUser.name}: ${newPin}`, '🔑')
 
-    // Optional WhatsApp Message link
     const waDigits = formatWhatsAppPhone(resetModalUser.phone)
     const msg = encodeURIComponent(
-      `নমস্কার ${resetModalUser.name}, GreenVest-এ আপনার অ্যাকাউন্ট পিন নতুন পরিবর্তন করা হয়েছে: ${newPin}\nলগইন করুন: https://greenvest.shop/auth`
+      `নমস্কার ${resetModalUser.name}, GreenVest-এ আপনার অ্যাকাউন্ট পিন নতুন পরিবর্তন করা হয়েছে: ${newPin}\nলগইন করুন: https://greenvest.shop/auth`
     )
     if (window.confirm(lang === 'bn' ? 'হোয়াটসঅ্যাপে কাস্টমারকে নতুন পিন পাঠাবেন?' : 'Send new PIN to customer via WhatsApp?')) {
       window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
@@ -98,21 +118,55 @@ export default function SellerCustomers() {
     setResetModalUser(null)
   }
 
+  const handleSendNotification = async () => {
+    if (!notifModalTarget || !notifMessage.trim()) {
+      alert(lang === 'bn' ? 'নোটিফিকেশন মেসেজ লিখুন' : 'Enter notification message')
+      return
+    }
+    setSendingNotif(true)
+    try {
+      await sendNotification(
+        notifModalTarget.id,
+        notifTitle.trim() || (lang === 'bn' ? 'স্টোর মেসেজ' : 'Store Update'),
+        notifMessage.trim(),
+        user.name || 'GreenVest Seller'
+      )
+      setNotifModalTarget(null)
+      setNotifTitle('')
+      setNotifMessage('')
+    } finally {
+      setSendingNotif(false)
+    }
+  }
+
   return (
     <div className="page">
       <div className="page-head">
-        <h1>{lang === 'bn' ? 'কাস্টমার ম্যানেজমেন্ট' : 'Customer Management'}</h1>
-        <Link to="/seller" className="btn btn-ghost">
-          {lang === 'bn' ? '← ড্যাশবোর্ড' : '← Dashboard'}
-        </Link>
+        <h1>{lang === 'bn' ? 'কাস্টমার ও ইউজার ম্যানেজমেন্ট' : 'Customer & User Management'}</h1>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setNotifModalTarget({ id: 'all', name: lang === 'bn' ? 'সকল কাস্টমার (Broadcast)' : 'All Customers (Broadcast)' })
+              setNotifTitle(lang === 'bn' ? 'অফার ও নতুন স্টক আপডেট' : 'Special Offer & Stock Update')
+              setNotifMessage('')
+            }}
+          >
+            📢 {lang === 'bn' ? 'সবাইকে মেসেজ দিন (Broadcast)' : 'Broadcast to All Users'}
+          </button>
+          <Link to="/seller" className="btn btn-ghost">
+            {lang === 'bn' ? '← ড্যাশবোর্ড' : '← Dashboard'}
+          </Link>
+        </div>
       </div>
       <p className="lede">
         {lang === 'bn'
-          ? 'কাস্টমারদের যোগাযোগের তথ্য, পিন রিসেট ও ব্লক ম্যানেজমেন্ট।'
-          : 'Customer contacts, PIN reset, and order security management.'}
+          ? 'কাস্টমারদের সরাসরি নোটিফিকেশন মেসেজ পাঠান, পিন রিসেট করুন ও অ্যাকাউন্ট সিকিউরিটি চেক করুন।'
+          : 'Send live notifications to any customer or all customers at once, reset user PINs, and manage security.'}
       </p>
 
-      {customers.length === 0 ? (
+      {customerList.length === 0 ? (
         <p className="empty">{lang === 'bn' ? 'এখনো কোনো কাস্টমার নেই।' : 'No customers yet.'}</p>
       ) : (
         <div className="table-wrap">
@@ -121,6 +175,7 @@ export default function SellerCustomers() {
               <tr>
                 <th>{lang === 'bn' ? 'নাম' : 'Name'}</th>
                 <th>{lang === 'bn' ? 'যোগাযোগ' : 'Contact'}</th>
+                <th>{lang === 'bn' ? 'রোল' : 'Role'}</th>
                 <th>{lang === 'bn' ? 'অর্ডার' : 'Orders'}</th>
                 <th>{lang === 'bn' ? 'কিনেছে' : 'Spent'}</th>
                 <th>{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
@@ -128,14 +183,17 @@ export default function SellerCustomers() {
               </tr>
             </thead>
             <tbody>
-              {customers.map((c) => (
+              {customerList.map((c) => (
                 <tr key={c.key}>
                   <td>
                     <strong>{c.name}</strong>
                   </td>
                   <td>
-                    <div>{c.phone}</div>
+                    <div>{c.phone || 'No phone'}</div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{c.email}</div>
+                  </td>
+                  <td>
+                    <span className={`role-pill role-${c.role}`}>{c.role}</span>
                   </td>
                   <td>{c.orders}</td>
                   <td>₹{c.spent}</td>
@@ -147,6 +205,21 @@ export default function SellerCustomers() {
                     )}
                   </td>
                   <td className="actions" style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    {/* 📢 Send Notification Button */}
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                      onClick={() => {
+                        setNotifModalTarget({ id: c.userId || 'all', name: c.name })
+                        setNotifTitle(lang === 'bn' ? 'আপনার অর্ডারের নতুন খবর' : 'Update regarding your order')
+                        setNotifMessage('')
+                      }}
+                    >
+                      📩 {lang === 'bn' ? 'মেসেজ দিন' : 'Send Notification'}
+                    </button>
+
+                    {/* WhatsApp button */}
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
@@ -154,6 +227,7 @@ export default function SellerCustomers() {
                     >
                       💬 WhatsApp
                     </button>
+
                     {c.userId && (
                       <>
                         <button
@@ -184,11 +258,50 @@ export default function SellerCustomers() {
         </div>
       )}
 
+      {/* 📢 Send Notification Modal */}
+      {notifModalTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', width: '90%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h3 style={{ margin: 0 }}>
+              📢 {lang === 'bn' ? `${notifModalTarget.name}-কে লাইভ নোটিফিকেশন পাঠান` : `Send Live Notification to ${notifModalTarget.name}`}
+            </h3>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600 }}>
+              {lang === 'bn' ? 'শিরোনাম (Title):' : 'Title:'}
+              <input
+                type="text"
+                value={notifTitle}
+                onChange={(e) => setNotifTitle(e.target.value)}
+                placeholder={lang === 'bn' ? 'যেমন: বিশেষ ছাড় বা অর্ডারের নতুন মেসেজ' : 'e.g. Special Discount or Order Message'}
+                style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc' }}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600 }}>
+              {lang === 'bn' ? 'নোটিফিকেশন মেসেজ (Message):' : 'Notification Message:'}
+              <textarea
+                rows={4}
+                value={notifMessage}
+                onChange={(e) => setNotifMessage(e.target.value)}
+                placeholder={lang === 'bn' ? 'আপনার মেসেজ লিখুন...' : 'Write your message here...'}
+                style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc', resize: 'vertical' }}
+              />
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setNotifModalTarget(null)}>
+                {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+              </button>
+              <button className="btn btn-primary" onClick={handleSendNotification} disabled={sendingNotif}>
+                {sendingNotif ? '...' : (lang === 'bn' ? '📢 পাঠান' : '📢 Send Notification')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PIN Reset Modal */}
       {resetModalUser && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h3>🔑 {lang === 'bn' ? `${resetModalUser.name}-এর নতুন ৪-সংখ্যার পিন দিন` : `Set New 4-Digit PIN for ${resetModalUser.name}`}</h3>
+            <h3 style={{ margin: 0 }}>🔑 {lang === 'bn' ? `${resetModalUser.name}-এর নতুন ৪-সংখ্যার পিন দিন` : `Set New 4-Digit PIN for ${resetModalUser.name}`}</h3>
             <input
               type="text"
               inputMode="numeric"

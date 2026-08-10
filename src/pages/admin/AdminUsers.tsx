@@ -9,9 +9,15 @@ import type { Role } from '../../types'
 
 export default function AdminUsers() {
   const { user, users, setUserRole, adminResetUserPin, toggleBlockUser, mode: dataMode } = useAuth()
-  const { products, orders, lang } = useStore()
+  const { products, orders, lang, sendNotification } = useStore()
+
   const [resetModalUserId, setResetModalUserId] = useState<string | null>(null)
   const [newPin, setNewPin] = useState('1234')
+
+  const [notifModalTarget, setNotifModalTarget] = useState<{ id: string | 'all'; name: string } | null>(null)
+  const [notifTitle, setNotifTitle] = useState('')
+  const [notifMessage, setNotifMessage] = useState('')
+  const [sendingNotif, setSendingNotif] = useState(false)
 
   if (!user || user.role !== 'admin') {
     return <Navigate to="/" replace />
@@ -26,11 +32,10 @@ export default function AdminUsers() {
     showToast(lang === 'bn' ? `🔑 ${name}-এর পিন রিসেট হয়েছে: ${newPin}` : `🔑 PIN reset for ${name}: ${newPin}`, '🔑')
     setResetModalUserId(null)
 
-    // Optional WhatsApp message link prompt
     if (phoneStr) {
       const waDigits = formatWhatsAppPhone(phoneStr)
       const msg = encodeURIComponent(
-        `নমস্কার ${name}, GreenVest-এ আপনার অ্যাকাউন্ট পিন নতুন পরিবর্তন করা হয়েছে: ${newPin}\nলগইন করুন: https://greenvest.shop/auth`
+        `নমস্কার ${name}, GreenVest-এ আপনার অ্যাকাউন্ট পিন নতুন পরিবর্তন করা হয়েছে: ${newPin}\nলগইন করুন: https://greenvest.shop/auth`
       )
       if (window.confirm(lang === 'bn' ? 'হোয়াটসঅ্যাপে গ্রাহককে নতুন পিন পাঠাবেন?' : 'Send new PIN to customer via WhatsApp?')) {
         window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
@@ -38,13 +43,47 @@ export default function AdminUsers() {
     }
   }
 
+  const handleSendNotification = async () => {
+    if (!notifModalTarget || !notifMessage.trim()) {
+      alert(lang === 'bn' ? 'নোটিফিকেশন মেসেজ লিখুন' : 'Enter notification message')
+      return
+    }
+    setSendingNotif(true)
+    try {
+      await sendNotification(
+        notifModalTarget.id,
+        notifTitle.trim() || (lang === 'bn' ? 'অ্যাডমিন আপডেট' : 'Admin Update'),
+        notifMessage.trim(),
+        'GreenVest Admin'
+      )
+      setNotifModalTarget(null)
+      setNotifTitle('')
+      setNotifMessage('')
+    } finally {
+      setSendingNotif(false)
+    }
+  }
+
   return (
     <div className="page">
-      <h1>{lang === 'bn' ? 'অ্যাডমিন — ইউজার ও অ্যাকাউন্ট সিকিউরিটি' : 'Admin — User & Account Security'}</h1>
+      <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <h1>{lang === 'bn' ? 'অ্যাডমিন — ইউজার ও অ্যাকাউন্ট সিকিউরিটি' : 'Admin — User & Account Security'}</h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => {
+            setNotifModalTarget({ id: 'all', name: lang === 'bn' ? 'সকল কাস্টমার (Broadcast)' : 'All Users (Broadcast)' })
+            setNotifTitle(lang === 'bn' ? 'জরুরি অ্যানাউন্সমেন্ট' : 'Important Announcement')
+            setNotifMessage('')
+          }}
+        >
+          📢 {lang === 'bn' ? 'সবাইকে মেসেজ দিন (Broadcast)' : 'Broadcast to All Users'}
+        </button>
+      </div>
       <p className="lede">
         {lang === 'bn'
-          ? 'সেলার রোল ম্যানেজ করুন, ইউজারের পিন রিসেট করুন বা ফেক অ্যাকাউন্ট ব্লক করুন।'
-          : 'Manage seller roles, reset user PINs, or block suspicious accounts.'}
+          ? 'সেলার ও রাইডার রোল পরিচালনা করুন, লাইভ নোটিফিকেশন মেসেজ পাঠান, পিন রিসেট করুন বা অ্যাকাউন্ট সসপেন্ড করুন।'
+          : 'Manage roles, send live broadcast notifications, reset user PINs, or block accounts.'}
       </p>
 
       <div className="dash-grid admin-health">
@@ -95,6 +134,20 @@ export default function AdminUsers() {
                   )}
                 </td>
                 <td className="actions" style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {/* 📢 Send Notification Button */}
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                    onClick={() => {
+                      setNotifModalTarget({ id: u.id, name: u.name })
+                      setNotifTitle(lang === 'bn' ? 'অ্যাকাউন্ট আপডেট' : 'Account Update')
+                      setNotifMessage('')
+                    }}
+                  >
+                    📩 {lang === 'bn' ? 'মেসেজ দিন' : 'Send Message'}
+                  </button>
+
                   {u.role !== 'admin' && (
                     <>
                       {/* Seller Role Toggle */}
@@ -167,6 +220,45 @@ export default function AdminUsers() {
           </tbody>
         </table>
       </div>
+
+      {/* 📢 Send Notification Modal */}
+      {notifModalTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', width: '90%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h3 style={{ margin: 0 }}>
+              📢 {lang === 'bn' ? `${notifModalTarget.name}-কে লাইভ নোটিফিকেশন পাঠান` : `Send Live Notification to ${notifModalTarget.name}`}
+            </h3>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600 }}>
+              {lang === 'bn' ? 'শিরোনাম (Title):' : 'Title:'}
+              <input
+                type="text"
+                value={notifTitle}
+                onChange={(e) => setNotifTitle(e.target.value)}
+                placeholder={lang === 'bn' ? 'যেমন: বিশেষ বিবরণ বা আপডেট' : 'e.g. Special Details or Update'}
+                style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc' }}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600 }}>
+              {lang === 'bn' ? 'নোটিফিকেশন মেসেজ (Message):' : 'Notification Message:'}
+              <textarea
+                rows={4}
+                value={notifMessage}
+                onChange={(e) => setNotifMessage(e.target.value)}
+                placeholder={lang === 'bn' ? 'আপনার মেসেজ লিখুন...' : 'Write your message here...'}
+                style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc', resize: 'vertical' }}
+              />
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setNotifModalTarget(null)}>
+                {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+              </button>
+              <button className="btn btn-primary" onClick={handleSendNotification} disabled={sendingNotif}>
+                {sendingNotif ? '...' : (lang === 'bn' ? '📢 পাঠান' : '📢 Send Notification')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PIN Reset Modal */}
       {resetModalUserId && (

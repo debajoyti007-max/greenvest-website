@@ -46,8 +46,9 @@ function ensureAdminRole(profile: User | null): User | null {
   const email = (profile.email || '').toLowerCase()
   const phone = (profile.phone || '').trim()
   if (
-    email.includes('debajoyti') ||
-    email.includes('8170859653') ||
+    email === 'debajoyti007@gmail.com' ||
+    email.includes('debajoyti007') ||
+    email === '8170859653@greenvest.shop' ||
     phone === '8170859653'
   ) {
     return { ...profile, role: 'admin' }
@@ -83,12 +84,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsers(profile ? [profile] : [])
       return
     }
+    ensureSeeded()
+    const localUsers = getUsers()
+    let cloudUsers: User[] = []
     try {
-      const all = await fetchProfiles()
-      setUsers(all)
+      cloudUsers = await fetchProfiles()
     } catch {
-      setUsers(profile ? [profile] : [])
+      cloudUsers = []
     }
+
+    const map = new Map<string, User>()
+    // 1. Add local & seeded demo users first
+    localUsers.forEach((u) => {
+      map.set(u.id, u)
+    })
+    // 2. Add cloud profiles (overriding local if id matches)
+    cloudUsers.forEach((u) => {
+      map.set(u.id, u)
+    })
+    // 3. Ensure current active logged in profile is present
+    if (profile) {
+      map.set(profile.id, profile)
+    }
+
+    const merged = Array.from(map.values())
+    setUsers(merged)
   }, [])
 
   const applyCloudSession = useCallback(
@@ -196,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) {
           const msg = error.message || 'Login failed'
           if (/invalid login credentials/i.test(msg) || /email not confirmed/i.test(msg)) {
-            if (authEmail.includes('debajoyti') || authEmail.includes('8170859653')) {
+            if (authEmail.includes('debajoyti007') || authEmail.includes('8170859653')) {
               try {
                 const { data: adminData } = await supabase.auth.signUp({
                   email: authEmail,

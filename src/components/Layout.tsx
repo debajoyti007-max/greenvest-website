@@ -10,6 +10,7 @@ import { t } from '../lib/i18n'
 
 import MandiTicker from './MandiTicker'
 import NotificationBell from './NotificationBell'
+import CustomerNotificationBanner from './CustomerNotificationBanner'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -28,6 +29,7 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
+      <CustomerNotificationBanner />
       <NetworkStatus />
       <ConfigBanner />
       <MandiTicker />

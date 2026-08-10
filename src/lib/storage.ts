@@ -139,3 +139,12 @@ export function saveDelivery(userId: string, data: SavedDelivery) {
 export function uid(prefix = 'id') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
+
+export function getAppNotifications(): import('../types').AppNotification[] {
+  return read<import('../types').AppNotification[]>('gv_app_notifications', [])
+}
+
+export function saveAppNotifications(notifications: import('../types').AppNotification[]) {
+  write('gv_app_notifications', notifications)
+}
+

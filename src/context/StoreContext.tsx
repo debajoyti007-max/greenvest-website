@@ -39,6 +39,8 @@ import {
   getLang,
   getOrders,
   getProducts,
+  getAppNotifications,
+  saveAppNotifications,
   saveCart,
   saveDelivery,
   saveOrders,
@@ -47,7 +49,8 @@ import {
   STORE_EVENT,
   uid,
 } from '../lib/storage'
-import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone } from '../types'
+import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification } from '../types'
+import { showToast } from '../components/Toast'
 import { useAuth } from './AuthContext'
 
 interface PlaceOrderOpts {
@@ -94,6 +97,8 @@ interface StoreContextValue {
   saveDailyReport: (report: DailyReport) => Promise<void>
   fetchDailyReport: (date: string) => Promise<DailyReport | null>
   fetchDeliveryZones: () => Promise<DeliveryZone[]>
+  notifications: AppNotification[]
+  sendNotification: (targetUserId: string | 'all', title: string, message: string, senderName?: string) => Promise<void>
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null)
@@ -106,12 +111,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([])
   const [lang, setLangState] = useState<Lang>('en')
   const [loading, setLoading] = useState(true)
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
 
   const refreshLocal = useCallback(() => {
     ensureSeeded()
     setProducts(getProducts())
     setCart(getCart())
     setOrders(getOrders())
+    setNotifications(getAppNotifications())
     const l = getLang()
     setLangState(l)
     document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
@@ -548,7 +555,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return fetchDeliveryZonesApi()
   }, [cloud])
 
-  const value = useMemo(
+  const sendNotification = useCallback(
+    async (targetUserId: string | 'all', title: string, message: string, senderName = 'GreenVest Seller') => {
+      const newNotif: AppNotification = {
+        id: uid('notif'),
+        userId: targetUserId,
+        title: title.trim(),
+        message: message.trim(),
+        sender: senderName,
+        createdAt: new Date().toISOString(),
+      }
+      const current = getAppNotifications()
+      const next = [newNotif, ...current]
+      saveAppNotifications(next)
+      setNotifications(next)
+      showToast(lang === 'bn' ? '📢 নোটিফিকেশন পাঠানো হয়েছে!' : '📢 Notification sent successfully!', '📢')
+    },
+    [lang],
+  )
+
+  const value = useMemo<StoreContextValue>(
     () => ({
       products,
       cart,
@@ -583,6 +609,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveDailyReport,
       fetchDailyReport,
       fetchDeliveryZones,
+      notifications,
+      sendNotification,
     }),
     [
       products,
@@ -618,6 +646,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveDailyReport,
       fetchDailyReport,
       fetchDeliveryZones,
+      notifications,
+      sendNotification,
     ],
   )
 
