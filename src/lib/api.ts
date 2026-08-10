@@ -197,6 +197,13 @@ export async function fetchProfiles(): Promise<User[]> {
   return (data as ProfileRow[]).map(mapProfile)
 }
 
+export async function checkAccountExistsByEmail(email: string): Promise<User | null> {
+  const client = requireClient()
+  const { data, error } = await client.from('profiles').select('*').eq('email', email.toLowerCase()).maybeSingle()
+  if (error) return null
+  return data ? mapProfile(data as ProfileRow) : null
+}
+
 export async function updateProfileRole(userId: string, role: Role): Promise<void> {
   const client = requireClient()
   const { error } = await client.from('profiles').update({ role }).eq('id', userId)

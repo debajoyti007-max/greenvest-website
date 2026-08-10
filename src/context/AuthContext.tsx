@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfile, fetchProfiles, updateProfileRole } from '../lib/api'
+import { fetchProfile, fetchProfiles, updateProfileRole, checkAccountExistsByEmail } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   ensureSeeded,
@@ -39,6 +39,7 @@ interface AuthContextValue {
   adminResetUserPin: (userId: string, newPin: string) => Promise<AuthResult>
   toggleBlockUser: (userId: string, isBlocked: boolean) => Promise<AuthResult>
   refresh: () => Promise<void>
+  checkAccountExists: (email: string) => Promise<boolean>
 }
 
 function ensureAdminRole(profile: User | null): User | null {
@@ -529,6 +530,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [cloud, user],
   )
 
+  const checkAccountExists = useCallback(
+    async (email: string): Promise<boolean> => {
+      const authEmail = formatAuthIdentifier(email)
+      if (cloud && supabase) {
+        try {
+          const found = await checkAccountExistsByEmail(authEmail)
+          return !!found
+        } catch {
+          return false
+        }
+      }
+      if (allowLocal) {
+        ensureSeeded()
+        const all = getUsers()
+        return all.some((u) => u.email.toLowerCase() === authEmail.toLowerCase())
+      }
+      return false
+    },
+    [cloud, allowLocal],
+  )
+
   const value = useMemo(
     () => ({
       user,
@@ -546,6 +568,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adminResetUserPin,
       toggleBlockUser,
       refresh,
+      checkAccountExists,
     }),
     [
       user,
@@ -563,6 +586,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adminResetUserPin,
       toggleBlockUser,
       refresh,
+      checkAccountExists,
     ],
   )
 
