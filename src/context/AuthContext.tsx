@@ -54,8 +54,12 @@ function ensureAdminRole(profile: User | null): User | null {
   return profile
 }
 
+export function normalizeText(str: string): string {
+  return str.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
 export function formatAuthIdentifier(input: string): string {
-  const trimmed = input.trim().toLowerCase()
+  const trimmed = normalizeText(input)
   const digitsOnly = trimmed.replace(/\D/g, '')
   if (digitsOnly.length >= 10 && !trimmed.includes('@')) {
     const last10 = digitsOnly.slice(-10)

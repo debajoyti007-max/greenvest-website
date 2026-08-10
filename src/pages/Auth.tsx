@@ -39,7 +39,7 @@ export default function Auth() {
   if (user) return <Navigate to={redirectFor(user.role)} replace />
 
   const getTargetEmail = (raw: string) => {
-    const trimmed = raw.trim()
+    const trimmed = raw.trim().toLowerCase().replace(/\s+/g, '')
     if (trimmed.includes('@')) return trimmed
     const digits = cleanDigits(trimmed)
     return digits ? `${digits}@greenvest.shop` : trimmed
@@ -51,7 +51,7 @@ export default function Auth() {
     setBusy(true)
     try {
       const targetMail = getTargetEmail(identifier)
-      const res = await login(targetMail, pass)
+      const res = await login(targetMail, pass.trim())
       if (!res.ok) {
         setError(
           res.error ||
@@ -70,17 +70,20 @@ export default function Auth() {
     setError('')
     setInfo('')
 
+    const cleanName = name.trim().replace(/\s+/g, ' ')
+    const cleanId = emailOrPhone.trim()
+
     if (mode === 'login') {
-      await doLogin(emailOrPhone, password)
+      await doLogin(cleanId, password)
       return
     }
 
     if (mode === 'forgot') {
-      if (!name.trim()) {
+      if (!cleanName) {
         setError(lang === 'bn' ? 'অ্যাকাউন্টের নাম (ইউজারনেম) লিখুন' : 'Enter your registered Username / Full Name')
         return
       }
-      const targetMail = getTargetEmail(emailOrPhone)
+      const targetMail = getTargetEmail(cleanId)
       if (!targetMail) {
         setError(lang === 'bn' ? 'মোবাইল নম্বর বা জিমেইল দিন' : 'Enter mobile number or Gmail address')
         return
@@ -90,8 +93,8 @@ export default function Auth() {
         await resetPassword(targetMail)
         setInfo(
           lang === 'bn'
-            ? `✅ অ্যাকাউন্টের নাম (${name.trim()}) ও আইডি (${emailOrPhone.trim()}) ভেরিফাই করা হয়েছে! আপনার নতুন ৪-সংখ্যার পিন দিয়ে লগইন করুন।`
-            : `✅ Verified account (${name.trim()}) for ${emailOrPhone.trim()}! You can now login with your new 4-digit PIN.`
+            ? `✅ অ্যাকাউন্টের নাম (${cleanName}) ও আইডি (${cleanId}) ভেরিফাই করা হয়েছে! আপনার নতুন ৪-সংখ্যার পিন দিয়ে লগইন করুন।`
+            : `✅ Verified account (${cleanName}) for ${cleanId}! You can now login with your new 4-digit PIN.`
         )
         setMode('login')
       } catch (err) {
