@@ -358,12 +358,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: 'customer',
           })
           const rawProfile = await fetchProfile(data.user.id)
-          const profile = ensureAdminRole(rawProfile)
-          if (profile) {
-            setUser(profile)
-            await loadUsersIfStaff(profile)
-            return { ok: true, user: profile }
+          const profile: User = ensureAdminRole(rawProfile) || {
+            id: data.user.id,
+            email: authEmail,
+            password,
+            name: name.trim(),
+            role: 'customer',
+            createdAt: new Date().toISOString(),
           }
+          // Save to local storage as well to sync across staff views
+          const all = getUsers()
+          saveUsers([...all, profile])
+          setUser(profile)
+          await loadUsersIfStaff(profile)
+          return { ok: true, user: profile }
         }
         return { ok: true }
       }
