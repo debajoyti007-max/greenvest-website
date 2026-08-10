@@ -11,8 +11,7 @@ export default function AdminUsers() {
   const { user, users, setUserRole, adminResetUserPin, toggleBlockUser, mode: dataMode } = useAuth()
   const { products, orders, lang, sendNotification } = useStore()
 
-  const [resetModalUserId, setResetModalUserId] = useState<string | null>(null)
-  const [newPin, setNewPin] = useState('1234')
+  const [resettingPinId, setResettingPinId] = useState<string | null>(null)
 
   const [notifModalTarget, setNotifModalTarget] = useState<{ id: string | 'all'; name: string } | null>(null)
   const [notifTitle, setNotifTitle] = useState('')
@@ -23,23 +22,49 @@ export default function AdminUsers() {
     return <Navigate to="/" replace />
   }
 
-  const handleResetPin = async (uId: string, name: string, phoneStr: string) => {
-    if (!newPin || newPin.length !== 4) {
-      alert(lang === 'bn' ? '৪ সংখ্যার পিন দিন' : 'Enter 4-digit PIN')
-      return
-    }
-    await adminResetUserPin(uId, newPin)
-    showToast(lang === 'bn' ? `🔑 ${name}-এর পিন রিসেট হয়েছে: ${newPin}` : `🔑 PIN reset for ${name}: ${newPin}`, '🔑')
-    setResetModalUserId(null)
+  const isProtectedAdmin = (email: string) => email.toLowerCase().replace('@greenvest.shop', '@gmail.com').includes('debajoyti007')
 
-    if (phoneStr) {
-      const waDigits = formatWhatsAppPhone(phoneStr)
-      const msg = encodeURIComponent(
-        `নমস্কার ${name}, GreenVest-এ আপনার অ্যাকাউন্ট পিন নতুন পরিবর্তন করা হয়েছে: ${newPin}\nলগইন করুন: https://greenvest.shop/auth`
+  const handleResetPin = async (u: { id: string; name: string; phone?: string; email: string }) => {
+    if (!window.confirm(
+      lang === 'bn'
+        ? `${u.name}-এর পিন রিসেট করবেন? ইউজারকে নতুন পিন সেট করতে হবে।`
+        : `Reset PIN for ${u.name}? User will need to set a new PIN via Forgot PIN.`
+    )) return
+
+    setResettingPinId(u.id)
+    try {
+      // Reset to temp PIN "0000"
+      await adminResetUserPin(u.id, '0000')
+
+      // Send in-app notification to user
+      sendNotification(
+        u.id,
+        lang === 'bn' ? '🔑 পিন রিসেট হয়েছে' : '🔑 PIN Reset by Admin',
+        lang === 'bn'
+          ? 'আপনার পিন অ্যাডমিন দ্বারা রিসেট হয়েছে। অস্থায়ী পিন "0000" দিয়ে লগইন করুন এবং Profile থেকে নতুন পিন সেট করুন।'
+          : 'Your PIN was reset by Admin. Login with temporary PIN "0000" and set a new PIN from your Profile page.'
       )
-      if (window.confirm(lang === 'bn' ? 'হোয়াটসঅ্যাপে গ্রাহককে নতুন পিন পাঠাবেন?' : 'Send new PIN to customer via WhatsApp?')) {
-        window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
+
+      showToast(
+        lang === 'bn'
+          ? `✅ ${u.name}-এর পিন রিসেট হয়েছে। ইউজারকে নোটিফিকেশন পাঠানো হয়েছে।`
+          : `✅ PIN reset for ${u.name}. User notified to set new PIN.`,
+        '🔑'
+      )
+
+      // Optionally send WhatsApp
+      const phoneStr = u.phone || u.email
+      if (phoneStr) {
+        const waDigits = formatWhatsAppPhone(phoneStr)
+        const msg = encodeURIComponent(
+          `নমস্কার ${u.name}, GreenVest-এ আপনার পিন রিসেট করা হয়েছে।\nঅস্থায়ী পিন: 0000\nলগইন করে নতুন পিন সেট করুন: https://greenvest.shop/auth`
+        )
+        if (window.confirm(lang === 'bn' ? 'হোয়াটসঅ্যাপে জানাবেন?' : 'Notify via WhatsApp?')) {
+          window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
+        }
       }
+    } finally {
+      setResettingPinId(null)
     }
   }
 
@@ -148,59 +173,97 @@ export default function AdminUsers() {
                     📩 {lang === 'bn' ? 'মেসেজ দিন' : 'Send Message'}
                   </button>
 
-                  {u.role !== 'admin' && (
+                  {/* === ROLE BUTTONS === */}
+                  {isProtectedAdmin(u.email) ? (
+                    <span style={{ color: '#b45309', fontWeight: 700, fontSize: '0.8rem', background: '#fef3c7', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
+                      🛡️ {lang === 'bn' ? 'সুরক্ষিত সুপার অ্যাডমিন' : 'Protected Super Admin'}
+                    </span>
+                  ) : (
                     <>
-                      {/* Seller Role Toggle */}
-                      {u.role !== 'seller' ? (
+                      {/* Make Admin / Revoke Admin */}
+                      {u.role !== 'admin' ? (
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
-                          onClick={() => void setUserRole(u.id, 'seller')}
+                          style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}
+                          onClick={() => {
+                            if (window.confirm(lang === 'bn' ? `${u.name}-কে অ্যাডমিন বানাবেন?` : `Make ${u.name} an Admin?`)) {
+                              void setUserRole(u.id, 'admin' as Role)
+                            }
+                          }}
                         >
-                          {lang === 'bn' ? 'সেলার করুন' : 'Make seller'}
+                          👑 {lang === 'bn' ? 'অ্যাডমিন করুন' : 'Make Admin'}
                         </button>
                       ) : (
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
-                          onClick={() => void setUserRole(u.id, 'customer' as Role)}
+                          style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5' }}
+                          onClick={() => {
+                            if (window.confirm(lang === 'bn' ? `${u.name}-এর অ্যাডমিন রোল বাতিল করবেন?` : `Revoke Admin from ${u.name}?`)) {
+                              void setUserRole(u.id, 'customer' as Role)
+                            }
+                          }}
                         >
-                          {lang === 'bn' ? 'সেলার বাতিল' : 'Revoke seller'}
+                          👑 {lang === 'bn' ? 'অ্যাডমিন বাতিল' : 'Revoke Admin'}
                         </button>
+                      )}
+
+                      {/* Seller Role Toggle */}
+                      {u.role !== 'admin' && (
+                        u.role !== 'seller' ? (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => void setUserRole(u.id, 'seller')}
+                          >
+                            {lang === 'bn' ? 'সেলার করুন' : 'Make Seller'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => void setUserRole(u.id, 'customer' as Role)}
+                          >
+                            {lang === 'bn' ? 'সেলার বাতিল' : 'Revoke Seller'}
+                          </button>
+                        )
                       )}
 
                       {/* Rider Role Toggle */}
-                      {u.role !== 'rider' ? (
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => void setUserRole(u.id, 'rider')}
-                        >
-                          🛵 {lang === 'bn' ? 'রাইডার করুন' : 'Make Rider'}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => void setUserRole(u.id, 'customer' as Role)}
-                        >
-                          🛵 {lang === 'bn' ? 'রাইডার বাতিল' : 'Revoke Rider'}
-                        </button>
+                      {u.role !== 'admin' && (
+                        u.role !== 'rider' ? (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => void setUserRole(u.id, 'rider')}
+                          >
+                            🛵 {lang === 'bn' ? 'রাইডার করুন' : 'Make Rider'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => void setUserRole(u.id, 'customer' as Role)}
+                          >
+                            🛵 {lang === 'bn' ? 'রাইডার বাতিল' : 'Revoke Rider'}
+                          </button>
+                        )
                       )}
 
-                      {/* 🔑 Reset PIN Button */}
+                      {/* 🔑 Reset PIN — auto-reset, no modal */}
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        onClick={() => {
-                          setResetModalUserId(u.id)
-                          setNewPin('1234')
-                        }}
+                        disabled={resettingPinId === u.id}
+                        onClick={() => void handleResetPin(u)}
                       >
-                        🔑 {lang === 'bn' ? 'পিন রিসেট' : 'Reset PIN'}
+                        {resettingPinId === u.id
+                          ? (lang === 'bn' ? '⏳ রিসেট হচ্ছে...' : '⏳ Resetting...')
+                          : (lang === 'bn' ? '🔑 পিন রিসেট' : '🔑 Reset PIN')}
                       </button>
 
-                      {/* 🚫 Block / Unblock Button */}
+                      {/* 🚫 Block / Unblock */}
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
@@ -210,9 +273,6 @@ export default function AdminUsers() {
                         {u.isBlocked ? (lang === 'bn' ? '🔓 আনব্লক' : '🔓 Unblock') : (lang === 'bn' ? '🚫 ব্লক' : '🚫 Block')}
                       </button>
                     </>
-                  )}
-                  {u.role === 'admin' && (
-                    <span className="muted">{lang === 'bn' ? 'সুরক্ষিত অ্যাডমিন' : 'Protected Admin'}</span>
                   )}
                 </td>
               </tr>
@@ -260,36 +320,7 @@ export default function AdminUsers() {
         </div>
       )}
 
-      {/* PIN Reset Modal */}
-      {resetModalUserId && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h3>🔑 {lang === 'bn' ? 'নতুন ৪-সংখ্যার পিন দিন' : 'Set New 4-Digit PIN'}</h3>
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={4}
-              value={newPin}
-              onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              style={{ fontSize: '1.2rem', fontWeight: 'bold', padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc', letterSpacing: '0.2rem' }}
-            />
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => setResetModalUserId(null)}>
-                {lang === 'bn' ? 'বাতিল' : 'Cancel'}
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  const targetUser = users.find((u) => u.id === resetModalUserId)
-                  if (targetUser) handleResetPin(targetUser.id, targetUser.name, targetUser.phone || targetUser.email)
-                }}
-              >
-                {lang === 'bn' ? 'পিন আপডেট করুন' : 'Save PIN'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* PIN Reset Modal removed — now uses one-click auto-reset with notification */}
     </div>
   )
 }
