@@ -56,36 +56,47 @@ export default function Layout() {
           </button>
 
           <nav className={`nav-links ${menuOpen ? 'open' : ''}`} aria-label="Main">
-            <NavLink to="/" end onClick={closeMenu}>
-              {t(lang, 'shop')}
-            </NavLink>
-            <NavLink to="/cart" onClick={closeMenu}>
-              {t(lang, 'cart')}
-              {cartCount > 0 && <span className="badge">{cartCount}</span>}
-            </NavLink>
-            <NavLink to="/track" onClick={closeMenu}>
-              {lang === 'bn' ? 'ট্র্যাক' : 'Track'}
-            </NavLink>
-            <NotificationBell />
-            {user && (
-              <NavLink to="/orders" onClick={closeMenu}>
-                {t(lang, 'orders')}
-              </NavLink>
-            )}
-            {user && (
-              <NavLink to="/profile" onClick={closeMenu}>
-                {lang === 'bn' ? '👤 প্রোফাইল' : '👤 Profile'}
-              </NavLink>
-            )}
-            {(user?.role === 'seller' || user?.role === 'admin') && (
-              <NavLink to="/seller" onClick={closeMenu}>
-                {t(lang, 'seller')}
-              </NavLink>
-            )}
-            {user?.role === 'admin' && (
-              <NavLink to="/admin" onClick={closeMenu}>
-                {t(lang, 'admin')}
-              </NavLink>
+            {user?.role === 'rider' ? (
+              <>
+                <NavLink to="/rider" onClick={closeMenu}>
+                  🛵 {lang === 'bn' ? 'রাইডার ড্যাশবোর্ড' : 'Rider View'}
+                </NavLink>
+                <NotificationBell />
+              </>
+            ) : (
+              <>
+                <NavLink to="/" end onClick={closeMenu}>
+                  {t(lang, 'shop')}
+                </NavLink>
+                <NavLink to="/cart" onClick={closeMenu}>
+                  {t(lang, 'cart')}
+                  {cartCount > 0 && <span className="badge">{cartCount}</span>}
+                </NavLink>
+                <NavLink to="/track" onClick={closeMenu}>
+                  {lang === 'bn' ? 'ট্র্যাক' : 'Track'}
+                </NavLink>
+                <NotificationBell />
+                {user && (
+                  <NavLink to="/orders" onClick={closeMenu}>
+                    {t(lang, 'orders')}
+                  </NavLink>
+                )}
+                {user && (
+                  <NavLink to="/profile" onClick={closeMenu}>
+                    {lang === 'bn' ? '👤 প্রোফাইল' : '👤 Profile'}
+                  </NavLink>
+                )}
+                {(user?.role === 'seller' || user?.role === 'admin') && (
+                  <NavLink to="/seller" onClick={closeMenu}>
+                    {t(lang, 'seller')}
+                  </NavLink>
+                )}
+                {user?.role === 'admin' && (
+                  <NavLink to="/admin" onClick={closeMenu}>
+                    {t(lang, 'admin')}
+                  </NavLink>
+                )}
+              </>
             )}
           </nav>
 

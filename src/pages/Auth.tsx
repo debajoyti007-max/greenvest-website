@@ -9,6 +9,7 @@ import type { Role } from '../types'
 function redirectFor(role: Role) {
   if (role === 'admin') return '/admin'
   if (role === 'seller') return '/seller'
+  if (role === 'rider') return '/rider'
   return '/'
 }
 

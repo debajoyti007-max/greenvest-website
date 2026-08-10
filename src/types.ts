@@ -1,4 +1,4 @@
-export type Role = 'customer' | 'seller' | 'admin'
+export type Role = 'customer' | 'rider' | 'seller' | 'admin'
 export type Grade = 'A' | 'B' | 'C'
 export type OrderStatus = 'pending' | 'advance_paid' | 'confirmed' | 'delivered' | 'cancelled'
 export type Season = 'all' | 'summer' | 'winter' | 'rainy'
@@ -11,6 +11,7 @@ export interface User {
   name: string
   role: Role
   phone?: string
+  isBlocked?: boolean
   createdAt: string
 }
 

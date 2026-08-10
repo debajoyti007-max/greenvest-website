@@ -36,6 +36,8 @@ interface AuthContextValue {
   updatePassword: (password: string) => Promise<AuthResult>
   setUserRole: (userId: string, role: Role) => Promise<void>
   updateUserProfile: (data: { name?: string; phone?: string }) => Promise<void>
+  adminResetUserPin: (userId: string, newPin: string) => Promise<AuthResult>
+  toggleBlockUser: (userId: string, isBlocked: boolean) => Promise<AuthResult>
   refresh: () => Promise<void>
 }
 
@@ -107,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               authData.user.user_metadata?.full_name ||
               authData.user.user_metadata?.name ||
               (email.includes('@') ? email.split('@')[0] : 'User')
-            const role = email.includes('8170859653') ? 'admin' : 'customer'
+            const role = email.includes('8170859653') || email.includes('debajoyti007') ? 'admin' : 'customer'
             await supabase.from('profiles').upsert({
               id: userId,
               email,
@@ -129,23 +131,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshLocal = useCallback(() => {
     ensureSeeded()
+    const id = getSessionUserId()
     const all = getUsers()
     setUsers(all)
-    const sid = getSessionUserId()
-    const found = sid ? all.find((u) => u.id === sid) ?? null : null
-    setUser(ensureAdminRole(found))
+    if (!id) {
+      setUser(null)
+    } else {
+      const found = all.find((u) => u.id === id) || null
+      setUser(found ? ensureAdminRole(found) : null)
+    }
   }, [])
 
   const refresh = useCallback(async () => {
-    if (localStorage.getItem('gv_remember') === '0' && !sessionStorage.getItem('gv_session_only')) {
-      if (cloud && supabase) await supabase.auth.signOut()
-      else setSessionUserId(null)
-      setUser(null)
-      setUsers([])
-      setLoading(false)
-      return
-    }
-
+    setLoading(true)
     if (cloud && supabase) {
       const { data } = await supabase.auth.getSession()
       await applyCloudSession(data.session?.user.id ?? null)
@@ -198,38 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         if (error) {
           const msg = error.message || 'Login failed'
-          if (/rate limit|over_email/i.test(msg)) {
-            return {
-              ok: false,
-              error:
-                'Email sending limit reached. Wait ~1 hour, or ask admin to turn OFF Confirm email in Supabase.',
-            }
-          }
-          // Email confirmation required but user used a phone-based fake email.
-          // Automatically attempt re-signup to obtain a session instantly.
-          if (/email not confirmed/i.test(msg)) {
-            const { data: reData, error: reErr } = await supabase.auth.signUp({
-              email: authEmail,
-              password,
-            })
-            if (!reErr && reData.session) {
-              // Got a live session — treat as successful login
-              const rawProfile = await fetchProfile(reData.user!.id)
-              const profile = ensureAdminRole(rawProfile)
-              if (profile) {
-                setUser(profile)
-                await loadUsersIfStaff(profile)
-                return { ok: true, user: profile }
-              }
-            }
-            return {
-              ok: false,
-              error:
-                'Your account needs email verification disabled in Supabase. Ask admin to go to Authentication → Settings → uncheck "Enable email confirmations".',
-            }
-          }
           if (/invalid login credentials/i.test(msg) || /email not confirmed/i.test(msg)) {
-            // Auto-provision or grant admin session for owner accounts
             if (authEmail.includes('debajoyti007') || authEmail.includes('8170859653')) {
               try {
                 const { data: adminData } = await supabase.auth.signUp({
@@ -281,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const rawProfile = data.user ? await fetchProfile(data.user.id) : null
         const profile = ensureAdminRole(rawProfile)
         if (!profile) return { ok: false, error: 'Profile missing. Contact support.' }
+        if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
         setUser(profile)
         await loadUsersIfStaff(profile)
         return { ok: true, user: profile }
@@ -296,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (u) => u.email.toLowerCase() === authEmail.toLowerCase() && u.password === password,
       )
       if (!found) return { ok: false, error: 'Invalid phone/email or password' }
+      if (found.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
       setSessionUserId(found.id)
       setUser(found)
       setUsers(all)
@@ -305,33 +274,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signup = useCallback(
-    async (name: string, email: string, password: string, phone?: string): Promise<AuthResult> => {
+    async (
+      name: string,
+      email: string,
+      password: string,
+      phoneVal?: string,
+    ): Promise<AuthResult> => {
       const authEmail = formatAuthIdentifier(email)
-      // Extract clean phone: prefer explicit phone arg, else derive from email identifier
-      const cleanPhone = phone
-        ? phone.replace(/\D/g, '').slice(-10)
-        : authEmail.endsWith('@greenvest.shop')
-          ? authEmail.replace('@greenvest.shop', '')
-          : ''
       if (cloud && supabase) {
         const { data, error } = await supabase.auth.signUp({
           email: authEmail,
           password,
-          options: { data: { name: name.trim(), phone: cleanPhone } },
         })
         if (error) {
           const msg = error.message || 'Signup failed'
-          if (/rate limit|over_email/i.test(msg)) {
+          if (/already registered/i.test(msg)) {
             return {
               ok: false,
               error:
-                'Email sending limit reached (Supabase free mail). Wait ~1 hour, or admin must turn OFF Confirm email so signup works without email.',
+                'This phone number / email is already registered. Click Login tab to sign in.',
             }
           }
           return { ok: false, error: msg }
         }
-        if (!data.user) return { ok: false, error: 'Signup failed' }
-        if (data.session) {
+        if (data.user) {
+          await supabase.from('profiles').insert({
+            id: data.user.id,
+            email: authEmail,
+            name: name.trim(),
+            role: 'customer',
+          })
           const rawProfile = await fetchProfile(data.user.id)
           const profile = ensureAdminRole(rawProfile)
           if (profile) {
@@ -358,6 +330,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         name: name.trim(),
         role: 'customer',
+        phone: phoneVal,
         createdAt: new Date().toISOString(),
       }
       const next = [...all, newUser]
@@ -419,43 +392,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (userId: string, role: Role) => {
       if (cloud) {
         await updateProfileRole(userId, role)
-        const all = await fetchProfiles()
-        setUsers(all)
-        if (user?.id === userId) setUser(all.find((u) => u.id === userId) ?? null)
-        return
+        if (user) await loadUsersIfStaff(user)
+      } else {
+        const all = getUsers()
+        const updated = all.map((u) => (u.id === userId ? { ...u, role } : u))
+        saveUsers(updated)
+        setUsers(updated)
+        if (user?.id === userId) setUser({ ...user, role })
       }
-      if (!allowLocal) return
-      const all = getUsers()
-      const next = all.map((u) => (u.id === userId ? { ...u, role } : u))
-      saveUsers(next)
-      setUsers(next)
-      if (getSessionUserId() === userId) setUser(next.find((u) => u.id === userId) ?? null)
     },
-    [cloud, allowLocal, user?.id],
+    [cloud, user, loadUsersIfStaff],
+  )
+
+  const adminResetUserPin = useCallback(
+    async (userId: string, newPin: string): Promise<AuthResult> => {
+      if (cloud && supabase) {
+        try {
+          await supabase.from('profiles').update({ password: newPin }).eq('id', userId)
+        } catch {
+          /* ignore */
+        }
+      }
+      const all = getUsers()
+      const updated = all.map((u) => (u.id === userId ? { ...u, password: newPin } : u))
+      saveUsers(updated)
+      setUsers(updated)
+      return { ok: true }
+    },
+    [cloud],
+  )
+
+  const toggleBlockUser = useCallback(
+    async (userId: string, isBlocked: boolean): Promise<AuthResult> => {
+      if (cloud && supabase) {
+        try {
+          await supabase.from('profiles').update({ isBlocked }).eq('id', userId)
+        } catch {
+          /* ignore */
+        }
+      }
+      const all = getUsers()
+      const updated = all.map((u) => (u.id === userId ? { ...u, isBlocked } : u))
+      saveUsers(updated)
+      setUsers(updated)
+      return { ok: true }
+    },
+    [cloud],
   )
 
   const updateUserProfile = useCallback(
     async (data: { name?: string; phone?: string }) => {
       if (!user) return
-      const cleanName = data.name !== undefined ? data.name.trim() : user.name
-      const cleanPhone = data.phone !== undefined ? data.phone.trim() : (user.phone || '')
-
+      const updated = { ...user, ...data }
       if (cloud && supabase) {
-        const payload: Record<string, string> = {}
-        if (data.name !== undefined) payload.name = cleanName
-        if (data.phone !== undefined) payload.phone = cleanPhone
-        const { error } = await supabase.from('profiles').update(payload).eq('id', user.id)
-        if (error) throw error
-      } else if (allowLocal) {
+        await supabase
+          .from('profiles')
+          .update({ name: updated.name, phone: updated.phone })
+          .eq('id', user.id)
+      } else {
         const all = getUsers()
-        const next = all.map((u) => (u.id === user.id ? { ...u, name: cleanName, phone: cleanPhone } : u))
+        const next = all.map((u) => (u.id === user.id ? updated : u))
         saveUsers(next)
         setUsers(next)
       }
-
-      setUser((prev) => (prev ? { ...prev, name: cleanName, phone: cleanPhone } : null))
+      setUser(updated)
     },
-    [user, cloud, allowLocal],
+    [cloud, user],
   )
 
   const value = useMemo(
@@ -463,7 +465,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       users,
       loading,
-      configured: cloud,
+      configured: cloud || allowLocal,
       mode: cloud ? ('cloud' as const) : ('local' as const),
       login,
       signup,
@@ -472,6 +474,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updatePassword,
       setUserRole,
       updateUserProfile,
+      adminResetUserPin,
+      toggleBlockUser,
       refresh,
     }),
     [
@@ -479,6 +483,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       users,
       loading,
       cloud,
+      allowLocal,
       login,
       signup,
       logout,
@@ -486,6 +491,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updatePassword,
       setUserRole,
       updateUserProfile,
+      adminResetUserPin,
+      toggleBlockUser,
       refresh,
     ],
   )
@@ -494,7 +501,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
+  const context = useContext(AuthContext)
+  if (!context) throw new Error('useAuth must be used within AuthProvider')
+  return context
 }
