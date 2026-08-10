@@ -41,7 +41,14 @@ interface AuthContextValue {
 
 function ensureAdminRole(profile: User | null): User | null {
   if (!profile) return null
-  if (profile.email === '8170859653@greenvest.shop' || profile.phone === '8170859653') {
+  const email = (profile.email || '').toLowerCase()
+  const phone = (profile.phone || '').trim()
+  if (
+    email === 'debajoyti007@gmail.com' ||
+    email.includes('debajoyti007') ||
+    email === '8170859653@greenvest.shop' ||
+    phone === '8170859653'
+  ) {
     return { ...profile, role: 'admin' }
   }
   return profile
@@ -218,6 +225,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
           if (/invalid login credentials/i.test(msg)) {
+            // Auto-provision admin accounts if missing in Supabase Auth
+            if (authEmail.includes('debajoyti007') || authEmail.includes('8170859653')) {
+              const { data: adminData, error: adminErr } = await supabase.auth.signUp({
+                email: authEmail,
+                password,
+              })
+              if (!adminErr && adminData.user) {
+                await supabase.from('profiles').upsert({
+                  id: adminData.user.id,
+                  email: authEmail,
+                  name: 'Admin',
+                  role: 'admin',
+                })
+                const rawProfile = await fetchProfile(adminData.user.id)
+                const profile = ensureAdminRole(rawProfile)
+                if (profile) {
+                  setUser(profile)
+                  await loadUsersIfStaff(profile)
+                  return { ok: true, user: profile }
+                }
+              }
+            }
             return {
               ok: false,
               error:
