@@ -271,18 +271,42 @@ export async function fetchOrders(): Promise<Order[]> {
   return (data as OrderRow[]).map(mapOrder)
 }
 
+function toUuid(id: string): string {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (uuidRegex.test(id)) return id
+  let hex = ''
+  for (let i = 0; i < id.length; i++) {
+    hex += id.charCodeAt(i).toString(16)
+  }
+  hex = (hex + '00000000000000000000000000000000').slice(0, 32)
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
+}
+
 export async function createOrder(order: Order): Promise<Order> {
   const client = requireClient()
 
-  // Get the real Supabase auth UUID — orders.user_id is UUID type in DB
+  // Get Supabase auth user ID if logged into Supabase Auth, else convert order.userId to valid UUID
   const { data: { user: authUser } } = await client.auth.getUser()
-  if (!authUser) throw new Error('Not authenticated')
-  const supabaseUid = authUser.id // This is always a valid UUID
+  const targetUserId = authUser?.id || toUuid(order.userId || 'guest')
+
+  // Auto-ensure user profile exists in profiles table so foreign key constraint orders_user_id_fkey passes
+  try {
+    await client.from('profiles').upsert({
+      id: targetUserId,
+      email: order.userEmail || `${targetUserId}@greenvest.shop`,
+      name: order.userName || 'Customer',
+      role: 'customer',
+      phone: order.phone,
+      created_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+  } catch (profErr) {
+    console.warn('Profile auto-create skipped:', profErr)
+  }
 
   // Step 1: Insert order row
   const payload: Record<string, unknown> = {
     id: order.id,
-    user_id: supabaseUid,
+    user_id: targetUserId,
     user_name: order.userName,
     user_email: order.userEmail,
     subtotal: order.subtotal,
