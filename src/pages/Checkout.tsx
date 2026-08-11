@@ -161,7 +161,11 @@ export default function Checkout() {
     }
     try {
       if (saveAddressToDb) {
-        await saveAddress({ user_id: user.id, label: 'Saved', address: fullAddress, phone, pin: '721632', is_default: savedAddresses.length === 0 })
+        try {
+          await saveAddress({ user_id: user.id, label: 'Saved', address: fullAddress, phone, pin: '721632', is_default: savedAddresses.length === 0 })
+        } catch (addrErr) {
+          console.warn('Address save failed:', addrErr)
+        }
       }
       const order = await placeOrder({ address: fullAddress, phone, pin: '721632', utr, deliverySlot: 'morning', discountAmount: 0, zones, geoLat, geoLng })
       if (order) navigate(`/orders/success/${order.id}`)

@@ -329,7 +329,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
 
       if (cloud) {
-        await createOrder(order)
+        try {
+          await createOrder(order)
+        } catch (cloudErr) {
+          console.warn('Cloud DB createOrder failed, saving order locally:', cloudErr)
+          const nextOrders = [order, ...getOrders()]
+          saveOrders(nextOrders)
+          setOrders(nextOrders)
+        }
         saveDelivery(user.id, {
           address: order.address,
           phone: order.phone,
@@ -338,7 +345,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
         saveCart([], user.id)
         setCart([])
-        await refreshCloud()
+        try {
+          await refreshCloud()
+        } catch {
+          /* ignore refresh error */
+        }
         return order
       }
 
