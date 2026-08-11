@@ -79,9 +79,19 @@ function padPin(pin: string): string {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [users, setUsers] = useState<User[]>([])
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [users, setUsers] = useState<User[]>(() => {
+    ensureSeeded()
+    return getUsers()
+  })
+  const [user, setUser] = useState<User | null>(() => {
+    ensureSeeded()
+    const sessionUserId = getSessionUserId()
+    if (!sessionUserId) return null
+    const all = getUsers()
+    const found = all.find((u) => u.id === sessionUserId) || null
+    return found ? ensureAdminRole(found) : null
+  })
+  const [loading, setLoading] = useState(false)
   const cloud = isSupabaseConfigured
   const allowLocal = ALLOW_LOCAL_FALLBACK && !cloud
 

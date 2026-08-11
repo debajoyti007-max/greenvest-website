@@ -108,12 +108,15 @@ const StoreContext = createContext<StoreContextValue | null>(null)
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { user, mode } = useAuth()
   const cloud = mode === 'cloud' && isSupabaseConfigured
-  const [products, setProducts] = useState<Product[]>([])
-  const [cart, setCart] = useState<CartItem[]>([])
-  const [orders, setOrders] = useState<Order[]>([])
-  const [lang, setLangState] = useState<Lang>('en')
-  const [loading, setLoading] = useState(true)
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [products, setProducts] = useState<Product[]>(() => {
+    ensureSeeded()
+    return getProducts()
+  })
+  const [cart, setCart] = useState<CartItem[]>(() => getCart(user?.id))
+  const [orders, setOrders] = useState<Order[]>(() => getOrders())
+  const [lang, setLangState] = useState<Lang>(() => getLang())
+  const [loading, setLoading] = useState(false)
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => getAppNotifications())
 
   const refreshLocal = useCallback(() => {
     ensureSeeded()
