@@ -216,14 +216,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
   }, [cloud, user, refreshCloud])
 
-  // Automatic 4-second polling fallback for seller/admin live order sync
-  useEffect(() => {
-    if (!cloud || !user) return
-    const timer = setInterval(() => {
-      void refreshCloud()
-    }, 4000)
-    return () => clearInterval(timer)
-  }, [cloud, user, refreshCloud])
+  // ✅ No polling needed — subscribeOrders + subscribeProducts above handle all live updates via Supabase Realtime.
 
   const setLang = useCallback((l: Lang) => {
     persistLang(l)
@@ -351,7 +344,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
         saveCart([], user.id)
         setCart([])
-        try { await refreshCloud() } catch { /* ignore refresh */ }
+        // Optimistically prepend the order so it shows immediately — don't wait for refresh
+        setOrders((prev) => [order, ...prev])
+        // Best-effort background sync; failures are safe since we already set state above
+        refreshCloud().catch(() => { /* ignore */ })
         return order
       }
 

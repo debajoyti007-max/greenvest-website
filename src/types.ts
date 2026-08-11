@@ -7,7 +7,7 @@ export type DeliverySlot = 'morning' | 'evening'
 export interface User {
   id: string
   email: string
-  password: string
+  password?: string
   name: string
   role: Role
   phone?: string

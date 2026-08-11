@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -92,8 +93,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return found ? ensureAdminRole(found) : null
   })
   const [loading, setLoading] = useState(false)
+  const [initialized, setInitialized] = useState(false)
   const cloud = isSupabaseConfigured
   const allowLocal = ALLOW_LOCAL_FALLBACK && !cloud
+  // Use a ref so applyCloudSession can read the latest user without being recreated every render.
+  // Must be initialized lazily to match whatever user useState resolved to.
+  const userRef = useRef<User | null>((() => {
+    const sessionUserId = getSessionUserId()
+    if (!sessionUserId) return null
+    const all = getUsers()
+    const found = all.find((u) => u.id === sessionUserId) || null
+    return found ? ensureAdminRole(found) : null
+  })())
 
   const loadUsersIfStaff = useCallback(async (profile: User | null) => {
     if (!profile || (profile.role !== 'admin' && profile.role !== 'seller')) {
@@ -127,6 +138,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsers(merged)
   }, [])
 
+  // Keep the ref in sync whenever user state updates
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
+
   const applyCloudSession = useCallback(
     async (userId: string | null) => {
       if (!userId) {
@@ -139,12 +155,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (found) {
             const profile = ensureAdminRole(found)
             setUser(profile)
+            userRef.current = profile
             await loadUsersIfStaff(profile)
             return
           }
         }
-        if (user) return
+        // Read from ref — not from stale closure — to decide whether to clear
+        if (userRef.current) return
         setUser(null)
+        userRef.current = null
         setUsers([])
         return
       }
@@ -167,10 +186,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = ensureAdminRole(rawProfile)
       if (profile) {
         setUser(profile)
+        userRef.current = profile
         await loadUsersIfStaff(profile)
       }
     },
-    [user, loadUsersIfStaff],
+    // ✅ No 'user' in deps — use userRef.current instead to prevent infinite loop
+    [loadUsersIfStaff],
   )
 
   const refreshLocal = useCallback(() => {
@@ -187,7 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user])
 
   const refresh = useCallback(async () => {
-    setLoading(true)
+    if (!initialized) setLoading(true)
     if (cloud && supabase) {
       try {
         const { data } = await supabase.auth.getSession()
@@ -196,15 +217,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         /* Keep existing user session if network/session check fails */
       }
       setLoading(false)
+      setInitialized(true)
       return
     }
     if (allowLocal) {
       refreshLocal()
       setLoading(false)
+      setInitialized(true)
       return
     }
     setLoading(false)
-  }, [cloud, allowLocal, refreshLocal, applyCloudSession])
+    setInitialized(true)
+  }, [cloud, allowLocal, refreshLocal, applyCloudSession, initialized])
 
   useEffect(() => {
     void refresh()
@@ -239,10 +263,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
       const authEmail = formatAuthIdentifier(email)
-      const normEmail = email.trim().toLowerCase()
 
       if (cloud && supabase) {
-        // Tier 1: Standard Supabase Auth sign-in
+        // Standard Supabase Auth sign-in — the only login path in cloud mode
         const { data, error } = await supabase.auth.signInWithPassword({
           email: authEmail,
           password: padPin(password),
@@ -254,83 +277,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!profile) return { ok: false, error: 'Profile missing. Contact support.' }
           if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
           setUser(profile)
+          userRef.current = profile
           setSessionUserId(profile.id)
           await loadUsersIfStaff(profile)
           return { ok: true, user: profile }
-        }
-
-        // Tier 2: Auto-signup / Auto-healing in Supabase Auth if account wasn't in Auth yet
-        try {
-          const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-            email: authEmail,
-            password: padPin(password),
-          })
-
-          if (!signUpErr && signUpData.user) {
-            const existingProfile = await fetchProfile(signUpData.user.id)
-            let userRole: Role = 'customer'
-            if (authEmail.includes('debajoyti007') || authEmail.includes('8170859653')) {
-              userRole = 'admin'
-            }
-            if (!existingProfile) {
-              await supabase.from('profiles').upsert({
-                id: signUpData.user.id,
-                email: authEmail,
-                name: authEmail.split('@')[0],
-                role: userRole,
-              })
-            }
-            const rawProfile = await fetchProfile(signUpData.user.id)
-            const profile: User = ensureAdminRole(rawProfile) || {
-              id: signUpData.user.id,
-              email: authEmail,
-              password,
-              name: authEmail.split('@')[0],
-              role: userRole,
-              createdAt: new Date().toISOString(),
-            }
-            if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
-            setUser(profile)
-            setSessionUserId(profile.id)
-            await loadUsersIfStaff(profile)
-            return { ok: true, user: profile }
-          }
-        } catch (err) {
-          console.warn('Auto-signup fallback failed:', err)
-        }
-
-        // Tier 3: Local storage / cached profiles fallback (e.g. for accounts with reset PIN)
-        ensureSeeded()
-        const localUsers = getUsers()
-        const localFound = localUsers.find(
-          (u) =>
-            (u.email.toLowerCase() === authEmail.toLowerCase() || u.email.toLowerCase() === normEmail) &&
-            (u.password === password)
-        )
-        if (localFound) {
-          if (localFound.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
-          const profile = ensureAdminRole(localFound) || localFound
-          setUser(profile)
-          setSessionUserId(profile.id)
-          await loadUsersIfStaff(profile)
-          return { ok: true, user: profile }
-        }
-
-        // Tier 4: Special admin bypass for debajoyti007
-        if (authEmail.includes('debajoyti007') || authEmail.includes('8170859653')) {
-          const adminUser: User = {
-            id: 'admin-debajoyti-007',
-            email: authEmail,
-            name: 'Debajoyti (Admin)',
-            role: 'admin',
-            phone: '8170859653',
-            password,
-            createdAt: new Date().toISOString(),
-          }
-          setUser(adminUser)
-          setSessionUserId(adminUser.id)
-          await loadUsersIfStaff(adminUser)
-          return { ok: true, user: adminUser }
         }
 
         return {
@@ -347,13 +297,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const all = getUsers()
       const found = all.find(
         (u) =>
-          (u.email.toLowerCase() === authEmail.toLowerCase() || u.email.toLowerCase() === normEmail) &&
+          (u.email.toLowerCase() === authEmail.toLowerCase()) &&
           (u.password === password),
       )
       if (!found) return { ok: false, error: 'Invalid phone/email or PIN' }
       if (found.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
       setSessionUserId(found.id)
       setUser(found)
+      userRef.current = found
       setUsers(all)
       return { ok: true, user: found }
     },
@@ -385,25 +336,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: false, error: msg }
         }
         if (data.user) {
+          // phoneVal is now properly saved to Supabase profiles
           await supabase.from('profiles').insert({
             id: data.user.id,
             email: authEmail,
             name: name.trim(),
             role: 'customer',
+            phone: phoneVal?.trim() || null,
           })
           const rawProfile = await fetchProfile(data.user.id)
           const profile: User = ensureAdminRole(rawProfile) || {
             id: data.user.id,
             email: authEmail,
-            password,
             name: name.trim(),
             role: 'customer',
+            phone: phoneVal?.trim() || undefined,
             createdAt: new Date().toISOString(),
           }
-          // Save to local storage as well to sync across staff views
-          const all = getUsers()
-          saveUsers([...all, profile])
           setUser(profile)
+          userRef.current = profile
           setSessionUserId(profile.id)
           await loadUsersIfStaff(profile)
           return { ok: true, user: profile }
@@ -434,6 +385,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsers(next)
       setSessionUserId(newUser.id)
       setUser(newUser)
+      userRef.current = newUser
       return { ok: true, user: newUser }
     },
     [cloud, allowLocal, loadUsersIfStaff],
@@ -443,9 +395,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (cloud && supabase) await supabase.auth.signOut()
     setSessionUserId(null)
     setUser(null)
-    if (allowLocal) setUsers(getUsers())
-    else setUsers([])
-  }, [cloud, allowLocal])
+    userRef.current = null
+    setUsers([])
+  }, [cloud])
 
   const resetPassword = useCallback(
     async (nameInput: string, email: string, newPin: string): Promise<AuthResult> => {

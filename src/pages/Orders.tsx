@@ -101,7 +101,7 @@ export default function Orders() {
             }}
             onClick={() => setActiveTab('recent')}
           >
-            Recent
+            {lang === 'bn' ? 'সাম্প্রতিক' : 'Recent'}
           </button>
           <button 
             type="button"
@@ -116,7 +116,7 @@ export default function Orders() {
             }}
             onClick={() => setActiveTab('archived')}
           >
-            Archived ({archivedCount})
+            {lang === 'bn' ? `আর্কাইভ (${archivedCount})` : `Archived (${archivedCount})`}
           </button>
         </div>
       )}
@@ -125,7 +125,7 @@ export default function Orders() {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center' }}>
           <label style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
             <input type="checkbox" checked={showCleared} onChange={e => setShowCleared(e.target.checked)} /> 
-            Show cleared
+            {lang === 'bn' ? 'মুছে ফেলাগুলি দেখুন' : 'Show cleared'}
           </label>
           {archivedOrders.length > 0 && (
             <button 
@@ -136,7 +136,7 @@ export default function Orders() {
                 setClearedIds(prev => [...new Set([...prev, ...archivedOrders.map(o => o.id)])])
               }}
             >
-              Clear All
+              {lang === 'bn' ? 'সব মুছুন' : 'Clear All'}
             </button>
           )}
         </div>
@@ -144,7 +144,7 @@ export default function Orders() {
 
       {displayOrders.length === 0 ? (
         <div className="empty-block">
-          <p>{activeTab === 'recent' ? 'No recent orders.' : 'No archived orders.'}</p>
+          <p>{activeTab === 'recent' ? (lang === 'bn' ? 'কোনো সাম্প্রতিক অর্ডার নেই।' : 'No recent orders.') : (lang === 'bn' ? 'কোনো আর্কাইভ অর্ডার নেই।' : 'No archived orders.')}</p>
           {mine.length === 0 && (
             <Link to="/" className="btn btn-primary">
               {t(lang, 'startShopping')}
@@ -253,7 +253,7 @@ export default function Orders() {
                       style={{ padding: '0.2rem 0.5rem', fontSize: '0.85rem', marginLeft: 'auto' }}
                       onClick={() => setArchivedIds(prev => [...new Set([...prev, o.id])])}
                     >
-                      📁 Archive
+                      📁 {lang === 'bn' ? 'আর্কাইভ' : 'Archive'}
                     </button>
                   )}
                 </div>

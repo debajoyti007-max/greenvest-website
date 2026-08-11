@@ -24,6 +24,7 @@ export default function Checkout() {
   const [detectingGps, setDetectingGps] = useState(false)
 
   const [phone, setPhone] = useState('')
+  const [pin, setPin] = useState('')
   const [utr, setUtr] = useState('')
   const [utrPasted, setUtrPasted] = useState(false)
   const [error, setError] = useState('')
@@ -33,9 +34,10 @@ export default function Checkout() {
 
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [zones, setZones] = useState<DeliveryZone[]>([])
+  const [zonesLoading, setZonesLoading] = useState(true)
   const [saveAddressToDb, setSaveAddressToDb] = useState(false)
 
-  const delivery = useMemo(() => calcDeliveryFee('721632', zones), [zones])
+  const delivery = useMemo(() => calcDeliveryFee(pin || '721632', zones), [zones, pin])
   const grandTotal = cartTotal + delivery.fee
   const advance = Math.ceil(grandTotal * 0.5)
 
@@ -43,7 +45,7 @@ export default function Checkout() {
     if (!user) return
     let active = true
     fetchAddresses(user.id).then(addrs => { if (active) setSavedAddresses(addrs) })
-    fetchDeliveryZones().then(z => { if (active) setZones(z) })
+    fetchDeliveryZones().then(z => { if (active) { setZones(z); setZonesLoading(false) } }).catch(() => { setZonesLoading(false) })
     return () => { active = false }
   }, [user, fetchAddresses, fetchDeliveryZones])
 
@@ -54,6 +56,7 @@ export default function Checkout() {
     if (saved?.address) {
       setHouse(saved.address)
       setPhone(saved.phone || '')
+      setPin(saved.pin || '')
       setPrefilled(true)
       return
     }
@@ -63,6 +66,7 @@ export default function Checkout() {
     if (last) {
       setHouse(last.address)
       setPhone(last.phone)
+      setPin(last.pin || '')
       setPrefilled(true)
       return
     }
@@ -140,6 +144,11 @@ export default function Checkout() {
       setSubmitting(false)
       return
     }
+    if (!pin.trim() || !/^\d{6}$/.test(pin.trim())) {
+      setError(lang === 'bn' ? '৬ সংখ্যার পিন কোড দিন (যেমন: ৭২১৬৩২)' : 'Enter your 6-digit PIN code (e.g. 721632)')
+      setSubmitting(false)
+      return
+    }
     if (!utr.trim()) {
       setError(lang === 'bn' ? 'UTR নম্বর দিন' : 'Please enter your UTR number')
       setSubmitting(false)
@@ -172,12 +181,12 @@ export default function Checkout() {
     try {
       if (saveAddressToDb) {
         try {
-          await saveAddress({ user_id: user.id, label: 'Saved', address: fullAddress, phone, pin: '721632', is_default: savedAddresses.length === 0 })
+          await saveAddress({ user_id: user.id, label: 'Saved', address: fullAddress, phone, pin: pin.trim(), is_default: savedAddresses.length === 0 })
         } catch (addrErr) {
           console.warn('Address save failed:', addrErr)
         }
       }
-      const order = await placeOrder({ address: fullAddress, phone, pin: '721632', utr, deliverySlot: 'morning', discountAmount: 0, zones, geoLat, geoLng })
+      const order = await placeOrder({ address: fullAddress, phone, pin: pin.trim(), utr, deliverySlot: 'morning', discountAmount: 0, zones, geoLat, geoLng })
       if (order) navigate(`/orders/success/${order.id}`, { state: { order } })
       else setError(lang === 'bn' ? 'অর্ডার প্রসেস করা যাচ্ছে না। আবার চেষ্টা করুন।' : 'Could not place order. Please try again.')
     } catch (err) {
@@ -240,11 +249,12 @@ export default function Checkout() {
                   : 'Works on PhonePe, GPay, Paytm & all UPI apps'}
               </p>
               <a
-                href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=Order+Advance`}
+                href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=Order+Advance`}
                 className="btn btn-primary"
-                style={{ marginTop: '0.5rem', display: 'block', textAlign: 'center' }}
+                style={{ marginTop: '0.5rem', display: 'block', textAlign: 'center', opacity: zonesLoading ? 0.6 : 1 }}
+                onClick={zonesLoading ? (e) => e.preventDefault() : undefined}
               >
-                Pay ₹{advance} via UPI App
+                {zonesLoading ? '⏳ Calculating...' : `Pay ₹${advance} via UPI App`}
               </a>
             </div>
           </div>
@@ -348,6 +358,17 @@ export default function Checkout() {
               onChange={(e) => setPhone(e.target.value)}
               required
               placeholder={lang === 'bn' ? '১০ সংখ্যার মোবাইল' : '10-digit mobile'}
+            />
+          </label>
+          <label>
+            📮 {lang === 'bn' ? 'আপনার এলাকার পিন কোড (৬ সংখ্যা)' : 'Your Area PIN Code (6 digits)'}
+            <input
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              required
+              maxLength={6}
+              inputMode="numeric"
+              placeholder={lang === 'bn' ? 'যেমন: ৭২১৬৩২' : 'e.g. 721632'}
             />
           </label>
           <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '-0.5rem' }}>

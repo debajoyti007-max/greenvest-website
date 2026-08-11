@@ -14,6 +14,10 @@ const KEYS = {
 
 export const STORE_EVENT = 'greenvest-store-update'
 
+// Module-level flag so ensureSeeded() is a true no-op after the first run.
+// This stops the localStorage read/write/event cascade on every render.
+let _seeded = false
+
 export type SavedDelivery = {
   address: string
   phone: string
@@ -36,78 +40,25 @@ function write<T>(key: string, value: T) {
   window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key } }))
 }
 
+// ⚠️ Only the admin seed entry is kept here.
+// Real user accounts must NOT be hardcoded — they live in Supabase Auth.
+// Never store real passwords in source code or localStorage.
 export const DEFAULT_USERS: User[] = [
   {
     id: 'admin-debajoyti-007',
     name: 'Debajoyti (Admin)',
     email: 'debajoyti007@gmail.com',
-    password: '9191',
     role: 'admin',
     phone: '8170859653',
     createdAt: '2026-08-01T00:00:00.000Z',
-  },
-  {
-    id: 'u-debajoyti3',
-    name: 'Debajoyti Barman',
-    email: 'debajoyti3@gmail.com',
-    password: '9191',
-    role: 'customer',
-    createdAt: '2026-08-02T00:00:00.000Z',
-  },
-  {
-    id: 'u-swayam-phone',
-    name: 'SWAYAM',
-    email: '6370225641@greenvest.shop',
-    password: '1234',
-    role: 'customer',
-    phone: '6370225641',
-    createdAt: '2026-08-03T00:00:00.000Z',
-  },
-  {
-    id: 'u-swayam-email',
-    name: 'SWAYAM',
-    email: 'swayamstar9@gmail.com',
-    password: '1234',
-    role: 'customer',
-    createdAt: '2026-08-04T00:00:00.000Z',
-  },
-  {
-    id: 'u-anjali',
-    name: 'Anjali Barman',
-    email: 'anjalibarman0007@gmail.com',
-    password: '1234',
-    role: 'customer',
-    createdAt: '2026-08-05T00:00:00.000Z',
-  },
-  {
-    id: 'u-kumarjyoti',
-    name: 'Kumar Jyoti Singha',
-    email: 'kumarjyotisingha8@gmail.com',
-    password: '1234',
-    role: 'customer',
-    createdAt: '2026-08-06T00:00:00.000Z',
-  },
-  {
-    id: 'u-m-phone',
-    name: 'm',
-    email: '1234569870@greenvest.shop',
-    password: '1234',
-    role: 'customer',
-    phone: '1234569870',
-    createdAt: '2026-08-07T00:00:00.000Z',
-  },
-  {
-    id: 'u-demo-customer',
-    name: 'Demo Customer',
-    email: 'customer@demo.com',
-    password: '1234',
-    role: 'customer',
-    createdAt: '2026-08-08T00:00:00.000Z',
   },
 ]
 
 /** Local catalog & user accounts bootstrap. */
 export function ensureSeeded() {
+  // Fast-path: already done this session — no reads, writes, or events
+  if (_seeded) return
+
   const existingUsers = read<User[]>(KEYS.users, [])
   const map = new Map<string, User>()
   DEFAULT_USERS.forEach((u) => map.set(u.email.toLowerCase(), u))
@@ -123,12 +74,14 @@ export function ensureSeeded() {
     if (needsRefresh) {
       write(KEYS.products, SEED_PRODUCTS)
     }
+    _seeded = true
     return
   }
   write(KEYS.products, SEED_PRODUCTS)
   write(KEYS.orders, [] as Order[])
   write(KEYS.cart, [] as CartItem[])
   localStorage.setItem(KEYS.seeded, '1')
+  _seeded = true
 }
 
 export function getUsers(): User[] {
@@ -178,8 +131,8 @@ export function getCart(userId?: string | null): CartItem[] {
 export function saveCart(cart: CartItem[], userId?: string | null) {
   const activeId = userId !== undefined ? userId : getSessionUserId()
   const key = activeId ? `${KEYS.cart}_${activeId}` : KEYS.cart
+  // write() already dispatches STORE_EVENT — no second dispatch needed
   write(key, cart)
-  window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key } }))
 }
 
 export function getSessionUserId(): string | null {
