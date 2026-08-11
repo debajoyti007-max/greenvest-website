@@ -386,7 +386,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .maybeSingle()
 
         if (profileRow) {
-          // Store new PIN locally
           storePin(profileRow.email, newPin)
           return { ok: true }
         }

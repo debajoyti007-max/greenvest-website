@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -32,7 +33,7 @@ import {
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   ensureSeeded,
   getCart,
@@ -117,6 +118,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => getLang())
   const [loading, setLoading] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => getAppNotifications())
+  const notifChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   const refreshLocal = useCallback(() => {
     ensureSeeded()
@@ -130,6 +132,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     document.body.classList.toggle('lang-bn', l === 'bn')
     setLoading(false)
   }, [])
+
+  // ── Supabase Realtime: live notification broadcast ─────────────────────────
+  useEffect(() => {
+    if (!cloud) return
+    const ch = supabase
+      .channel('gv-broadcasts')
+      .on('broadcast', { event: 'notif' }, ({ payload }: { payload: unknown }) => {
+        const n = payload as AppNotification
+        const isMe = !n.userId || n.userId === 'all' || n.userId === user?.id
+        if (!isMe) return
+        setNotifications(prev => {
+          const next = [n, ...prev].slice(0, 30)
+          saveAppNotifications(next)
+          return next
+        })
+        showToast(`📢 ${n.title ? n.title + ': ' : ''}${n.message}`, '🔔')
+      })
+      .subscribe()
+    notifChannelRef.current = ch
+    return () => {
+      supabase.removeChannel(ch)
+      notifChannelRef.current = null
+    }
+  }, [cloud, user?.id])
 
   const refreshCloud = useCallback(async () => {
     try {
@@ -586,13 +612,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         sender: senderName,
         createdAt: new Date().toISOString(),
       }
+      // Save locally (for sender's own view)
       const current = getAppNotifications()
-      const next = [newNotif, ...current]
+      const next = [newNotif, ...current].slice(0, 30)
       saveAppNotifications(next)
       setNotifications(next)
+
+      // Broadcast via Supabase Realtime → reaches ALL online users instantly
+      if (cloud && notifChannelRef.current) {
+        try {
+          await notifChannelRef.current.send({
+            type: 'broadcast',
+            event: 'notif',
+            payload: newNotif,
+          })
+        } catch (e) {
+          console.warn('Realtime broadcast failed:', e)
+        }
+      }
+
       showToast(lang === 'bn' ? '📢 নোটিফিকেশন পাঠানো হয়েছে!' : '📢 Notification sent successfully!', '📢')
     },
-    [lang],
+    [cloud, lang],
   )
 
   const value = useMemo<StoreContextValue>(
