@@ -273,7 +273,9 @@ export async function fetchOrders(): Promise<Order[]> {
 
 export async function createOrder(order: Order): Promise<Order> {
   const client = requireClient()
-  const payload: Record<string, unknown> = {
+
+  // Build payload for RPC — single atomic call with SECURITY DEFINER bypasses RLS
+  const rpcPayload = {
     id: order.id,
     user_id: order.userId,
     user_name: order.userName,
@@ -288,36 +290,26 @@ export async function createOrder(order: Order): Promise<Order> {
     address: order.address,
     phone: order.phone,
     pin: order.pin,
+    delivery_slot: order.deliverySlot || null,
+    geo_lat: order.geoLat ?? null,
+    geo_lng: order.geoLng ?? null,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
+    items: order.items.map((it) => ({
+      product_id: it.productId,
+      name: it.name,
+      emoji: it.emoji,
+      grade: it.grade,
+      qty: it.qty,
+      unit_price: it.unitPrice,
+    })),
   }
-  if (order.deliverySlot) payload.delivery_slot = order.deliverySlot
-  if (order.geoLat != null) payload.geo_lat = order.geoLat
-  if (order.geoLng != null) payload.geo_lng = order.geoLng
 
-  let { error: orderError } = await client.from('orders').insert(payload)
-  if (orderError && /delivery_slot|geo_lat|geo_lng/i.test(orderError.message)) {
-    delete payload.delivery_slot
-    delete payload.geo_lat
-    delete payload.geo_lng
-    ;({ error: orderError } = await client.from('orders').insert(payload))
-  }
-  if (orderError) throw orderError
+  const { error: rpcError } = await client.rpc('create_order_with_items', {
+    order_data: rpcPayload,
+  })
 
-  const items = order.items.map((it) => ({
-    order_id: order.id,
-    product_id: it.productId,
-    name: it.name,
-    emoji: it.emoji,
-    grade: it.grade,
-    qty: it.qty,
-    unit_price: it.unitPrice,
-  }))
-  const { error: itemsError } = await client.from('order_items').insert(items)
-  if (itemsError) {
-    await client.from('orders').delete().eq('id', order.id)
-    throw itemsError
-  }
+  if (rpcError) throw rpcError
 
   return order
 }

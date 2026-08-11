@@ -315,7 +315,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         deliveryFee,
         total,
         advanceAmount: Math.ceil(total * 0.5),
-        utr: opts.utr.trim(),
+        utr: opts.utr.trim().toUpperCase(),
         utrVerified: false,
         status: 'pending',
         address: opts.address.trim(),

@@ -130,8 +130,18 @@ export default function Checkout() {
 
     const fullAddress = `${house.trim()} ${landmark.trim() ? `(Near: ${landmark.trim()})` : ''} ${area.trim()} ${geoCoords ? `[Maps: ${geoCoords}]` : ''}`.trim()
 
-    if (!fullAddress || !phone.trim() || !utr.trim()) {
-      setError(lang === 'bn' ? 'সব ঘর পূরণ করুন' : 'Please fill all required fields')
+    if (!house.trim() || !area.trim()) {
+      setError(lang === 'bn' ? 'বাড়ি ও এলাকার নাম দিন' : 'Please enter your House name and Area/Village')
+      setSubmitting(false)
+      return
+    }
+    if (!phone.trim()) {
+      setError(lang === 'bn' ? 'ফোন নম্বর দিন' : 'Please enter your phone number')
+      setSubmitting(false)
+      return
+    }
+    if (!utr.trim()) {
+      setError(lang === 'bn' ? 'UTR নম্বর দিন' : 'Please enter your UTR number')
       setSubmitting(false)
       return
     }
