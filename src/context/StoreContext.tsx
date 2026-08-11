@@ -452,13 +452,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const checkDuplicateUtr = useCallback(
     async (utr: string): Promise<boolean> => {
-      const clean = utr.trim()
+      const clean = utr.trim().toUpperCase()
       if (clean.length < 6) return false
-      if (cloud) {
-        return checkDuplicateUtrApi(clean)
-      }
+      // In cloud mode: only check Supabase (ignore stale local orders)
+      if (cloud) return checkDuplicateUtrApi(clean)
+      // Local mode only: check local storage
       const existing = getOrders()
-      return existing.some((o) => o.utr === clean && o.status !== 'cancelled')
+      return existing.some((o) => o.utr.toUpperCase() === clean && o.status !== 'cancelled')
     },
     [cloud],
   )
