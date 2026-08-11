@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfile, fetchProfiles, updateProfileRole, checkAccountExistsByEmail } from '../lib/api'
+import { fetchProfiles, updateProfileRole, checkAccountExistsByEmail } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   ensureSeeded,
@@ -17,7 +17,6 @@ import {
   getUsers,
   saveUsers,
   setSessionUserId,
-  STORE_EVENT,
   uid,
 } from '../lib/storage'
 import type { Role, User } from '../types'
@@ -138,61 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsers(merged)
   }, [])
 
-  // Keep the ref in sync whenever user state updates
-  useEffect(() => {
-    userRef.current = user
-  }, [user])
-
-  const applyCloudSession = useCallback(
-    async (userId: string | null) => {
-      if (!userId) {
-        // Fall back to local session before dropping user
-        const localId = getSessionUserId()
-        if (localId) {
-          ensureSeeded()
-          const all = getUsers()
-          const found = all.find((u) => u.id === localId) || null
-          if (found) {
-            const profile = ensureAdminRole(found)
-            setUser(profile)
-            userRef.current = profile
-            await loadUsersIfStaff(profile)
-            return
-          }
-        }
-        // Read from ref — not from stale closure — to decide whether to clear
-        if (userRef.current) return
-        setUser(null)
-        userRef.current = null
-        setUsers([])
-        return
-      }
-
-      let rawProfile: User | null = null
-      try {
-        rawProfile = await fetchProfile(userId)
-      } catch {
-        rawProfile = null
-      }
-
-      if (!rawProfile) {
-        ensureSeeded()
-        const localId = getSessionUserId()
-        const all = getUsers()
-        const found = all.find((u) => u.id === userId || u.id === localId)
-        if (found) rawProfile = found
-      }
-
-      const profile = ensureAdminRole(rawProfile)
-      if (profile) {
-        setUser(profile)
-        userRef.current = profile
-        await loadUsersIfStaff(profile)
-      }
-    },
-    // ✅ No 'user' in deps — use userRef.current instead to prevent infinite loop
-    [loadUsersIfStaff],
-  )
 
   const refreshLocal = useCallback(() => {
     ensureSeeded()
@@ -210,11 +154,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     if (!initialized) setLoading(true)
     if (cloud && supabase) {
-      try {
-        const { data } = await supabase.auth.getSession()
-        await applyCloudSession(data.session?.user.id ?? null)
-      } catch {
-        /* Keep existing user session if network/session check fails */
+      // Restore session from localStorage userId (we don't use Supabase Auth sessions)
+      const localId = getSessionUserId()
+      if (localId && !userRef.current) {
+        try {
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', localId)
+            .maybeSingle()
+          if (profileRow) {
+            const profile = ensureAdminRole({
+              id: profileRow.id,
+              email: profileRow.email,
+              name: profileRow.name,
+              role: profileRow.role,
+              phone: profileRow.phone || undefined,
+              isBlocked: profileRow.isBlocked || false,
+              createdAt: profileRow.created_at,
+            })
+            if (profile) {
+              setUser(profile)
+              userRef.current = profile
+              await loadUsersIfStaff(profile)
+            }
+          } else {
+            // Session ID in localStorage but no matching profile — clear stale session
+            setSessionUserId(null)
+          }
+        } catch {
+          // Network error — keep existing in-memory user if any
+        }
       }
       setLoading(false)
       setInitialized(true)
@@ -228,54 +198,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setLoading(false)
     setInitialized(true)
-  }, [cloud, allowLocal, refreshLocal, applyCloudSession, initialized])
+  }, [cloud, allowLocal, refreshLocal, initialized, loadUsersIfStaff])
 
   useEffect(() => {
     void refresh()
-    if (cloud && supabase) {
-      const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (_event === 'SIGNED_OUT') {
-          // Only clear user on explicit logout
-          const localId = getSessionUserId()
-          if (!localId) {
-            setUser(null)
-            setUsers([])
-          }
-        } else if (_event === 'TOKEN_REFRESHED' || session) {
-          void applyCloudSession(session?.user.id ?? null)
-        }
-      })
-      return () => sub.subscription.unsubscribe()
-    }
-    if (!allowLocal) return
-    const onStore = () => refreshLocal()
-    const onStorage = (e: StorageEvent) => {
-      if (!e.key || e.key.startsWith('gv_')) refreshLocal()
-    }
-    window.addEventListener(STORE_EVENT, onStore)
-    window.addEventListener('storage', onStorage)
-    return () => {
-      window.removeEventListener(STORE_EVENT, onStore)
-      window.removeEventListener('storage', onStorage)
-    }
-  }, [cloud, allowLocal, refresh, refreshLocal, applyCloudSession])
+    // No supabase.auth listener needed — sessions are managed via localStorage
+  }, [refresh])
+
+
 
   const login = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
       const authEmail = formatAuthIdentifier(email)
 
       if (cloud && supabase) {
-        // Standard Supabase Auth sign-in — the only login path in cloud mode
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: authEmail,
-          password: padPin(password),
-        })
+        // ── Simple approach: check profiles table directly (no Supabase Auth needed) ──
+        // Step 1: find the profile row by email
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('*')
+          .or(`email.eq.${authEmail.toLowerCase()},email.eq.${email.trim().toLowerCase()}`)
+          .maybeSingle()
 
-        if (!error && data.user) {
-          const rawProfile = await fetchProfile(data.user.id)
-          const profile = ensureAdminRole(rawProfile)
-          if (!profile) return { ok: false, error: 'Profile missing. Contact support.' }
-          if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
+        if (profileRow) {
+          // Step 2: compare PIN (stored as password field in profiles)
+          const storedPin: string = profileRow.password || ''
+          const pinMatch = storedPin === password || storedPin === padPin(password)
+
+          if (!pinMatch) {
+            return { ok: false, error: 'Incorrect PIN. Please check your PIN or click "Forgot PIN".' }
+          }
+
+          const profile = ensureAdminRole({
+            id: profileRow.id,
+            email: profileRow.email,
+            name: profileRow.name,
+            role: profileRow.role,
+            phone: profileRow.phone || undefined,
+            isBlocked: profileRow.isBlocked || false,
+            createdAt: profileRow.created_at,
+          })
+
+          if (profile?.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
+          if (!profile) return { ok: false, error: 'Profile not found. Contact support.' }
+
           setUser(profile)
           userRef.current = profile
           setSessionUserId(profile.id)
@@ -283,11 +249,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: true, user: profile }
         }
 
+        // Profile not found in Supabase at all
         return {
           ok: false,
-          error: 'Incorrect phone number/email or PIN. Please check your details or click Sign Up.',
+          error: 'Account not found. Please Sign Up first.',
         }
       }
+
 
       if (!allowLocal) {
         return { ok: false, error: 'Store is not configured. Contact support.' }
@@ -320,46 +288,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ): Promise<AuthResult> => {
       const authEmail = formatAuthIdentifier(email)
       if (cloud && supabase) {
-        const { data, error } = await supabase.auth.signUp({
-          email: authEmail,
-          password: padPin(password),
+        // Simple approach: insert directly into profiles table — no Supabase Auth needed
+        // Step 1: check if already registered
+        const { data: existing } = await supabase
+          .from('profiles')
+          .select('id')
+          .or(`email.eq.${authEmail.toLowerCase()},email.eq.${email.trim().toLowerCase()}`)
+          .maybeSingle()
+
+        if (existing) {
+          return { ok: false, error: 'This phone number / email is already registered. Click Login tab to sign in.' }
+        }
+
+        // Step 2: insert new profile with PIN stored as password
+        const newId = uid('u')
+        const { error: insertErr } = await supabase.from('profiles').insert({
+          id: newId,
+          email: authEmail.toLowerCase(),
+          name: name.trim(),
+          role: 'customer',
+          phone: phoneVal?.trim() || null,
+          password,                   // stores the 4-digit PIN
         })
-        if (error) {
-          const msg = error.message || 'Signup failed'
-          if (/already registered/i.test(msg)) {
-            return {
-              ok: false,
-              error:
-                'This phone number / email is already registered. Click Login tab to sign in.',
-            }
-          }
-          return { ok: false, error: msg }
+
+        if (insertErr) return { ok: false, error: insertErr.message || 'Signup failed. Try again.' }
+
+        const profile: User = {
+          id: newId,
+          email: authEmail,
+          name: name.trim(),
+          role: 'customer',
+          phone: phoneVal?.trim() || undefined,
+          createdAt: new Date().toISOString(),
         }
-        if (data.user) {
-          // phoneVal is now properly saved to Supabase profiles
-          await supabase.from('profiles').insert({
-            id: data.user.id,
-            email: authEmail,
-            name: name.trim(),
-            role: 'customer',
-            phone: phoneVal?.trim() || null,
-          })
-          const rawProfile = await fetchProfile(data.user.id)
-          const profile: User = ensureAdminRole(rawProfile) || {
-            id: data.user.id,
-            email: authEmail,
-            name: name.trim(),
-            role: 'customer',
-            phone: phoneVal?.trim() || undefined,
-            createdAt: new Date().toISOString(),
-          }
-          setUser(profile)
-          userRef.current = profile
-          setSessionUserId(profile.id)
-          await loadUsersIfStaff(profile)
-          return { ok: true, user: profile }
-        }
-        return { ok: true }
+        setUser(profile)
+        userRef.current = profile
+        setSessionUserId(profile.id)
+        return { ok: true, user: profile }
       }
 
       if (!allowLocal) {
@@ -392,12 +357,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(async () => {
-    if (cloud && supabase) await supabase.auth.signOut()
+    // No supabase.auth.signOut() needed — we manage sessions via localStorage
     setSessionUserId(null)
     setUser(null)
     userRef.current = null
     setUsers([])
-  }, [cloud])
+  }, [])
 
   const resetPassword = useCallback(
     async (nameInput: string, email: string, newPin: string): Promise<AuthResult> => {
