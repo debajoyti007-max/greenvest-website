@@ -92,9 +92,14 @@ export default function Layout() {
                   </NavLink>
                 )}
                 {(user?.role === 'seller' || user?.role === 'admin') && (
-                  <NavLink to="/seller" onClick={closeMenu}>
-                    {t(lang, 'seller')}
-                  </NavLink>
+                  <>
+                    <NavLink to="/seller" onClick={closeMenu}>
+                      {t(lang, 'seller')}
+                    </NavLink>
+                    <NavLink to="/rider" onClick={closeMenu}>
+                      🛵 {lang === 'bn' ? 'রাইডার' : 'Rider'}
+                    </NavLink>
+                  </>
                 )}
                 {user?.role === 'admin' && (
                   <NavLink to="/admin" onClick={closeMenu}>
