@@ -213,6 +213,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
   }, [cloud, user, refreshCloud])
 
+  // Automatic 4-second polling fallback to ensure seller receives all orders live
+  useEffect(() => {
+    if (!cloud || !user) return
+    const timer = setInterval(() => {
+      void refreshCloud()
+    }, 4000)
+    return () => clearInterval(timer)
+  }, [cloud, user, refreshCloud])
+
   const setLang = useCallback((l: Lang) => {
     persistLang(l)
     setLangState(l)
