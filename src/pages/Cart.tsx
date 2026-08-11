@@ -11,6 +11,13 @@ export default function Cart() {
   const [showGrades, setShowGrades] = useState(false)
 
   const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
+
+  // Auto-clean orphaned cart items (products that no longer exist)
+  const orphanedItems = cart.filter(item => !products.find(x => x.id === item.productId))
+  if (orphanedItems.length > 0) {
+    orphanedItems.forEach(item => removeFromCart(item.productId, item.grade))
+  }
+
   const canCheckout = cartTotal >= MIN_ORDER_AMOUNT
 
   if (cart.length === 0) {
@@ -96,6 +103,9 @@ export default function Cart() {
           <span>{t(lang, 'advance')}</span>
           <strong>₹{Math.ceil(cartTotal * 0.5)}</strong>
         </div>
+        <p className="hint" style={{ fontSize: '0.8rem', color: '#6b7280', margin: '0.25rem 0' }}>
+          {lang === 'bn' ? '+ ডেলিভারি চার্জ চেকআউটে যোগ হবে' : '+ delivery fee added at checkout'}
+        </p>
         {!canCheckout && (
           <p className="form-error">
             {lang === 'bn'

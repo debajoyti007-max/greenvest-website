@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -14,10 +14,13 @@ export default function Checkout() {
   const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr, fetchAddresses, fetchDeliveryZones, saveAddress } = useStore()
   const navigate = useNavigate()
 
+  const userEditedAddress = useRef(false)
   const [house, setHouse] = useState('')
   const [landmark, setLandmark] = useState('')
   const [area, setArea] = useState('')
   const [geoCoords, setGeoCoords] = useState('')
+  const [geoLat, setGeoLat] = useState<number | undefined>(undefined)
+  const [geoLng, setGeoLng] = useState<number | undefined>(undefined)
   const [detectingGps, setDetectingGps] = useState(false)
 
   const [phone, setPhone] = useState('')
@@ -32,7 +35,7 @@ export default function Checkout() {
   const [zones, setZones] = useState<DeliveryZone[]>([])
   const [saveAddressToDb, setSaveAddressToDb] = useState(false)
 
-  const delivery = useMemo(() => calcDeliveryFee('', zones), [zones])
+  const delivery = useMemo(() => calcDeliveryFee('721632', zones), [zones])
   const grandTotal = cartTotal + delivery.fee
   const advance = Math.ceil(grandTotal * 0.5)
 
@@ -45,6 +48,7 @@ export default function Checkout() {
   }, [user, fetchAddresses, fetchDeliveryZones])
 
   useEffect(() => {
+    if (userEditedAddress.current) return
     if (!user) return
     const saved = getSavedDelivery(user.id)
     if (saved?.address) {
@@ -106,6 +110,8 @@ export default function Checkout() {
         const lng = pos.coords.longitude
         const mapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
         setGeoCoords(mapUrl)
+        setGeoLat(lat)
+        setGeoLng(lng)
         if (!area) setArea(lang === 'bn' ? 'GPS অবস্থান সংরক্ষিত' : 'GPS Location Saved')
         setDetectingGps(false)
       },
@@ -118,16 +124,20 @@ export default function Checkout() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (submitting) return
     setError('')
+    setSubmitting(true)
 
     const fullAddress = `${house.trim()} ${landmark.trim() ? `(Near: ${landmark.trim()})` : ''} ${area.trim()} ${geoCoords ? `[Maps: ${geoCoords}]` : ''}`.trim()
 
     if (!fullAddress || !phone.trim() || !utr.trim()) {
       setError(lang === 'bn' ? 'সব ঘর পূরণ করুন' : 'Please fill all required fields')
+      setSubmitting(false)
       return
     }
     if (utr.trim().length < 8) {
       setError(lang === 'bn' ? 'সঠিক UTR দিন' : 'Enter a valid UTR (min 8 characters)')
+      setSubmitting(false)
       return
     }
     if (cartTotal < MIN_ORDER_AMOUNT) {
@@ -136,6 +146,7 @@ export default function Checkout() {
           ? `সর্বনিম্ন অর্ডার ₹${MIN_ORDER_AMOUNT}`
           : `Minimum order is ₹${MIN_ORDER_AMOUNT}`,
       )
+      setSubmitting(false)
       return
     }
     const isDup = await checkDuplicateUtr(utr.trim())
@@ -145,14 +156,14 @@ export default function Checkout() {
           ? 'এই UTR নম্বরটি আগেই ব্যবহৃত হয়েছে। নতুন UTR নম্বর দিন।'
           : 'This UTR number has already been used for another order.',
       )
+      setSubmitting(false)
       return
     }
-    setSubmitting(true)
     try {
       if (saveAddressToDb) {
         await saveAddress({ user_id: user.id, label: 'Saved', address: fullAddress, phone, pin: '721632', is_default: savedAddresses.length === 0 })
       }
-      const order = await placeOrder({ address: fullAddress, phone, pin: '721632', utr, deliverySlot: 'morning', discountAmount: 0, zones })
+      const order = await placeOrder({ address: fullAddress, phone, pin: '721632', utr, deliverySlot: 'morning', discountAmount: 0, zones, geoLat, geoLng })
       if (order) navigate(`/orders/success/${order.id}`)
       else setError(lang === 'bn' ? 'অর্ডার হয়নি' : 'Could not place order')
     } catch (err) {
@@ -286,7 +297,7 @@ export default function Checkout() {
             🏡 {lang === 'bn' ? 'বাড়ি / শপ / পারা নাম' : 'House / Shop / Para Name'}
             <input
               value={house}
-              onChange={(e) => setHouse(e.target.value)}
+              onChange={(e) => { setHouse(e.target.value); userEditedAddress.current = true }}
               required
               placeholder={lang === 'bn' ? 'যেমন: কয়েল বাগান, বিশ্বাস বাড়ি / House #12' : 'e.g. Biswas House, House #12'}
             />
@@ -296,7 +307,7 @@ export default function Checkout() {
             🏛️ {lang === 'bn' ? 'কাছের পরিচিত চিহ্নিত স্থান (ল্যান্ডমার্ক)' : 'Nearby Famous Landmark'}
             <input
               value={landmark}
-              onChange={(e) => setLandmark(e.target.value)}
+              onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
               placeholder={lang === 'bn' ? 'যেমন: প্রাইমারি স্কুলের পাশে / হাসপাতাল মোড়' : 'e.g. Near Primary School / Hospital More'}
             />
           </label>
@@ -305,7 +316,7 @@ export default function Checkout() {
             📍 {lang === 'bn' ? 'গ্রাম / শহর / এলাকা' : 'Village / Town / Area Name'}
             <input
               value={area}
-              onChange={(e) => setArea(e.target.value)}
+              onChange={(e) => { setArea(e.target.value); userEditedAddress.current = true }}
               required
               placeholder={lang === 'bn' ? 'যেমন: কাঁথি শহর / সাবাজপুট' : 'e.g. Contai Town / Sabajput'}
             />

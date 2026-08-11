@@ -66,6 +66,10 @@ export interface Order {
   address: string
   phone: string
   pin: string
+  /** GPS latitude from customer's device */
+  geoLat?: number
+  /** GPS longitude from customer's device */
+  geoLng?: number
   deliverySlot?: DeliverySlot
   createdAt: string
   updatedAt: string

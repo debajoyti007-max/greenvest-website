@@ -49,6 +49,8 @@ type OrderRow = {
   phone: string
   pin: string
   delivery_slot?: string | null
+  geo_lat?: number | null
+  geo_lng?: number | null
   created_at: string
   updated_at: string
   order_items?: OrderItemRow[]
@@ -160,6 +162,8 @@ function mapOrder(row: OrderRow): Order {
     phone: row.phone,
     pin: row.pin,
     deliverySlot: slot === 'morning' || slot === 'evening' ? (slot as DeliverySlot) : undefined,
+    geoLat: row.geo_lat ?? undefined,
+    geoLng: row.geo_lng ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -258,16 +262,6 @@ export async function setAllProductsInStock(): Promise<void> {
 
 export async function fetchOrders(): Promise<Order[]> {
   const client = requireClient()
-  const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
-  try {
-    await client
-      .from('orders')
-      .delete()
-      .eq('status', 'cancelled')
-      .lt('created_at', eightHoursAgo)
-  } catch {
-    /* ignore deletion errors if user lacks admin delete policy */
-  }
 
   const { data, error } = await client
     .from('orders')
@@ -298,10 +292,14 @@ export async function createOrder(order: Order): Promise<Order> {
     updated_at: order.updatedAt,
   }
   if (order.deliverySlot) payload.delivery_slot = order.deliverySlot
+  if (order.geoLat != null) payload.geo_lat = order.geoLat
+  if (order.geoLng != null) payload.geo_lng = order.geoLng
 
   let { error: orderError } = await client.from('orders').insert(payload)
-  if (orderError && /delivery_slot/i.test(orderError.message)) {
+  if (orderError && /delivery_slot|geo_lat|geo_lng/i.test(orderError.message)) {
     delete payload.delivery_slot
+    delete payload.geo_lat
+    delete payload.geo_lng
     ;({ error: orderError } = await client.from('orders').insert(payload))
   }
   if (orderError) throw orderError
@@ -345,7 +343,7 @@ export async function bulkUpdateOrderStatusApi(ids: string[], status: OrderStatu
 
 export async function checkDuplicateUtrApi(utr: string): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false
-  const clean = utr.trim()
+  const clean = utr.trim().toUpperCase()
   if (clean.length < 6) return false
   const { data } = await supabase
     .from('orders')

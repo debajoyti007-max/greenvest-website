@@ -71,6 +71,11 @@ export function formatAuthIdentifier(input: string): string {
   return trimmed
 }
 
+/** Pad 4-digit PIN to meet Supabase 6-char minimum. */
+function padPin(pin: string): string {
+  return pin.length < 6 ? pin + '0'.repeat(6 - pin.length) : pin
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -230,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Tier 1: Standard Supabase Auth sign-in
         const { data, error } = await supabase.auth.signInWithPassword({
           email: authEmail,
-          password,
+          password: padPin(password),
         })
 
         if (!error && data.user) {
@@ -247,7 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
             email: authEmail,
-            password,
+            password: padPin(password),
           })
 
           if (!signUpErr && signUpData.user) {
@@ -278,8 +283,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await loadUsersIfStaff(profile)
             return { ok: true, user: profile }
           }
-        } catch {
-          /* ignore */
+        } catch (err) {
+          console.warn('Auto-signup fallback failed:', err)
         }
 
         // Tier 3: Local storage / cached profiles fallback (e.g. for accounts with reset PIN)
@@ -288,7 +293,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const localFound = localUsers.find(
           (u) =>
             (u.email.toLowerCase() === authEmail.toLowerCase() || u.email.toLowerCase() === normEmail) &&
-            (u.password === password || password === '0000')
+            (u.password === password)
         )
         if (localFound) {
           if (localFound.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
@@ -329,7 +334,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const found = all.find(
         (u) =>
           (u.email.toLowerCase() === authEmail.toLowerCase() || u.email.toLowerCase() === normEmail) &&
-          (u.password === password || password === '0000'),
+          (u.password === password),
       )
       if (!found) return { ok: false, error: 'Invalid phone/email or PIN' }
       if (found.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
@@ -352,7 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cloud && supabase) {
         const { data, error } = await supabase.auth.signUp({
           email: authEmail,
-          password,
+          password: padPin(password),
         })
         if (error) {
           const msg = error.message || 'Signup failed'
@@ -483,8 +488,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             await supabase.from('profiles').update({ password: newPin }).eq('id', match.id)
             await supabase.from('profiles').update({ password: newPin }).eq('email', match.email.toLowerCase())
-          } catch {
-            /* ignore */
+          } catch (err) {
+            console.warn('Cloud PIN update failed:', err)
           }
         }
         return { ok: true }

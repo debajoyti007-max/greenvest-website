@@ -20,7 +20,8 @@ export default function RiderView() {
   }, [orders])
 
   const deliveredToday = useMemo(() => {
-    return orders.filter((o) => o.status === 'delivered')
+    const today = new Date().toDateString()
+    return orders.filter((o) => o.status === 'delivered' && new Date(o.createdAt).toDateString() === today)
   }, [orders])
 
   const cashCollectedToday = useMemo(() => {
@@ -77,7 +78,9 @@ export default function RiderView() {
         <div className="rider-orders-list">
           {activeDeliveries.map((o, idx) => {
             const balance = Math.max(0, o.total - o.advanceAmount)
-            const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${o.address} PIN ${o.pin}`)}`
+            const mapUrl = o.geoLat && o.geoLng
+              ? `https://www.google.com/maps/search/?api=1&query=${o.geoLat},${o.geoLng}`
+              : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${o.address} PIN ${o.pin}`)}`
             return (
               <div key={o.id} className="rider-order-card">
                 <div className="rider-card-top">
@@ -110,8 +113,8 @@ export default function RiderView() {
                   <button type="button" onClick={() => sendOutForDeliveryWA(o.phone, o.userName, o.id)} className="btn btn-secondary rider-btn">
                     💬 WhatsApp Alert (Optional)
                   </button>
-                  <a href={mapUrl} className="btn btn-secondary rider-btn" target="_blank" rel="noopener noreferrer">
-                    🗺️ Maps
+                  <a href={mapUrl} className="btn btn-secondary rider-btn" target="_blank" rel="noopener noreferrer" style={o.geoLat && o.geoLng ? { background: '#dcfce7', color: '#166534', fontWeight: 600 } : {}}>
+                    {o.geoLat && o.geoLng ? '📍 GPS Maps' : '🗺️ Maps'}
                   </a>
                 </div>
 

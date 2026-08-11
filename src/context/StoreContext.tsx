@@ -61,6 +61,8 @@ interface PlaceOrderOpts {
   deliverySlot: import('../types').DeliverySlot
   discountAmount?: number
   zones?: DeliveryZone[]
+  geoLat?: number
+  geoLng?: number
 }
 
 interface StoreContextValue {
@@ -277,18 +279,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (currentCart.length === 0) return null
 
       const catalog = cloud ? products : getProducts()
-      const items = currentCart.map((c) => {
-        const p = catalog.find((x) => x.id === c.productId)
-        if (!p) throw new Error('Product missing from cart')
-        return {
-          productId: c.productId,
-          name: p.name,
-          emoji: p.emoji,
-          grade: c.grade,
-          qty: c.qty,
-          unitPrice: priceFor(p, c.grade),
-        }
-      })
+      const items = currentCart
+        .map((c) => {
+          const p = catalog.find((x) => x.id === c.productId)
+          if (!p) return null
+          return {
+            productId: c.productId,
+            name: p.name,
+            emoji: p.emoji,
+            grade: c.grade,
+            qty: c.qty,
+            unitPrice: priceFor(p, c.grade),
+          }
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+
+      if (items.length === 0) return null
 
       const subtotal = items.reduce((s, i) => s + i.unitPrice * i.qty, 0)
       if (subtotal < MIN_ORDER_AMOUNT) return null
@@ -312,6 +318,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         phone: opts.phone.trim(),
         pin: opts.pin.replace(/\D/g, ''),
         deliverySlot: opts.deliverySlot,
+        geoLat: opts.geoLat,
+        geoLng: opts.geoLng,
         createdAt: now,
         updatedAt: now,
       }

@@ -15,13 +15,13 @@ export default function OrderSuccess() {
   const { orders, lang } = useStore()
   const notified = useRef(false)
   const [copied, setCopied] = useState(false)
+  const [waitingForOrder, setWaitingForOrder] = useState(true)
 
   const order = user ? orders.find((o) => o.id === id && o.userId === user.id) : undefined
 
   useEffect(() => {
     if (!order || notified.current) return
     notified.current = true
-    openSellerOrderWhatsApp(order)
     showToast(
       lang === 'bn'
         ? `🎉 অর্ডার #${order.id.slice(0, 6)} সফলভাবে সম্পন্ন হয়েছে! রসিদ ও নোটিফিকেশন চেক করুন।`
@@ -29,6 +29,15 @@ export default function OrderSuccess() {
       '🔔'
     )
   }, [order, lang])
+
+  useEffect(() => {
+    if (order) {
+      setWaitingForOrder(false)
+      return
+    }
+    const timer = setTimeout(() => setWaitingForOrder(false), 3000)
+    return () => clearTimeout(timer)
+  }, [order])
 
   const copySummary = async () => {
     if (!order) return
@@ -50,7 +59,15 @@ export default function OrderSuccess() {
 
   if (!user) return <Navigate to="/auth" replace />
 
-  if (!order) {
+  if (!order && waitingForOrder) {
+    return (
+      <div className="page narrow" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+        <p>{lang === 'bn' ? '⏳ অর্ডার লোড হচ্ছে...' : '⏳ Loading your order...'}</p>
+      </div>
+    )
+  }
+
+  if (!order && !waitingForOrder) {
     return (
       <div className="page narrow">
         <h1>{t(lang, 'orderNotFound')}</h1>

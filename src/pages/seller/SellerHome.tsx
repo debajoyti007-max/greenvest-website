@@ -111,7 +111,15 @@ export default function SellerHome() {
     if (
       confirm(lang === 'bn' ? 'সব আইটেম স্টকে আনবেন?' : 'Mark ALL items IN STOCK for the new day?')
     ) {
-      void morningReset().then(() => setSheet(null))
+      void morningReset().then(() => {
+        setSheet(null)
+        showToast(
+          lang === 'bn'
+            ? '🌅 সকালের স্টক রিসেট সম্পন্ন হয়েছে!'
+            : '🌅 6 AM Morning Stock Reset Complete!',
+          '🥬'
+        )
+      })
     }
   }
 
@@ -230,15 +238,7 @@ export default function SellerHome() {
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={() => {
-            onMorningReset()
-            showToast(
-              lang === 'bn'
-                ? '🌅 সকালের স্টক রিসেট সম্পন্ন হয়েছে!'
-                : '🌅 6 AM Morning Stock Reset Complete!',
-              '🥬'
-            )
-          }}
+          onClick={onMorningReset}
           style={{ background: '#f0fdf4', borderColor: '#86efac', color: '#166534', fontWeight: 700 }}
         >
           {lang === 'bn' ? '🌅 6 AM সকালের স্টক রিসেট' : '🌅 6 AM Morning Stock Reset'}

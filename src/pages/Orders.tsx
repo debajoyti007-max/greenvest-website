@@ -176,8 +176,8 @@ export default function Orders() {
                 order={o} 
                 lang={lang} 
                 createdAt={o.createdAt} 
-                updatedAt={(o as any).updatedAt} 
-                deliverySlot={(o as any).deliverySlot} 
+                updatedAt={o.updatedAt} 
+                deliverySlot={o.deliverySlot} 
               />
               <ul>
                 {o.items.map((it) => (

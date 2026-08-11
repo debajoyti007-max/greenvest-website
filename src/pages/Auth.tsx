@@ -64,6 +64,10 @@ export default function Auth() {
 
     // ───── LOGIN MODE ─────
     if (mode === 'login') {
+      if (password.length !== 4) {
+        setError(lang === 'bn' ? '৪-সংখ্যার পিন দিন' : 'Please enter a 4-digit PIN')
+        return
+      }
       setBusy(true)
       try {
         const targetMail = getTargetEmail(cleanId)
@@ -124,6 +128,16 @@ export default function Auth() {
     // ───── SIGNUP MODE ─────
     if (!name.trim()) {
       setError(lang === 'bn' ? 'নাম দিন' : 'Name required')
+      return
+    }
+
+    if (password.length !== 4) {
+      setError(lang === 'bn' ? '৪-সংখ্যার পিন দিন' : 'Please enter a 4-digit PIN')
+      return
+    }
+
+    if (!emailOrPhone.includes('@') && !isValidIndianPhone(emailOrPhone)) {
+      setError(lang === 'bn' ? 'সঠিক ১০-সংখ্যার মোবাইল নম্বর দিন' : 'Enter a valid 10-digit mobile number')
       return
     }
 

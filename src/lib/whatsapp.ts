@@ -26,6 +26,7 @@ export function sellerOrderWhatsAppUrl(order: Order) {
     `ফোন: ${order.phone}`,
     `ঠিকানা: ${order.address}`,
     `PIN: ${order.pin}`,
+    order.geoLat && order.geoLng ? `📍 GPS: https://www.google.com/maps/search/?api=1&query=${order.geoLat},${order.geoLng}` : '',
     `মোট: ₹${order.total} (অগ্রিম ₹${order.advanceAmount})`,
     order.deliverySlot ? `স্লট: ${order.deliverySlot}` : '',
     `UTR: ${order.utr}`,
@@ -34,7 +35,7 @@ export function sellerOrderWhatsAppUrl(order: Order) {
     ...order.items.map(
       (it) => `${it.emoji} ${it.name} ${it.grade} × ${it.qty} = ₹${it.unitPrice * it.qty}`,
     ),
-  ]
+  ].filter(Boolean)
   const text = encodeURIComponent(lines.join('\n'))
   return `https://wa.me/${SUPPORT_WHATSAPP}?text=${text}`
 }
@@ -48,18 +49,22 @@ export function openSellerOrderWhatsApp(order: Order) {
 export function riderDispatchWhatsAppUrl(order: Order) {
   const balance = Math.max(0, order.total - order.advanceAmount)
   const shortId = formatOrderId(order.id)
+  const gpsLink = order.geoLat && order.geoLng
+    ? `https://www.google.com/maps/search/?api=1&query=${order.geoLat},${order.geoLng}`
+    : null
   const lines = [
     `🚛 NEW DELIVERY ASSIGNED`,
     `Order #: ${shortId}`,
     `Customer: ${order.userName} (${order.phone})`,
     `Address: ${order.address} (PIN ${order.pin})`,
+    gpsLink ? `📍 GPS Location: ${gpsLink}` : '',
     `Delivery Slot: ${order.deliverySlot || 'Standard'}`,
     `Collect Balance: ₹${balance} (${balance > 0 ? 'Collect on delivery' : 'Fully Paid'})`,
     `📲 Live Track: https://greenvest.shop/track?id=${shortId}`,
     ``,
     `Items to deliver:`,
     ...order.items.map((it) => `• ${it.emoji} ${it.name} (Grade ${it.grade}) × ${it.qty}`),
-  ]
+  ].filter(Boolean)
   return `https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`
 }
 
