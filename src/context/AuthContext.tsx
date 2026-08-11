@@ -228,13 +228,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!storedPin) {
             return {
               ok: false,
-              error: 'Your PIN is not set yet. Click "Forgot PIN? Verify Username & Reset" below to create your PIN.',
+              error: '🔑 No PIN set for this account yet. Click "Forgot PIN? Verify Username & Reset" below to create your 4-digit PIN.',
             }
           }
 
           const pinMatch = storedPin === password || storedPin === padPin(password)
           if (!pinMatch) {
-            return { ok: false, error: 'Incorrect PIN. Click "Forgot PIN?" below to reset it.' }
+            return { ok: false, error: '❌ Incorrect PIN. Click "Forgot PIN?" below to reset it.' }
           }
 
           const profile = ensureAdminRole({
@@ -319,7 +319,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,                   // stores the 4-digit PIN
         })
 
-        if (insertErr) return { ok: false, error: insertErr.message || 'Signup failed. Try again.' }
+        if (insertErr) {
+          // Surface the real error — most likely the `password` column is missing
+          // Fix: run in Supabase SQL Editor:
+          // ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password TEXT;
+          const isColumnMissing = insertErr.code === '42703' || (insertErr.message || '').includes('column')
+          if (isColumnMissing) {
+            return { ok: false, error: 'Database setup needed. Ask admin to run: ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password TEXT;' }
+          }
+          return { ok: false, error: insertErr.message || 'Signup failed. Try again.' }
+        }
 
         const profile: User = {
           id: newId,
@@ -398,7 +407,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             })
             .eq('id', profileRow.id)
 
-          if (updateErr) return { ok: false, error: 'PIN update failed. Please try again.' }
+          if (updateErr) {
+            // PostgreSQL error 42703 = column doesn't exist in the table schema
+            const isColumnMissing = updateErr.code === '42703' || (updateErr.message || '').includes('column')
+            if (isColumnMissing) {
+              return {
+                ok: false,
+                error: 'Setup needed: Run this SQL in Supabase → SQL Editor:\n\nALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password TEXT;',
+              }
+            }
+            return { ok: false, error: `PIN update failed: ${updateErr.message}` }
+          }
           return { ok: true }
         }
 
