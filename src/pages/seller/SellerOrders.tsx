@@ -72,6 +72,7 @@ export default function SellerOrders() {
   const { user } = useAuth()
   const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr, deleteOrder } = useStore()
   const [filter, setFilter] = useState<Filter>('active')
+  const [customerFilter, setCustomerFilter] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const prevCount = useRef(orders.length)
@@ -141,8 +142,12 @@ export default function SellerOrders() {
   }, [todayOrders])
 
   const filtered = useMemo(() => {
-    const sorted = [...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    let sorted = [...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    if (customerFilter) {
+      return sorted.filter(o => o.phone === customerFilter || o.userId === customerFilter)
+    }
     return sorted.filter(o => {
+      if (filter === 'all') return true
       if (filter !== 'cancelled' && isCancelledOld(o)) return false
       if (filter === 'utr') return !o.utrVerified && o.status !== 'cancelled'
       if (filter === 'today') return isToday(o.createdAt)
@@ -151,7 +156,7 @@ export default function SellerOrders() {
       if (filter === 'cancelled') return o.status === 'cancelled'
       return true
     })
-  }, [orders, filter])
+  }, [orders, filter, customerFilter])
 
   const toggleSelect = (id: string) => setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
   const toggleSelectAll = () => setSelectedIds(selectedIds.length === filtered.length ? [] : filtered.map(o => o.id))
@@ -201,16 +206,28 @@ export default function SellerOrders() {
         </div>
       </div>
 
+      {/* Customer filter notice banner */}
+      {customerFilter && (
+        <div style={{ ...cs, padding: '0.6rem 1rem', marginBottom: '0.75rem', background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e40af' }}>
+            👤 {lang === 'bn' ? `কাস্টমারের সকল অর্ডারের হিস্টোরি (${filtered.length})` : `Order History for Customer (${filtered.length} orders)`}
+          </span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCustomerFilter(null)} style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}>
+            ✕ {lang === 'bn' ? 'ক্লিয়ার ফিল্টার' : 'Clear Filter'}
+          </button>
+        </div>
+      )}
+
       {/* Filter chips */}
       <div style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', padding: '0.25rem 0', marginBottom: '0.75rem' }}>
         {filters.map(f => (
           <button key={f.id} type="button"
-            onClick={() => setFilter(f.id)}
+            onClick={() => { setCustomerFilter(null); setFilter(f.id) }}
             style={{
               padding: '0.4rem 0.75rem', borderRadius: '20px', border: 'none', cursor: 'pointer',
               fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
-              background: filter === f.id ? 'var(--primary, #166534)' : '#f3f4f6',
-              color: filter === f.id ? 'white' : '#374151',
+              background: !customerFilter && filter === f.id ? 'var(--primary, #166534)' : '#f3f4f6',
+              color: !customerFilter && filter === f.id ? 'white' : '#374151',
             }}>
             {lang === 'bn' ? f.bn : f.en}{f.count !== undefined ? ` (${f.count})` : ''}
           </button>
@@ -261,10 +278,21 @@ export default function SellerOrders() {
                       <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{o.userName}</span>
                       {/* S8: Quick call */}
                       <a href={`tel:${o.phone}`} onClick={e => e.stopPropagation()} style={{ fontSize: '0.85rem', textDecoration: 'none' }}>📞</a>
-                      {historyCount <= 1
-                        ? <span style={{ fontSize: '0.7rem', padding: '1px 6px', background: '#dcfce7', color: '#166534', borderRadius: '10px' }}>🆕</span>
-                        : <span style={{ fontSize: '0.7rem', padding: '1px 6px', background: '#e0e7ff', color: '#3730a3', borderRadius: '10px' }}>🔁{historyCount}{suffix(historyCount)}</span>
-                      }
+                      {historyCount <= 1 ? (
+                        <span style={{ fontSize: '0.7rem', padding: '1px 6px', background: '#dcfce7', color: '#166534', borderRadius: '10px' }}>🆕</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setCustomerFilter(o.phone || o.userId || null)
+                          }}
+                          title={lang === 'bn' ? 'এই কাস্টমারের পূর্বের সব অর্ডার দেখুন' : 'Click to see all orders from this customer'}
+                          style={{ fontSize: '0.7rem', padding: '1px 6px', background: '#e0e7ff', color: '#3730a3', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          🔁 {historyCount}{suffix(historyCount)} (History)
+                        </button>
+                      )}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: '#6b7280', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <span>{o.items.map(i => i.emoji).join('')} ₹{o.total}</span>
@@ -383,6 +411,7 @@ export default function SellerOrders() {
                     <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
                       <a href={`tel:${o.phone}`} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534' }}>📞 Call</a>
                       <button type="button" onClick={() => openWhatsApp(o, lang)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', cursor: 'pointer', color: '#166534' }}>💬 WhatsApp</button>
+                      <Link to={`/orders/success/${o.id}`} target="_blank" style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#e0e7ff', border: '1px solid #c7d2fe', fontSize: '0.8rem', textDecoration: 'none', color: '#3730a3', fontWeight: 600 }}>📲 Live Track</Link>
                       <button type="button" onClick={() => window.open(riderDispatchWhatsAppUrl(o), '_blank', 'noopener,noreferrer')} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: '0.8rem', cursor: 'pointer', color: '#1e40af' }}>🛵 Rider</button>
                       <button type="button" onClick={() => openMaps(o.address, o.pin || '')} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🗺️ Maps</button>
                       <button type="button" onClick={() => printOrderInvoice(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🧾</button>
