@@ -316,29 +316,28 @@ export default function SellerOrders() {
                   <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{expanded ? '▲' : '▼'}</span>
                 </div>
 
-                {/* S3: Quick action buttons - always visible for active orders */}
-                {o.status !== 'delivered' && o.status !== 'cancelled' && (
-                  <div style={{ padding: '0 1rem 0.6rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    {(o.status === 'pending' || o.status === 'advance_paid') && (
-                      <button type="button" onClick={() => void handleAcceptOrder(o)}
-                        style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: '#22c55e', color: 'white' }}>
-                        ✅ {lang === 'bn' ? 'অর্ডার গ্রহণ' : 'Accept Order'}
-                      </button>
-                    )}
-                    {o.status === 'confirmed' && (
-                      <button type="button" onClick={() => void handleMarkDelivered(o)}
-                        style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: '#3b82f6', color: 'white' }}>
-                        🚚 {lang === 'bn' ? 'ডেলিভারড' : 'Mark Delivered'}
-                      </button>
-                    )}
-                    {(o.status === 'pending' || o.status === 'advance_paid') && (
-                      <button type="button" onClick={() => void handleCancel(o)}
-                        style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #fca5a5', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', background: '#fef2f2', color: '#dc2626' }}>
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                )}
+                {/* Quick action buttons - available for all orders */}
+                <div style={{ padding: '0 1rem 0.6rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {(o.status === 'pending' || o.status === 'advance_paid') && (
+                    <button type="button" onClick={() => void handleAcceptOrder(o)}
+                      style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: '#22c55e', color: 'white' }}>
+                      ✅ {lang === 'bn' ? 'অর্ডার গ্রহণ' : 'Accept Order'}
+                    </button>
+                  )}
+                  {o.status === 'confirmed' && (
+                    <button type="button" onClick={() => void handleMarkDelivered(o)}
+                      style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: '#3b82f6', color: 'white' }}>
+                      🚚 {lang === 'bn' ? 'ডেলিভারড' : 'Mark Delivered'}
+                    </button>
+                  )}
+                  {o.status !== 'cancelled' && (
+                    <button type="button" onClick={() => void handleCancel(o)}
+                      title={lang === 'bn' ? 'অর্ডার বাতিল করুন' : 'Cancel order'}
+                      style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #fca5a5', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', background: '#fef2f2', color: '#dc2626' }}>
+                      ✕ {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                    </button>
+                  )}
+                </div>
 
                 {/* S4: Balance due for delivered orders */}
                 {o.status === 'delivered' && balance > 0 && (
