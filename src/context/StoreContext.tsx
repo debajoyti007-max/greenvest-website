@@ -135,7 +135,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       const prods = await fetchProducts()
       setProducts(prods)
-      setCart(getCart())
+      setCart(getCart(user?.id))
       const l = getLang()
       setLangState(l)
       document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
@@ -163,14 +163,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return
     }
     setProducts([])
-    setCart(getCart())
+    setCart(getCart(user?.id))
     setOrders([])
     const l = getLang()
     setLangState(l)
     document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
     document.body.classList.toggle('lang-bn', l === 'bn')
     setLoading(false)
-  }, [cloud, refreshCloud, refreshLocal])
+  }, [cloud, refreshCloud, refreshLocal, user?.id])
 
   useEffect(() => {
     void refresh()
@@ -179,12 +179,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onStore = () => {
       if (cloud) {
-        setCart(getCart())
+        setCart(getCart(user?.id))
         setLangState(getLang())
       } else if (ALLOW_LOCAL_FALLBACK) {
         refreshLocal()
       } else {
-        setCart(getCart())
+        setCart(getCart(user?.id))
         setLangState(getLang())
       }
     }
@@ -197,7 +197,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(STORE_EVENT, onStore)
       window.removeEventListener('storage', onStorage)
     }
-  }, [cloud, refreshLocal])
+  }, [cloud, refreshLocal, user?.id])
 
   useEffect(() => {
     if (!cloud) return
@@ -216,7 +216,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
   }, [cloud, user, refreshCloud])
 
-  // Automatic 4-second polling fallback to ensure seller receives all orders live
+  // Automatic 4-second polling fallback for seller/admin live order sync
   useEffect(() => {
     if (!cloud || !user) return
     const timer = setInterval(() => {

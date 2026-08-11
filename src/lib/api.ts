@@ -210,18 +210,41 @@ export async function checkAccountExistsByEmail(email: string): Promise<User | n
 
 export async function updateProfileRole(userId: string, role: Role, email?: string): Promise<void> {
   const client = requireClient()
-  try {
-    await client.from('profiles').update({ role }).eq('id', userId)
-  } catch {
-    /* ignore */
-  }
+  
+  // 1. Try updating by ID
+  const { data: updatedById, error: errById } = await client
+    .from('profiles')
+    .update({ role })
+    .eq('id', userId)
+    .select()
+
+  if (!errById && updatedById && updatedById.length > 0) return
+
+  // 2. Try updating by email
   if (email) {
-    try {
-      await client.from('profiles').update({ role }).eq('email', email.toLowerCase())
-    } catch {
-      /* ignore */
-    }
+    const { data: updatedByEmail, error: errByEmail } = await client
+      .from('profiles')
+      .update({ role })
+      .eq('email', email.toLowerCase())
+      .select()
+
+    if (!errByEmail && updatedByEmail && updatedByEmail.length > 0) return
   }
+
+  // 3. If profile row doesn't exist in Supabase yet, UPSERT it!
+  const targetId = toUuid(userId)
+  const targetEmail = email ? email.toLowerCase() : `${targetId}@greenvest.shop`
+  const { error: upsertErr } = await client.from('profiles').upsert(
+    {
+      id: targetId,
+      email: targetEmail,
+      name: targetEmail.split('@')[0],
+      role: role,
+      created_at: new Date().toISOString(),
+    },
+    { onConflict: 'id' }
+  )
+  if (upsertErr) console.warn('upsertProfileRole error:', upsertErr)
 }
 
 export async function fetchProducts(): Promise<Product[]> {
@@ -304,7 +327,7 @@ export async function createOrder(order: Order): Promise<Order> {
   }
 
   // Step 1: Insert order row
-  const payload: Record<string, unknown> = {
+  const payload: any = {
     id: order.id,
     user_id: targetUserId,
     user_name: order.userName,
@@ -319,11 +342,21 @@ export async function createOrder(order: Order): Promise<Order> {
     address: order.address,
     phone: order.phone,
     pin: order.pin,
+    delivery_slot: order.deliverySlot || null,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
   }
 
-  const { error: orderError } = await client.from('orders').insert(payload)
+  if (order.geoLat != null) payload.geo_lat = order.geoLat
+  if (order.geoLng != null) payload.geo_lng = order.geoLng
+
+  let { error: orderError } = await client.from('orders').insert(payload)
+  if (orderError && /(delivery_slot|geo_lat|geo_lng)/i.test(orderError.message)) {
+    delete payload.delivery_slot
+    delete payload.geo_lat
+    delete payload.geo_lng
+    ;({ error: orderError } = await client.from('orders').insert(payload))
+  }
   if (orderError) throw orderError
 
   // Step 2: Insert order items

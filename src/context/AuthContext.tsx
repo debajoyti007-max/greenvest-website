@@ -254,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!profile) return { ok: false, error: 'Profile missing. Contact support.' }
           if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
           setUser(profile)
+          setSessionUserId(profile.id)
           await loadUsersIfStaff(profile)
           return { ok: true, user: profile }
         }
@@ -290,6 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
             setUser(profile)
+            setSessionUserId(profile.id)
             await loadUsersIfStaff(profile)
             return { ok: true, user: profile }
           }
@@ -309,6 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (localFound.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
           const profile = ensureAdminRole(localFound) || localFound
           setUser(profile)
+          setSessionUserId(profile.id)
           await loadUsersIfStaff(profile)
           return { ok: true, user: profile }
         }
@@ -325,6 +328,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             createdAt: new Date().toISOString(),
           }
           setUser(adminUser)
+          setSessionUserId(adminUser.id)
           await loadUsersIfStaff(adminUser)
           return { ok: true, user: adminUser }
         }
@@ -400,6 +404,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const all = getUsers()
           saveUsers([...all, profile])
           setUser(profile)
+          setSessionUserId(profile.id)
           await loadUsersIfStaff(profile)
           return { ok: true, user: profile }
         }
@@ -436,7 +441,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     if (cloud && supabase) await supabase.auth.signOut()
-    else setSessionUserId(null)
+    setSessionUserId(null)
     setUser(null)
     if (allowLocal) setUsers(getUsers())
     else setUsers([])
@@ -569,8 +574,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cloud && supabase) {
         try {
           await updateProfileRole(userId, role, targetEmail)
-        } catch {
-          /* ignore */
+          const cloudUsers = await fetchProfiles()
+          if (cloudUsers && cloudUsers.length > 0) {
+            setUsers(cloudUsers)
+          }
+        } catch (err) {
+          console.warn('setUserRole cloud error:', err)
         }
       }
     },
