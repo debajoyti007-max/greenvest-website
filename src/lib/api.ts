@@ -274,10 +274,15 @@ export async function fetchOrders(): Promise<Order[]> {
 export async function createOrder(order: Order): Promise<Order> {
   const client = requireClient()
 
+  // Get the real Supabase auth UUID — orders.user_id is UUID type in DB
+  const { data: { user: authUser } } = await client.auth.getUser()
+  if (!authUser) throw new Error('Not authenticated')
+  const supabaseUid = authUser.id // This is always a valid UUID
+
   // Step 1: Insert order row
   const payload: Record<string, unknown> = {
     id: order.id,
-    user_id: order.userId,
+    user_id: supabaseUid,
     user_name: order.userName,
     user_email: order.userEmail,
     subtotal: order.subtotal,
@@ -309,7 +314,6 @@ export async function createOrder(order: Order): Promise<Order> {
   }))
   const { error: itemsError } = await client.from('order_items').insert(items)
   if (itemsError) {
-    // Rollback order row if items fail
     await client.from('orders').delete().eq('id', order.id)
     throw itemsError
   }
