@@ -274,8 +274,8 @@ export async function fetchOrders(): Promise<Order[]> {
 export async function createOrder(order: Order): Promise<Order> {
   const client = requireClient()
 
-  // Build payload for RPC — single atomic call with SECURITY DEFINER bypasses RLS
-  const rpcPayload = {
+  // Step 1: Insert order row
+  const payload: Record<string, unknown> = {
     id: order.id,
     user_id: order.userId,
     user_name: order.userName,
@@ -290,26 +290,29 @@ export async function createOrder(order: Order): Promise<Order> {
     address: order.address,
     phone: order.phone,
     pin: order.pin,
-    delivery_slot: order.deliverySlot || null,
-    geo_lat: order.geoLat ?? null,
-    geo_lng: order.geoLng ?? null,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
-    items: order.items.map((it) => ({
-      product_id: it.productId,
-      name: it.name,
-      emoji: it.emoji,
-      grade: it.grade,
-      qty: it.qty,
-      unit_price: it.unitPrice,
-    })),
   }
 
-  const { error: rpcError } = await client.rpc('create_order_with_items', {
-    order_data: rpcPayload,
-  })
+  const { error: orderError } = await client.from('orders').insert(payload)
+  if (orderError) throw orderError
 
-  if (rpcError) throw rpcError
+  // Step 2: Insert order items
+  const items = order.items.map((it) => ({
+    order_id: order.id,
+    product_id: it.productId,
+    name: it.name,
+    emoji: it.emoji,
+    grade: it.grade,
+    qty: it.qty,
+    unit_price: it.unitPrice,
+  }))
+  const { error: itemsError } = await client.from('order_items').insert(items)
+  if (itemsError) {
+    // Rollback order row if items fail
+    await client.from('orders').delete().eq('id', order.id)
+    throw itemsError
+  }
 
   return order
 }
