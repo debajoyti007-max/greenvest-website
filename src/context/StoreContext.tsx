@@ -226,11 +226,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return p.pC
   }, [])
 
+  useEffect(() => {
+    setCart(getCart(user?.id))
+  }, [user?.id])
+
   const addToCart = useCallback((productId: string, grade: Grade, qty = 1) => {
     const p = products.find((x) => x.id === productId)
     if (p && !p.inStock) return
 
-    const current = getCart()
+    const current = getCart(user?.id)
     const idx = current.findIndex((c) => c.productId === productId && c.grade === grade)
 
     let next: CartItem[]
@@ -239,28 +243,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } else {
       next = [...current, { productId, grade, qty }]
     }
-    saveCart(next)
+    saveCart(next, user?.id)
     setCart(next)
-  }, [products])
+  }, [products, user?.id])
 
   const updateCartQty = useCallback((productId: string, grade: Grade, qty: number) => {
-    const next = getCart()
+    const next = getCart(user?.id)
       .map((c) => (c.productId === productId && c.grade === grade ? { ...c, qty } : c))
       .filter((c) => c.qty > 0)
-    saveCart(next)
+    saveCart(next, user?.id)
     setCart(next)
-  }, [])
+  }, [user?.id])
 
   const removeFromCart = useCallback((productId: string, grade: Grade) => {
-    const next = getCart().filter((c) => !(c.productId === productId && c.grade === grade))
-    saveCart(next)
+    const next = getCart(user?.id).filter((c) => !(c.productId === productId && c.grade === grade))
+    saveCart(next, user?.id)
     setCart(next)
-  }, [])
+  }, [user?.id])
 
   const clearCart = useCallback(() => {
-    saveCart([])
+    saveCart([], user?.id)
     setCart([])
-  }, [])
+  }, [user?.id])
 
   const cartCount = useMemo(() => cart.reduce((s, c) => s + c.qty, 0), [cart])
 
@@ -275,7 +279,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const placeOrder = useCallback(
     async (opts: PlaceOrderOpts) => {
       if (!user) return null
-      const currentCart = getCart()
+      const currentCart = getCart(user.id)
       if (currentCart.length === 0) return null
 
       const catalog = cloud ? products : getProducts()
@@ -332,7 +336,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           pin: order.pin,
           deliverySlot: order.deliverySlot,
         })
-        saveCart([])
+        saveCart([], user.id)
         setCart([])
         await refreshCloud()
         return order
@@ -347,7 +351,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pin: order.pin,
         deliverySlot: order.deliverySlot,
       })
-      saveCart([])
+      saveCart([], user.id)
       setCart([])
       return order
     },
@@ -359,7 +363,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const catalog = cloud ? products : getProducts()
       let added = 0
       let skipped = 0
-      const next = [...getCart()]
+      const next = [...getCart(user?.id)]
 
       for (const it of order.items) {
         const p = catalog.find((x) => x.id === it.productId)
@@ -376,11 +380,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         added += 1
       }
 
-      saveCart(next)
+      saveCart(next, user?.id)
       setCart(next)
       return { added, skipped }
     },
-    [cloud, products],
+    [cloud, products, user?.id],
   )
 
   const updateProduct = useCallback(

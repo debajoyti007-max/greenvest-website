@@ -169,12 +169,17 @@ export function saveOrders(orders: Order[]) {
   write(KEYS.orders, orders)
 }
 
-export function getCart(): CartItem[] {
-  return read(KEYS.cart, [])
+export function getCart(userId?: string | null): CartItem[] {
+  const activeId = userId !== undefined ? userId : getSessionUserId()
+  const key = activeId ? `${KEYS.cart}_${activeId}` : KEYS.cart
+  return read(key, [])
 }
 
-export function saveCart(cart: CartItem[]) {
-  write(KEYS.cart, cart)
+export function saveCart(cart: CartItem[], userId?: string | null) {
+  const activeId = userId !== undefined ? userId : getSessionUserId()
+  const key = activeId ? `${KEYS.cart}_${activeId}` : KEYS.cart
+  write(key, cart)
+  window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key } }))
 }
 
 export function getSessionUserId(): string | null {
