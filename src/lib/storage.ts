@@ -14,6 +14,34 @@ const KEYS = {
 
 export const STORE_EVENT = 'greenvest-store-update'
 
+// ── PIN Storage (no Supabase schema change needed) ─────────────────────────
+// PINs are stored in localStorage keyed by lowercase email.
+// This works independently of the Supabase profiles table schema.
+const PINS_KEY = 'gv_pins'
+
+export function getStoredPin(email: string): string {
+  try {
+    const pins = JSON.parse(localStorage.getItem(PINS_KEY) || '{}')
+    return pins[email.toLowerCase()] || ''
+  } catch { return '' }
+}
+
+export function storePin(email: string, pin: string): void {
+  try {
+    const pins = JSON.parse(localStorage.getItem(PINS_KEY) || '{}')
+    pins[email.toLowerCase()] = pin
+    localStorage.setItem(PINS_KEY, JSON.stringify(pins))
+  } catch {}
+}
+
+export function removePin(email: string): void {
+  try {
+    const pins = JSON.parse(localStorage.getItem(PINS_KEY) || '{}')
+    delete pins[email.toLowerCase()]
+    localStorage.setItem(PINS_KEY, JSON.stringify(pins))
+  } catch {}
+}
+
 // Module-level flag so ensureSeeded() is a true no-op after the first run.
 // This stops the localStorage read/write/event cascade on every render.
 let _seeded = false

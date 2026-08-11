@@ -14,9 +14,11 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   ensureSeeded,
   getSessionUserId,
+  getStoredPin,
   getUsers,
   saveUsers,
   setSessionUserId,
+  storePin,
   uid,
 } from '../lib/storage'
 import type { Role, User } from '../types'
@@ -221,14 +223,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .maybeSingle()
 
         if (profileRow) {
-          // Step 2: compare PIN (stored as password field in profiles)
-          const storedPin: string = profileRow.password || ''
+          // Check PIN from localStorage (no profiles.password column needed)
+          const storedPin = getStoredPin(profileRow.email)
 
-          // If account exists but PIN was never set (old Supabase Auth account)
           if (!storedPin) {
             return {
               ok: false,
-              error: '🔑 No PIN set for this account yet. Click "Forgot PIN? Verify Username & Reset" below to create your 4-digit PIN.',
+              error: '🔑 No PIN set yet. Click "Forgot PIN? Verify Username & Reset" below to create your 4-digit PIN.',
             }
           }
 
@@ -257,13 +258,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: true, user: profile }
         }
 
-        // Profile not found in Supabase at all
-        return {
-          ok: false,
-          error: 'Account not found. Please Sign Up first.',
-        }
+        return { ok: false, error: 'Account not found. Please Sign Up first.' }
       }
-
 
       if (!allowLocal) {
         return { ok: false, error: 'Store is not configured. Contact support.' }
@@ -308,7 +304,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: false, error: 'This phone number / email is already registered. Click Login tab to sign in.' }
         }
 
-        // Step 2: insert new profile with PIN stored as password
+        // Insert profile WITHOUT password field (column may not exist in Supabase)
         const newId = uid('u')
         const { error: insertErr } = await supabase.from('profiles').insert({
           id: newId,
@@ -316,19 +312,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: name.trim(),
           role: 'customer',
           phone: phoneVal?.trim() || null,
-          password,                   // stores the 4-digit PIN
         })
 
-        if (insertErr) {
-          // Surface the real error — most likely the `password` column is missing
-          // Fix: run in Supabase SQL Editor:
-          // ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password TEXT;
-          const isColumnMissing = insertErr.code === '42703' || (insertErr.message || '').includes('column')
-          if (isColumnMissing) {
-            return { ok: false, error: 'Database setup needed. Ask admin to run: ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password TEXT;' }
-          }
-          return { ok: false, error: insertErr.message || 'Signup failed. Try again.' }
-        }
+        if (insertErr) return { ok: false, error: insertErr.message || 'Signup failed. Try again.' }
+
+        // Store PIN locally (no schema change needed)
+        storePin(authEmail, password)
 
         const profile: User = {
           id: newId,
@@ -390,42 +379,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (cloud && supabase) {
-        // Find profile directly in Supabase
         const { data: profileRow } = await supabase
           .from('profiles')
-          .select('*')
+          .select('id,email,name')
           .or(`email.eq.${authEmail.toLowerCase()},email.eq.${email.trim().toLowerCase()}`)
           .maybeSingle()
 
         if (profileRow) {
-          // Update their PIN in Supabase profiles table
-          const { error: updateErr } = await supabase
-            .from('profiles')
-            .update({
-              password: newPin,
-              name: nameInput.trim() || profileRow.name,
-            })
-            .eq('id', profileRow.id)
-
-          if (updateErr) {
-            // PostgreSQL error 42703 = column doesn't exist in the table schema
-            const isColumnMissing = updateErr.code === '42703' || (updateErr.message || '').includes('column')
-            if (isColumnMissing) {
-              return {
-                ok: false,
-                error: 'Setup needed: Run this SQL in Supabase → SQL Editor:\n\nALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password TEXT;',
-              }
-            }
-            return { ok: false, error: `PIN update failed: ${updateErr.message}` }
-          }
+          // Store new PIN locally
+          storePin(profileRow.email, newPin)
           return { ok: true }
         }
 
-        // Account not found — show clear error, don't silently create
-        return {
-          ok: false,
-          error: 'Account not found with that email/phone. Please Sign Up first.',
-        }
+        return { ok: false, error: 'Account not found with that email/phone. Please Sign Up first.' }
       }
 
       // Local fallback (dev mode only)
@@ -453,22 +419,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (newPin.length !== 4 || /\D/.test(newPin)) {
         return { ok: false, error: 'PIN must be exactly 4 digits.' }
       }
-      if (cloud && supabase) {
-        const { error } = await supabase
-          .from('profiles')
-          .update({ password: newPin })
-          .eq('id', user.id)
-        if (error) return { ok: false, error: error.message }
-        return { ok: true }
-      }
-      // Local fallback
-      const all = getUsers()
-      const updated = all.map((u) => (u.id === user.id ? { ...u, password: newPin } : u))
-      saveUsers(updated)
-      setUsers(updated)
+      // Store new PIN in localStorage
+      storePin(user.email, newPin)
       return { ok: true }
     },
-    [cloud, user],
+    [user],
   )
 
   const setUserRole = useCallback(
