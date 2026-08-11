@@ -223,10 +223,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (profileRow) {
           // Step 2: compare PIN (stored as password field in profiles)
           const storedPin: string = profileRow.password || ''
-          const pinMatch = storedPin === password || storedPin === padPin(password)
 
+          // If account exists but PIN was never set (old Supabase Auth account)
+          if (!storedPin) {
+            return {
+              ok: false,
+              error: 'Your PIN is not set yet. Click "Forgot PIN? Verify Username & Reset" below to create your PIN.',
+            }
+          }
+
+          const pinMatch = storedPin === password || storedPin === padPin(password)
           if (!pinMatch) {
-            return { ok: false, error: 'Incorrect PIN. Please check your PIN or click "Forgot PIN".' }
+            return { ok: false, error: 'Incorrect PIN. Click "Forgot PIN?" below to reset it.' }
           }
 
           const profile = ensureAdminRole({
@@ -366,107 +374,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPassword = useCallback(
     async (nameInput: string, email: string, newPin: string): Promise<AuthResult> => {
-      const normEmail = email.trim().toLowerCase()
       const authEmail = formatAuthIdentifier(email)
 
       if (newPin.length !== 4 || /\D/.test(newPin)) {
         return { ok: false, error: 'PIN must be exactly 4 digits.' }
       }
 
+      if (cloud && supabase) {
+        // Find profile directly in Supabase
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('*')
+          .or(`email.eq.${authEmail.toLowerCase()},email.eq.${email.trim().toLowerCase()}`)
+          .maybeSingle()
+
+        if (profileRow) {
+          // Update their PIN in Supabase profiles table
+          const { error: updateErr } = await supabase
+            .from('profiles')
+            .update({
+              password: newPin,
+              name: nameInput.trim() || profileRow.name,
+            })
+            .eq('id', profileRow.id)
+
+          if (updateErr) return { ok: false, error: 'PIN update failed. Please try again.' }
+          return { ok: true }
+        }
+
+        // Account not found — show clear error, don't silently create
+        return {
+          ok: false,
+          error: 'Account not found with that email/phone. Please Sign Up first.',
+        }
+      }
+
+      // Local fallback (dev mode only)
       ensureSeeded()
       const all = getUsers()
-
-      // Find user by email, formatted email, or phone across local storage
-      let match = all.find((u) => {
+      const match = all.find((u) => {
         const uEmail = (u.email || '').toLowerCase()
-        const uPhone = (u.phone || '').trim()
-        return uEmail === normEmail || uEmail === authEmail.toLowerCase() || (uPhone && `${uPhone}@greenvest.shop` === normEmail)
+        return uEmail === authEmail.toLowerCase() || uEmail === email.trim().toLowerCase()
       })
+      if (!match) return { ok: false, error: 'Account not found. Please Sign Up first.' }
 
-      // If not found in local users, check in-memory users state
-      if (!match) {
-        match = users.find((u) => {
-          const uEmail = (u.email || '').toLowerCase()
-          const uPhone = (u.phone || '').trim()
-          return uEmail === normEmail || uEmail === authEmail.toLowerCase() || (uPhone && `${uPhone}@greenvest.shop` === normEmail)
-        })
-      }
-
-      // If still not found, try fetchProfiles() from cloud
-      if (!match && cloud && supabase) {
-        try {
-          const cloudProfiles = await fetchProfiles()
-          match = cloudProfiles.find((u) => {
-            const uEmail = (u.email || '').toLowerCase()
-            const uPhone = (u.phone || '').trim()
-            return uEmail === normEmail || uEmail === authEmail.toLowerCase() || (uPhone && `${uPhone}@greenvest.shop` === normEmail)
-          })
-        } catch {
-          /* ignore */
-        }
-      }
-
-      // If user exists, update their PIN across local storage and cloud!
-      if (match) {
-        const updated = all.map((u) =>
-          u.id === match!.id || u.email.toLowerCase() === match!.email.toLowerCase()
-            ? { ...u, password: newPin, name: nameInput.trim() || u.name }
-            : u,
-        )
-        saveUsers(updated)
-        setUsers(updated)
-
-        if (cloud && supabase) {
-          try {
-            await supabase.from('profiles').update({ password: newPin }).eq('id', match.id)
-            await supabase.from('profiles').update({ password: newPin }).eq('email', match.email.toLowerCase())
-          } catch (err) {
-            console.warn('Cloud PIN update failed:', err)
-          }
-        }
-        return { ok: true }
-      }
-
-      // If account not found, auto-create/link with the new PIN so user is never blocked
-      const autoName = nameInput.trim() || (normEmail.includes('@') ? normEmail.split('@')[0] : 'Customer')
-      const newUser: User = {
-        id: uid('u'),
-        email: authEmail,
-        password: newPin,
-        name: autoName,
-        role: 'customer',
-        createdAt: new Date().toISOString(),
-      }
-      saveUsers([...all, newUser])
-      setUsers([...all, newUser])
-
-      if (cloud && supabase) {
-        try {
-          await supabase.from('profiles').upsert({
-            email: authEmail,
-            name: autoName,
-            role: 'customer',
-          })
-        } catch {
-          /* ignore */
-        }
-      }
-
+      const updated = all.map((u) =>
+        u.id === match.id ? { ...u, password: newPin, name: nameInput.trim() || u.name } : u
+      )
+      saveUsers(updated)
+      setUsers(updated)
       return { ok: true }
     },
     [cloud, users],
   )
 
   const updatePassword = useCallback(
-    async (password: string): Promise<AuthResult> => {
-      if (!cloud || !supabase) {
-        return { ok: false, error: 'Password update needs the live store (Supabase).' }
+    async (newPin: string): Promise<AuthResult> => {
+      if (!user) return { ok: false, error: 'Not logged in.' }
+      if (newPin.length !== 4 || /\D/.test(newPin)) {
+        return { ok: false, error: 'PIN must be exactly 4 digits.' }
       }
-      const { error } = await supabase.auth.updateUser({ password })
-      if (error) return { ok: false, error: error.message }
+      if (cloud && supabase) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ password: newPin })
+          .eq('id', user.id)
+        if (error) return { ok: false, error: error.message }
+        return { ok: true }
+      }
+      // Local fallback
+      const all = getUsers()
+      const updated = all.map((u) => (u.id === user.id ? { ...u, password: newPin } : u))
+      saveUsers(updated)
+      setUsers(updated)
       return { ok: true }
     },
-    [cloud],
+    [cloud, user],
   )
 
   const setUserRole = useCallback(
