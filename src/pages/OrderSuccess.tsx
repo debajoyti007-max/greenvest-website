@@ -78,6 +78,8 @@ export default function OrderSuccess() {
     )
   }
 
+  if (!order) return null
+
   return (
     <div className="page narrow success-page">
       <div className="success-badge" aria-hidden>
