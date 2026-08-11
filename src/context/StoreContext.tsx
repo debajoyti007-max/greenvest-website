@@ -329,14 +329,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
 
       if (cloud) {
-        try {
-          await createOrder(order)
-        } catch (cloudErr) {
-          console.warn('Cloud DB createOrder failed, saving order locally:', cloudErr)
-          const nextOrders = [order, ...getOrders()]
-          saveOrders(nextOrders)
-          setOrders(nextOrders)
-        }
+        // Let the real error surface — no silent fallback
+        await createOrder(order)
         saveDelivery(user.id, {
           address: order.address,
           phone: order.phone,
@@ -345,11 +339,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
         saveCart([], user.id)
         setCart([])
-        try {
-          await refreshCloud()
-        } catch {
-          /* ignore refresh error */
-        }
+        try { await refreshCloud() } catch { /* ignore refresh */ }
         return order
       }
 
