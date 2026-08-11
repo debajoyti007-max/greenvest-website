@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -8,24 +8,29 @@ import { t } from '../lib/i18n'
 import { openSellerOrderWhatsApp } from '../lib/whatsapp'
 import { printOrderInvoice } from '../lib/printOrder'
 import { showToast } from '../components/Toast'
+import type { Order } from '../types'
 
 export default function OrderSuccess() {
   const { id } = useParams()
+  const location = useLocation()
   const { user } = useAuth()
   const { orders, lang } = useStore()
   const notified = useRef(false)
   const [copied, setCopied] = useState(false)
   const [waitingForOrder, setWaitingForOrder] = useState(true)
 
-  const order = user ? orders.find((o) => o.id === id && o.userId === user.id) : undefined
+  // Use order passed via navigation state first (instant) — fallback to store lookup
+  const navOrder = (location.state as { order?: Order } | null)?.order
+  const storeOrder = user ? orders.find((o) => o.id === id && o.userId === user.id) : undefined
+  const order = storeOrder ?? (navOrder?.id === id ? navOrder : undefined)
 
   useEffect(() => {
     if (!order || notified.current) return
     notified.current = true
     showToast(
       lang === 'bn'
-        ? `🎉 অর্ডার #${order.id.slice(0, 6)} সফলভাবে সম্পন্ন হয়েছে! রসিদ ও নোটিফিকেশন চেক করুন।`
-        : `🎉 Order #${order.id.slice(0, 6)} placed! Check live notification bell for updates.`,
+        ? `🎉 অর্ডার সফলভাবে সম্পন্ন হয়েছে! UTR যাচাইয়ের পর ডেলিভারি হবে।`
+        : `🎉 Order placed! Delivery after seller confirms your UTR.`,
       '🔔'
     )
   }, [order, lang])
@@ -35,7 +40,8 @@ export default function OrderSuccess() {
       setWaitingForOrder(false)
       return
     }
-    const timer = setTimeout(() => setWaitingForOrder(false), 3000)
+    // Give Supabase 8 seconds to sync before showing "not found"
+    const timer = setTimeout(() => setWaitingForOrder(false), 8000)
     return () => clearTimeout(timer)
   }, [order])
 

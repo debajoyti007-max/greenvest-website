@@ -178,8 +178,8 @@ export default function Checkout() {
         }
       }
       const order = await placeOrder({ address: fullAddress, phone, pin: '721632', utr, deliverySlot: 'morning', discountAmount: 0, zones, geoLat, geoLng })
-      if (order) navigate(`/orders/success/${order.id}`)
-      else setError(lang === 'bn' ? 'অর্ডার হয়নি' : 'Could not place order')
+      if (order) navigate(`/orders/success/${order.id}`, { state: { order } })
+      else setError(lang === 'bn' ? 'অর্ডার প্রসেস করা যাচ্ছে না। আবার চেষ্টা করুন।' : 'Could not place order. Please try again.')
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'Order failed'
       if (/row-level security|policy/i.test(raw)) {
