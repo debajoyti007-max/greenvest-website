@@ -210,6 +210,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // No supabase.auth listener needed — sessions are managed via localStorage
   }, [refresh])
 
+  // ── Realtime: auto-update role/status when admin changes this user's profile ──
+  useEffect(() => {
+    if (!cloud || !supabase || !user) return
+    const channel = supabase
+      .channel(`profile-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>
+          if (!row) return
+          const updated = ensureAdminRole({
+            id: row.id as string,
+            email: row.email as string,
+            name: row.name as string,
+            role: row.role as Role,
+            phone: (row.phone as string) || undefined,
+            isBlocked: (row.isBlocked as boolean) || false,
+            createdAt: row.created_at as string,
+          })
+          if (updated) {
+            setUser(updated)
+            userRef.current = updated
+          }
+        }
+      )
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [cloud, user?.id])
 
 
   const login = useCallback(
