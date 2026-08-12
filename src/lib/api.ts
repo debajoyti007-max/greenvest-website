@@ -211,64 +211,57 @@ export async function checkAccountExistsByEmail(email: string): Promise<User | n
   return data ? mapProfile(data as ProfileRow) : null
 }
 
-export async function updateProfileRole(userId: string, role: Role, email?: string): Promise<void> {
+async function updateProfileField(
+  userId: string,
+  email: string | undefined,
+  phone: string | undefined,
+  fields: Record<string, unknown>
+): Promise<void> {
   const client = requireClient()
-  const { data: byId, error: errId } = await client.from('profiles').update({ role }).eq('id', userId).select()
-  if (!errId && byId && byId.length > 0) return
 
-  if (email) {
-    const { data: byEmail, error: errEmail } = await client.from('profiles').update({ role }).eq('email', email.toLowerCase()).select()
+  // 1. Try by exact ID
+  if (userId) {
+    const { data: byId, error: errId } = await client.from('profiles').update(fields).eq('id', userId).select()
+    if (!errId && byId && byId.length > 0) return
+  }
+
+  // 2. Try by email if provided
+  if (email && email.trim()) {
+    const { data: byEmail, error: errEmail } = await client.from('profiles').update(fields).eq('email', email.trim().toLowerCase()).select()
     if (!errEmail && byEmail && byEmail.length > 0) return
   }
-  
-  if (errId) throw new Error(errId.message)
+
+  // 3. Try by phone or formatted phone email (e.g. 8350087877@greenvest.shop)
+  const rawIdentifier = phone || email || userId
+  if (rawIdentifier) {
+    const digits = rawIdentifier.replace(/\D/g, '')
+    if (digits.length >= 10) {
+      const phoneEmail = `${digits.slice(-10)}@greenvest.shop`
+      const { data: byPhoneEmail, error: errPhoneEmail } = await client.from('profiles').update(fields).eq('email', phoneEmail).select()
+      if (!errPhoneEmail && byPhoneEmail && byPhoneEmail.length > 0) return
+
+      const { data: byPhone, error: errPhone } = await client.from('profiles').update(fields).eq('phone', digits).select()
+      if (!errPhone && byPhone && byPhone.length > 0) return
+    }
+  }
+
   throw new Error('User profile not found in database')
 }
 
-export async function updateProfilePin(userId: string, pin: string, email?: string): Promise<void> {
-  const client = requireClient()
-  const { data: byId, error: errId } = await client.from('profiles').update({ pin }).eq('id', userId).select()
-  if (!errId && byId && byId.length > 0) return
-
-  if (email) {
-    const { data: byEmail, error: errEmail } = await client.from('profiles').update({ pin }).eq('email', email.toLowerCase()).select()
-    if (!errEmail && byEmail && byEmail.length > 0) return
-  }
-
-  if (errId) throw new Error(errId.message)
-  throw new Error('User profile not found in database')
+export async function updateProfileRole(userId: string, role: Role, email?: string, phone?: string): Promise<void> {
+  return updateProfileField(userId, email, phone, { role })
 }
 
-export async function updateProfileBlocked(userId: string, isBlocked: boolean, email?: string): Promise<void> {
-  const client = requireClient()
-  const { data: byId, error: errId } = await client.from('profiles').update({ isBlocked }).eq('id', userId).select()
-  if (!errId && byId && byId.length > 0) return
-
-  if (email) {
-    const { data: byEmail, error: errEmail } = await client.from('profiles').update({ isBlocked }).eq('email', email.toLowerCase()).select()
-    if (!errEmail && byEmail && byEmail.length > 0) return
-  }
-
-  if (errId) throw new Error(errId.message)
-  throw new Error('User profile not found in database')
+export async function updateProfilePin(userId: string, pin: string, email?: string, phone?: string): Promise<void> {
+  return updateProfileField(userId, email, phone, { pin })
 }
 
-export async function updateProfileDetails(userId: string, details: { name?: string; phone?: string }, email?: string): Promise<void> {
-  const client = requireClient()
-  const patch: Record<string, unknown> = {}
-  if (details.name !== undefined) patch.name = details.name
-  if (details.phone !== undefined) patch.phone = details.phone
+export async function updateProfileBlocked(userId: string, isBlocked: boolean, email?: string, phone?: string): Promise<void> {
+  return updateProfileField(userId, email, phone, { isBlocked })
+}
 
-  const { data: byId, error: errId } = await client.from('profiles').update(patch).eq('id', userId).select()
-  if (!errId && byId && byId.length > 0) return
-
-  if (email) {
-    const { data: byEmail, error: errEmail } = await client.from('profiles').update(patch).eq('email', email.toLowerCase()).select()
-    if (!errEmail && byEmail && byEmail.length > 0) return
-  }
-
-  if (errId) throw new Error(errId.message)
-  throw new Error('User profile not found in database')
+export async function updateProfileDetails(userId: string, details: { name?: string; phone?: string }, email?: string, phone?: string): Promise<void> {
+  return updateProfileField(userId, email, phone, details)
 }
 
 export async function fetchProducts(): Promise<Product[]> {

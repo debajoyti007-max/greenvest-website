@@ -477,12 +477,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (newPin.length !== 4 || /\D/.test(newPin)) {
         return { ok: false, error: 'PIN must be exactly 4 digits.' }
       }
-      // Bug 14 fix: store in localStorage AND Supabase so PIN works on any device
       storePin(user.email, newPin)
+      if (user.phone) {
+        storePin(user.phone, newPin)
+        storePin(formatAuthIdentifier(user.phone), newPin)
+      }
       if (cloud && supabase) {
         try {
-          await supabase.from('profiles').update({ pin: newPin }).eq('id', user.id)
-        } catch { /* ignore network errors */ }
+          await updateProfilePin(user.id, newPin, user.email, user.phone)
+          const cloudUsers = await fetchProfiles()
+          if (cloudUsers && cloudUsers.length > 0) {
+            setUsers(cloudUsers)
+            saveUsers(cloudUsers)
+          }
+        } catch (err: any) {
+          console.error('updatePassword error:', err)
+          return { ok: false, error: err.message || 'Failed to update PIN in database' }
+        }
       }
       return { ok: true }
     },
@@ -491,8 +502,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setUserRole = useCallback(
     async (userId: string, role: Role) => {
-      const targetUser = users.find((u) => u.id === userId || u.email === userId)
+      const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
       const targetEmail = targetUser?.email || ''
+      const targetPhone = targetUser?.phone || ''
 
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)))
       if (user && user.id === userId) {
@@ -501,7 +513,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (cloud && supabase) {
         try {
-          await updateProfileRole(userId, role, targetEmail)
+          await updateProfileRole(userId, role, targetEmail, targetPhone)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)
@@ -518,18 +530,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const adminResetUserPin = useCallback(
     async (userId: string, newPin: string): Promise<AuthResult> => {
-      const targetUser = users.find((u) => u.id === userId || u.email === userId)
+      const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
       const targetEmail = targetUser?.email || ''
+      const targetPhone = targetUser?.phone || ''
 
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, password: newPin } : u))
       )
 
       if (targetEmail) storePin(targetEmail, newPin)
+      if (targetPhone) {
+        storePin(targetPhone, newPin)
+        storePin(formatAuthIdentifier(targetPhone), newPin)
+      }
 
       if (cloud && supabase) {
         try {
-          await updateProfilePin(userId, newPin, targetEmail)
+          await updateProfilePin(userId, newPin, targetEmail, targetPhone)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)
@@ -548,13 +565,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const toggleBlockUser = useCallback(
     async (userId: string, isBlocked: boolean): Promise<AuthResult> => {
-      const targetUser = users.find((u) => u.id === userId || u.email === userId)
+      const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
       const targetEmail = targetUser?.email || ''
+      const targetPhone = targetUser?.phone || ''
 
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, isBlocked } : u)))
       if (cloud && supabase) {
         try {
-          await updateProfileBlocked(userId, isBlocked, targetEmail)
+          await updateProfileBlocked(userId, isBlocked, targetEmail, targetPhone)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)
@@ -577,7 +595,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const updated = { ...user, ...data }
       if (cloud && supabase) {
         try {
-          await updateProfileDetails(user.id, data, user.email)
+          await updateProfileDetails(user.id, data, user.email, user.phone)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)

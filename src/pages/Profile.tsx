@@ -8,7 +8,7 @@ import { showToast } from '../components/Toast'
 import type { Address } from '../types'
 
 export default function Profile() {
-  const { user, logout, updateUserProfile, updatePassword, adminResetUserPin } = useAuth()
+  const { user, logout, updateUserProfile, updatePassword } = useAuth()
   const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang } = useStore()
 
   const [addresses, setAddresses] = useState<Address[]>([])
@@ -64,19 +64,22 @@ export default function Profile() {
   }
 
   const handleUpdateMyPin = async () => {
-    if (!user || newPinVal.length !== 4) {
+    if (!user || newPinVal.length !== 4 || /\D/.test(newPinVal)) {
       alert(lang === 'bn' ? '৪ সংখ্যার পিন দিন' : 'PIN must be 4 digits')
       return
     }
     setSaving(true)
     try {
-      await updatePassword(newPinVal)
-      await adminResetUserPin(user.id, newPinVal)
-      showToast(lang === 'bn' ? '🔑 আপনার নতুন ৪-সংখ্যার পিন সেভ হয়েছে!' : '🔑 New 4-digit PIN saved!', '🎉')
-      setNewPinVal('')
-      setShowPinForm(false)
-    } catch {
-      alert(lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed')
+      const res = await updatePassword(newPinVal)
+      if (res.ok) {
+        showToast(lang === 'bn' ? '🔑 আপনার নতুন ৪-সংখ্যার পিন সেভ হয়েছে!' : '🔑 New 4-digit PIN saved!', '🎉')
+        setNewPinVal('')
+        setShowPinForm(false)
+      } else {
+        alert(res.error || (lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed'))
+      }
+    } catch (err: any) {
+      alert(err?.message || (lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed'))
     }
     setSaving(false)
   }
