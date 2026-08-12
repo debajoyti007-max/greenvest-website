@@ -92,43 +92,70 @@ export default function SellerOrders() {
 
   const handleDeleteOrder = async (id: string) => {
     if (!confirm(lang === 'bn' ? 'অর্ডারটি ডাটাবেস থেকে স্থায়ীভাবে মুছে ফেলতে চান?' : 'Permanently delete this order from the database?')) return
-    await deleteOrder(id)
+    try {
+      await deleteOrder(id)
+    } catch (err) {
+      console.error('Delete order error:', err)
+    }
   }
 
   // S3: One-tap accept (verify UTR + confirm + WhatsApp)
   const handleAcceptOrder = async (o: Order) => {
-    if (!o.utrVerified) await verifyUtr(o.id, true)
-    await updateOrderStatus(o.id, 'confirmed')
-    window.open(orderStatusWhatsAppUrl(o, 'confirmed'), '_blank', 'noopener,noreferrer')
+    try {
+      if (!o.utrVerified) {
+        await verifyUtr(o.id, true)
+      } else {
+        await updateOrderStatus(o.id, 'confirmed')
+      }
+      window.open(orderStatusWhatsAppUrl(o, 'confirmed'), '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      console.error('Accept order error:', err)
+    }
   }
 
   const handleMarkDelivered = async (o: Order) => {
-    await updateOrderStatus(o.id, 'delivered')
-    window.open(orderStatusWhatsAppUrl(o, 'delivered'), '_blank', 'noopener,noreferrer')
+    try {
+      await updateOrderStatus(o.id, 'delivered')
+      window.open(orderStatusWhatsAppUrl(o, 'delivered'), '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      console.error('Mark delivered error:', err)
+    }
   }
 
   const handleCancel = async (o: Order) => {
     if (!confirm(lang === 'bn' ? 'বাতিল করবেন?' : 'Cancel this order?')) return
-    await updateOrderStatus(o.id, 'cancelled')
-    window.open(orderStatusWhatsAppUrl(o, 'cancelled'), '_blank', 'noopener,noreferrer')
+    try {
+      await updateOrderStatus(o.id, 'cancelled')
+      window.open(orderStatusWhatsAppUrl(o, 'cancelled'), '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      console.error('Cancel order error:', err)
+    }
   }
 
   const handleVerifyUtr = async (o: Order) => {
     const next = !o.utrVerified
-    await verifyUtr(o.id, next)
-    if (next) window.open(paymentVerifiedWhatsAppUrl(o, lang), '_blank', 'noopener,noreferrer')
+    try {
+      await verifyUtr(o.id, next)
+      if (next) window.open(paymentVerifiedWhatsAppUrl(o, lang), '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      console.error('Verify UTR error:', err)
+    }
   }
 
   const handleRejectUtr = async (o: Order) => {
     if (!confirm(lang === 'bn' ? 'ভুল UTR হলে অর্ডার বাতিল করবেন?' : 'Reject invalid UTR and cancel order?')) return
-    await updateOrderStatus(o.id, 'cancelled')
-    const phone = formatWhatsAppPhone(o.phone)
-    const msg = encodeURIComponent(
-      lang === 'bn'
-        ? `❌ আপনার অর্ডার ${o.id}-এর UTR (${o.utr}) ব্যাংক স্টেটমেন্টে পাওয়া যায়নি। অনুগ্রহ করে সঠিক UTR পাঠান।`
-        : `❌ Your UTR (${o.utr}) for Order #${o.id} could not be verified in bank records. Please send your correct 12-digit UTR.`
-    )
-    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank', 'noopener,noreferrer')
+    try {
+      await updateOrderStatus(o.id, 'cancelled')
+      const phone = formatWhatsAppPhone(o.phone)
+      const msg = encodeURIComponent(
+        lang === 'bn'
+          ? `❌ আপনার অর্ডার ${o.id}-এর UTR (${o.utr}) ব্যাংক স্টেটমেন্টে পাওয়া যায়নি। অনুগ্রহ করে সঠিক UTR পাঠান।`
+          : `❌ Your UTR (${o.utr}) for Order #${o.id} could not be verified in bank records. Please send your correct 12-digit UTR.`
+      )
+      window.open(`https://wa.me/${phone}?text=${msg}`, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      console.error('Reject UTR error:', err)
+    }
   }
 
   // S7: Today's summary

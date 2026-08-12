@@ -508,16 +508,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateOrderStatus = useCallback(
     async (id: string, status: OrderStatus) => {
-      if (cloud) {
-        await updateOrderStatusApi(id, status)
-        await refreshCloud()
-        return
-      }
-      const next = getOrders().map((o) =>
-        o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o,
+      // Optimistically update React state for 0ms UI delay
+      setOrders((prev) =>
+        prev.map((o) => (o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o)),
       )
-      saveOrders(next)
-      setOrders(next)
+      if (cloud) {
+        try {
+          await updateOrderStatusApi(id, status)
+          await refreshCloud()
+        } catch (err: any) {
+          console.error('updateOrderStatus failed:', err)
+          showToast(`Error updating order: ${err.message || err}`, 'error')
+          await refreshCloud()
+          throw err
+        }
+      } else {
+        const next = getOrders().map((o) =>
+          o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o,
+        )
+        saveOrders(next)
+      }
     },
     [cloud, refreshCloud],
   )
@@ -525,53 +535,88 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const bulkUpdateOrderStatus = useCallback(
     async (ids: string[], status: OrderStatus) => {
       if (ids.length === 0) return
-      if (cloud) {
-        await bulkUpdateOrderStatusApi(ids, status)
-        await refreshCloud()
-        return
-      }
-      const next = getOrders().map((o) =>
-        ids.includes(o.id) ? { ...o, status, updatedAt: new Date().toISOString() } : o,
+      setOrders((prev) =>
+        prev.map((o) => (ids.includes(o.id) ? { ...o, status, updatedAt: new Date().toISOString() } : o)),
       )
-      saveOrders(next)
-      setOrders(next)
+      if (cloud) {
+        try {
+          await bulkUpdateOrderStatusApi(ids, status)
+          await refreshCloud()
+        } catch (err: any) {
+          console.error('bulkUpdateOrderStatus failed:', err)
+          showToast(`Bulk update failed: ${err.message || err}`, 'error')
+          await refreshCloud()
+          throw err
+        }
+      } else {
+        const next = getOrders().map((o) =>
+          ids.includes(o.id) ? { ...o, status, updatedAt: new Date().toISOString() } : o,
+        )
+        saveOrders(next)
+      }
     },
     [cloud, refreshCloud],
   )
 
   const verifyUtr = useCallback(
     async (id: string, verified: boolean) => {
-      if (cloud) {
-        await verifyUtrApi(id, verified)
-        await refreshCloud()
-        return
-      }
-      const next = getOrders().map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              utrVerified: verified,
-              status: verified ? ('confirmed' as OrderStatus) : o.status,
-              updatedAt: new Date().toISOString(),
-            }
-          : o,
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === id
+            ? {
+                ...o,
+                utrVerified: verified,
+                status: verified ? ('confirmed' as OrderStatus) : o.status,
+                updatedAt: new Date().toISOString(),
+              }
+            : o,
+        ),
       )
-      saveOrders(next)
-      setOrders(next)
+      if (cloud) {
+        try {
+          await verifyUtrApi(id, verified)
+          await refreshCloud()
+        } catch (err: any) {
+          console.error('verifyUtr failed:', err)
+          showToast(`Verify UTR failed: ${err.message || err}`, 'error')
+          await refreshCloud()
+          throw err
+        }
+      } else {
+        const next = getOrders().map((o) =>
+          o.id === id
+            ? {
+                ...o,
+                utrVerified: verified,
+                status: verified ? ('confirmed' as OrderStatus) : o.status,
+                updatedAt: new Date().toISOString(),
+              }
+            : o,
+        )
+        saveOrders(next)
+      }
     },
     [cloud, refreshCloud],
   )
 
   const deleteOrder = useCallback(
     async (id: string) => {
+      // Optimistically remove order from local state immediately
+      setOrders((prev) => prev.filter((o) => o.id !== id))
       if (cloud) {
-        await deleteOrderApi(id)
-        await refreshCloud()
-        return
+        try {
+          await deleteOrderApi(id)
+          await refreshCloud()
+        } catch (err: any) {
+          console.error('deleteOrder failed:', err)
+          showToast(`Delete order failed: ${err.message || err}`, 'error')
+          await refreshCloud()
+          throw err
+        }
+      } else {
+        const next = getOrders().filter((o) => o.id !== id)
+        saveOrders(next)
       }
-      const next = getOrders().filter((o) => o.id !== id)
-      saveOrders(next)
-      setOrders(next)
     },
     [cloud, refreshCloud],
   )
