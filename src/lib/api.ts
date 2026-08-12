@@ -213,41 +213,62 @@ export async function checkAccountExistsByEmail(email: string): Promise<User | n
 
 export async function updateProfileRole(userId: string, role: Role, email?: string): Promise<void> {
   const client = requireClient()
-  
-  // 1. Try updating by ID
-  const { data: updatedById, error: errById } = await client
-    .from('profiles')
-    .update({ role })
-    .eq('id', userId)
-    .select()
+  const { data: byId, error: errId } = await client.from('profiles').update({ role }).eq('id', userId).select()
+  if (!errId && byId && byId.length > 0) return
 
-  if (!errById && updatedById && updatedById.length > 0) return
-
-  // 2. Try updating by email
   if (email) {
-    const { data: updatedByEmail, error: errByEmail } = await client
-      .from('profiles')
-      .update({ role })
-      .eq('email', email.toLowerCase())
-      .select()
+    const { data: byEmail, error: errEmail } = await client.from('profiles').update({ role }).eq('email', email.toLowerCase()).select()
+    if (!errEmail && byEmail && byEmail.length > 0) return
+  }
+  
+  if (errId) throw new Error(errId.message)
+  throw new Error('User profile not found in database')
+}
 
-    if (!errByEmail && updatedByEmail && updatedByEmail.length > 0) return
+export async function updateProfilePin(userId: string, pin: string, email?: string): Promise<void> {
+  const client = requireClient()
+  const { data: byId, error: errId } = await client.from('profiles').update({ pin }).eq('id', userId).select()
+  if (!errId && byId && byId.length > 0) return
+
+  if (email) {
+    const { data: byEmail, error: errEmail } = await client.from('profiles').update({ pin }).eq('email', email.toLowerCase()).select()
+    if (!errEmail && byEmail && byEmail.length > 0) return
   }
 
-  // 3. If profile row doesn't exist in Supabase yet, UPSERT it!
-  const targetId = toUuid(userId)
-  const targetEmail = email ? email.toLowerCase() : `${targetId}@greenvest.shop`
-  const { error: upsertErr } = await client.from('profiles').upsert(
-    {
-      id: targetId,
-      email: targetEmail,
-      name: targetEmail.split('@')[0],
-      role: role,
-      created_at: new Date().toISOString(),
-    },
-    { onConflict: 'id' }
-  )
-  if (upsertErr) console.warn('upsertProfileRole error:', upsertErr)
+  if (errId) throw new Error(errId.message)
+  throw new Error('User profile not found in database')
+}
+
+export async function updateProfileBlocked(userId: string, isBlocked: boolean, email?: string): Promise<void> {
+  const client = requireClient()
+  const { data: byId, error: errId } = await client.from('profiles').update({ isBlocked }).eq('id', userId).select()
+  if (!errId && byId && byId.length > 0) return
+
+  if (email) {
+    const { data: byEmail, error: errEmail } = await client.from('profiles').update({ isBlocked }).eq('email', email.toLowerCase()).select()
+    if (!errEmail && byEmail && byEmail.length > 0) return
+  }
+
+  if (errId) throw new Error(errId.message)
+  throw new Error('User profile not found in database')
+}
+
+export async function updateProfileDetails(userId: string, details: { name?: string; phone?: string }, email?: string): Promise<void> {
+  const client = requireClient()
+  const patch: Record<string, unknown> = {}
+  if (details.name !== undefined) patch.name = details.name
+  if (details.phone !== undefined) patch.phone = details.phone
+
+  const { data: byId, error: errId } = await client.from('profiles').update(patch).eq('id', userId).select()
+  if (!errId && byId && byId.length > 0) return
+
+  if (email) {
+    const { data: byEmail, error: errEmail } = await client.from('profiles').update(patch).eq('email', email.toLowerCase()).select()
+    if (!errEmail && byEmail && byEmail.length > 0) return
+  }
+
+  if (errId) throw new Error(errId.message)
+  throw new Error('User profile not found in database')
 }
 
 export async function fetchProducts(): Promise<Product[]> {
@@ -307,16 +328,7 @@ export async function fetchOrders(userRole?: string, userId?: string): Promise<O
   return (data as OrderRow[]).map(mapOrder)
 }
 
-function toUuid(id: string): string {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  if (uuidRegex.test(id)) return id
-  let hex = ''
-  for (let i = 0; i < id.length; i++) {
-    hex += id.charCodeAt(i).toString(16)
-  }
-  hex = (hex + '00000000000000000000000000000000').slice(0, 32)
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
-}
+
 
 export async function createOrder(order: Order): Promise<Order> {
   const client = requireClient()

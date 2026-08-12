@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfiles, checkAccountExistsByEmail } from '../lib/api'
+import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   ensureSeeded,
@@ -494,49 +494,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const targetUser = users.find((u) => u.id === userId || u.email === userId)
       const targetEmail = targetUser?.email || ''
 
-      // Optimistically update UI
-      const updated = users.map((u) =>
-        u.id === userId ? { ...u, role } : u,
-      )
-      setUsers(updated)
-      saveUsers(updated)
-
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)))
       if (user && user.id === userId) {
         setUser({ ...user, role })
       }
 
       if (cloud && supabase) {
         try {
-          // Always update by BOTH id and email for maximum reliability
-          const { error: errById } = await supabase
-            .from('profiles')
-            .update({ role })
-            .eq('id', userId)
-          if (errById) {
-            // Fallback: try by email
-            if (targetEmail && targetEmail !== userId) {
-              const { error: errByEmail } = await supabase
-                .from('profiles')
-                .update({ role })
-                .eq('email', targetEmail.toLowerCase())
-              if (errByEmail) {
-                console.error('Role update failed by both id and email:', errById, errByEmail)
-                alert(`⚠️ Role update failed: ${errById.message}. Please check Supabase.`)
-              }
-            } else {
-              console.error('Role update failed:', errById)
-              alert(`⚠️ Role update failed: ${errById.message}`)
-            }
-          }
-          // Re-fetch users from Supabase to confirm the change
+          await updateProfileRole(userId, role, targetEmail)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)
             saveUsers(cloudUsers)
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error('setUserRole cloud error:', err)
-          alert(`⚠️ Network error updating role. Check your connection and try again.`)
+          alert(`⚠️ Role update error: ${err.message || err}`)
         }
       }
     },
@@ -556,10 +529,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (cloud && supabase) {
         try {
-          const { error: errById } = await supabase.from('profiles').update({ pin: newPin }).eq('id', userId)
-          if (errById && targetEmail) {
-            await supabase.from('profiles').update({ pin: newPin }).eq('email', targetEmail.toLowerCase())
-          }
+          await updateProfilePin(userId, newPin, targetEmail)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)
@@ -578,14 +548,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const toggleBlockUser = useCallback(
     async (userId: string, isBlocked: boolean): Promise<AuthResult> => {
+      const targetUser = users.find((u) => u.id === userId || u.email === userId)
+      const targetEmail = targetUser?.email || ''
+
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, isBlocked } : u)))
       if (cloud && supabase) {
         try {
-          const { error } = await supabase.from('profiles').update({ isBlocked }).eq('id', userId)
-          if (error) {
-            console.error('toggleBlockUser error:', error)
-            return { ok: false, error: error.message }
-          }
+          await updateProfileBlocked(userId, isBlocked, targetEmail)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)
@@ -593,12 +562,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           return { ok: true }
         } catch (err: any) {
+          console.error('toggleBlockUser error:', err)
           return { ok: false, error: err.message || 'Failed to toggle block status' }
         }
       }
       return { ok: true }
     },
-    [cloud],
+    [cloud, users],
   )
 
   const updateUserProfile = useCallback(
@@ -606,10 +576,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!user) return
       const updated = { ...user, ...data }
       if (cloud && supabase) {
-        await supabase
-          .from('profiles')
-          .update({ name: updated.name, phone: updated.phone })
-          .eq('id', user.id)
+        try {
+          await updateProfileDetails(user.id, data, user.email)
+          const cloudUsers = await fetchProfiles()
+          if (cloudUsers && cloudUsers.length > 0) {
+            setUsers(cloudUsers)
+            saveUsers(cloudUsers)
+          }
+        } catch (err: any) {
+          console.error('updateUserProfile error:', err)
+        }
       } else {
         const all = getUsers()
         const next = all.map((u) => (u.id === user.id ? updated : u))
