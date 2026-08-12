@@ -270,24 +270,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (profileRow) {
-          // Check PIN: DB first, localStorage fallback
-          const dbPin: string = (profileRow.pin as string) || ''
-          const localPin = getStoredPin(profileRow.email as string)
-          const storedPin = dbPin || localPin
+          // Check PIN: matches either DB pin or local pin cache
+          const dbPin = ((profileRow.pin as string) || '').trim()
+          const localPin = getStoredPin(profileRow.email as string).trim()
+          const hasPin = Boolean(dbPin || localPin)
 
-          // Sync DB pin to localStorage if missing locally
-          if (dbPin && !localPin) storePin(profileRow.email as string, dbPin)
-
-          if (!storedPin) {
+          if (!hasPin) {
             return {
               ok: false,
               error: '🔑 Your account exists but has no PIN set yet. Click "Forgot PIN? Verify & Reset" below to create your PIN — it only takes 10 seconds.',
             }
           }
 
-          const pinMatch = storedPin === password || storedPin === padPin(password)
+          const inputPin = password.trim()
+          const paddedInput = padPin(inputPin)
+
+          const pinMatch =
+            (dbPin && (inputPin === dbPin || paddedInput === dbPin)) ||
+            (localPin && (inputPin === localPin || paddedInput === localPin))
+
           if (!pinMatch) {
             return { ok: false, error: '❌ Incorrect PIN. Click "Forgot PIN?" below to reset it.' }
+          }
+
+          // Auto-sync valid PIN across localStorage and Supabase DB
+          if (inputPin && inputPin.length === 4) {
+            storePin(profileRow.email as string, inputPin)
+            if (profileRow.phone) storePin(profileRow.phone as string, inputPin)
+            if (dbPin !== inputPin) {
+              void updateProfilePin(profileRow.id as string, inputPin, profileRow.email as string, profileRow.phone as string)
+            }
           }
 
           const profile = ensureAdminRole({
