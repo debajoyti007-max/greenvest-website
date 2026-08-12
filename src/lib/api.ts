@@ -318,10 +318,6 @@ function toUuid(id: string): string {
 export async function createOrder(order: Order): Promise<Order> {
   const client = requireClient()
 
-  // Get Supabase auth user ID if logged into Supabase Auth, else convert order.userId to valid UUID
-  const { data: { user: authUser } } = await client.auth.getUser()
-  const targetUserId = authUser?.id || toUuid(order.userId || 'guest')
-
   // Auto-ensure user profile exists — use INSERT with ignoreDuplicates so we
   // NEVER overwrite an existing role (rider/seller would get reset to 'customer'!)
   try {
