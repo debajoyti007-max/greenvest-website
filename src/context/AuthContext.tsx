@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfiles, updateProfileRole, checkAccountExistsByEmail } from '../lib/api'
+import { fetchProfiles, checkAccountExistsByEmail } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   ensureSeeded,
@@ -217,28 +217,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const authEmail = formatAuthIdentifier(email)
 
       if (cloud && supabase) {
-        // ── Simple approach: check profiles table directly (no Supabase Auth needed) ──
-        // Step 1: find the profile row by email
-        // Fix: use .eq() not .or() — PostgREST misparses emails with @ and . in .or() strings
-        const { data: profileRow } = await supabase
+        // Search by email (primary)
+        let profileRow: Record<string, unknown> | null = null
+        const { data: byEmail } = await supabase
           .from('profiles')
           .select('*')
           .eq('email', authEmail.toLowerCase())
           .maybeSingle()
+        profileRow = byEmail
+
+        // Fallback: if not found and user entered a phone number,
+        // also search by the raw phone column
+        if (!profileRow && !email.trim().includes('@')) {
+          const rawPhone = email.trim().replace(/\D/g, '')
+          const { data: byPhone } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('phone', rawPhone)
+            .maybeSingle()
+          if (byPhone) profileRow = byPhone
+        }
 
         if (profileRow) {
-          // Bug 1 fix: check DB pin first, fall back to localStorage cache
-          const dbPin: string = profileRow.pin || ''
-          const localPin = getStoredPin(profileRow.email)
+          // Check PIN: DB first, localStorage fallback
+          const dbPin: string = (profileRow.pin as string) || ''
+          const localPin = getStoredPin(profileRow.email as string)
           const storedPin = dbPin || localPin
 
-          // Sync DB pin to localStorage if it was missing locally
-          if (dbPin && !localPin) storePin(profileRow.email, dbPin)
+          // Sync DB pin to localStorage if missing locally
+          if (dbPin && !localPin) storePin(profileRow.email as string, dbPin)
 
           if (!storedPin) {
             return {
               ok: false,
-              error: '🔑 No PIN set yet. Click "Forgot PIN? Verify Username & Reset" below to create your 4-digit PIN.',
+              error: '🔑 Your account exists but has no PIN set yet. Click "Forgot PIN? Verify & Reset" below to create your PIN — it only takes 10 seconds.',
             }
           }
 
@@ -248,17 +260,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           const profile = ensureAdminRole({
-            id: profileRow.id,
-            email: profileRow.email,
-            name: profileRow.name,
-            role: profileRow.role,
-            phone: profileRow.phone || undefined,
-            isBlocked: profileRow.isBlocked || false,
-            createdAt: profileRow.created_at,
+            id: profileRow.id as string,
+            email: profileRow.email as string,
+            name: profileRow.name as string,
+            role: profileRow.role as Role,
+            phone: (profileRow.phone as string) || undefined,
+            isBlocked: (profileRow.isBlocked as boolean) || false,
+            createdAt: profileRow.created_at as string,
           })
 
-          if (profile?.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
-          if (!profile) return { ok: false, error: 'Profile not found. Contact support.' }
+          if (profile?.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Contact GreenVest Admin.' }
+          if (!profile) return { ok: false, error: 'Profile error. Please contact support.' }
 
           setUser(profile)
           userRef.current = profile
@@ -267,7 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: true, user: profile }
         }
 
-        return { ok: false, error: 'Account not found. Please Sign Up first.' }
+        return { ok: false, error: '❌ No account found with this phone/email. Please Sign Up first — it\'s free!' }
       }
 
       if (!allowLocal) {
@@ -467,13 +479,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (cloud && supabase) {
         try {
-          await updateProfileRole(userId, role, targetEmail)
+          // Always update by BOTH id and email for maximum reliability
+          const { error: errById } = await supabase
+            .from('profiles')
+            .update({ role })
+            .eq('id', userId)
+          if (errById) {
+            // Fallback: try by email
+            if (targetEmail && targetEmail !== userId) {
+              const { error: errByEmail } = await supabase
+                .from('profiles')
+                .update({ role })
+                .eq('email', targetEmail.toLowerCase())
+              if (errByEmail) {
+                console.error('Role update failed by both id and email:', errById, errByEmail)
+                alert(`⚠️ Role update failed: ${errById.message}. Please check Supabase.`)
+              }
+            } else {
+              console.error('Role update failed:', errById)
+              alert(`⚠️ Role update failed: ${errById.message}`)
+            }
+          }
+          // Re-fetch users from Supabase to confirm the change
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)
+            saveUsers(cloudUsers)
           }
         } catch (err) {
-          console.warn('setUserRole cloud error:', err)
+          console.error('setUserRole cloud error:', err)
+          alert(`⚠️ Network error updating role. Check your connection and try again.`)
         }
       }
     },
