@@ -168,7 +168,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
       document.body.classList.toggle('lang-bn', l === 'bn')
       if (user) {
-        const ords = await fetchOrders()
+        // Pass role + id so fetchOrders filters correctly:
+        // rider/seller/admin → all orders | customer → only their own
+        const ords = await fetchOrders(user.role, user.id)
         setOrders(ords)
       } else {
         setOrders([])

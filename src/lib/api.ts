@@ -71,6 +71,8 @@ type ProfileRow = {
   name: string
   role: Role
   phone?: string | null
+  isBlocked?: boolean | null
+  pin?: string | null
   created_at: string
 }
 
@@ -183,6 +185,7 @@ function mapProfile(row: ProfileRow): User {
     name: row.name,
     role: row.role,
     phone: derivedPhone || undefined,
+    isBlocked: row.isBlocked ?? false,
     createdAt: row.created_at,
   }
 }
@@ -283,13 +286,20 @@ export async function setAllProductsInStock(): Promise<void> {
   if (error) throw error
 }
 
-export async function fetchOrders(): Promise<Order[]> {
+export async function fetchOrders(userRole?: string, userId?: string): Promise<Order[]> {
   const client = requireClient()
-
-  const { data, error } = await client
+  let query = client
     .from('orders')
     .select('*, order_items(*)')
     .order('created_at', { ascending: false })
+
+  // Customers only see their own orders; staff (seller/admin/rider) see all
+  const isStaff = userRole === 'seller' || userRole === 'admin' || userRole === 'rider'
+  if (!isStaff && userId) {
+    query = query.eq('user_id', userId)
+  }
+
+  const { data, error } = await query
   if (error) throw error
   return (data as OrderRow[]).map(mapOrder)
 }
@@ -312,24 +322,27 @@ export async function createOrder(order: Order): Promise<Order> {
   const { data: { user: authUser } } = await client.auth.getUser()
   const targetUserId = authUser?.id || toUuid(order.userId || 'guest')
 
-  // Auto-ensure user profile exists in profiles table so foreign key constraint orders_user_id_fkey passes
+  // Auto-ensure user profile exists — use INSERT with ignoreDuplicates so we
+  // NEVER overwrite an existing role (rider/seller would get reset to 'customer'!)
   try {
-    await client.from('profiles').upsert({
-      id: targetUserId,
-      email: order.userEmail || `${targetUserId}@greenvest.shop`,
+    await client.from('profiles').insert({
+      id: order.userId,
+      email: order.userEmail || `${order.userId}@greenvest.shop`,
       name: order.userName || 'Customer',
       role: 'customer',
       phone: order.phone,
       created_at: new Date().toISOString(),
-    }, { onConflict: 'id' })
+    }).select()
+    // If insert fails due to existing row, that's fine — we don't overwrite
   } catch (profErr) {
-    console.warn('Profile auto-create skipped:', profErr)
+    // Profile already exists — role is preserved as-is
+    console.debug('Profile already exists, role preserved:', profErr)
   }
 
   // Step 1: Insert order row
   const payload: any = {
     id: order.id,
-    user_id: targetUserId,
+    user_id: order.userId,  // Use actual userId (text), not toUuid conversion
     user_name: order.userName,
     user_email: order.userEmail,
     subtotal: order.subtotal,
