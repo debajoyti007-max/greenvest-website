@@ -491,7 +491,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setUserRole = useCallback(
     async (userId: string, role: Role) => {
-      // Use React state (loaded from Supabase) NOT localStorage (may have stale IDs)
       const targetUser = users.find((u) => u.id === userId || u.email === userId)
       const targetEmail = targetUser?.email || ''
 
@@ -541,56 +540,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [cloud, user],
+    [cloud, user, users],
   )
 
   const adminResetUserPin = useCallback(
     async (userId: string, newPin: string): Promise<AuthResult> => {
-      ensureSeeded()
-      const all = getUsers()
-      const targetUser = all.find((u) => u.id === userId || u.email === userId)
-      const targetEmail = targetUser?.email || userId
+      const targetUser = users.find((u) => u.id === userId || u.email === userId)
+      const targetEmail = targetUser?.email || ''
 
-      const updated = all.map((u) =>
-        u.id === userId || (targetEmail && u.email.toLowerCase() === targetEmail.toLowerCase())
-          ? { ...u, password: newPin }
-          : u,
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, password: newPin } : u))
       )
-      saveUsers(updated)
-      setUsers(updated)
 
-      // Also update localStorage cache
       if (targetEmail) storePin(targetEmail, newPin)
 
       if (cloud && supabase) {
         try {
-          // Bug 6 fix: update the `pin` column (not the non-existent `password` column)
-          await supabase.from('profiles').update({ pin: newPin }).eq('id', userId)
-          if (targetEmail) {
+          const { error: errById } = await supabase.from('profiles').update({ pin: newPin }).eq('id', userId)
+          if (errById && targetEmail) {
             await supabase.from('profiles').update({ pin: newPin }).eq('email', targetEmail.toLowerCase())
           }
-        } catch {
-          /* ignore */
+          const cloudUsers = await fetchProfiles()
+          if (cloudUsers && cloudUsers.length > 0) {
+            setUsers(cloudUsers)
+            saveUsers(cloudUsers)
+          }
+          return { ok: true }
+        } catch (err: any) {
+          console.error('adminResetUserPin error:', err)
+          return { ok: false, error: err.message || 'Failed to update PIN in database' }
         }
       }
       return { ok: true }
     },
-    [cloud],
+    [cloud, users],
   )
 
   const toggleBlockUser = useCallback(
     async (userId: string, isBlocked: boolean): Promise<AuthResult> => {
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, isBlocked } : u)))
       if (cloud && supabase) {
         try {
-          await supabase.from('profiles').update({ isBlocked }).eq('id', userId)
-        } catch {
-          /* ignore */
+          const { error } = await supabase.from('profiles').update({ isBlocked }).eq('id', userId)
+          if (error) {
+            console.error('toggleBlockUser error:', error)
+            return { ok: false, error: error.message }
+          }
+          const cloudUsers = await fetchProfiles()
+          if (cloudUsers && cloudUsers.length > 0) {
+            setUsers(cloudUsers)
+            saveUsers(cloudUsers)
+          }
+          return { ok: true }
+        } catch (err: any) {
+          return { ok: false, error: err.message || 'Failed to toggle block status' }
         }
       }
-      const all = getUsers()
-      const updated = all.map((u) => (u.id === userId ? { ...u, isBlocked } : u))
-      saveUsers(updated)
-      setUsers(updated)
       return { ok: true }
     },
     [cloud],
