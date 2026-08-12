@@ -219,10 +219,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cloud && supabase) {
         // ── Simple approach: check profiles table directly (no Supabase Auth needed) ──
         // Step 1: find the profile row by email
+        // Fix: use .eq() not .or() — PostgREST misparses emails with @ and . in .or() strings
         const { data: profileRow } = await supabase
           .from('profiles')
           .select('*')
-          .or(`email.eq.${authEmail.toLowerCase()},email.eq.${email.trim().toLowerCase()}`)
+          .eq('email', authEmail.toLowerCase())
           .maybeSingle()
 
         if (profileRow) {
@@ -302,10 +303,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cloud && supabase) {
         // Simple approach: insert directly into profiles table — no Supabase Auth needed
         // Step 1: check if already registered
+        // Fix: use .eq() not .or() — PostgREST misparses emails with @ and . in .or() strings
         const { data: existing } = await supabase
           .from('profiles')
           .select('id')
-          .or(`email.eq.${authEmail.toLowerCase()},email.eq.${email.trim().toLowerCase()}`)
+          .eq('email', authEmail.toLowerCase())
           .maybeSingle()
 
         if (existing) {
@@ -389,10 +391,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (cloud && supabase) {
+        // Fix: use .eq() not .or() — PostgREST misparses emails with @ and . in .or() strings
         const { data: profileRow } = await supabase
           .from('profiles')
           .select('id,email,name')
-          .or(`email.eq.${authEmail.toLowerCase()},email.eq.${email.trim().toLowerCase()}`)
+          .eq('email', authEmail.toLowerCase())
           .maybeSingle()
 
         if (profileRow) {
