@@ -467,11 +467,7 @@ export function subscribeOrders(onChange: () => void) {
   const channel = client
     .channel('orders-live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => onChange())
-    .subscribe((status) => {
-      if (status === 'TIMED_OUT' || status === 'CLOSED') {
-        setTimeout(() => void channel.subscribe(), 2000)
-      }
-    })
+    .subscribe()
   return () => {
     void client.removeChannel(channel)
   }
@@ -483,11 +479,7 @@ export function subscribeProducts(onChange: () => void) {
   const channel = client
     .channel('products-live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => onChange())
-    .subscribe((status) => {
-      if (status === 'TIMED_OUT' || status === 'CLOSED') {
-        setTimeout(() => void channel.subscribe(), 2000)
-      }
-    })
+    .subscribe()
   return () => {
     void client.removeChannel(channel)
   }

@@ -243,7 +243,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return subscribeOrders(() => {
       void refreshCloud()
     })
-  }, [cloud, user, refreshCloud])
+  }, [cloud, user?.id, user?.role, refreshCloud])
 
   // ✅ No polling needed — subscribeOrders + subscribeProducts above handle all live updates via Supabase Realtime.
 
