@@ -439,8 +439,13 @@ export async function verifyUtrApi(id: string, verified: boolean): Promise<void>
 
 export async function deleteOrderApi(id: string): Promise<void> {
   const client = requireClient()
+  // Delete order_items first to avoid foreign key violation
+  await client.from('order_items').delete().eq('order_id', id)
   const { error } = await client.from('orders').delete().eq('id', id)
-  if (error) throw error
+  if (error) {
+    console.error('deleteOrderApi error:', error)
+    throw new Error(error.message || 'Failed to delete order from database')
+  }
 }
 
 
