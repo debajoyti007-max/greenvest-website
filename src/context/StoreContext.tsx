@@ -140,7 +140,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .channel('gv-broadcasts')
       .on('broadcast', { event: 'notif' }, ({ payload }: { payload: unknown }) => {
         const n = payload as AppNotification
-        const isMe = !n.userId || n.userId === 'all' || n.userId === user?.id
+        // Bug 2 fix: never show notification with a falsy userId; only exact 'all' or own ID
+        const isMe = n.userId === 'all' || (!!user && n.userId === user.id)
         if (!isMe) return
         setNotifications(prev => {
           const next = [n, ...prev].slice(0, 30)

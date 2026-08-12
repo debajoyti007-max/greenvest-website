@@ -46,7 +46,7 @@ export function openSellerOrderWhatsApp(order: Order) {
 }
 
 /** 1-Tap Delivery Rider Dispatch on WhatsApp */
-export function riderDispatchWhatsAppUrl(order: Order) {
+export function riderDispatchWhatsAppUrl(order: Order, riderPhone?: string) {
   const balance = Math.max(0, order.total - order.advanceAmount)
   const shortId = formatOrderId(order.id)
   const gpsLink = order.geoLat && order.geoLng
@@ -65,7 +65,9 @@ export function riderDispatchWhatsAppUrl(order: Order) {
     `Items to deliver:`,
     ...order.items.map((it) => `• ${it.emoji} ${it.name} (Grade ${it.grade}) × ${it.qty}`),
   ].filter(Boolean)
-  return `https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`
+  // Bug 8 fix: use riderPhone if provided, else fall back to support number
+  const phone = riderPhone ? formatWhatsAppPhone(riderPhone) : SUPPORT_WHATSAPP
+  return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`
 }
 
 /** Payment Verified WhatsApp message to customer */

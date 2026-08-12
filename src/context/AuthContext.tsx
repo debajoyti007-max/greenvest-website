@@ -94,7 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return found ? ensureAdminRole(found) : null
   })
   const [loading, setLoading] = useState(false)
-  const [initialized, setInitialized] = useState(false)
+  // Use a ref for initialized so refresh() doesn't re-create itself (Bug 7 fix)
+  const initializedRef = useRef(false)
   const cloud = isSupabaseConfigured
   const allowLocal = ALLOW_LOCAL_FALLBACK && !cloud
   // Use a ref so applyCloudSession can read the latest user without being recreated every render.
@@ -154,7 +155,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user])
 
   const refresh = useCallback(async () => {
-    if (!initialized) setLoading(true)
+    // Bug 7 fix: use ref so this callback isn't recreated each time initialized changes
+    if (!initializedRef.current) setLoading(true)
     if (cloud && supabase) {
       // Restore session from localStorage userId (we don't use Supabase Auth sessions)
       const localId = getSessionUserId()
@@ -189,18 +191,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       setLoading(false)
-      setInitialized(true)
+      initializedRef.current = true
       return
     }
     if (allowLocal) {
       refreshLocal()
       setLoading(false)
-      setInitialized(true)
+      initializedRef.current = true
       return
     }
     setLoading(false)
-    setInitialized(true)
-  }, [cloud, allowLocal, refreshLocal, initialized, loadUsersIfStaff])
+    initializedRef.current = true
+  // Removed `initialized` from deps — it was a stale-closure that caused double-init (Bug 7)
+  }, [cloud, allowLocal, refreshLocal, loadUsersIfStaff])
 
   useEffect(() => {
     void refresh()
@@ -223,8 +226,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .maybeSingle()
 
         if (profileRow) {
-          // Check PIN from localStorage (no profiles.password column needed)
-          const storedPin = getStoredPin(profileRow.email)
+          // Bug 1 fix: check DB pin first, fall back to localStorage cache
+          const dbPin: string = profileRow.pin || ''
+          const localPin = getStoredPin(profileRow.email)
+          const storedPin = dbPin || localPin
+
+          // Sync DB pin to localStorage if it was missing locally
+          if (dbPin && !localPin) storePin(profileRow.email, dbPin)
 
           if (!storedPin) {
             return {
@@ -304,19 +312,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: false, error: 'This phone number / email is already registered. Click Login tab to sign in.' }
         }
 
-        // Insert profile WITHOUT password field (column may not exist in Supabase)
-        const newId = uid('u')
+        // Bug 5 fix: use crypto.randomUUID() so the ID is a valid UUID (not 'u-...')
+        // Bug 1 fix: store PIN in `profiles.pin` column so login works on any device
+        const newId = crypto.randomUUID()
         const { error: insertErr } = await supabase.from('profiles').insert({
           id: newId,
           email: authEmail.toLowerCase(),
           name: name.trim(),
           role: 'customer',
           phone: phoneVal?.trim() || null,
+          pin: password,           // ← stored in DB (survives device changes)
         })
 
         if (insertErr) return { ok: false, error: insertErr.message || 'Signup failed. Try again.' }
 
-        // Store PIN locally (no schema change needed)
+        // Also cache PIN in localStorage for instant offline login
         storePin(authEmail, password)
 
         const profile: User = {
@@ -386,6 +396,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .maybeSingle()
 
         if (profileRow) {
+          // Bug 1 fix: update PIN in DB so it works on all devices
+          await supabase.from('profiles').update({ pin: newPin }).eq('id', profileRow.id)
+          // Also update localStorage cache
           storePin(profileRow.email, newPin)
           return { ok: true }
         }
@@ -474,11 +487,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveUsers(updated)
       setUsers(updated)
 
+      // Also update localStorage cache
+      if (targetEmail) storePin(targetEmail, newPin)
+
       if (cloud && supabase) {
         try {
-          await supabase.from('profiles').update({ password: newPin }).eq('id', userId)
+          // Bug 6 fix: update the `pin` column (not the non-existent `password` column)
+          await supabase.from('profiles').update({ pin: newPin }).eq('id', userId)
           if (targetEmail) {
-            await supabase.from('profiles').update({ password: newPin }).eq('email', targetEmail.toLowerCase())
+            await supabase.from('profiles').update({ pin: newPin }).eq('email', targetEmail.toLowerCase())
           }
         } catch {
           /* ignore */

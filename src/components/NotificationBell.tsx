@@ -10,9 +10,12 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
 
-  // 1. Order notifications
+  // 1. Order notifications — Bug 3 fix: filter to current user's orders only
   const orderNotifs = orders
-    .filter((o) => Date.now() - new Date(o.createdAt).getTime() < TWELVE_HOURS)
+    .filter((o) =>
+      o.userId === user?.id &&   // ← only show THIS user's orders (not everyone's)
+      Date.now() - new Date(o.createdAt).getTime() < TWELVE_HOURS
+    )
     .map((o) => ({
       id: `order-${o.id}`,
       link: `/orders/success/${o.id}`,
@@ -26,7 +29,8 @@ export default function NotificationBell() {
   // 2. Custom seller/admin broadcast or direct user notifications
   const customNotifs = (notifications || [])
     .filter((n) => {
-      const isTarget = !n.userId || n.userId === 'all' || (user && n.userId === user.id)
+      // Bug 2 fix: require exact 'all' or own userId — never show on falsy/empty userId
+      const isTarget = n.userId === 'all' || (!!user && n.userId === user.id)
       const isRecent = Date.now() - new Date(n.createdAt).getTime() < TWELVE_HOURS
       return isTarget && isRecent
     })
