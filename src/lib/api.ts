@@ -277,7 +277,10 @@ export async function insertProduct(product: Omit<Product, 'id'>): Promise<Produ
 export async function deleteProductApi(id: string): Promise<void> {
   const client = requireClient()
   const { error } = await client.from('products').delete().eq('id', id)
-  if (error) throw error
+  if (error) {
+    console.error('deleteProductApi error:', error)
+    throw new Error(error.message || 'Failed to delete product from database')
+  }
 }
 
 export async function setAllProductsInStock(): Promise<void> {
@@ -366,7 +369,10 @@ export async function createOrder(order: Order): Promise<Order> {
     delete payload.geo_lng
     ;({ error: orderError } = await client.from('orders').insert(payload))
   }
-  if (orderError) throw orderError
+  if (orderError) {
+    console.error('createOrder → orders insert failed:', orderError)
+    throw new Error(orderError.message || 'Order insert failed')
+  }
 
   // Step 2: Insert order items
   const items = order.items.map((it) => ({
@@ -380,8 +386,9 @@ export async function createOrder(order: Order): Promise<Order> {
   }))
   const { error: itemsError } = await client.from('order_items').insert(items)
   if (itemsError) {
+    console.error('createOrder → order_items insert failed:', itemsError)
     await client.from('orders').delete().eq('id', order.id)
-    throw itemsError
+    throw new Error(itemsError.message || 'Order items insert failed')
   }
 
   return order

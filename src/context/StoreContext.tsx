@@ -340,7 +340,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const total = Math.max(0, subtotal + deliveryFee - (opts.discountAmount || 0))
       const now = new Date().toISOString()
       const order: Order = {
-        id: uid('ord'),
+        id: crypto.randomUUID(),   // UUID required by DB — uid('ord') was generating invalid IDs
         userId: user.id,
         userName: user.name,
         userEmail: user.email,
@@ -363,8 +363,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
 
       if (cloud) {
-        // Let the real error surface — no silent fallback
-        await createOrder(order)
+        try {
+          await createOrder(order)
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error('placeOrder failed:', msg)
+          showToast(`Order failed: ${msg}`, 'error')
+          return null
+        }
         saveDelivery(user.id, {
           address: order.address,
           phone: order.phone,

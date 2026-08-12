@@ -491,20 +491,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setUserRole = useCallback(
     async (userId: string, role: Role) => {
-      ensureSeeded()
-      const all = getUsers()
-      const targetUser = all.find((u) => u.id === userId || u.email === userId)
-      const targetEmail = targetUser?.email || userId
+      // Use React state (loaded from Supabase) NOT localStorage (may have stale IDs)
+      const targetUser = users.find((u) => u.id === userId || u.email === userId)
+      const targetEmail = targetUser?.email || ''
 
-      const updated = all.map((u) =>
-        u.id === userId || (targetEmail && u.email.toLowerCase() === targetEmail.toLowerCase())
-          ? { ...u, role }
-          : u,
+      // Optimistically update UI
+      const updated = users.map((u) =>
+        u.id === userId ? { ...u, role } : u,
       )
-      saveUsers(updated)
       setUsers(updated)
+      saveUsers(updated)
 
-      if (user && (user.id === userId || (targetEmail && user.email.toLowerCase() === targetEmail.toLowerCase()))) {
+      if (user && user.id === userId) {
         setUser({ ...user, role })
       }
 
