@@ -219,22 +219,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cloud && supabase) {
         // Search by email (primary)
         let profileRow: Record<string, unknown> | null = null
-        const { data: byEmail } = await supabase
+        const { data: byEmail, error: emailErr } = await supabase
           .from('profiles')
           .select('*')
           .eq('email', authEmail.toLowerCase())
           .maybeSingle()
+        if (emailErr) console.error('Login email lookup error:', emailErr)
         profileRow = byEmail
 
         // Fallback: if not found and user entered a phone number,
         // also search by the raw phone column
         if (!profileRow && !email.trim().includes('@')) {
           const rawPhone = email.trim().replace(/\D/g, '')
-          const { data: byPhone } = await supabase
+          const { data: byPhone, error: phoneErr } = await supabase
             .from('profiles')
             .select('*')
             .eq('phone', rawPhone)
             .maybeSingle()
+          if (phoneErr) console.error('Login phone lookup error:', phoneErr)
           if (byPhone) profileRow = byPhone
         }
 
