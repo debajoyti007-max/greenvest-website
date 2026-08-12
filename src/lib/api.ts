@@ -57,6 +57,7 @@ type OrderRow = {
 }
 
 type OrderItemRow = {
+  order_id?: string
   product_id: string
   name: string
   emoji: string
@@ -321,22 +322,74 @@ export async function setAllProductsInStock(): Promise<void> {
   if (error) throw error
 }
 
-export async function fetchOrders(userRole?: string, userId?: string): Promise<Order[]> {
+export async function fetchOrders(userRole?: string, userId?: string, userEmail?: string, userPhone?: string): Promise<Order[]> {
   const client = requireClient()
-  let query = client
-    .from('orders')
-    .select('*, order_items(*)')
-    .order('created_at', { ascending: false })
-
-  // Customers only see their own orders; staff (seller/admin/rider) see all
   const isStaff = userRole === 'seller' || userRole === 'admin' || userRole === 'rider'
-  if (!isStaff && userId) {
-    query = query.eq('user_id', userId)
+
+  let ordersData: OrderRow[] = []
+  let itemsData: OrderItemRow[] = []
+
+  try {
+    let query = client.from('orders').select('*, order_items(*)').order('created_at', { ascending: false })
+    if (!isStaff) {
+      const filters: string[] = []
+      if (userId) filters.push(`user_id.eq.${userId}`)
+      if (userEmail) filters.push(`user_email.eq.${userEmail.toLowerCase()}`)
+      if (userPhone) filters.push(`phone.eq.${userPhone.replace(/\D/g, '')}`)
+      if (filters.length > 0) {
+        query = query.or(filters.join(','))
+      }
+    }
+    const { data, error } = await query
+    if (!error && data) {
+      return (data as OrderRow[]).map(mapOrder)
+    }
+  } catch (err) {
+    console.warn('Nested orders query fallback triggered:', err)
   }
 
-  const { data, error } = await query
-  if (error) throw error
-  return (data as OrderRow[]).map(mapOrder)
+  // Fallback: 2-step separate query if nested select failed
+  try {
+    let ordersQuery = client.from('orders').select('*').order('created_at', { ascending: false })
+    if (!isStaff) {
+      const filters: string[] = []
+      if (userId) filters.push(`user_id.eq.${userId}`)
+      if (userEmail) filters.push(`user_email.eq.${userEmail.toLowerCase()}`)
+      if (userPhone) filters.push(`phone.eq.${userPhone.replace(/\D/g, '')}`)
+      if (filters.length > 0) {
+        ordersQuery = ordersQuery.or(filters.join(','))
+      }
+    }
+    const { data: ords, error: ordErr } = await ordersQuery
+    if (ordErr || !ords) throw ordErr || new Error('No orders found')
+    ordersData = ords as OrderRow[]
+
+    const orderIds = ordersData.map((o) => o.id)
+    if (orderIds.length > 0) {
+      const { data: itms } = await client.from('order_items').select('*').in('order_id', orderIds)
+      if (itms) itemsData = itms as OrderItemRow[]
+    }
+  } catch (err) {
+    console.error('fetchOrders fallback error:', err)
+    return []
+  }
+
+  const itemsByOrderId = new Map<string, OrderItemRow[]>()
+  itemsData.forEach((it) => {
+    if (it.order_id) {
+      const arr = itemsByOrderId.get(it.order_id) || []
+      arr.push(it)
+      itemsByOrderId.set(it.order_id, arr)
+    }
+  })
+
+  return ordersData.map((ord) => {
+    const rowWithItems: OrderRow = {
+      ...ord,
+      order_items: itemsByOrderId.get(ord.id) || [],
+    }
+    return mapOrder(rowWithItems)
+  })
 }
 
 

@@ -170,7 +170,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (user) {
         // Pass role + id so fetchOrders filters correctly:
         // rider/seller/admin → all orders | customer → only their own
-        const ords = await fetchOrders(user.role, user.id)
+        const ords = await fetchOrders(user.role, user.id, user.email, user.phone)
         setOrders(ords)
       } else {
         setOrders([])
