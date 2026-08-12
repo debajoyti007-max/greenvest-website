@@ -431,11 +431,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (newPin.length !== 4 || /\D/.test(newPin)) {
         return { ok: false, error: 'PIN must be exactly 4 digits.' }
       }
-      // Store new PIN in localStorage
+      // Bug 14 fix: store in localStorage AND Supabase so PIN works on any device
       storePin(user.email, newPin)
+      if (cloud && supabase) {
+        try {
+          await supabase.from('profiles').update({ pin: newPin }).eq('id', user.id)
+        } catch { /* ignore network errors */ }
+      }
       return { ok: true }
     },
-    [user],
+    [user, cloud],
   )
 
   const setUserRole = useCallback(
