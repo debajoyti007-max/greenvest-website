@@ -245,7 +245,25 @@ async function updateProfileField(
     }
   }
 
-  throw new Error('User profile not found in database')
+  // 4. Fallback: auto-create/upsert missing profile row in database
+  const targetEmail = (email && email.trim()) ? email.trim().toLowerCase() : (phone ? `${phone.replace(/\D/g, '').slice(-10)}@greenvest.shop` : `${userId}@greenvest.shop`)
+  const targetPhone = phone ? phone.replace(/\D/g, '') : undefined
+
+  const payload: Record<string, unknown> = {
+    id: userId || crypto.randomUUID(),
+    email: targetEmail,
+    name: targetEmail.split('@')[0],
+    role: 'customer',
+    created_at: new Date().toISOString(),
+    ...fields,
+  }
+  if (targetPhone) payload.phone = targetPhone
+
+  const { error: upsertErr } = await client.from('profiles').upsert(payload)
+  if (upsertErr) {
+    console.error('updateProfileField upsert error:', upsertErr)
+    throw new Error(upsertErr.message || 'Failed to save profile to database')
+  }
 }
 
 export async function updateProfileRole(userId: string, role: Role, email?: string, phone?: string): Promise<void> {
