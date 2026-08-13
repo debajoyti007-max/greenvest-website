@@ -93,20 +93,24 @@ export function resolveProductImage(_id: string, _imageUrl?: string, name?: stri
   const id = _id || ''
   const nameQ = (name || '').toLowerCase()
 
-  // 1. Exact match by product ID (f1–f10, p1–p22 seed items) — ALWAYS 100% WINS
+  // 1. Exact ID match (f1–f10, p1–p22 seed items) — ALWAYS WINS
   if (id in ID_MAP) return ID_MAP[id]
 
-  // 2. Match by name keywords
+  // 2. Keyword match by name (e.g. "Bagda Prawns", "Bhetki", "Rohu Fish", "Catla Fish") — ALWAYS WINS over DB URLs
   for (const [keywords, img] of NAME_MAP) {
     if (keywords.some((kw) => nameQ.includes(kw))) return img
   }
 
-  // 3. Custom uploaded or DB image URL
-  if (_imageUrl) {
-    if (_imageUrl.startsWith('http')) return _imageUrl
-    if (_imageUrl.startsWith('veg/')) return asset(_imageUrl)
+  // 3. Local veg/ relative path from DB
+  if (_imageUrl && _imageUrl.startsWith('veg/')) {
+    return asset(_imageUrl)
   }
 
-  // 4. Fallback
+  // 4. Custom user uploaded photo (only if uploaded by seller to Supabase storage)
+  if (_imageUrl && _imageUrl.includes('supabase.co/storage')) {
+    return _imageUrl
+  }
+
+  // 5. Fallback image
   return HERO_IMAGE
 }
