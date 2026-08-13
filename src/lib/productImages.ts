@@ -111,6 +111,10 @@ export function resolveProductImage(_id: string, _imageUrl?: string, name?: stri
     return _imageUrl
   }
 
-  // 5. Fallback image
-  return HERO_IMAGE
+  // 5. Fallback: if fish/seafood item return fresh Rohu photo, else fresh Tomato photo
+  if (nameQ.includes('fish') || nameQ.includes('মাছ') || nameQ.includes('prawn') || nameQ.includes('chingri')) {
+    return PRODUCT_IMAGES.f1
+  }
+
+  return PRODUCT_IMAGES.p1
 }
