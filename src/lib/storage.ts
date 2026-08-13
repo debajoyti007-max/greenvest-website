@@ -1,4 +1,4 @@
-import { SEED_PRODUCTS } from '../data/seed'
+import { SEED_PRODUCTS, ensureAllSeedProducts } from '../data/seed'
 import type { CartItem, DeliverySlot, Lang, Order, Product, User } from '../types'
 
 const KEYS = {
@@ -96,11 +96,9 @@ export function ensureSeeded() {
 
   if (localStorage.getItem(KEYS.seeded) === '1') {
     const products = read<Product[]>(KEYS.products, [])
-    const needsRefresh =
-      products.length < SEED_PRODUCTS.length ||
-      products.some((p) => !p.bnName || /^[?\s]+$/.test(p.bnName) || !/[\u0980-\u09FF]/.test(p.bnName))
-    if (needsRefresh) {
-      write(KEYS.products, SEED_PRODUCTS)
+    const merged = ensureAllSeedProducts(products)
+    if (merged.length !== products.length) {
+      write(KEYS.products, merged)
     }
     _seeded = true
     return
@@ -123,7 +121,8 @@ export function saveUsers(users: User[]) {
 }
 
 export function getProducts(): Product[] {
-  return read(KEYS.products, SEED_PRODUCTS)
+  const stored = read<Product[]>(KEYS.products, SEED_PRODUCTS)
+  return ensureAllSeedProducts(stored)
 }
 
 export function saveProducts(products: Product[]) {

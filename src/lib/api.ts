@@ -13,7 +13,7 @@ import type {
   Season,
   User,
 } from '../types'
-import { SEED_PRODUCTS } from '../data/seed'
+import { SEED_PRODUCTS, ensureAllSeedProducts } from '../data/seed'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 type ProductRow = {
@@ -296,19 +296,21 @@ export async function fetchProducts(): Promise<Product[]> {
   const fetched = (data as ProductRow[]).map(mapProduct)
   const fetchedIds = new Set(fetched.map((p) => p.id))
   const missingSeeds = SEED_PRODUCTS.filter((sp) => !fetchedIds.has(sp.id))
+
   if (missingSeeds.length > 0) {
     try {
       const rows = missingSeeds.map(productToRow)
       await client.from('products').upsert(rows)
       const { data: newData } = await client.from('products').select('*').order('name')
-      if (newData) return (newData as ProductRow[]).map(mapProduct)
+      if (newData) {
+        const reFetched = (newData as ProductRow[]).map(mapProduct)
+        return ensureAllSeedProducts(reFetched)
+      }
     } catch (e) {
       console.warn('Failed to auto-sync seed products to cloud DB, merging locally:', e)
     }
-    // Fallback: merge missing seed products so Fish and new seed items NEVER disappear
-    return [...fetched, ...missingSeeds].sort((a, b) => a.name.localeCompare(b.name))
   }
-  return fetched
+  return ensureAllSeedProducts(fetched)
 }
 
 export async function upsertProduct(product: Product): Promise<Product> {

@@ -30,3 +30,10 @@ export const SEED_PRODUCTS: Product[] = [
   { id: 'f4', emoji: '🐡', name: 'Hilsa Fish', bnName: 'ইলিশ মাছ', pA: 800, pB: 650, pC: 500, inStock: true, category: 'Fish', unit: 'pc', soldAs: 'loose' },
   { id: 'f5', emoji: '🐟', name: 'Tilapia', bnName: 'তেলাপিয়া', pA: 180, pB: 140, pC: 100, inStock: true, category: 'Fish', unit: 'kg', soldAs: 'loose' },
 ]
+
+export function ensureAllSeedProducts(list: Product[]): Product[] {
+  const ids = new Set(list.map((p) => p.id))
+  const missing = SEED_PRODUCTS.filter((sp) => !ids.has(sp.id))
+  if (missing.length === 0) return list
+  return [...list, ...missing].sort((a, b) => a.name.localeCompare(b.name))
+}
