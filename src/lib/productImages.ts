@@ -28,6 +28,11 @@ export const PRODUCT_IMAGES: Record<string, string> = {
   p19: asset('veg/bittergourd.jpg'),
   p20: asset('veg/radish.jpg'),
   p21: asset('veg/peas.jpg'),
+  f1:  asset('veg/rohu.jpg'),
+  f2:  asset('veg/catla.jpg'),
+  f3:  asset('veg/prawns.jpg'),
+  f4:  asset('veg/hilsa.jpg'),
+  f5:  asset('veg/tilapia.jpg'),
 }
 
 export const HERO_IMAGE = asset('veg/hero.jpg')
@@ -55,6 +60,12 @@ const NAME_MAP: Array<[string[], string]> = [
   [['potato', 'আলু'],                              PRODUCT_IMAGES.p2],
   [['onion', 'পেঁয়াজ'],                           PRODUCT_IMAGES.p3],
   [['tomato', 'টমেটো'],                            PRODUCT_IMAGES.p1],
+  [['rohu', 'রুই'],                                PRODUCT_IMAGES.f1],
+  [['catla', 'কাতলা'],                             PRODUCT_IMAGES.f2],
+  [['prawn', 'shrimp', 'চিংড়ি', 'chingri'],       PRODUCT_IMAGES.f3],
+  [['hilsa', 'ilish', 'ইলিশ'],                     PRODUCT_IMAGES.f4],
+  [['tilapia', 'তেলাপিয়া'],                        PRODUCT_IMAGES.f5],
+  [['fish', 'মাছ'],                                PRODUCT_IMAGES.f1],
 ]
 
 /** ID → local image (for seed products p1–p21) */

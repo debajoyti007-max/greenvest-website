@@ -24,11 +24,11 @@ export const SEED_PRODUCTS: Product[] = [
   { id: 'p19', emoji: '🥒', name: 'Bitter Gourd', bnName: 'করলা', pA: 65, pB: 50, pC: 35, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p19 },
   { id: 'p20', emoji: '🌱', name: 'Radish', bnName: 'মুলা', pA: 40, pB: 28, pC: 18, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p20 },
   { id: 'p21', emoji: '🫛', name: 'Green Peas', bnName: 'মটরশুঁটি', pA: 90, pB: 70, pC: 50, inStock: true, category: 'Vegetables', unit: 'kg', imageUrl: PRODUCT_IMAGES.p21 },
-  { id: 'f1', emoji: '🐟', name: 'Rohu Fish', bnName: 'রুই মাছ', pA: 280, pB: 220, pC: 160, inStock: true, category: 'Fish', unit: 'kg', soldAs: 'loose' },
-  { id: 'f2', emoji: '🐠', name: 'Catla Fish', bnName: 'কাতলা মাছ', pA: 320, pB: 260, pC: 190, inStock: true, category: 'Fish', unit: 'kg', soldAs: 'loose' },
-  { id: 'f3', emoji: '🦐', name: 'Prawns', bnName: 'চিংড়ি', pA: 550, pB: 420, pC: 300, inStock: true, category: 'Fish', unit: 'kg', soldAs: 'packet', gramOptions: [250, 500, 1000] },
-  { id: 'f4', emoji: '🐡', name: 'Hilsa Fish', bnName: 'ইলিশ মাছ', pA: 800, pB: 650, pC: 500, inStock: true, category: 'Fish', unit: 'pc', soldAs: 'loose' },
-  { id: 'f5', emoji: '🐟', name: 'Tilapia', bnName: 'তেলাপিয়া', pA: 180, pB: 140, pC: 100, inStock: true, category: 'Fish', unit: 'kg', soldAs: 'loose' },
+  { id: 'f1', emoji: '🐟', name: 'Rohu Fish', bnName: 'রুই মাছ', pA: 280, pB: 220, pC: 160, inStock: true, category: 'Fish', unit: 'kg', soldAs: 'loose', imageUrl: PRODUCT_IMAGES.f1 },
+  { id: 'f2', emoji: '🐠', name: 'Catla Fish', bnName: 'কাতলা মাছ', pA: 320, pB: 260, pC: 190, inStock: true, category: 'Fish', unit: 'kg', soldAs: 'loose', imageUrl: PRODUCT_IMAGES.f2 },
+  { id: 'f3', emoji: '🦐', name: 'Prawns', bnName: 'চিংড়ি', pA: 550, pB: 420, pC: 300, inStock: true, category: 'Fish', unit: 'kg', soldAs: 'packet', gramOptions: [250, 500, 1000], imageUrl: PRODUCT_IMAGES.f3 },
+  { id: 'f4', emoji: '🐡', name: 'Hilsa Fish', bnName: 'ইলিশ মাছ', pA: 800, pB: 650, pC: 500, inStock: true, category: 'Fish', unit: 'pc', soldAs: 'loose', imageUrl: PRODUCT_IMAGES.f4 },
+  { id: 'f5', emoji: '🐟', name: 'Tilapia', bnName: 'তেলাপিয়া', pA: 180, pB: 140, pC: 100, inStock: true, category: 'Fish', unit: 'kg', soldAs: 'loose', imageUrl: PRODUCT_IMAGES.f5 },
 ]
 
 export function ensureAllSeedProducts(list: Product[]): Product[] {
