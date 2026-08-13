@@ -38,8 +38,12 @@ export const SEED_PRODUCTS: Product[] = [
 ]
 
 export function ensureAllSeedProducts(list: Product[]): Product[] {
-  const ids = new Set(list.map((p) => p.id))
-  const missing = SEED_PRODUCTS.filter((sp) => !ids.has(sp.id))
-  if (missing.length === 0) return list
-  return [...list, ...missing].sort((a, b) => a.name.localeCompare(b.name))
+  // Purge any legacy/old fish items from list and enforce official 10 fish catalog (f1..f10)
+  const officialFishList = SEED_PRODUCTS.filter((p) => p.category === 'Fish')
+  const nonFishList = list.filter((p) => p.category !== 'Fish')
+  
+  const existingIds = new Set(nonFishList.map((p) => p.id))
+  const missingNonFishSeeds = SEED_PRODUCTS.filter((sp) => sp.category !== 'Fish' && !existingIds.has(sp.id))
+
+  return [...nonFishList, ...missingNonFishSeeds, ...officialFishList].sort((a, b) => a.name.localeCompare(b.name))
 }
