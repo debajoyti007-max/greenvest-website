@@ -29,7 +29,7 @@ function waCustomer(phone: string, name: string) {
 
 export default function SellerCustomers() {
   const { user, users, adminResetUserPin, toggleBlockUser } = useAuth()
-  const { orders, lang, sendNotification } = useStore()
+  const { orders, lang, sendNotification, createCoupon } = useStore()
 
   const [resetModalUser, setResetModalUser] = useState<{ id: string; name: string; phone: string } | null>(null)
   const [newPin, setNewPin] = useState('1234')
@@ -47,12 +47,46 @@ export default function SellerCustomers() {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   const MONTHS_BN = ['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর']
 
-  function loyaltyTier(spent: number): { label: string; color: string; emoji: string } {
-    if (spent >= 10000) return { label: lang === 'bn' ? 'প্লাটিনাম' : 'Platinum', color: '#7c3aed', emoji: '💎' }
-    if (spent >= 5000) return { label: lang === 'bn' ? 'গোল্ড' : 'Gold', color: '#d97706', emoji: '🥇' }
-    if (spent >= 2000) return { label: lang === 'bn' ? 'সিলভার' : 'Silver', color: '#6b7280', emoji: '🥈' }
-    if (spent >= 500) return { label: lang === 'bn' ? 'ব্রোঞ্জ' : 'Bronze', color: '#92400e', emoji: '🥉' }
-    return { label: '', color: '', emoji: '' }
+  function loyaltyTier(spent: number): { label: string; color: string; emoji: string; minSpend: number } {
+    if (spent >= 10000) return { label: lang === 'bn' ? 'প্লাটিনাম' : 'Platinum', color: '#7c3aed', emoji: '💎', minSpend: 10000 }
+    if (spent >= 5000) return { label: lang === 'bn' ? 'গোল্ড' : 'Gold', color: '#d97706', emoji: '🥇', minSpend: 5000 }
+    if (spent >= 2000) return { label: lang === 'bn' ? 'সিলভার' : 'Silver', color: '#6b7280', emoji: '🥈', minSpend: 2000 }
+    if (spent >= 500) return { label: lang === 'bn' ? 'ব্রোঞ্জ' : 'Bronze', color: '#92400e', emoji: '🥉', minSpend: 500 }
+    return { label: '', color: '', emoji: '', minSpend: 0 }
+  }
+
+  const [couponModal, setCouponModal] = useState<{ name: string; phone: string; userId?: string; spent: number } | null>(null)
+  const [couponDiscount, setCouponDiscount] = useState(50)
+  const [couponMinOrder, setCouponMinOrder] = useState(500)
+  const [couponType, setCouponType] = useState<'flat' | 'percent'>('flat')
+  const [couponSending, setCouponSending] = useState(false)
+
+  const handleSendCoupon = async () => {
+    if (!couponModal) return
+    setCouponSending(true)
+    try {
+      const code = `GV${couponModal.name.replace(/\s/g, '').toUpperCase().slice(0, 4)}${Math.floor(Math.random() * 900 + 100)}`
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      await createCoupon({ code, discount_type: couponType, discount_value: couponDiscount, min_order: couponMinOrder, valid: true, expires_at: expires })
+      // Send WhatsApp message
+      const digits = formatWhatsAppPhone(couponModal.phone)
+      const discountText = couponType === 'flat' ? `₹${couponDiscount}` : `${couponDiscount}%`
+      const msg = encodeURIComponent(
+        lang === 'bn'
+          ? `🎉 ${couponModal.name}, GreenVest-এ আপনার জন্য বিশেষ অফার!\n🎟️ কুপন কোড: *${code}*\n💸 ছাড়: ${discountText} (মিনিমাম অর্ডার ₹${couponMinOrder})\n⏳ মেয়াদ: ৭ দিন\n🛒 অর্ডার করুন: https://greenvest.shop`
+          : `🎉 Hi ${couponModal.name}, here is a special GreenVest reward!\n🎟️ Coupon Code: *${code}*\n💸 Discount: ${discountText} (min order ₹${couponMinOrder})\n⏳ Valid for 7 days\n🛒 Shop now: https://greenvest.shop`
+      )
+      window.open(`https://wa.me/${digits}?text=${msg}`, '_blank', 'noopener,noreferrer')
+      if (couponModal.userId) {
+        await sendNotification(couponModal.userId, lang === 'bn' ? '🎉 বিশেষ কুপন অফার!' : '🎉 Special Coupon Offer!', lang === 'bn' ? `কুপন কোড: ${code} — ${discountText} ছাড় পান!` : `Use code ${code} for ${discountText} off your next order!`, 'GreenVest')
+      }
+      showToast(lang === 'bn' ? `🎟️ ${couponModal.name}-কে কুপন পাঠানো হয়েছে: ${code}` : `🎟️ Coupon ${code} sent to ${couponModal.name}!`, '🎉')
+      setCouponModal(null)
+    } catch (err) {
+      showToast(lang === 'bn' ? '❌ কুপন পাঠানো যায়নি' : '❌ Failed to send coupon', '❌')
+    } finally {
+      setCouponSending(false)
+    }
   }
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
@@ -245,10 +279,15 @@ export default function SellerCustomers() {
               </tr>
             </thead>
             <tbody>
-              {customerList.map((c) => (
-                <tr key={c.key}>
+              {customerList.map((c, idx) => (
+                <tr key={c.key} style={idx < 3 ? { background: idx === 0 ? '#fffbeb' : idx === 1 ? '#f8fafc' : '#fff7ed' } : {}}>
                   <td>
-                    <strong>{c.name}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontWeight: 800, fontSize: '1rem', color: idx === 0 ? '#d97706' : idx === 1 ? '#6b7280' : idx === 2 ? '#92400e' : '#888', minWidth: '1.5rem' }}>
+                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                      </span>
+                      <strong>{c.name}</strong>
+                    </div>
                   </td>
                   <td>
                     <div>{c.phone || 'No phone'}</div>
@@ -291,6 +330,18 @@ export default function SellerCustomers() {
                     >
                       💬 WhatsApp
                     </button>
+
+                    {/* 🎟️ Send Coupon Button (for spenders >=500) */}
+                    {c.spent >= 500 && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ background: '#fefce8', color: '#854d0e', border: '1px solid #fde047', fontWeight: 700 }}
+                        onClick={() => setCouponModal({ name: c.name, phone: c.phone, userId: c.userId, spent: c.spent })}
+                      >
+                        🎟️ {lang === 'bn' ? 'কুপন দিন' : 'Send Coupon'}
+                      </button>
+                    )}
 
                     {c.userId && (
                       <>
@@ -380,6 +431,83 @@ export default function SellerCustomers() {
               </button>
               <button className="btn btn-primary" onClick={handleResetPin}>
                 {lang === 'bn' ? 'পিন আপডেট করুন' : 'Save PIN'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🎟️ Send Coupon Modal */}
+      {couponModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            {/* Header */}
+            <div style={{ background: 'linear-gradient(135deg,#fef08a,#fde047)', padding: '1.2rem 1.5rem', borderBottom: '1px solid #fde047' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#713f12' }}>
+                🎟️ {lang === 'bn' ? `${couponModal.name}-কে বিশেষ কুপন পাঠান` : `Send Special Coupon to ${couponModal.name}`}
+              </h3>
+              <p style={{ margin: '0.3rem 0 0', fontSize: '0.82rem', color: '#92400e' }}>
+                {lang === 'bn' ? `মোট খরচ: ₹${couponModal.spent} — তাকে পুরস্কার দিন!` : `Total spent: ₹${couponModal.spent} — Reward them!`}
+              </p>
+            </div>
+            {/* Body */}
+            <div style={{ padding: '1.2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                {lang === 'bn' ? 'ছাড়ের ধরন' : 'Discount Type'}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setCouponType('flat')}
+                    style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '2px solid', fontWeight: 700, cursor: 'pointer', background: couponType === 'flat' ? '#fef08a' : 'white', borderColor: couponType === 'flat' ? '#eab308' : '#e5e7eb' }}
+                  >
+                    💸 {lang === 'bn' ? 'ফ্ল্যাট (যেমন ₹50)' : 'Flat (e.g. ₹50 off)'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCouponType('percent')}
+                    style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '2px solid', fontWeight: 700, cursor: 'pointer', background: couponType === 'percent' ? '#fef08a' : 'white', borderColor: couponType === 'percent' ? '#eab308' : '#e5e7eb' }}
+                  >
+                    🎟️ {lang === 'bn' ? 'পার্সেন্ট (যেমন 10%)' : 'Percent (e.g. 10% off)'}
+                  </button>
+                </div>
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                {couponType === 'flat' ? (lang === 'bn' ? `ছাড়ের পরিমাণ (₹)` : 'Discount Amount (₹)') : (lang === 'bn' ? 'ছাড় শতাংশ (%)' : 'Discount Percentage (%)')}
+                <input
+                  type="number"
+                  min={1}
+                  max={couponType === 'percent' ? 50 : 500}
+                  value={couponDiscount}
+                  onChange={e => setCouponDiscount(Number(e.target.value))}
+                  style={{ padding: '0.5rem', borderRadius: '8px', border: '1.5px solid #fde047', fontSize: '1rem', fontWeight: 700 }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                {lang === 'bn' ? 'মিনিমাম অর্ডার (₹)' : 'Minimum Order Amount (₹)'}
+                <input
+                  type="number"
+                  min={100}
+                  value={couponMinOrder}
+                  onChange={e => setCouponMinOrder(Number(e.target.value))}
+                  style={{ padding: '0.5rem', borderRadius: '8px', border: '1.5px solid #fde047', fontSize: '1rem', fontWeight: 700 }}
+                />
+              </label>
+              <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '10px', padding: '0.75rem', fontSize: '0.85rem', color: '#166534' }}>
+                👀 {lang === 'bn' ? 'কুপন কোড অ্যাপে তৈরি হবে এবং WhatsApp দিয়ে পাঠানো হবে। মেয়াদ ৭ দিন।' : 'Code will be auto-generated and sent via WhatsApp. Valid for 7 days.'}
+              </div>
+            </div>
+            {/* Footer */}
+            <div style={{ padding: '0 1.5rem 1.2rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setCouponModal(null)}>
+                {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleSendCoupon}
+                disabled={couponSending}
+                style={{ background: '#eab308', color: '#1c1917', border: 'none' }}
+              >
+                {couponSending ? '⏳...' : `🎟️ ${lang === 'bn' ? 'WhatsApp-এ কুপন পাঠান' : 'Send Coupon via WhatsApp'}`}
               </button>
             </div>
           </div>

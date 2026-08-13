@@ -588,6 +588,24 @@ export async function validateCoupon(code: string, orderTotal: number): Promise<
   } catch { return null }
 }
 
+export async function createCoupon(coupon: {
+  code: string
+  discount_type: 'flat' | 'percent'
+  discount_value: number
+  min_order: number
+  valid: boolean
+  expires_at?: string
+}): Promise<boolean> {
+  if (!supabase) return false
+  try {
+    const { error } = await supabase.from('coupons').upsert({
+      ...coupon,
+      created_at: new Date().toISOString(),
+    })
+    return !error
+  } catch { return false }
+}
+
 export async function saveDailyReport(report: DailyReport): Promise<void> {
   if (!supabase) return
   try {

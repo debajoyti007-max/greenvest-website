@@ -27,6 +27,7 @@ import {
   saveAddress as saveAddressApi,
   deleteAddress as deleteAddressApi,
   validateCoupon as validateCouponApi,
+  createCoupon as createCouponApi,
   saveDailyReport as saveDailyReportApi,
   fetchDailyReport as fetchDailyReportApi,
   fetchDeliveryZones as fetchDeliveryZonesApi,
@@ -97,6 +98,7 @@ interface StoreContextValue {
   saveAddress: (addr: Address) => Promise<void>
   deleteAddress: (id: number) => Promise<void>
   validateCoupon: (code: string, orderTotal: number) => Promise<Coupon | null>
+  createCoupon: (coupon: { code: string; discount_type: 'flat' | 'percent'; discount_value: number; min_order: number; valid: boolean; expires_at?: string }) => Promise<boolean>
   saveDailyReport: (report: DailyReport) => Promise<void>
   fetchDailyReport: (date: string) => Promise<DailyReport | null>
   fetchDeliveryZones: () => Promise<DeliveryZone[]>
@@ -641,6 +643,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return validateCouponApi(code, orderTotal)
   }, [cloud])
 
+  const createCoupon = useCallback(async (coupon: { code: string; discount_type: 'flat' | 'percent'; discount_value: number; min_order: number; valid: boolean; expires_at?: string }) => {
+    if (!cloud) return false
+    return createCouponApi(coupon)
+  }, [cloud])
+
   const saveDailyReport = useCallback(async (report: DailyReport) => {
     if (!cloud) return
     return saveDailyReportApi(report)
@@ -722,6 +729,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveAddress,
       deleteAddress,
       validateCoupon,
+      createCoupon,
       saveDailyReport,
       fetchDailyReport,
       fetchDeliveryZones,
@@ -759,6 +767,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveAddress,
       deleteAddress,
       validateCoupon,
+      createCoupon,
       saveDailyReport,
       fetchDailyReport,
       fetchDeliveryZones,
