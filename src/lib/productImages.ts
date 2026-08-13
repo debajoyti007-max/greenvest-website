@@ -28,11 +28,17 @@ export const PRODUCT_IMAGES: Record<string, string> = {
   p19: asset('veg/bittergourd.jpg'),
   p20: asset('veg/radish.jpg'),
   p21: asset('veg/peas.jpg'),
+  p22: asset('veg/potol.jpg'),
   f1:  asset('veg/rohu.jpg'),
   f2:  asset('veg/catla.jpg'),
   f3:  asset('veg/prawns.jpg'),
   f4:  asset('veg/hilsa.jpg'),
   f5:  asset('veg/tilapia.jpg'),
+  f6:  asset('veg/bhetki.jpg'),
+  f7:  asset('veg/pabda.jpg'),
+  f8:  asset('veg/tangra.jpg'),
+  f9:  asset('veg/parshe.jpg'),
+  f10: asset('veg/pomfret.jpg'),
 }
 
 export const HERO_IMAGE = asset('veg/hero.jpg')
@@ -61,10 +67,16 @@ const NAME_MAP: Array<[string[], string]> = [
   [['onion', 'পেঁয়াজ'],                           PRODUCT_IMAGES.p3],
   [['tomato', 'টমেটো'],                            PRODUCT_IMAGES.p1],
   [['rohu', 'রুই'],                                PRODUCT_IMAGES.f1],
-  [['catla', 'কাতলা'],                             PRODUCT_IMAGES.f2],
+  [['catla', 'katla', 'কাতলা'],                    PRODUCT_IMAGES.f2],
   [['prawn', 'shrimp', 'চিংড়ি', 'chingri'],       PRODUCT_IMAGES.f3],
   [['hilsa', 'ilish', 'ইলিশ'],                     PRODUCT_IMAGES.f4],
   [['tilapia', 'তেলাপিয়া'],                        PRODUCT_IMAGES.f5],
+  [['bhetki', 'ভেটকি'],                             PRODUCT_IMAGES.f6],
+  [['pabda', 'পাবদা'],                             PRODUCT_IMAGES.f7],
+  [['tangra', 'ট্যাংরা'],                           PRODUCT_IMAGES.f8],
+  [['parshe', 'পারশে'],                            PRODUCT_IMAGES.f9],
+  [['pomfret', 'পমফ্রেট'],                         PRODUCT_IMAGES.f10],
+  [['potol', 'pointed gourd', 'পটোল', 'পটল'],      PRODUCT_IMAGES.p22],
   [['fish', 'মাছ'],                                PRODUCT_IMAGES.f1],
 ]
 
