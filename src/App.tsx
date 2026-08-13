@@ -18,7 +18,6 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Contact = lazy(() => import('./pages/Contact'))
 const Privacy = lazy(() => import('./pages/Privacy'))
 const Terms = lazy(() => import('./pages/Terms'))
-const Refund = lazy(() => import('./pages/Refund'))
 const SellerHome = lazy(() => import('./pages/seller/SellerHome'))
 const SellerProducts = lazy(() => import('./pages/seller/SellerProducts'))
 const SellerOrders = lazy(() => import('./pages/seller/SellerOrders'))
@@ -61,7 +60,7 @@ function AppRoutes() {
           <Route path="contact" element={<Contact />} />
           <Route path="privacy" element={<Privacy />} />
           <Route path="terms" element={<Terms />} />
-          <Route path="refund" element={<Refund />} />
+          <Route path="refund" element={<Navigate to="/" replace />} />
           <Route
             path="seller"
             element={

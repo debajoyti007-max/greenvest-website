@@ -11,7 +11,7 @@ import type { Address, DeliveryZone } from '../types'
 
 export default function Checkout() {
   const { user } = useAuth()
-  const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr, fetchAddresses, fetchDeliveryZones, saveAddress } = useStore()
+  const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr, fetchAddresses, fetchDeliveryZones, saveAddress, validateCoupon } = useStore()
   const navigate = useNavigate()
 
   const userEditedAddress = useRef(false)
@@ -32,13 +32,18 @@ export default function Checkout() {
   const [prefilled, setPrefilled] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  const [couponCode, setCouponCode] = useState('')
+  const [couponApplied, setCouponApplied] = useState<{ discount: number; message: string } | null>(null)
+  const [couponLoading, setCouponLoading] = useState(false)
+  const [couponError, setCouponError] = useState('')
+
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [zones, setZones] = useState<DeliveryZone[]>([])
   const [zonesLoading, setZonesLoading] = useState(true)
   const [saveAddressToDb, setSaveAddressToDb] = useState(false)
 
   const delivery = useMemo(() => calcDeliveryFee(pin || '721632', zones), [zones, pin])
-  const grandTotal = cartTotal + delivery.fee
+  const grandTotal = cartTotal + delivery.fee - (couponApplied?.discount || 0)
   const advance = Math.ceil(grandTotal * 0.5)
 
   useEffect(() => {
@@ -186,7 +191,7 @@ export default function Checkout() {
           console.warn('Address save failed:', addrErr)
         }
       }
-      const order = await placeOrder({ address: fullAddress, phone, pin: pin.trim(), utr, deliverySlot: 'morning', discountAmount: 0, zones, geoLat, geoLng })
+      const order = await placeOrder({ address: fullAddress, phone, pin: pin.trim(), utr, deliverySlot: 'morning', discountAmount: couponApplied?.discount || 0, zones, geoLat, geoLng })
       if (order) navigate(`/orders/success/${order.id}`, { state: { order } })
       else setError(lang === 'bn' ? 'অর্ডার প্রসেস করা যাচ্ছে না। আবার চেষ্টা করুন।' : 'Could not place order. Please try again.')
     } catch (err) {
@@ -265,11 +270,15 @@ export default function Checkout() {
               <dd>₹{cartTotal}</dd>
             </div>
             <div>
-              <dt>
-                {t(lang, 'delivery')}
-              </dt>
+              <dt>{t(lang, 'delivery')}</dt>
               <dd>₹{delivery.fee}</dd>
             </div>
+            {couponApplied && (
+              <div>
+                <dt style={{ color: '#16a34a' }}>🎟️ {lang === 'bn' ? 'কুপন ছাড়' : 'Coupon Discount'}</dt>
+                <dd style={{ color: '#16a34a' }}>-₹{couponApplied.discount}</dd>
+              </div>
+            )}
             <div>
               <dt>{t(lang, 'total')}</dt>
               <dd>₹{grandTotal}</dd>
@@ -279,6 +288,48 @@ export default function Checkout() {
               <dd className="accent">₹{advance}</dd>
             </div>
           </dl>
+
+          {/* 🎟️ Coupon Code */}
+          <div style={{ marginTop: '1rem', background: 'linear-gradient(135deg,#fefce8,#fef9c3)', border: '1.5px solid #fde047', borderRadius: '12px', padding: '0.85rem 1rem' }}>
+            <p style={{ margin: '0 0 0.5rem', fontWeight: 700, fontSize: '0.88rem', color: '#854d0e' }}>
+              🎟️ {lang === 'bn' ? 'প্রমো কোড / কুপন আছে?' : 'Have a Promo Code / Coupon?'}
+            </p>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                type="text"
+                value={couponCode}
+                onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponError(''); setCouponApplied(null) }}
+                placeholder={lang === 'bn' ? 'কুপন কোড লিখুন' : 'Enter coupon code'}
+                style={{ flex: 1, padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1.5px solid #fde047', fontSize: '0.9rem', fontWeight: 600, letterSpacing: '0.05rem' }}
+              />
+              <button
+                type="button"
+                disabled={couponLoading || !couponCode.trim()}
+                onClick={async () => {
+                  if (!couponCode.trim()) return
+                  setCouponLoading(true)
+                  setCouponError('')
+                  try {
+                    const result = await validateCoupon(couponCode.trim(), cartTotal + delivery.fee)
+                    if (result && result.valid && result.discount) {
+                      setCouponApplied({ discount: result.discount, message: result.message || `✅ ${lang === 'bn' ? 'কুপন প্রযোজ্য হয়েছে!' : 'Coupon applied!'}` })
+                    } else {
+                      setCouponError(lang === 'bn' ? '❌ এই কুপন কোডটি বৈধ নয় বা মেয়াদ শেষ।' : '❌ Invalid or expired coupon code.')
+                    }
+                  } catch {
+                    setCouponError(lang === 'bn' ? 'কুপন যাচাই করা যায়নি। পরে চেষ্টা করুন।' : 'Could not verify coupon. Try again.')
+                  } finally {
+                    setCouponLoading(false)
+                  }
+                }}
+                style={{ padding: '0.5rem 1rem', borderRadius: '8px', background: '#eab308', color: '#1c1917', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem' }}
+              >
+                {couponLoading ? '⏳' : (lang === 'bn' ? 'প্রয়োগ করুন' : 'Apply')}
+              </button>
+            </div>
+            {couponApplied && <p style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.85rem', margin: '0.4rem 0 0' }}>{couponApplied.message}</p>}
+            {couponError && <p style={{ color: '#dc2626', fontSize: '0.85rem', margin: '0.4rem 0 0' }}>{couponError}</p>}
+          </div>
         </div>
 
         <form className="form" onSubmit={onSubmit}>

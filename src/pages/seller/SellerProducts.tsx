@@ -22,6 +22,8 @@ const emptyForm = {
   category: 'Vegetables',
   unit: 'kg',
   imageUrl: '',
+  soldAs: 'loose' as 'loose' | 'packet' | 'both',
+  gramOptions: [] as number[],
 }
 
 type Section = 'active' | 'restock' | 'archived'
@@ -77,6 +79,8 @@ export default function SellerProducts() {
       category: p.category,
       unit: p.unit,
       imageUrl: p.imageUrl || '',
+      soldAs: p.soldAs || 'loose',
+      gramOptions: p.gramOptions || [],
     })
   }
 
@@ -168,15 +172,43 @@ export default function SellerProducts() {
           <label>
             {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
             <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-              <option value="Vegetables">Vegetables</option>
-              <option value="Leafy">Leafy</option>
-              <option value="Spices">Spices</option>
+              <option value="Vegetables">🥦 Vegetables (শাকসবজি)</option>
+              <option value="Leafy">🤬 Leafy Greens (শাক)</option>
+              <option value="Spices">🌶️ Spices (মশলা)</option>
+              <option value="Fish">🐟 Fish (মাছ)</option>
+              <option value="Fruits">🥭 Fruits (ফল)</option>
+              <option value="Dairy">🥛 Dairy (দুগ্ধজাত)</option>
             </select>
           </label>
           <label>
             {lang === 'bn' ? 'ইউনিট' : 'Unit'}
-            <input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+            <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
+              <option value="kg">kg (কিলো)</option>
+              <option value="pc">pc (পিস)</option>
+              <option value="bunch">bunch (ডাঁটা)</option>
+              <option value="litre">litre (লিটার)</option>
+              <option value="packet">packet (প্যাকেট)</option>
+            </select>
           </label>
+          <label>
+            {lang === 'bn' ? 'বিক্রয় পদ্ধতি' : 'Sold As'}
+            <select value={form.soldAs || 'loose'} onChange={(e) => setForm({ ...form, soldAs: e.target.value as 'loose' | 'packet' | 'both' })}>
+              <option value="loose">⚖️ Loose by weight ({lang === 'bn' ? 'ওজনে বিক্রয়' : 'e.g. 1 kg, 2 kg'})</option>
+              <option value="packet">📦 Fixed Packets only ({lang === 'bn' ? 'প্যাকেটে বিক্রয়' : 'e.g. 250g, 500g'})</option>
+              <option value="both">♾️ Both loose & packet ({lang === 'bn' ? 'দুটোই বিক্রয় হয়' : 'customer can choose'})</option>
+            </select>
+          </label>
+          {(form.soldAs === 'packet' || form.soldAs === 'both') && (
+            <label>
+              {lang === 'bn' ? 'গ্রাম অপশন (কমা দিয়ে বিভক্ত করুন)' : 'Gram options (comma-separated)'}
+              <input
+                placeholder="e.g. 250,500,1000"
+                value={(form.gramOptions || []).join(',')}
+                onChange={(e) => setForm({ ...form, gramOptions: e.target.value.split(',').map(v => parseInt(v.trim())).filter(n => !isNaN(n)) })}
+              />
+              <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>{lang === 'bn' ? 'যেমন: 250,500,1000 মানে তিনটি সাইজে বিক্রয় হবে' : 'e.g. 250,500,1000 means 3 packet sizes'}</span>
+            </label>
+          )}
           <label className="span-2">
             {t(lang, 'uploadPhoto')}
             <input

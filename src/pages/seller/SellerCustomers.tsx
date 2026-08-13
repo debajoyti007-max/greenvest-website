@@ -39,6 +39,22 @@ export default function SellerCustomers() {
   const [notifMessage, setNotifMessage] = useState('')
   const [sendingNotif, setSendingNotif] = useState(false)
 
+  const now = new Date()
+  const [filterMonth, setFilterMonth] = useState(now.getMonth()) // 0-indexed
+  const [filterYear, setFilterYear] = useState(now.getFullYear())
+  const [spendMode, setSpendMode] = useState<'all' | 'month'>('all')
+
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const MONTHS_BN = ['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর']
+
+  function loyaltyTier(spent: number): { label: string; color: string; emoji: string } {
+    if (spent >= 10000) return { label: lang === 'bn' ? 'প্লাটিনাম' : 'Platinum', color: '#7c3aed', emoji: '💎' }
+    if (spent >= 5000) return { label: lang === 'bn' ? 'গোল্ড' : 'Gold', color: '#d97706', emoji: '🥇' }
+    if (spent >= 2000) return { label: lang === 'bn' ? 'সিলভার' : 'Silver', color: '#6b7280', emoji: '🥈' }
+    if (spent >= 500) return { label: lang === 'bn' ? 'ব্রোঞ্জ' : 'Bronze', color: '#92400e', emoji: '🥉' }
+    return { label: '', color: '', emoji: '' }
+  }
+
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
   }
@@ -67,9 +83,13 @@ export default function SellerCustomers() {
     // 2. Aggregate orders
     orders.forEach((o) => {
       if (o.status === 'cancelled') return
+      // Month filtering
+      const orderDate = new Date(o.createdAt)
+      const matchesMonth = spendMode === 'all' ||
+        (orderDate.getMonth() === filterMonth && orderDate.getFullYear() === filterYear)
       const key = o.userId || o.phone || o.userEmail
       const existing = userMap.get(key) || userMap.get(o.userId)
-      const spentAdd = o.utrVerified ? o.total : 0
+      const spentAdd = (o.utrVerified && matchesMonth) ? o.total : 0
 
       if (existing) {
         existing.orders += 1
@@ -96,8 +116,8 @@ export default function SellerCustomers() {
       }
     })
 
-    return Array.from(userMap.values()).sort((a, b) => b.lastOrderAt.localeCompare(a.lastOrderAt))
-  }, [users, orders])
+    return Array.from(userMap.values()).sort((a, b) => b.spent - a.spent || b.lastOrderAt.localeCompare(a.lastOrderAt))
+  }, [users, orders, filterMonth, filterYear, spendMode])
 
   const handleResetPin = async () => {
     if (!resetModalUser) return
@@ -166,6 +186,48 @@ export default function SellerCustomers() {
           : 'Send live notifications to any customer or all customers at once, reset user PINs, and manage security.'}
       </p>
 
+      {/* 📅 Monthly Spend Filter */}
+      <div style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)', border: '1.5px solid #86efac', borderRadius: '14px', padding: '1rem 1.2rem', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, color: '#166534', fontSize: '0.9rem' }}>📊 {lang === 'bn' ? 'ব্যয়ের সময়কাল:' : 'Spend Period:'}</span>
+        <button
+          type="button"
+          onClick={() => setSpendMode('all')}
+          style={{ padding: '0.35rem 0.85rem', borderRadius: '20px', border: '1.5px solid', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', background: spendMode === 'all' ? '#16a34a' : 'white', color: spendMode === 'all' ? 'white' : '#16a34a', borderColor: '#16a34a' }}
+        >
+          {lang === 'bn' ? '📈 সব সময়' : '📈 All Time'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setSpendMode('month')}
+          style={{ padding: '0.35rem 0.85rem', borderRadius: '20px', border: '1.5px solid', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', background: spendMode === 'month' ? '#16a34a' : 'white', color: spendMode === 'month' ? 'white' : '#16a34a', borderColor: '#16a34a' }}
+        >
+          📅 {lang === 'bn' ? 'মাস অনুযায়ী' : 'By Month'}
+        </button>
+        {spendMode === 'month' && (
+          <>
+            <select
+              value={filterMonth}
+              onChange={e => setFilterMonth(Number(e.target.value))}
+              style={{ padding: '0.35rem 0.6rem', borderRadius: '8px', border: '1px solid #86efac', fontSize: '0.85rem', background: 'white' }}
+            >
+              {(lang === 'bn' ? MONTHS_BN : MONTHS).map((m, i) => (
+                <option key={i} value={i}>{m}</option>
+              ))}
+            </select>
+            <select
+              value={filterYear}
+              onChange={e => setFilterYear(Number(e.target.value))}
+              style={{ padding: '0.35rem 0.6rem', borderRadius: '8px', border: '1px solid #86efac', fontSize: '0.85rem', background: 'white' }}
+            >
+              {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </>
+        )}
+        <span style={{ fontSize: '0.8rem', color: '#166534', marginLeft: 'auto' }}>
+          {lang === 'bn' ? `মোট ₹${customerList.reduce((s,c) => s+c.spent,0)} বিক্রি হয়েছে` : `Total ₹${customerList.reduce((s,c) => s+c.spent,0)} sold`}
+        </span>
+      </div>
+
       {customerList.length === 0 ? (
         <p className="empty">{lang === 'bn' ? 'এখনো কোনো কাস্টমার নেই।' : 'No customers yet.'}</p>
       ) : (
@@ -196,7 +258,9 @@ export default function SellerCustomers() {
                     <span className={`role-pill role-${c.role}`}>{c.role}</span>
                   </td>
                   <td>{c.orders}</td>
-                  <td>₹{c.spent}</td>
+                  <td>₹{c.spent}
+                    {(() => { const t = loyaltyTier(c.spent); return t.label ? <span style={{ display:'block', fontSize:'0.72rem', fontWeight:700, color: t.color, marginTop:'2px' }}>{t.emoji} {t.label}</span> : null })()} 
+                  </td>
                   <td>
                     {c.isBlocked ? (
                       <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '0.85rem' }}>🚫 Blocked</span>

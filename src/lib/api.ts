@@ -31,6 +31,8 @@ type ProductRow = {
   category: string
   unit: string
   image_url: string | null
+  sold_as?: string | null
+  gram_options?: number[] | null
 }
 
 type OrderRow = {
@@ -113,6 +115,8 @@ function mapProduct(row: ProductRow): Product {
     category: row.category,
     unit: row.unit,
     imageUrl: row.image_url || undefined,
+    soldAs: (row.sold_as as Product['soldAs']) || undefined,
+    gramOptions: row.gram_options || undefined,
   }
 }
 
@@ -132,6 +136,8 @@ function productToRow(p: Product | (Omit<Product, 'id'> & { id: string })) {
     category: p.category,
     unit: p.unit,
     image_url: p.imageUrl || null,
+    sold_as: p.soldAs || null,
+    gram_options: p.gramOptions || null,
   }
 }
 

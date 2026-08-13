@@ -8,7 +8,7 @@ import { formatWhatsAppPhone, orderStatusWhatsAppUrl, paymentVerifiedWhatsAppUrl
 import OrderChat from '../../components/OrderChat'
 import type { Order, OrderStatus } from '../../types'
 
-const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled']
+const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled', 'refunded']
 
 type Filter = 'all' | 'utr' | 'today' | 'active' | 'done' | 'cancelled'
 
@@ -58,6 +58,7 @@ const statusBn: Record<OrderStatus, string> = {
   confirmed: 'কনফার্ম',
   delivered: 'ডেলিভারড',
   cancelled: 'বাতিল',
+  refunded: 'রিফান্ড হয়েছে',
 }
 
 const statusIcon: Record<OrderStatus, string> = {
@@ -66,6 +67,7 @@ const statusIcon: Record<OrderStatus, string> = {
   confirmed: '✅',
   delivered: '🚚',
   cancelled: '❌',
+  refunded: '💸',
 }
 
 export default function SellerOrders() {

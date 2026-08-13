@@ -1,6 +1,6 @@
 export type Role = 'customer' | 'rider' | 'seller' | 'admin'
 export type Grade = 'A' | 'B' | 'C'
-export type OrderStatus = 'pending' | 'advance_paid' | 'confirmed' | 'delivered' | 'cancelled'
+export type OrderStatus = 'pending' | 'advance_paid' | 'confirmed' | 'delivered' | 'cancelled' | 'refunded'
 export type Season = 'all' | 'summer' | 'winter' | 'rainy'
 export type DeliverySlot = 'morning' | 'evening'
 
@@ -33,6 +33,10 @@ export interface Product {
   unit: string
   /** Optional photo URL; emoji used as fallback */
   imageUrl?: string
+  /** How product is sold: loose by weight, fixed packets, or both */
+  soldAs?: 'loose' | 'packet' | 'both'
+  /** Available gram sizes when soldAs is packet or both, e.g. [250, 500, 1000] */
+  gramOptions?: number[]
 }
 
 export interface CartItem {
