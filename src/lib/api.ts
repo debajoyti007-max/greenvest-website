@@ -303,8 +303,10 @@ export async function fetchProducts(): Promise<Product[]> {
       const { data: newData } = await client.from('products').select('*').order('name')
       if (newData) return (newData as ProductRow[]).map(mapProduct)
     } catch (e) {
-      console.warn('Failed to auto-sync seed products to cloud DB:', e)
+      console.warn('Failed to auto-sync seed products to cloud DB, merging locally:', e)
     }
+    // Fallback: merge missing seed products so Fish and new seed items NEVER disappear
+    return [...fetched, ...missingSeeds].sort((a, b) => a.name.localeCompare(b.name))
   }
   return fetched
 }
@@ -313,8 +315,8 @@ export async function upsertProduct(product: Product): Promise<Product> {
   const client = requireClient()
   const row = productToRow(product)
   let { data, error } = await client.from('products').upsert(row).select('*').single()
-  if (error && /(archived|stock_qty|season)/i.test(error.message)) {
-    const { archived: _a, stock_qty: _s, season: _se, ...rest } = row
+  if (error && /(archived|stock_qty|season|sold_as|gram_options)/i.test(error.message)) {
+    const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
     ;({ data, error } = await client.from('products').upsert(rest).select('*').single())
   }
   if (error) throw error
