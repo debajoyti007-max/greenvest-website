@@ -93,14 +93,20 @@ export function resolveProductImage(_id: string, _imageUrl?: string, name?: stri
   const id = _id || ''
   const nameQ = (name || '').toLowerCase()
 
-  // 1. Match by name keywords (most reliable — works for any DB row)
+  // 1. Exact match by product ID (f1–f10, p1–p22 seed items) — ALWAYS 100% WINS
+  if (id in ID_MAP) return ID_MAP[id]
+
+  // 2. Match by name keywords
   for (const [keywords, img] of NAME_MAP) {
     if (keywords.some((kw) => nameQ.includes(kw))) return img
   }
 
-  // 2. Match by ID (p1–p21 seed products)
-  if (id in ID_MAP) return ID_MAP[id]
+  // 3. Custom uploaded or DB image URL
+  if (_imageUrl) {
+    if (_imageUrl.startsWith('http')) return _imageUrl
+    if (_imageUrl.startsWith('veg/')) return asset(_imageUrl)
+  }
 
-  // 3. Fallback
+  // 4. Fallback
   return HERO_IMAGE
 }
