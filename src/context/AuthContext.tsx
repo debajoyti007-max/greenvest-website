@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
+import { showToast } from '../components/Toast'
 import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
@@ -533,7 +534,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } catch (err: any) {
           console.error('setUserRole cloud error:', err)
-          alert(`⚠️ Role update error: ${err.message || err}`)
+          showToast(`⚠️ Role update error: ${err.message || err}`, '❌', 'error')
         }
       }
     },

@@ -34,7 +34,7 @@ export default function AdminUsers() {
     if (!inputPin) return
     const cleanPin = inputPin.replace(/\D/g, '').slice(0, 4)
     if (cleanPin.length !== 4) {
-      alert(lang === 'bn' ? 'পিন অবশ্যই ৪ সংখ্যার হতে হবে' : 'PIN must be exactly 4 digits')
+      showToast(lang === 'bn' ? 'পিন অবশ্যই ৪ সংখ্যার হতে হবে' : 'PIN must be exactly 4 digits', '⚠️', 'error')
       return
     }
 
@@ -76,7 +76,7 @@ export default function AdminUsers() {
 
   const handleSendNotification = async () => {
     if (!notifModalTarget || !notifMessage.trim()) {
-      alert(lang === 'bn' ? 'নোটিফিকেশন মেসেজ লিখুন' : 'Enter notification message')
+      showToast(lang === 'bn' ? 'নোটিফিকেশন মেসেজ লিখুন' : 'Enter notification message', '⚠️', 'error')
       return
     }
     setSendingNotif(true)

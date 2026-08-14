@@ -46,7 +46,7 @@ export default function Profile() {
       await updateUserProfile({ name: nameVal.trim() })
       setEditingName(false)
     } catch {
-      alert(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.')
+      showToast(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.', '❌', 'error')
     }
     setSaving(false)
   }
@@ -58,14 +58,14 @@ export default function Profile() {
       await updateUserProfile({ phone: phoneVal.trim() })
       setEditingPhone(false)
     } catch {
-      alert(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.')
+      showToast(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.', '❌', 'error')
     }
     setSaving(false)
   }
 
   const handleUpdateMyPin = async () => {
     if (!user || newPinVal.length !== 4 || /\D/.test(newPinVal)) {
-      alert(lang === 'bn' ? '৪ সংখ্যার পিন দিন' : 'PIN must be 4 digits')
+      showToast(lang === 'bn' ? '৪ সংখ্যার পিন দিন' : 'PIN must be 4 digits', '⚠️', 'error')
       return
     }
     setSaving(true)
@@ -76,10 +76,10 @@ export default function Profile() {
         setNewPinVal('')
         setShowPinForm(false)
       } else {
-        alert(res.error || (lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed'))
+        showToast(res.error || (lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed'), '❌', 'error')
       }
     } catch (err: any) {
-      alert(err?.message || (lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed'))
+      showToast(err?.message || (lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed'), '❌', 'error')
     }
     setSaving(false)
   }
@@ -102,7 +102,7 @@ export default function Profile() {
       setAddrInput('')
       setShowAddForm(false)
     } catch {
-      alert(lang === 'bn' ? 'ঠিকানা আপডেট ব্যর্থ হয়েছে' : 'Address save failed')
+      showToast(lang === 'bn' ? 'ঠিকানা আপডেট ব্যর্থ হয়েছে' : 'Address save failed', '❌', 'error')
     }
     setSaving(false)
   }

@@ -156,7 +156,7 @@ export default function SellerCustomers() {
   const handleResetPin = async () => {
     if (!resetModalUser) return
     if (!newPin || newPin.length !== 4) {
-      alert(lang === 'bn' ? '৪ সংখ্যার পিন দিন' : 'Enter 4-digit PIN')
+      showToast(lang === 'bn' ? '৪ সংখ্যার পিন দিন' : 'Enter 4-digit PIN', '⚠️', 'error')
       return
     }
     await adminResetUserPin(resetModalUser.id, newPin)
@@ -174,7 +174,7 @@ export default function SellerCustomers() {
 
   const handleSendNotification = async () => {
     if (!notifModalTarget || !notifMessage.trim()) {
-      alert(lang === 'bn' ? 'নোটিফিকেশন মেসেজ লিখুন' : 'Enter notification message')
+      showToast(lang === 'bn' ? 'নোটিফিকেশন মেসেজ লিখুন' : 'Enter notification message', '⚠️', 'error')
       return
     }
     setSendingNotif(true)
