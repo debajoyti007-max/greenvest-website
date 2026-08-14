@@ -355,6 +355,75 @@ img {
   animation: hero-rise 0.9s ease-out both;
 }
 
+/* Hero Slider Navigation Arrows & Dots */
+.hero-slider-wrapper {
+  transition: background-image 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hero-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-size: 1.8rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
+}
+
+.hero-arrow:hover {
+  background: rgba(22, 101, 52, 0.85);
+  border-color: #fff;
+  transform: translateY(-50%) scale(1.1);
+}
+
+.hero-arrow-left {
+  left: 1.25rem;
+}
+
+.hero-arrow-right {
+  right: 1.25rem;
+}
+
+.hero-dots {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.hero-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.3s ease;
+}
+
+.hero-dot.active {
+  width: 28px;
+  border-radius: 6px;
+  background: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+}
+
 @keyframes hero-rise {
   from {
     opacity: 0;

@@ -42,6 +42,8 @@ export const PRODUCT_IMAGES: Record<string, string> = {
 }
 
 export const HERO_IMAGE = asset('veg/hero.jpg')
+export const HERO_VEGGIES_IMAGE = asset('veg/hero_veggies.jpg')
+export const HERO_FISH_IMAGE = asset('veg/hero_fish.jpg')
 
 /** Map of product name keywords → local image (always wins over DB URL) */
 const NAME_MAP: Array<[string[], string]> = [

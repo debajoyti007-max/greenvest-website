@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import { showToast } from '../components/Toast'
@@ -7,7 +7,7 @@ import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'
-import { HERO_IMAGE, resolveProductImage } from '../lib/productImages'
+import { HERO_IMAGE, HERO_VEGGIES_IMAGE, HERO_FISH_IMAGE, resolveProductImage } from '../lib/productImages'
 import type { Grade, Lang, Product, CartItem } from '../types'
 
 const GRADES: Grade[] = ['A', 'B', 'C']
@@ -157,6 +157,15 @@ export default function Shop() {
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState<Product | null>(null)
   const [grade, setGrade] = useState<Grade>('B')
+  const [heroSlide, setHeroSlide] = useState(0)
+
+  // Auto-slide hero banner every 4.5 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setHeroSlide((prev) => (prev + 1) % 3)
+    }, 4500)
+    return () => clearInterval(timer)
+  }, [])
 
   // Auto-redirect rider away from Shop to Rider Live Delivery View
   if (user?.role === 'rider') {
@@ -247,21 +256,103 @@ export default function Shop() {
     document.getElementById('veg-grid')?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const slides = useMemo(
+    () => [
+      {
+        image: HERO_VEGGIES_IMAGE,
+        kicker: lang === 'bn' ? '🚜 সরাসরি খামার থেকে প্রতিদিন তাজা' : '🚜 Farm-Fresh Daily Harvest',
+        title: lang === 'bn' ? 'তাজা সবজি ও আলু-টমেটো' : 'Fresh Vegetables & Organic Produce',
+        sub:
+          lang === 'bn'
+            ? `গ্রেড A/B/C · মিনিমাম ₹${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
+            : `Grade A/B/C · Min ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW}`,
+        buttonText: lang === 'bn' ? 'সবজি কিনুন 🛒' : 'Shop Veggies 🛒',
+        onClick: () => {
+          setCategory('Vegetables')
+          scrollToGrid()
+        },
+      },
+      {
+        image: HERO_FISH_IMAGE,
+        kicker: lang === 'bn' ? '🐟 নদী ও সমুদ্রের টাটকা মাছ' : '🐟 Fresh River & Sea Catch',
+        title: lang === 'bn' ? 'তাজা রুই, ইলিশ, চিংড়ি ও ভেটকি' : 'Fresh Rui, Hilsa, Prawns & Fish',
+        sub:
+          lang === 'bn'
+            ? '১০০% টাটকা মাছ · প্রতিদিনের বাজার দর · দ্রুত হোম ডেলিভারি'
+            : '100% Fresh Daily Catch · Live Market Prices · Fast Home Delivery',
+        buttonText: lang === 'bn' ? 'মাছ দেখুন 🐟' : 'Explore Fish 🐟',
+        onClick: () => {
+          setCategory('Fish')
+          scrollToGrid()
+        },
+      },
+      {
+        image: HERO_IMAGE,
+        kicker: lang === 'bn' ? '⭐ সেরা মানের নিশ্চয়তা' : '⭐ Guaranteed Quality & Best Prices',
+        title: lang === 'bn' ? 'আপনার বাজেটে এ, বি, সি গ্রেড' : 'Grade A, B, C For Every Budget',
+        sub:
+          lang === 'bn'
+            ? 'প্রতিদিনের তাজা দর · নিয়মিত ক্রেতাদের বিশেষ কুপন ছাড়'
+            : 'Daily Price Updates · Special Coupon Offers For Frequent Buyers',
+        buttonText: lang === 'bn' ? 'এখনই অর্ডার করুন 🚀' : 'Order Now 🚀',
+        onClick: scrollToGrid,
+      },
+    ],
+    [lang]
+  )
+
   return (
     <div className="page shop-page">
-      <section className="hero-full" style={{ backgroundImage: `url(${HERO_IMAGE})` }}>
+      {/* 🚀 Auto-Sliding Hero Banner */}
+      <section
+        className="hero-full hero-slider-wrapper"
+        style={{
+          backgroundImage: `url(${slides[heroSlide].image})`,
+          transition: 'background-image 0.8s ease-in-out',
+        }}
+      >
         <div className="hero-full-shade hero-shade-strong" />
-        <div className="hero-full-copy hero-animated">
-          <p className="hero-kicker hero-anim-1">{t(lang, 'farmToDoor')}</p>
-          <h1 className="brand-hero light hero-anim-2">GreenVest</h1>
-          <p className="hero-sub hero-anim-3">
-            {lang === 'bn'
-              ? `গ্রেড A/B/C · মিনিমাম ₹${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
-              : `Grade A/B/C · Min ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW}`}
-          </p>
-          <button type="button" className="btn btn-primary hero-cta hero-anim-4" onClick={scrollToGrid}>
-            {t(lang, 'shopVeggies')}
+
+        {/* Previous Arrow */}
+        <button
+          type="button"
+          aria-label="Previous Slide"
+          className="hero-arrow hero-arrow-left"
+          onClick={() => setHeroSlide((prev) => (prev === 0 ? slides.length - 1 : prev - 1))}
+        >
+          ‹
+        </button>
+
+        {/* Next Arrow */}
+        <button
+          type="button"
+          aria-label="Next Slide"
+          className="hero-arrow hero-arrow-right"
+          onClick={() => setHeroSlide((prev) => (prev + 1) % slides.length)}
+        >
+          ›
+        </button>
+
+        <div className="hero-full-copy hero-animated" key={heroSlide}>
+          <p className="hero-kicker hero-anim-1">{slides[heroSlide].kicker}</p>
+          <h1 className="brand-hero light hero-anim-2">{slides[heroSlide].title}</h1>
+          <p className="hero-sub hero-anim-3">{slides[heroSlide].sub}</p>
+          <button type="button" className="btn btn-primary hero-cta hero-anim-4" onClick={slides[heroSlide].onClick}>
+            {slides[heroSlide].buttonText}
           </button>
+        </div>
+
+        {/* Dots */}
+        <div className="hero-dots">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`hero-dot ${i === heroSlide ? 'active' : ''}`}
+              onClick={() => setHeroSlide(i)}
+              aria-label={`Go to slide ${i + 1}`}
+            />
+          ))}
         </div>
       </section>
 
