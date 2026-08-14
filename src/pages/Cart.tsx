@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SUPPORT_WHATSAPP } from '../lib/business'
 import { t } from '../lib/i18n'
 
 export default function Cart() {
@@ -141,6 +141,42 @@ export default function Cart() {
             {t(lang, 'addMore')}
           </Link>
         )}
+
+        {/* 💬 Clean WhatsApp Order Fallback */}
+        <button
+          type="button"
+          onClick={() => {
+            const lines = cart.map(c => {
+              const p = products.find(x => x.id === c.productId)
+              const name = p ? (lang === 'bn' ? p.bnName : p.name) : 'Item'
+              const price = p ? priceFor(p, c.grade) * c.qty : 0
+              return `• ${name} (Grade ${c.grade}) × ${c.qty} = ₹${price}`
+            })
+            const text = encodeURIComponent(
+              `নমস্কার GreenVest, আমি নিচের সবজিগুলো অর্ডার করতে চাই:\n\n${lines.join('\n')}\n\nমোট মূল্য: ₹${cartTotal}\n\nঅনুগ্রহ করে ডেলিভারি ও পেমেন্ট কনফার্ম করুন।`
+            )
+            window.open(`https://wa.me/${SUPPORT_WHATSAPP}?text=${text}`, '_blank')
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.45rem',
+            width: '100%',
+            marginTop: '0.65rem',
+            padding: '0.6rem',
+            background: '#f0fdf4',
+            border: '1.5px solid #86efac',
+            borderRadius: '10px',
+            color: '#166534',
+            fontWeight: 700,
+            fontSize: '0.86rem',
+            cursor: 'pointer',
+          }}
+        >
+          <span>💬</span>
+          <span>{lang === 'bn' ? 'হোয়াটসঅ্যাপে অর্ডার পাঠান' : 'Order via WhatsApp'}</span>
+        </button>
       </div>
     </div>
   )

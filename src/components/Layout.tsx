@@ -207,6 +207,33 @@ export default function Layout() {
           </div>
         </div>
       </footer>
+
+      {/* 📱 Mobile Bottom Navigation Bar (Smart mobile navigation) */}
+      <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">
+        <NavLink to="/" end className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
+          <span className="bottom-bar-icon">🏠</span>
+          <span className="bottom-bar-label">{lang === 'bn' ? 'শপ' : 'Shop'}</span>
+        </NavLink>
+        <NavLink to="/track" className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
+          <span className="bottom-bar-icon">📍</span>
+          <span className="bottom-bar-label">{lang === 'bn' ? 'ট্র্যাক' : 'Track'}</span>
+        </NavLink>
+        <NavLink to="/orders" className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
+          <span className="bottom-bar-icon">📦</span>
+          <span className="bottom-bar-label">{lang === 'bn' ? 'অর্ডার' : 'Orders'}</span>
+        </NavLink>
+        <NavLink to="/cart" className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
+          <div className="bottom-bar-icon-wrap">
+            <span className="bottom-bar-icon">🛒</span>
+            {cartCount > 0 && <span className="bottom-bar-badge">{cartCount}</span>}
+          </div>
+          <span className="bottom-bar-label">{lang === 'bn' ? 'কার্ট' : 'Cart'}</span>
+        </NavLink>
+        <NavLink to={user ? '/profile' : '/auth'} className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
+          <span className="bottom-bar-icon">👤</span>
+          <span className="bottom-bar-label">{user ? (lang === 'bn' ? 'প্রোফাইল' : 'Profile') : (lang === 'bn' ? 'লগইন' : 'Login')}</span>
+        </NavLink>
+      </nav>
     </div>
   )
 }

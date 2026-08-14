@@ -253,14 +253,42 @@ export default function Checkout() {
                   ? 'PhonePe / GPay / Paytm / যেকোনো UPI অ্যাপ'
                   : 'Works on PhonePe, GPay, Paytm & all UPI apps'}
               </p>
-              <a
-                href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=Order+Advance`}
-                className="btn btn-primary"
-                style={{ marginTop: '0.5rem', display: 'block', textAlign: 'center', opacity: zonesLoading ? 0.6 : 1 }}
-                onClick={zonesLoading ? (e) => e.preventDefault() : undefined}
-              >
-                {zonesLoading ? '⏳ Calculating...' : `Pay ₹${advance} via UPI App`}
-              </a>
+              {/* ⚡ 1-Tap UPI Intent Apps */}
+              <div style={{ marginTop: '0.6rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', display: 'block', marginBottom: '0.35rem' }}>
+                  {lang === 'bn' ? '⚡ ১-ট্যাপে সরাসরি পেমেন্ট করুন:' : '⚡ 1-Tap Quick Pay:'}
+                </span>
+                <div className="upi-app-grid">
+                  <a
+                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=GreenVest+Order`}
+                    className="upi-app-btn"
+                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
+                  >
+                    <span style={{ color: '#0f9d58' }}>●</span> GPay
+                  </a>
+                  <a
+                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=GreenVest+Order`}
+                    className="upi-app-btn"
+                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
+                  >
+                    <span style={{ color: '#5f259f' }}>●</span> PhonePe
+                  </a>
+                  <a
+                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=GreenVest+Order`}
+                    className="upi-app-btn"
+                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
+                  >
+                    <span style={{ color: '#00baf2' }}>●</span> Paytm
+                  </a>
+                  <a
+                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=GreenVest+Order`}
+                    className="upi-app-btn"
+                    style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
+                  >
+                    ⚡ Pay ₹{advance}
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
 
