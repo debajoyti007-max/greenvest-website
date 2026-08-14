@@ -24,11 +24,11 @@ export const SEASON_LABELS = {
 } as const
 
 /** Display phone. */
-export const SUPPORT_PHONE = env('VITE_SUPPORT_PHONE', '+91 8170859653')
+export const SUPPORT_PHONE = env('VITE_SUPPORT_PHONE', '+91 99328 71027')
 /** WhatsApp deep-link number: country code + digits, no + or spaces. */
-export const SUPPORT_WHATSAPP = env('VITE_SUPPORT_WHATSAPP', '918170859653')
+export const SUPPORT_WHATSAPP = env('VITE_SUPPORT_WHATSAPP', '919932871027')
 export const SUPPORT_EMAIL = env('VITE_SUPPORT_EMAIL', 'greenvest.orders@gmail.com')
-export const SUPPORT_HOURS = env('VITE_SUPPORT_HOURS', '7:00 AM – 8:00 PM')
+export const SUPPORT_HOURS = env('VITE_SUPPORT_HOURS', '7:00 AM – 9:00 PM')
 
 /** @deprecated use SUPPORT_WHATSAPP */
 export const SELLER_WHATSAPP = SUPPORT_WHATSAPP

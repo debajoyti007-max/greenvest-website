@@ -33,8 +33,8 @@ export default function Terms() {
         </li>
         <li>
           {lang === 'bn'
-            ? `সেলার UTR যাচাই করার পর অর্ডার কনফার্ম হয়। লোকাল ডেলিভারি সময় ৬–৮ ঘণ্টা (সাধারণ এলাকা ${DELIVERY_WINDOW_BN})।`
-            : `Delivery is confirmed after seller verifies your UTR. Local delivery time is 6–8 hours (standard area ${DELIVERY_WINDOW}).`}
+            ? `সেলার UTR যাচাই করার পর অর্ডার কনফার্ম হয়। ডেলিভারি সময় ${DELIVERY_WINDOW_BN}।`
+            : `Delivery is confirmed after seller verifies your UTR. Delivery time: ${DELIVERY_WINDOW}.`}
         </li>
       </ul>
 
