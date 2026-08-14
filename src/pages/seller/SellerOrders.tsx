@@ -10,7 +10,7 @@ import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled', 'refunded']
 
-type Filter = 'all' | 'utr' | 'today' | 'active' | 'done' | 'cancelled'
+type Filter = 'active' | 'utr' | 'to_pack' | 'today' | 'done' | 'cancelled' | 'all'
 
 const suffix = (n: number) => {
   if (n % 10 === 1 && n % 100 !== 11) return 'st'
@@ -49,7 +49,7 @@ function isToday(iso: string) {
 
 function isCancelledOld(order: Order) {
   if (order.status !== 'cancelled') return false
-  return Date.now() - new Date(order.updatedAt || order.createdAt).getTime() > 12 * 60 * 60 * 1000
+  return Date.now() - new Date(order.updatedAt || order.createdAt).getTime() > 24 * 60 * 60 * 1000
 }
 
 const statusBn: Record<OrderStatus, string> = {
@@ -74,9 +74,11 @@ export default function SellerOrders() {
   const { user } = useAuth()
   const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr, deleteOrder } = useStore()
   const [filter, setFilter] = useState<Filter>('active')
+  const [searchQuery, setSearchQuery] = useState('')
   const [customerFilter, setCustomerFilter] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [purging, setPurging] = useState(false)
   const prevCount = useRef(orders.length)
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
@@ -96,8 +98,27 @@ export default function SellerOrders() {
     if (!confirm(lang === 'bn' ? 'অর্ডারটি ডাটাবেস থেকে স্থায়ীভাবে মুছে ফেলতে চান?' : 'Permanently delete this order from the database?')) return
     try {
       await deleteOrder(id)
+      showToast(lang === 'bn' ? 'অর্ডার মুছে ফেলা হয়েছে' : 'Order deleted', '🗑️')
     } catch (err) {
       console.error('Delete order error:', err)
+    }
+  }
+
+  // 1-Click Purge All Cancelled Orders
+  const handlePurgeAllCancelled = async () => {
+    const cancelledList = orders.filter(o => o.status === 'cancelled')
+    if (cancelledList.length === 0) return
+    if (!confirm(lang === 'bn' ? `সকল ${cancelledList.length}টি বাতিল অর্ডার স্থায়ীভাবে ডাটাবেস থেকে মুছে ফেলতে চান?` : `Permanently purge all ${cancelledList.length} cancelled orders from database?`)) return
+
+    setPurging(true)
+    try {
+      await Promise.allSettled(cancelledList.map(o => deleteOrder(o.id)))
+      showToast(
+        lang === 'bn' ? `🗑️ ${cancelledList.length}টি বাতিল অর্ডার সফলভাবে সাফ করা হয়েছে!` : `🗑️ ${cancelledList.length} cancelled orders purged!`,
+        '✨'
+      )
+    } finally {
+      setPurging(false)
     }
   }
 
@@ -160,7 +181,7 @@ export default function SellerOrders() {
     }
   }
 
-  // S7: Today's summary
+  // Today's summary
   const todayOrders = useMemo(() => orders.filter(o => isToday(o.createdAt)), [orders])
   const todayStats = useMemo(() => {
     const active = todayOrders.filter(o => o.status !== 'cancelled' && o.status !== 'delivered')
@@ -170,46 +191,76 @@ export default function SellerOrders() {
     return { total: todayOrders.length, active: active.length, delivered: delivered.length, revenue, pendingUtr: pending.length }
   }, [todayOrders])
 
+  // Filtered orders with search
   const filtered = useMemo(() => {
     let sorted = [...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+
+    // Customer filter
     if (customerFilter) {
-      return sorted.filter(o => o.phone === customerFilter || o.userId === customerFilter)
+      sorted = sorted.filter(o => o.phone === customerFilter || o.userId === customerFilter)
     }
+
+    // Search query
+    const q = searchQuery.trim().toLowerCase()
+    if (q) {
+      sorted = sorted.filter(o =>
+        o.id.toLowerCase().includes(q) ||
+        o.phone.toLowerCase().includes(q) ||
+        o.userName.toLowerCase().includes(q) ||
+        o.address.toLowerCase().includes(q) ||
+        o.pin.toLowerCase().includes(q) ||
+        (o.utr && o.utr.toLowerCase().includes(q))
+      )
+    }
+
+    // Category / Status Filter
     return sorted.filter(o => {
       if (filter === 'all') return true
       if (filter !== 'cancelled' && isCancelledOld(o)) return false
       if (filter === 'utr') return !o.utrVerified && o.status !== 'cancelled'
+      if (filter === 'to_pack') return (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))
       if (filter === 'today') return isToday(o.createdAt)
       if (filter === 'active') return o.status !== 'delivered' && o.status !== 'cancelled'
       if (filter === 'done') return o.status === 'delivered'
       if (filter === 'cancelled') return o.status === 'cancelled'
       return true
     })
-  }, [orders, filter, customerFilter])
+  }, [orders, filter, customerFilter, searchQuery])
 
   const toggleSelect = (id: string) => setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
   const toggleSelectAll = () => setSelectedIds(selectedIds.length === filtered.length ? [] : filtered.map(o => o.id))
+
   const handleBulkStatus = async (status: OrderStatus) => {
     if (selectedIds.length === 0) return
     await bulkUpdateOrderStatus(selectedIds, status)
     setSelectedIds([])
+    showToast(lang === 'bn' ? 'স্ট্যাটাস আপডেট হয়েছে' : 'Status updated', '✅')
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    if (!confirm(lang === 'bn' ? `নির্বাচিত ${selectedIds.length}টি অর্ডার মুছে ফেলতে চান?` : `Delete ${selectedIds.length} selected orders?`)) return
+    await Promise.allSettled(selectedIds.map(id => deleteOrder(id)))
+    setSelectedIds([])
+    showToast(lang === 'bn' ? 'অর্ডারগুলো মুছে ফেলা হয়েছে' : 'Orders deleted', '🗑️')
   }
 
   const filters: { id: Filter; en: string; bn: string; count?: number }[] = [
-    { id: 'active', en: 'Active', bn: 'চলমান', count: orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length },
-    { id: 'utr', en: 'UTR ⏳', bn: 'UTR বাকি', count: orders.filter(o => !o.utrVerified && o.status !== 'cancelled').length },
-    { id: 'today', en: 'Today', bn: 'আজ', count: todayOrders.length },
-    { id: 'all', en: 'All', bn: 'সব' },
-    { id: 'done', en: 'Done', bn: 'ডেলিভারড' },
-    { id: 'cancelled', en: 'Archived', bn: 'আর্কাইভ' },
+    { id: 'active', en: 'Active 🛵', bn: 'চলমান 🛵', count: orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length },
+    { id: 'utr', en: 'Pending UTR ⏳', bn: 'UTR বাকি ⏳', count: orders.filter(o => !o.utrVerified && o.status !== 'cancelled').length },
+    { id: 'to_pack', en: 'To Pack 📦', bn: 'প্যাকিং বাকি 📦', count: orders.filter(o => (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))).length },
+    { id: 'today', en: 'Today 📅', bn: 'আজ 📅', count: todayOrders.length },
+    { id: 'done', en: 'Done ✅', bn: 'ডেলিভারড ✅', count: orders.filter(o => o.status === 'delivered').length },
+    { id: 'cancelled', en: 'Trash / Cancelled ❌', bn: 'বাতিল / ট্র্যাশ ❌', count: orders.filter(o => o.status === 'cancelled').length },
+    { id: 'all', en: 'All 🌐', bn: 'সব 🌐' },
   ]
 
   const cs: React.CSSProperties = { background: 'var(--white, #fff)', borderRadius: '12px', border: '1px solid var(--line, #e5e7eb)' }
 
   return (
-    <div className="page" style={{ maxWidth: '800px', margin: '0 auto' }}>
+    <div className="page" style={{ maxWidth: '800px', margin: '0 auto', paddingBottom: '3rem' }}>
       <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: '1.2rem', margin: 0 }}>{lang === 'bn' ? '📋 অর্ডার' : '📋 Orders'}</h1>
+        <h1 style={{ fontSize: '1.2rem', margin: 0 }}>{lang === 'bn' ? '📋 অর্ডার ম্যানেজমেন্ট' : '📋 Order Management'}</h1>
         <Link to="/seller" className="btn btn-ghost" style={{ fontSize: '0.85rem' }}>
           {lang === 'bn' ? '← ড্যাশবোর্ড' : '← Dashboard'}
         </Link>
@@ -233,6 +284,44 @@ export default function SellerOrders() {
           <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--primary)' }}>₹{todayStats.revenue}</div>
           <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{lang === 'bn' ? 'আয়' : 'Revenue'}</div>
         </div>
+      </div>
+
+      {/* 🔍 Fast Search Bar */}
+      <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder={lang === 'bn' ? '🔍 ফোন নম্বর, নাম, UTR বা অর্ডার ID খুঁজুন...' : '🔍 Search by Phone, Name, UTR, or Order ID...'}
+          style={{
+            width: '100%',
+            padding: '0.65rem 2.2rem 0.65rem 0.85rem',
+            borderRadius: '10px',
+            border: '1.5px solid var(--line, #cbd5e1)',
+            fontSize: '0.9rem',
+            background: '#ffffff',
+          }}
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            style={{
+              position: 'absolute',
+              right: '8px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'transparent',
+              border: 'none',
+              fontSize: '1rem',
+              color: '#9ca3af',
+              cursor: 'pointer',
+              padding: '4px',
+            }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Customer filter notice banner */}
@@ -263,6 +352,29 @@ export default function SellerOrders() {
         ))}
       </div>
 
+      {/* Cancelled Orders Purge Header (When in cancelled tab) */}
+      {filter === 'cancelled' && filtered.length > 0 && (
+        <div style={{ ...cs, padding: '0.75rem 1rem', marginBottom: '0.75rem', background: '#fef2f2', border: '1.5px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <strong style={{ color: '#991b1b', fontSize: '0.88rem', display: 'block' }}>
+              🗑️ {lang === 'bn' ? 'বাতিল অর্ডার ট্র্যাশ বিন' : 'Cancelled Orders Trash Bin'}
+            </strong>
+            <span style={{ fontSize: '0.78rem', color: '#b91c1c' }}>
+              {lang === 'bn' ? 'ডাটাবেস ফাস্ট ও ক্লিন রাখতে সকল বাতিল অর্ডার মুছে দিন।' : 'Purge old cancelled orders to keep database clean and fast.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handlePurgeAllCancelled}
+            disabled={purging}
+            style={{ background: '#dc2626', borderColor: '#dc2626', fontSize: '0.82rem', padding: '0.4rem 0.8rem' }}
+          >
+            {purging ? '⏳...' : `🗑️ ${lang === 'bn' ? 'সকল বাতিল সাফ করুন' : 'Purge All Cancelled'}`}
+          </button>
+        </div>
+      )}
+
       {/* Bulk toolbar */}
       {filtered.length > 0 && (
         <div style={{ ...cs, padding: '0.5rem 0.75rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
@@ -271,12 +383,15 @@ export default function SellerOrders() {
             {selectedIds.length > 0 ? `${selectedIds.length} selected` : (lang === 'bn' ? 'সব নির্বাচন' : 'Select all')}
           </label>
           {selectedIds.length > 0 && (
-            <div style={{ display: 'flex', gap: '0.3rem' }}>
+            <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
               <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => void handleBulkStatus('confirmed')}>
                 ✅ {lang === 'bn' ? 'কনফার্ম' : 'Confirm'}
               </button>
               <button type="button" className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => void handleBulkStatus('delivered')}>
                 🚚 {lang === 'bn' ? 'ডেলিভারড' : 'Delivered'}
+              </button>
+              <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', background: '#fef2f2', borderColor: '#fca5a5', color: '#dc2626' }} onClick={handleBulkDelete}>
+                🗑️ {lang === 'bn' ? 'ডিলিট' : 'Delete'}
               </button>
             </div>
           )}
@@ -285,7 +400,11 @@ export default function SellerOrders() {
 
       {/* Order list */}
       {filtered.length === 0 ? (
-        <p style={{ textAlign: 'center', color: '#9ca3af', padding: '2rem' }}>{lang === 'bn' ? 'এই ফিল্টারে অর্ডার নেই।' : 'No orders here.'}</p>
+        <p style={{ textAlign: 'center', color: '#9ca3af', padding: '2rem' }}>
+          {searchQuery
+            ? (lang === 'bn' ? 'কোনো অর্ডারের মিল পাওয়া যায়নি।' : 'No orders matched your search.')
+            : (lang === 'bn' ? 'এই ফিল্টারে অর্ডার নেই।' : 'No orders here.')}
+        </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
           {filtered.map(o => {
