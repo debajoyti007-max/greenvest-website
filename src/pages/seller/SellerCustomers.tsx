@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { formatWhatsAppPhone } from '../../lib/whatsapp'
 import { showToast } from '../../components/Toast'
+import CouponGeneratorModal from '../../components/seller/CouponGeneratorModal'
 
 type CustomerRow = {
   key: string
@@ -60,6 +61,7 @@ export default function SellerCustomers() {
   const [couponMinOrder, setCouponMinOrder] = useState(500)
   const [couponType, setCouponType] = useState<'flat' | 'percent'>('flat')
   const [couponSending, setCouponSending] = useState(false)
+  const [showGeneralCouponModal, setShowGeneralCouponModal] = useState(false)
 
   const handleSendCoupon = async () => {
     if (!couponModal) return
@@ -197,7 +199,15 @@ export default function SellerCustomers() {
     <div className="page">
       <div className="page-head">
         <h1>{lang === 'bn' ? 'কাস্টমার ও ইউজার ম্যানেজমেন্ট' : 'Customer & User Management'}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setShowGeneralCouponModal(true)}
+            style={{ background: '#fef9c3', borderColor: '#fde047', color: '#854d0e', fontWeight: 700 }}
+          >
+            🎟️ {lang === 'bn' ? 'কুপন তৈরি করুন' : 'Create Promo Code'}
+          </button>
           <button
             type="button"
             className="btn btn-primary"
@@ -513,6 +523,9 @@ export default function SellerCustomers() {
           </div>
         </div>
       )}
+
+      {/* Seller General Coupon Generator Modal */}
+      {showGeneralCouponModal && <CouponGeneratorModal onClose={() => setShowGeneralCouponModal(false)} />}
     </div>
   )
 }

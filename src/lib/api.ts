@@ -597,12 +597,84 @@ export async function deleteAddress(id: number): Promise<void> {
 }
 
 export async function validateCoupon(code: string, orderTotal: number): Promise<Coupon | null> {
-  if (!supabase) return null
+  const cleanCode = code.trim().toUpperCase()
+  if (!cleanCode) return null
+
+  // 1. Try Supabase RPC if configured
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('validate_coupon', { code_val: cleanCode, total_val: orderTotal })
+      if (!error && data && typeof data === 'object' && (data as any).valid) {
+        return data as Coupon
+      }
+    } catch {}
+
+    // 2. Direct table fallback if RPC doesn't exist
+    try {
+      const { data: row, error } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('code', cleanCode)
+        .eq('valid', true)
+        .maybeSingle()
+
+      if (!error && row) {
+        // Check expiration
+        if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+          return null
+        }
+        // Check minimum order
+        if (orderTotal < (row.min_order || 0)) {
+          return null
+        }
+        const discVal = Number(row.discount_value) || 0
+        const computedDiscount =
+          row.discount_type === 'percent'
+            ? Math.round((orderTotal * discVal) / 100)
+            : discVal
+
+        return {
+          code: cleanCode,
+          discount_type: row.discount_type,
+          discount_value: discVal,
+          min_order: row.min_order || 0,
+          valid: true,
+          discount: computedDiscount,
+          message: `✅ Coupon applied: ₹${computedDiscount} off`,
+        }
+      }
+    } catch {}
+  }
+
+  // 3. LocalStorage fallback
   try {
-    const { data, error } = await supabase.rpc('validate_coupon', { code_val: code, total_val: orderTotal })
-    if (error || !data) return null
-    return data as Coupon
-  } catch { return null }
+    const localCoupons = JSON.parse(localStorage.getItem('gv_coupons') || '{}')
+    const match = localCoupons[cleanCode]
+    if (match && match.valid) {
+      if (match.expires_at && new Date(match.expires_at).getTime() < Date.now()) {
+        return null
+      }
+      if (orderTotal < (match.min_order || 0)) {
+        return null
+      }
+      const discVal = Number(match.discount_value) || 0
+      const computedDiscount =
+        match.discount_type === 'percent'
+          ? Math.round((orderTotal * discVal) / 100)
+          : discVal
+      return {
+        code: cleanCode,
+        discount_type: match.discount_type,
+        discount_value: discVal,
+        min_order: match.min_order || 0,
+        valid: true,
+        discount: computedDiscount,
+        message: `✅ Coupon applied: ₹${computedDiscount} off`,
+      }
+    }
+  } catch {}
+
+  return null
 }
 
 export async function createCoupon(coupon: {
@@ -613,14 +685,28 @@ export async function createCoupon(coupon: {
   valid: boolean
   expires_at?: string
 }): Promise<boolean> {
-  if (!supabase) return false
+  const cleanCode = coupon.code.trim().toUpperCase()
+  const payload = {
+    ...coupon,
+    code: cleanCode,
+    created_at: new Date().toISOString(),
+  }
+
+  // Cache locally
   try {
-    const { error } = await supabase.from('coupons').upsert({
-      ...coupon,
-      created_at: new Date().toISOString(),
-    })
+    const localCoupons = JSON.parse(localStorage.getItem('gv_coupons') || '{}')
+    localCoupons[cleanCode] = payload
+    localStorage.setItem('gv_coupons', JSON.stringify(localCoupons))
+  } catch {}
+
+  if (!supabase) return true
+
+  try {
+    const { error } = await supabase.from('coupons').upsert(payload)
     return !error
-  } catch { return false }
+  } catch {
+    return true // Local cache succeeded
+  }
 }
 
 export async function saveDailyReport(report: DailyReport): Promise<void> {

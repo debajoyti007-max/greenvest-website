@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
+import WeeklyBasketModal from '../components/WeeklyBasketModal'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -158,6 +159,7 @@ export default function Shop() {
   const [picked, setPicked] = useState<Product | null>(null)
   const [grade, setGrade] = useState<Grade>('B')
   const [heroSlide, setHeroSlide] = useState(0)
+  const [showBasketModal, setShowBasketModal] = useState(false)
 
   // Auto-slide hero banner every 4.5 seconds
   useEffect(() => {
@@ -412,6 +414,54 @@ export default function Shop() {
             </button>
           </div>
         )}
+
+        {/* 🧺 Weekly Family Basket Promo Banner */}
+        <div
+          className="weekly-basket-promo-banner"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.85rem',
+            background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+            border: '1.5px solid #86efac',
+            borderRadius: '14px',
+            padding: '0.9rem 1.2rem',
+            marginBottom: '1.25rem',
+            boxShadow: '0 4px 12px rgba(22, 101, 52, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <span style={{ fontSize: '2rem' }}>🧺</span>
+            <div>
+              <strong style={{ color: '#166534', fontSize: '0.98rem', display: 'block', marginBottom: '0.15rem' }}>
+                {lang === 'bn' ? 'সাপ্তাহিক পারিবারিক সবজি বাস্কেট' : 'Weekly Family Fresh Basket'}
+              </strong>
+              <span style={{ fontSize: '0.82rem', color: '#15803d' }}>
+                {lang === 'bn'
+                  ? 'আলু, পেঁয়াজ, টমেটো ও কাঁচা লঙ্কা — ৪টি দরকারি সবজির ১-ক্লিক প্যাক'
+                  : 'Potato, Onion, Tomato & Green Chili — 1-Tap complete fresh pack'}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setShowBasketModal(true)}
+            style={{
+              whiteSpace: 'nowrap',
+              padding: '0.5rem 1rem',
+              fontSize: '0.88rem',
+              fontWeight: 700,
+              background: '#166534',
+              borderColor: '#166534',
+              borderRadius: '10px',
+              cursor: 'pointer',
+            }}
+          >
+            {lang === 'bn' ? 'বাস্কেট দেখুন ➔' : 'View Basket ➔'}
+          </button>
+        </div>
         {/* Cart minimum progress bar */}
         <div className="cart-progress-wrap">
           <div className="cart-progress-header">
@@ -580,6 +630,9 @@ export default function Shop() {
           </div>
         </div>
       )}
+
+      {/* 🧺 Weekly Family Basket Modal */}
+      {showBasketModal && <WeeklyBasketModal onClose={() => setShowBasketModal(false)} />}
     </div>
   )
 }

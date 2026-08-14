@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { showToast } from '../../components/Toast'
+import CouponGeneratorModal from '../../components/seller/CouponGeneratorModal'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { printPackingList, printRiderManifest } from '../../lib/printOrder'
@@ -14,6 +15,7 @@ export default function SellerHome() {
   const { products, orders, lang, morningReset, fetchDailyReport, saveDailyReport } = useStore()
   const [sheet, setSheet] = useState<string | null>(null)
   const [mandiCost, setMandiCost] = useState<number | ''>('')
+  const [showCouponModal, setShowCouponModal] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -238,6 +240,14 @@ export default function SellerHome() {
         <button
           type="button"
           className="btn btn-secondary"
+          onClick={() => setShowCouponModal(true)}
+          style={{ background: '#fef9c3', borderColor: '#fde047', color: '#854d0e', fontWeight: 700 }}
+        >
+          {lang === 'bn' ? '🎟️ কুপন তৈরি করুন' : '🎟️ Promo Coupons'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
           onClick={onMorningReset}
           style={{ background: '#f0fdf4', borderColor: '#86efac', color: '#166534', fontWeight: 700 }}
         >
@@ -259,6 +269,8 @@ export default function SellerHome() {
           </div>
         </div>
       )}
+
+      {showCouponModal && <CouponGeneratorModal onClose={() => setShowCouponModal(false)} />}
     </div>
   )
 }
