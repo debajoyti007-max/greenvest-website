@@ -1,3 +1,4 @@
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import {
   createContext,
   useCallback,
@@ -120,7 +121,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => getLang())
   const [loading, setLoading] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => getAppNotifications())
-  const notifChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const notifChannelRef = useRef<RealtimeChannel | null>(null)
 
   const refreshLocal = useCallback(() => {
     ensureSeeded()
@@ -137,7 +138,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ── Supabase Realtime: live notification broadcast ─────────────────────────
   useEffect(() => {
-    if (!cloud) return
+    if (!cloud || !supabase) return
     const ch = supabase
       .channel('gv-broadcasts')
       .on('broadcast', { event: 'notif' }, ({ payload }: { payload: unknown }) => {
@@ -155,7 +156,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .subscribe()
     notifChannelRef.current = ch
     return () => {
-      supabase.removeChannel(ch)
+      if (supabase) supabase.removeChannel(ch)
       notifChannelRef.current = null
     }
   }, [cloud, user?.id])

@@ -26,8 +26,8 @@ jobs:
       - run: npm ci
       - name: Build
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://zvjqpigduyvczidzafus.supabase.co' }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2anFwaWdkdXl2Y3ppZHphZnVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxOTYzNjAsImV4cCI6MjEwMTc3MjM2MH0.jQjWuhoPsHAYuTAVPl-CWlXLfCmlI0aEny18XsEBpEo' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
       # SPA deep links on GitHub Pages
       - run: cp dist/index.html dist/404.html

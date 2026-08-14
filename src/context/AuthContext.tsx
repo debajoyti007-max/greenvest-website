@@ -238,7 +238,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       )
       .subscribe()
-    return () => { void supabase.removeChannel(channel) }
+    return () => {
+      if (supabase) void supabase.removeChannel(channel)
+    }
   }, [cloud, user?.id])
 
 
