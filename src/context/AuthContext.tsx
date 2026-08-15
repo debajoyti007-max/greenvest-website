@@ -607,10 +607,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateUserProfile = useCallback(
     async (data: { name?: string; phone?: string }) => {
       if (!user) return
-      const updated = { ...user, ...data }
+      const cleanPhone = data.phone ? data.phone.replace(/\D/g, '').slice(-10) : undefined
+      const patch = {
+        ...(data.name ? { name: data.name.trim() } : {}),
+        ...(cleanPhone ? { phone: cleanPhone } : {}),
+      }
+      const updated = ensureAdminRole({ ...user, ...patch })
+      setUser(updated)
+      userRef.current = updated
+      saveUsers(getUsers().map((u) => (u.id === user.id ? { ...u, ...patch } : u)))
+
       if (cloud && supabase) {
         try {
-          await updateProfileDetails(user.id, data, user.email, user.phone)
+          await updateProfileDetails(user.id, patch, user.email, cleanPhone || user.phone)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)
@@ -619,15 +628,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (err: any) {
           console.error('updateUserProfile error:', err)
         }
-      } else {
-        const all = getUsers()
-        const next = all.map((u) => (u.id === user.id ? updated : u))
-        saveUsers(next)
-        setUsers(next)
       }
-      setUser(updated)
     },
-    [cloud, user],
+    [user, cloud],
   )
 
   const checkAccountExists = useCallback(

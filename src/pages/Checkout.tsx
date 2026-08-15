@@ -16,7 +16,7 @@ import {
 import type { Address, DeliveryZone } from '../types'
 
 export default function Checkout() {
-  const { user } = useAuth()
+  const { user, updateUserProfile } = useAuth()
   const {
     cart,
     cartTotal,
@@ -282,6 +282,9 @@ export default function Checkout() {
       clearCartIdempotencyKey(user.id)
 
       if (order) {
+        if (user && phoneVal.cleanedValue) {
+          updateUserProfile({ phone: phoneVal.cleanedValue }).catch(() => {})
+        }
         navigate(`/orders/success/${order.id}`, { state: { order } })
       } else {
         // Fallback recovery check: did Supabase insert it despite network lag?

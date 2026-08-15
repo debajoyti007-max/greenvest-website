@@ -5,6 +5,7 @@ import { useStore } from '../context/StoreContext'
 import { supabase } from '../lib/supabase'
 import { saveDelivery } from '../lib/storage'
 import { showToast } from '../components/Toast'
+import { validatePhoneStrict } from '../lib/validation'
 import type { Address } from '../types'
 
 export default function Profile() {
@@ -45,6 +46,7 @@ export default function Profile() {
     try {
       await updateUserProfile({ name: nameVal.trim() })
       setEditingName(false)
+      showToast(lang === 'bn' ? '✅ নাম সফলভাবে সেভ হয়েছে' : '✅ Name updated successfully', '🎉')
     } catch {
       showToast(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.', '❌', 'error')
     }
@@ -53,10 +55,16 @@ export default function Profile() {
 
   const handleSavePhone = async () => {
     if (!user || !phoneVal.trim()) return
+    const check = validatePhoneStrict(phoneVal)
+    if (!check.isValid) {
+      showToast(lang === 'bn' ? check.errorBn : check.errorEn, '⚠️', 'error')
+      return
+    }
     setSaving(true)
     try {
-      await updateUserProfile({ phone: phoneVal.trim() })
+      await updateUserProfile({ phone: check.cleanedValue })
       setEditingPhone(false)
+      showToast(lang === 'bn' ? '✅ মোবাইল নম্বর সেভ হয়েছে' : '✅ Phone number saved', '🎉')
     } catch {
       showToast(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.', '❌', 'error')
     }
