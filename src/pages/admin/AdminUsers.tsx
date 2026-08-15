@@ -5,12 +5,22 @@ import { useStore } from '../../context/StoreContext'
 import { formatDisplayContact } from '../../lib/business'
 import { formatWhatsAppPhone } from '../../lib/whatsapp'
 import { showToast } from '../../components/Toast'
+import DatabaseCleaner from '../../components/admin/DatabaseCleaner'
 import type { Role } from '../../types'
 
 export default function AdminUsers() {
   const { user, users, setUserRole, adminResetUserPin, toggleBlockUser, mode: dataMode } = useAuth()
-  const { products, orders, lang, sendNotification } = useStore()
+  const {
+    products,
+    orders,
+    lang,
+    sendNotification,
+    deleteOrder,
+    updateOrderStatus,
+    refresh,
+  } = useStore()
 
+  const [adminTab, setAdminTab] = useState<'users' | 'database'>('users')
   const [resettingPinId, setResettingPinId] = useState<string | null>(null)
 
   const [notifModalTarget, setNotifModalTarget] = useState<{ id: string | 'all'; name: string } | null>(null)
@@ -22,19 +32,24 @@ export default function AdminUsers() {
     return <Navigate to="/" replace />
   }
 
-  const isProtectedAdmin = (email: string) => email.toLowerCase().replace('@greenvest.shop', '@gmail.com').includes('debajoyti007')
+  const isProtectedAdmin = (email: string) =>
+    email.toLowerCase().replace('@greenvest.shop', '@gmail.com').includes('debajoyti007')
 
   const handleResetPin = async (u: { id: string; name: string; phone?: string; email: string }) => {
     const inputPin = window.prompt(
       lang === 'bn'
         ? `${u.name}-এর জন্য নতুন ৪-সংখ্যার সিকিউরিটি পিন দিন:`
         : `Enter new 4-digit security PIN for ${u.name}:`,
-      '1234',
+      '1234'
     )
     if (!inputPin) return
     const cleanPin = inputPin.replace(/\D/g, '').slice(0, 4)
     if (cleanPin.length !== 4) {
-      showToast(lang === 'bn' ? 'পিন অবশ্যই ৪ সংখ্যার হতে হবে' : 'PIN must be exactly 4 digits', '⚠️', 'error')
+      showToast(
+        lang === 'bn' ? 'পিন অবশ্যই ৪ সংখ্যার হতে হবে' : 'PIN must be exactly 4 digits',
+        '⚠️',
+        'error'
+      )
       return
     }
 
@@ -48,14 +63,14 @@ export default function AdminUsers() {
         lang === 'bn' ? '🔑 নতুন সিকিউরিটি পিন সেট করা হয়েছে' : '🔑 Security PIN Updated',
         lang === 'bn'
           ? `আপনার অ্যাকাউন্ট সিকিউরিটি পিন আপডেট করা হয়েছে। আপনার পিন: ${cleanPin}`
-          : `Your account security PIN has been updated to: ${cleanPin}`,
+          : `Your account security PIN has been updated to: ${cleanPin}`
       )
 
       showToast(
         lang === 'bn'
           ? `✅ ${u.name}-এর পিন আপডেট করা হয়েছে: ${cleanPin}`
           : `✅ PIN for ${u.name} updated to: ${cleanPin}`,
-        '🔑',
+        '🔑'
       )
 
       // Optionally send WhatsApp
@@ -63,9 +78,13 @@ export default function AdminUsers() {
       if (phoneStr) {
         const waDigits = formatWhatsAppPhone(phoneStr)
         const msg = encodeURIComponent(
-          `নমস্কার ${u.name}, GreenVest-এ আপনার লগইন পিন আপডেট করা হয়েছে: ${cleanPin}\nলগইন করুন: https://greenvest.shop/auth`,
+          `নমস্কার ${u.name}, GreenVest-এ আপনার লগইন পিন আপডেট করা হয়েছে: ${cleanPin}\nলগইন করুন: https://greenvest.shop/auth`
         )
-        if (window.confirm(lang === 'bn' ? 'হোয়াটসঅ্যাপে গ্রাহককে জানাবেন?' : 'Notify customer via WhatsApp?')) {
+        if (
+          window.confirm(
+            lang === 'bn' ? 'হোয়াটসঅ্যাপে গ্রাহককে জানাবেন?' : 'Notify customer via WhatsApp?'
+          )
+        ) {
           window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
         }
       }
@@ -96,14 +115,34 @@ export default function AdminUsers() {
   }
 
   return (
-    <div className="page">
-      <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-        <h1>{lang === 'bn' ? 'অ্যাডমিন — ইউজার ও অ্যাকাউন্ট সিকিউরিটি' : 'Admin — User & Account Security'}</h1>
+    <div className="page admin-page">
+      <div
+        className="page-head"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '1rem',
+        }}
+      >
+        <div>
+          <h1>{lang === 'bn' ? 'অ্যাডমিন ড্যাশবোর্ড' : 'Admin Control Dashboard'}</h1>
+          <p className="subtle" style={{ margin: '0.25rem 0 0' }}>
+            {lang === 'bn'
+              ? 'ইউজার সিকিউরিটি, রোল ম্যানেজমেন্ট ও স্মার্ট ডেটাবেস রক্ষণাবেক্ষণ'
+              : 'User security, role management & smart database maintenance'}
+          </p>
+        </div>
+
         <button
           type="button"
           className="btn btn-primary"
           onClick={() => {
-            setNotifModalTarget({ id: 'all', name: lang === 'bn' ? 'সকল কাস্টমার (Broadcast)' : 'All Users (Broadcast)' })
+            setNotifModalTarget({
+              id: 'all',
+              name: lang === 'bn' ? 'সকল কাস্টমার (Broadcast)' : 'All Users (Broadcast)',
+            })
             setNotifTitle(lang === 'bn' ? 'জরুরি অ্যানাউন্সমেন্ট' : 'Important Announcement')
             setNotifMessage('')
           }}
@@ -111,204 +150,393 @@ export default function AdminUsers() {
           📢 {lang === 'bn' ? 'সবাইকে মেসেজ দিন (Broadcast)' : 'Broadcast to All Users'}
         </button>
       </div>
-      <p className="lede">
-        {lang === 'bn'
-          ? 'সেলার ও রাইডার রোল পরিচালনা করুন, লাইভ নোটিফিকেশন মেসেজ পাঠান, পিন রিসেট করুন বা অ্যাকাউন্ট সসপেন্ড করুন।'
-          : 'Manage roles, send live broadcast notifications, reset user PINs, or block accounts.'}
-      </p>
 
-      <div className="dash-grid admin-health">
-        <div className="stat">
-          <span>{lang === 'bn' ? 'ইউজার' : 'Users'}</span>
-          <strong>{users.length}</strong>
-        </div>
-        <div className="stat">
-          <span>{lang === 'bn' ? 'প্রোডাক্ট' : 'Products'}</span>
-          <strong>{products.length}</strong>
-        </div>
-        <div className="stat">
-          <span>{lang === 'bn' ? 'অর্ডার' : 'Orders'}</span>
-          <strong>{orders.length}</strong>
-        </div>
-        <div className="stat">
-          <span>{lang === 'bn' ? 'স্টোরেজ' : 'Storage'}</span>
-          <strong>{dataMode === 'cloud' ? 'Supabase' : 'Local'}</strong>
-        </div>
+      {/* 🧭 Admin Tab Switcher */}
+      <div
+        className="admin-tab-nav"
+        style={{
+          display: 'flex',
+          gap: '0.5rem',
+          margin: '1.25rem 0',
+          borderBottom: '1.5px solid #e5e7eb',
+          paddingBottom: '0.5rem',
+        }}
+      >
+        <button
+          type="button"
+          className={`btn btn-sm ${adminTab === 'users' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setAdminTab('users')}
+          style={{ borderRadius: '8px' }}
+        >
+          👥 {lang === 'bn' ? 'ইউজার ও সিকিউরিটি' : 'Users & Security'} ({users.length})
+        </button>
+
+        <button
+          type="button"
+          className={`btn btn-sm ${adminTab === 'database' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setAdminTab('database')}
+          style={{ borderRadius: '8px' }}
+        >
+          📊 {lang === 'bn' ? 'স্মার্ট ডেটাবেস ক্লিনার ও হেলথ' : 'Smart Database Cleaner & Health'}
+        </button>
       </div>
 
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>{lang === 'bn' ? 'নাম' : 'Name'}</th>
-              <th>{lang === 'bn' ? 'ফোন / যোগাযোগ' : 'Phone / Contact'}</th>
-              <th>{lang === 'bn' ? 'রোল' : 'Role'}</th>
-              <th>{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
-              <th>{lang === 'bn' ? 'অ্যাকশন' : 'Actions'}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>
-                  <strong>{u.name}</strong>
-                </td>
-                <td>{formatDisplayContact(u.email, u.phone)}</td>
-                <td>
-                  <span className={`role-pill role-${u.role}`}>{u.role}</span>
-                </td>
-                <td>
-                  {u.isBlocked ? (
-                    <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '0.85rem' }}>🚫 {lang === 'bn' ? 'ব্লকড' : 'Blocked'}</span>
-                  ) : (
-                    <span style={{ color: '#166534', fontSize: '0.85rem' }}>✅ {lang === 'bn' ? 'সক্রিয়' : 'Active'}</span>
-                  )}
-                </td>
-                <td className="actions" style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                  {/* 📢 Send Notification Button */}
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
-                    onClick={() => {
-                      setNotifModalTarget({ id: u.id, name: u.name })
-                      setNotifTitle(lang === 'bn' ? 'অ্যাকাউন্ট আপডেট' : 'Account Update')
-                      setNotifMessage('')
-                    }}
-                  >
-                    📩 {lang === 'bn' ? 'মেসেজ দিন' : 'Send Message'}
-                  </button>
+      {adminTab === 'database' ? (
+        /* 📊 Tab 2: Database Cleaner & Health */
+        <DatabaseCleaner
+          orders={orders}
+          users={users}
+          products={products}
+          lang={lang}
+          deleteOrder={deleteOrder}
+          updateOrderStatus={updateOrderStatus}
+          onRefresh={refresh}
+        />
+      ) : (
+        /* 👥 Tab 1: Users & Security */
+        <>
+          <div className="dash-grid admin-health">
+            <div className="stat">
+              <span>{lang === 'bn' ? 'ইউজার' : 'Users'}</span>
+              <strong>{users.length}</strong>
+            </div>
+            <div className="stat">
+              <span>{lang === 'bn' ? 'প্রোডাক্ট' : 'Products'}</span>
+              <strong>{products.length}</strong>
+            </div>
+            <div className="stat">
+              <span>{lang === 'bn' ? 'অর্ডার' : 'Orders'}</span>
+              <strong>{orders.length}</strong>
+            </div>
+            <div className="stat">
+              <span>{lang === 'bn' ? 'স্টোরেজ' : 'Storage'}</span>
+              <strong>{dataMode === 'cloud' ? 'Supabase' : 'Local'}</strong>
+            </div>
+          </div>
 
-                  {/* === ROLE BUTTONS === */}
-                  {isProtectedAdmin(u.email) ? (
-                    <span style={{ color: '#b45309', fontWeight: 700, fontSize: '0.8rem', background: '#fef3c7', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
-                      🛡️ {lang === 'bn' ? 'সুরক্ষিত সুপার অ্যাডমিন' : 'Protected Super Admin'}
-                    </span>
-                  ) : (
-                    <>
-                      {/* Make Admin / Revoke Admin */}
-                      {u.role !== 'admin' ? (
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}
-                          onClick={async () => {
-                            if (window.confirm(lang === 'bn' ? `${u.name}-কে অ্যাডমিন বানাবেন?` : `Make ${u.name} an Admin?`)) {
-                              await setUserRole(u.id, 'admin' as Role)
-                              showToast(lang === 'bn' ? `👑 ${u.name} এখন অ্যাডমিন!` : `👑 ${u.name} is now an Admin!`, '👑')
-                            }
-                          }}
-                        >
-                          👑 {lang === 'bn' ? 'অ্যাডমিন করুন' : 'Make Admin'}
-                        </button>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>{lang === 'bn' ? 'নাম' : 'Name'}</th>
+                  <th>{lang === 'bn' ? 'ফোন / যোগাযোগ' : 'Phone / Contact'}</th>
+                  <th>{lang === 'bn' ? 'রোল' : 'Role'}</th>
+                  <th>{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
+                  <th>{lang === 'bn' ? 'অ্যাকশন' : 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td>
+                      <strong>{u.name}</strong>
+                    </td>
+                    <td>{formatDisplayContact(u.email, u.phone)}</td>
+                    <td>
+                      <span className={`role-pill role-${u.role}`}>{u.role}</span>
+                    </td>
+                    <td>
+                      {u.isBlocked ? (
+                        <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '0.85rem' }}>
+                          🚫 {lang === 'bn' ? 'ব্লকড' : 'Blocked'}
+                        </span>
                       ) : (
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5' }}
-                          onClick={async () => {
-                            if (window.confirm(lang === 'bn' ? `${u.name}-এর অ্যাডমিন রোল বাতিল করবেন?` : `Revoke Admin from ${u.name}?`)) {
-                              await setUserRole(u.id, 'customer' as Role)
-                              showToast(lang === 'bn' ? `${u.name} এখন কাস্টমার` : `${u.name} is now a Customer`, '👤')
-                            }
-                          }}
-                        >
-                          👑 {lang === 'bn' ? 'অ্যাডমিন বাতিল' : 'Revoke Admin'}
-                        </button>
+                        <span style={{ color: '#166534', fontSize: '0.85rem' }}>
+                          ✅ {lang === 'bn' ? 'সক্রিয়' : 'Active'}
+                        </span>
                       )}
-
-                      {/* Seller Role Toggle */}
-                      {u.role !== 'admin' && (
-                        u.role !== 'seller' ? (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={async () => {
-                              await setUserRole(u.id, 'seller')
-                              showToast(lang === 'bn' ? `🏬 ${u.name} এখন সেলার!` : `🏬 ${u.name} is now a Seller!`, '🏬')
-                            }}
-                          >
-                            {lang === 'bn' ? 'সেলার করুন' : 'Make Seller'}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={async () => {
-                              await setUserRole(u.id, 'customer' as Role)
-                              showToast(lang === 'bn' ? `${u.name} এখন কাস্টমার` : `${u.name} is now a Customer`, '👤')
-                            }}
-                          >
-                            {lang === 'bn' ? 'সেলার বাতিল' : 'Revoke Seller'}
-                          </button>
-                        )
-                      )}
-
-                      {/* Rider Role Toggle */}
-                      {u.role !== 'admin' && (
-                        u.role !== 'rider' ? (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={async () => {
-                              await setUserRole(u.id, 'rider')
-                              showToast(lang === 'bn' ? `🛵 ${u.name} এখন রাইডার!` : `🛵 ${u.name} is now a Rider!`, '🛵')
-                            }}
-                          >
-                            🛵 {lang === 'bn' ? 'রাইডার করুন' : 'Make Rider'}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={async () => {
-                              await setUserRole(u.id, 'customer' as Role)
-                              showToast(lang === 'bn' ? `${u.name} এখন কাস্টমার` : `${u.name} is now a Customer`, '👤')
-                            }}
-                          >
-                            🛵 {lang === 'bn' ? 'রাইডার বাতিল' : 'Revoke Rider'}
-                          </button>
-                        )
-                      )}
-
-                      {/* 🔑 Reset PIN — auto-reset, no modal */}
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        disabled={resettingPinId === u.id}
-                        onClick={() => void handleResetPin(u)}
-                      >
-                        {resettingPinId === u.id
-                          ? (lang === 'bn' ? '⏳ রিসেট হচ্ছে...' : '⏳ Resetting...')
-                          : (lang === 'bn' ? '🔑 পিন রিসেট' : '🔑 Reset PIN')}
-                      </button>
-
-                      {/* 🚫 Block / Unblock */}
+                    </td>
+                    <td className="actions" style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      {/* 📢 Send Notification Button */}
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
-                        style={{ background: u.isBlocked ? '#dcfce7' : '#fef2f2', color: u.isBlocked ? '#166534' : '#dc2626' }}
-                        onClick={() => void toggleBlockUser(u.id, !u.isBlocked)}
+                        style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                        onClick={() => {
+                          setNotifModalTarget({ id: u.id, name: u.name })
+                          setNotifTitle(lang === 'bn' ? 'অ্যাকাউন্ট আপডেট' : 'Account Update')
+                          setNotifMessage('')
+                        }}
                       >
-                        {u.isBlocked ? (lang === 'bn' ? '🔓 আনব্লক' : '🔓 Unblock') : (lang === 'bn' ? '🚫 ব্লক' : '🚫 Block')}
+                        📩 {lang === 'bn' ? 'মেসেজ দিন' : 'Send Message'}
                       </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+
+                      {/* === ROLE BUTTONS === */}
+                      {isProtectedAdmin(u.email) ? (
+                        <span
+                          style={{
+                            color: '#b45309',
+                            fontWeight: 700,
+                            fontSize: '0.8rem',
+                            background: '#fef3c7',
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '6px',
+                          }}
+                        >
+                          🛡️ {lang === 'bn' ? 'সুরক্ষিত সুপার অ্যাডমিন' : 'Protected Super Admin'}
+                        </span>
+                      ) : (
+                        <>
+                          {/* Make Admin / Revoke Admin */}
+                          {u.role !== 'admin' ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}
+                              onClick={async () => {
+                                if (
+                                  window.confirm(
+                                    lang === 'bn'
+                                      ? `${u.name}-কে অ্যাডমিন বানাবেন?`
+                                      : `Make ${u.name} an Admin?`
+                                  )
+                                ) {
+                                  await setUserRole(u.id, 'admin' as Role)
+                                  showToast(
+                                    lang === 'bn'
+                                      ? `👑 ${u.name} এখন অ্যাডমিন!`
+                                      : `👑 ${u.name} is now an Admin!`,
+                                    '👑'
+                                  )
+                                }
+                              }}
+                            >
+                              👑 {lang === 'bn' ? 'অ্যাডমিন বানান' : 'Make Admin'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ color: '#dc2626' }}
+                              onClick={async () => {
+                                if (
+                                  window.confirm(
+                                    lang === 'bn'
+                                      ? `${u.name}-এর অ্যাডমিন রোল বাতিল করবেন?`
+                                      : `Revoke Admin from ${u.name}?`
+                                  )
+                                ) {
+                                  await setUserRole(u.id, 'customer' as Role)
+                                  showToast(
+                                    lang === 'bn'
+                                      ? `${u.name}-এর অ্যাডমিন বাতিল হয়েছে`
+                                      : `Revoked Admin from ${u.name}`,
+                                    'ℹ️'
+                                  )
+                                }
+                              }}
+                            >
+                              {lang === 'bn' ? 'অ্যাডমিন বাতিল' : 'Revoke Admin'}
+                            </button>
+                          )}
+
+                          {/* Make Seller / Revoke Seller */}
+                          {u.role !== 'seller' ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={async () => {
+                                if (
+                                  window.confirm(
+                                    lang === 'bn'
+                                      ? `${u.name}-কে সেলার বানাবেন?`
+                                      : `Make ${u.name} a Seller?`
+                                  )
+                                ) {
+                                  await setUserRole(u.id, 'seller' as Role)
+                                  showToast(
+                                    lang === 'bn'
+                                      ? `🏪 ${u.name} এখন সেলার!`
+                                      : `🏪 ${u.name} is now a Seller!`,
+                                    '🏪'
+                                  )
+                                }
+                              }}
+                            >
+                              🏪 {lang === 'bn' ? 'সেলার বানান' : 'Make Seller'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={async () => {
+                                if (
+                                  window.confirm(
+                                    lang === 'bn'
+                                      ? `${u.name}-এর সেলার রোল বাতিল করবেন?`
+                                      : `Revoke Seller from ${u.name}?`
+                                  )
+                                ) {
+                                  await setUserRole(u.id, 'customer' as Role)
+                                  showToast(
+                                    lang === 'bn'
+                                      ? `${u.name}-এর সেলার বাতিল হয়েছে`
+                                      : `Revoked Seller from ${u.name}`,
+                                    'ℹ️'
+                                  )
+                                }
+                              }}
+                            >
+                              {lang === 'bn' ? 'সেলার বাতিল' : 'Revoke Seller'}
+                            </button>
+                          )}
+
+                          {/* Make Rider / Revoke Rider */}
+                          {u.role !== 'rider' ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #86efac' }}
+                              onClick={async () => {
+                                if (
+                                  window.confirm(
+                                    lang === 'bn'
+                                      ? `${u.name}-কে রাইডার বানাবেন?`
+                                      : `Make ${u.name} a Delivery Rider?`
+                                  )
+                                ) {
+                                  await setUserRole(u.id, 'rider' as Role)
+                                  showToast(
+                                    lang === 'bn'
+                                      ? `🛵 ${u.name} এখন ডেলিভারি রাইডার!`
+                                      : `🛵 ${u.name} is now a Delivery Rider!`,
+                                    '🛵'
+                                  )
+                                }
+                              }}
+                            >
+                              🛵 {lang === 'bn' ? 'রাইডার বানান' : 'Make Rider'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={async () => {
+                                if (
+                                  window.confirm(
+                                    lang === 'bn'
+                                      ? `${u.name}-এর রাইডার রোল বাতিল করবেন?`
+                                      : `Revoke Rider from ${u.name}?`
+                                  )
+                                ) {
+                                  await setUserRole(u.id, 'customer' as Role)
+                                  showToast(
+                                    lang === 'bn'
+                                      ? `${u.name}-এর রাইডার বাতিল হয়েছে`
+                                      : `Revoked Rider from ${u.name}`,
+                                    'ℹ️'
+                                  )
+                                }
+                              }}
+                            >
+                              {lang === 'bn' ? 'রাইডার বাতিল' : 'Revoke Rider'}
+                            </button>
+                          )}
+
+                          {/* 🔑 Reset PIN Button */}
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}
+                            disabled={resettingPinId === u.id}
+                            onClick={() => handleResetPin(u)}
+                          >
+                            🔑 {resettingPinId === u.id ? '...' : lang === 'bn' ? 'পিন রিসেট' : 'Reset PIN'}
+                          </button>
+
+                          {/* 🚫 Block / Unblock User */}
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${u.isBlocked ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{
+                              background: u.isBlocked ? '#166534' : '#fff1f2',
+                              color: u.isBlocked ? '#fff' : '#e11d48',
+                              border: u.isBlocked ? 'none' : '1px solid #fecdd3',
+                            }}
+                            onClick={async () => {
+                              const action = u.isBlocked
+                                ? lang === 'bn'
+                                  ? 'আনব্লক'
+                                  : 'unblock'
+                                : lang === 'bn'
+                                  ? 'ব্লক'
+                                  : 'block'
+                              if (
+                                window.confirm(
+                                  lang === 'bn'
+                                    ? `আপনি কি নিশ্চিত ${u.name}-কে ${action} করবেন?`
+                                    : `Are you sure you want to ${action} ${u.name}?`
+                                )
+                              ) {
+                                await toggleBlockUser(u.id, !u.isBlocked)
+                                showToast(
+                                  lang === 'bn'
+                                    ? `ইউজার ${action} সফল হয়েছে`
+                                    : `User ${action}ed successfully`,
+                                  u.isBlocked ? '✅' : '🚫'
+                                )
+                              }
+                            }}
+                          >
+                            {u.isBlocked
+                              ? lang === 'bn'
+                                ? '🔓 আনব্লক'
+                                : '🔓 Unblock'
+                              : lang === 'bn'
+                                ? '🚫 ব্লক'
+                                : '🚫 Block'}
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* 📢 Send Notification Modal */}
       {notifModalTarget && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', width: '90%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: '1.5rem',
+              borderRadius: '12px',
+              width: '90%',
+              maxWidth: '450px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+            }}
+          >
             <h3 style={{ margin: 0 }}>
-              📢 {lang === 'bn' ? `${notifModalTarget.name}-কে লাইভ নোটিফিকেশন পাঠান` : `Send Live Notification to ${notifModalTarget.name}`}
+              📢{' '}
+              {lang === 'bn'
+                ? `${notifModalTarget.name}-কে লাইভ নোটিফিকেশন পাঠান`
+                : `Send Live Notification to ${notifModalTarget.name}`}
             </h3>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600 }}>
+            <label
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.3rem',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+              }}
+            >
               {lang === 'bn' ? 'শিরোনাম (Title):' : 'Title:'}
               <input
                 type="text"
@@ -318,29 +546,44 @@ export default function AdminUsers() {
                 style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc' }}
               />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600 }}>
+            <label
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.3rem',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+              }}
+            >
               {lang === 'bn' ? 'নোটিফিকেশন মেসেজ (Message):' : 'Notification Message:'}
               <textarea
                 rows={4}
                 value={notifMessage}
                 onChange={(e) => setNotifMessage(e.target.value)}
                 placeholder={lang === 'bn' ? 'আপনার মেসেজ লিখুন...' : 'Write your message here...'}
-                style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc', resize: 'vertical' }}
+                style={{
+                  padding: '0.5rem',
+                  borderRadius: '8px',
+                  border: '1px solid #ccc',
+                  resize: 'vertical',
+                }}
               />
             </label>
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
               <button className="btn btn-ghost" onClick={() => setNotifModalTarget(null)}>
                 {lang === 'bn' ? 'বাতিল' : 'Cancel'}
               </button>
-              <button className="btn btn-primary" onClick={handleSendNotification} disabled={sendingNotif}>
-                {sendingNotif ? '...' : (lang === 'bn' ? '📢 পাঠান' : '📢 Send Notification')}
+              <button
+                className="btn btn-primary"
+                onClick={handleSendNotification}
+                disabled={sendingNotif}
+              >
+                {sendingNotif ? '...' : lang === 'bn' ? '📢 পাঠান' : '📢 Send Notification'}
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* PIN Reset Modal removed — now uses one-click auto-reset with notification */}
     </div>
   )
 }
