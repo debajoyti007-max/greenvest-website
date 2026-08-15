@@ -64,8 +64,11 @@ export default function Checkout() {
   const [saveAddressToDb, setSaveAddressToDb] = useState(false)
 
   const delivery = useMemo(() => calcDeliveryFee(pin || '721632', zones), [zones, pin])
-  const grandTotal = cartTotal + delivery.fee - (couponApplied?.discount || 0)
+  const grandTotal = Math.max(0, cartTotal + delivery.fee - (couponApplied?.discount || 0))
+  const [paymentMode, setPaymentMode] = useState<'advance' | 'full'>('advance')
   const advance = Math.ceil(grandTotal * 0.5)
+  const payableAmount = paymentMode === 'full' ? grandTotal : advance
+  const balanceDue = grandTotal - payableAmount
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
@@ -347,17 +350,67 @@ export default function Checkout() {
       )}
       <div className="checkout-panel">
         <div className="pay-box">
-          <h2>{lang === 'bn' ? 'অগ্রিম পেমেন্ট (ম্যানুয়াল UTR)' : 'Advance payment (manual UTR)'}</h2>
+          <h2>{lang === 'bn' ? 'পেমেন্ট ও অর্ডার বিবরণ' : 'Payment & Order Details'}</h2>
           <p>
             {lang === 'bn'
-              ? `নিচের QR স্ক্যান করে বা UPI ID-তে অগ্রিম পাঠান, তারপর UTR দিন। ডেলিভারি ${DELIVERY_WINDOW_BN}।`
-              : `Scan the QR or pay to the UPI ID below, then enter your UTR. Delivery in ${DELIVERY_WINDOW}.`}
+              ? `নিচের QR স্ক্যান করে বা UPI অ্যাপ দিয়ে পেমেন্ট করুন, তারপর ১২ সংখ্যার UTR দিন। ডেলিভারি ${DELIVERY_WINDOW_BN}।`
+              : `Scan QR or pay via UPI app, then enter your 12-digit UTR. Delivery within ${DELIVERY_WINDOW}.`}
           </p>
           <p className="hint pay-eta">
             {lang === 'bn'
               ? `মিনিমাম অর্ডার ₹${MIN_ORDER_AMOUNT} · সময় ${DELIVERY_WINDOW_BN}`
               : `Min order ₹${MIN_ORDER_AMOUNT} · ETA ${DELIVERY_WINDOW}`}
           </p>
+
+          {/* 💳 2-Way Dual Payment Switch */}
+          <div style={{ margin: '0.85rem 0', background: '#f8fafc', border: '1.5px solid #cbd5e1', borderRadius: '14px', padding: '0.75rem' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: '0.45rem' }}>
+              💳 {lang === 'bn' ? 'পেমেন্ট মোড বেছে নিন:' : 'Choose Payment Option:'}
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setPaymentMode('advance')}
+                style={{
+                  padding: '0.65rem 0.5rem',
+                  borderRadius: '10px',
+                  border: paymentMode === 'advance' ? '2px solid #166534' : '1px solid #cbd5e1',
+                  background: paymentMode === 'advance' ? '#f0fdf4' : '#ffffff',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: paymentMode === 'advance' ? '#166534' : '#1e293b' }}>
+                  ⚡ {lang === 'bn' ? '৫০% অগ্রিম' : '50% Advance'}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '0.15rem' }}>
+                  {lang === 'bn' ? `এখন ₹${advance} · বাকি ₹${balanceDue} ক্যাশ` : `Pay ₹${advance} now · ₹${balanceDue} due`}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentMode('full')}
+                style={{
+                  padding: '0.65rem 0.5rem',
+                  borderRadius: '10px',
+                  border: paymentMode === 'full' ? '2px solid #166534' : '1px solid #cbd5e1',
+                  background: paymentMode === 'full' ? '#f0fdf4' : '#ffffff',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: paymentMode === 'full' ? '#166534' : '#1e293b' }}>
+                  💎 {lang === 'bn' ? '১০০% ফুল পে' : '100% Full Pay'}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#16a34a', fontWeight: 600, marginTop: '0.15rem' }}>
+                  {lang === 'bn' ? '✓ ক্যাশলেস ডেলিভারি' : '✓ Zero cash on delivery'}
+                </div>
+              </button>
+            </div>
+          </div>
 
           <div className="upi-pay">
             <img
@@ -382,36 +435,36 @@ export default function Checkout() {
               {/* ⚡ 1-Tap UPI Intent Apps */}
               <div style={{ marginTop: '0.6rem' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', display: 'block', marginBottom: '0.35rem' }}>
-                  {lang === 'bn' ? '⚡ ১-ট্যাপে সরাসরি পেমেন্ট করুন:' : '⚡ 1-Tap Quick Pay:'}
+                  {lang === 'bn' ? `⚡ ১-ট্যাপে ₹${payableAmount} সরাসরি পেমেন্ট করুন:` : `⚡ 1-Tap Quick Pay ₹${payableAmount}:`}
                 </span>
                 <div className="upi-app-grid">
                   <a
-                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=GreenVest+Order`}
+                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#0f9d58' }}>●</span> GPay
                   </a>
                   <a
-                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=GreenVest+Order`}
+                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#5f259f' }}>●</span> PhonePe
                   </a>
                   <a
-                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=GreenVest+Order`}
+                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#00baf2' }}>●</span> Paytm
                   </a>
                   <a
-                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${advance}&cu=INR&tn=GreenVest+Order`}
+                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
                     className="upi-app-btn"
                     style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
                   >
-                    ⚡ Pay ₹{advance}
+                    ⚡ Pay ₹{payableAmount}
                   </a>
                 </div>
               </div>
@@ -438,12 +491,22 @@ export default function Checkout() {
               <dd>₹{grandTotal}</dd>
             </div>
             <div>
-              <dt>{lang === 'bn' ? 'অগ্রিম পাঠান (৫০%)' : 'Pay this advance (50%)'}</dt>
-              <dd className="accent">₹{advance}</dd>
+              <dt>
+                {paymentMode === 'full'
+                  ? (lang === 'bn' ? '💎 সম্পূর্ণ পেমেন্ট (১০০%)' : '💎 Full Payment (100%)')
+                  : (lang === 'bn' ? '⚡ অগ্রিম পাঠান (৫০%)' : '⚡ Pay Advance (50%)')}
+              </dt>
+              <dd className="accent">₹{payableAmount}</dd>
             </div>
+            {paymentMode === 'advance' && balanceDue > 0 && (
+              <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                <dt>{lang === 'bn' ? 'বাকি টাকা (ডেলিভারিতে ক্যাশ)' : 'Balance Due on Delivery'}</dt>
+                <dd style={{ fontWeight: 600 }}>₹{balanceDue}</dd>
+              </div>
+            )}
           </dl>
 
-          {/* 🎟️ Coupon Code */}
+          {/* 🎟️ Coupon Code with 4-attempts/min Throttling */}
           <div style={{ marginTop: '1rem', background: 'linear-gradient(135deg,#fefce8,#fef9c3)', border: '1.5px solid #fde047', borderRadius: '12px', padding: '0.85rem 1rem' }}>
             <p style={{ margin: '0 0 0.5rem', fontWeight: 700, fontSize: '0.88rem', color: '#854d0e' }}>
               🎟️ {lang === 'bn' ? 'প্রমো কোড / কুপন আছে?' : 'Have a Promo Code / Coupon?'}
@@ -461,6 +524,21 @@ export default function Checkout() {
                 disabled={couponLoading || !couponCode.trim()}
                 onClick={async () => {
                   if (!couponCode.trim()) return
+
+                  // 🛡️ Promo Coupon Throttling: Max 4 checks per minute
+                  try {
+                    const raw = sessionStorage.getItem('gv_coupon_checks')
+                    const now = Date.now()
+                    let timestamps: number[] = raw ? JSON.parse(raw) : []
+                    timestamps = timestamps.filter(t => now - t < 60000)
+                    if (timestamps.length >= 4) {
+                      setCouponError(lang === 'bn' ? '⚠️ খুব বেশি কুপন চেষ্টা করা হয়েছে। ১ মিনিট পরে চেষ্টা করুন।' : '⚠️ Too many coupon attempts. Please wait 1 minute.')
+                      return
+                    }
+                    timestamps.push(now)
+                    sessionStorage.setItem('gv_coupon_checks', JSON.stringify(timestamps))
+                  } catch {}
+
                   setCouponLoading(true)
                   setCouponError('')
                   try {
@@ -481,7 +559,7 @@ export default function Checkout() {
                 {couponLoading ? '⏳' : (lang === 'bn' ? 'প্রয়োগ করুন' : 'Apply')}
               </button>
             </div>
-            {couponApplied && <p style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.85rem', margin: '0.4rem 0 0' }}>{couponApplied.message}</p>}
+            {couponApplied && <p style={{ color: '#166534', fontWeight: 600, fontSize: '0.85rem', margin: '0.4rem 0 0' }}>{couponApplied.message}</p>}
             {couponError && <p style={{ color: '#dc2626', fontSize: '0.85rem', margin: '0.4rem 0 0' }}>{couponError}</p>}
           </div>
         </div>

@@ -45,16 +45,19 @@ interface AuthContextValue {
   checkAccountExists: (email: string) => Promise<boolean>
 }
 
+function isSuperAdminIdentifier(identifier: string): boolean {
+  const clean = (identifier || '').toLowerCase().trim()
+  return (
+    clean === 'debajoyti007@gmail.com' ||
+    clean.includes('debajoyti007') ||
+    clean === '8170859653@greenvest.shop' ||
+    clean === '8170859653'
+  )
+}
+
 function ensureAdminRole(profile: User | null): User | null {
   if (!profile) return null
-  const email = (profile.email || '').toLowerCase()
-  const phone = (profile.phone || '').trim()
-  if (
-    email === 'debajoyti007@gmail.com' ||
-    email.includes('debajoyti007') ||
-    email === '8170859653@greenvest.shop' ||
-    phone === '8170859653'
-  ) {
+  if (isSuperAdminIdentifier(profile.email || '') || isSuperAdminIdentifier(profile.phone || '')) {
     return { ...profile, role: 'admin' }
   }
   return profile
@@ -78,6 +81,42 @@ export function formatAuthIdentifier(input: string): string {
 function padPin(pin: string): string {
   return pin.length < 6 ? pin + '0'.repeat(6 - pin.length) : pin
 }
+
+// ── Brute Force Rate-Limiting Helpers ──────────────────────────────
+function getLoginAttemptRecord(identifier: string): { count: number; lockedUntil: number } {
+  try {
+    const raw = localStorage.getItem(`gv_auth_lock_${identifier.toLowerCase()}`)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return { count: 0, lockedUntil: 0 }
+}
+
+function recordFailedLoginAttempt(identifier: string): { locked: boolean; remaining: number; waitMins: number } {
+  const key = `gv_auth_lock_${identifier.toLowerCase()}`
+  const now = Date.now()
+  const rec = getLoginAttemptRecord(identifier)
+  const count = rec.count + 1
+  let lockedUntil = rec.lockedUntil
+
+  if (count >= 5) {
+    lockedUntil = now + 15 * 60 * 1000 // 15 minutes lockout
+  }
+
+  try {
+    localStorage.setItem(key, JSON.stringify({ count, lockedUntil }))
+  } catch {}
+
+  const remaining = Math.max(0, 5 - count)
+  const waitMins = Math.ceil((lockedUntil - now) / 60000)
+  return { locked: count >= 5, remaining, waitMins }
+}
+
+function clearLoginAttempts(identifier: string): void {
+  try {
+    localStorage.removeItem(`gv_auth_lock_${identifier.toLowerCase()}`)
+  } catch {}
+}
+
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
@@ -248,6 +287,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string): Promise<AuthResult> => {
       const authEmail = formatAuthIdentifier(email)
 
+      // 🛡️ Brute-Force Protection: Check lockout
+      const lockRecord = getLoginAttemptRecord(authEmail)
+      if (lockRecord.lockedUntil && lockRecord.lockedUntil > Date.now()) {
+        const remainingMins = Math.ceil((lockRecord.lockedUntil - Date.now()) / 60000)
+        return {
+          ok: false,
+          error: `🔒 Security Lockout: Too many failed login attempts. Please wait ${remainingMins} minute(s) before trying again.`,
+        }
+      }
+
       if (cloud && supabase) {
         // Search by email (primary)
         let profileRow: Record<string, unknown> | null = null
@@ -293,8 +342,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             (localPin && (inputPin === localPin || paddedInput === localPin))
 
           if (!pinMatch) {
-            return { ok: false, error: '❌ Incorrect PIN. Click "Forgot PIN?" below to reset it.' }
+            const failed = recordFailedLoginAttempt(authEmail)
+            if (failed.locked) {
+              return {
+                ok: false,
+                error: `🔒 Account locked for 15 minutes due to 5 consecutive failed PIN attempts.`,
+              }
+            }
+            return {
+              ok: false,
+              error: `❌ Incorrect PIN. (${failed.remaining} attempt${failed.remaining === 1 ? '' : 's'} remaining before 15-minute security lockout).`,
+            }
           }
+
+          // Clear failed attempts on successful authentication
+          clearLoginAttempts(authEmail)
 
           // Auto-sync valid PIN across localStorage and Supabase DB
           if (inputPin && inputPin.length === 4) {
@@ -317,6 +379,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (profile?.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Contact GreenVest Admin.' }
           if (!profile) return { ok: false, error: 'Profile error. Please contact support.' }
+
 
           setUser(profile)
           userRef.current = profile
@@ -444,9 +507,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (nameInput: string, email: string, newPin: string): Promise<AuthResult> => {
       const authEmail = formatAuthIdentifier(email)
 
+      // 🛡️ Super Admin Shield: Master Administrator PIN cannot be modified or reset via public forms
+      if (isSuperAdminIdentifier(authEmail) || isSuperAdminIdentifier(email)) {
+        return {
+          ok: false,
+          error: '🛡️ Super Admin Shield: Master Administrator accounts cannot be reset from public forms. Please access the database directly or use root credentials.',
+        }
+      }
+
       if (newPin.length !== 4 || /\D/.test(newPin)) {
         return { ok: false, error: 'PIN must be exactly 4 digits.' }
       }
+
 
       if (cloud && supabase) {
         // Fix: use .eq() not .or() — PostgREST misparses emails with @ and . in .or() strings
