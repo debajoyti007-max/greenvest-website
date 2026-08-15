@@ -49,8 +49,11 @@ export default function Cart() {
             <li key={`${item.productId}-${item.grade}`} className="cart-row">
               <span className="cart-emoji">{p.emoji}</span>
               <div className="cart-info">
-                <strong>{lang === 'bn' ? p.bnName : p.name}</strong>
-                <span>
+                <div className="cart-dual-title">
+                  <strong className="cart-bn">{p.bnName}</strong>
+                  <span className="cart-en">{p.name}</span>
+                </div>
+                <span className="cart-meta-mono">
                   {t(lang, 'grade')} {item.grade} · ₹{priceFor(p, item.grade)}/{p.unit}
                 </span>
               </div>

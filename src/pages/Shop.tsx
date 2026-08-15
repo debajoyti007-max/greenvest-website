@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import WeeklyBasketModal from '../components/WeeklyBasketModal'
+import MyUsualBasketModal from '../components/MyUsualBasketModal'
+import CategoryBar from '../components/CategoryBar'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -9,6 +11,7 @@ import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/bu
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'
 import { HERO_IMAGE, HERO_VEGGIES_IMAGE, HERO_FISH_IMAGE, resolveProductImage } from '../lib/productImages'
+import { matchesProductQuery } from '../lib/searchUtils'
 import type { Grade, Lang, Product, CartItem } from '../types'
 
 const GRADES: Grade[] = ['A', 'B', 'C']
@@ -23,16 +26,19 @@ function ProductCard({
   p: Product
   lang: Lang
   cart: CartItem[]
-  onAdd: (p: Product, grade: Grade) => void
+  onAdd: (p: Product, grade: Grade, qty?: number) => void
   onUpdateQty: (productId: string, grade: Grade, qty: number) => void
 }) {
   const [cardGrade, setCardGrade] = useState<Grade>('B')
   const [showGradeInfo, setShowGradeInfo] = useState(false)
+  const [weightMultiplier, setWeightMultiplier] = useState<number>(1)
+
   const img = resolveProductImage(p.id, p.imageUrl, `${p.name} ${p.bnName}`)
   const low =
     p.inStock && p.stockQty != null && p.stockQty > 0 && p.stockQty <= LOW_STOCK_QTY
 
-  const priceMap: Record<Grade, number> = { A: p.pA, B: p.pB, C: p.pC }
+  const basePrice = (cardGrade === 'A' ? p.pA : cardGrade === 'C' ? p.pC : p.pB) || p.pB || p.pA
+  const calculatedPrice = Math.round(basePrice * weightMultiplier)
 
   const cartItem = cart.find((c) => c.productId === p.id && c.grade === cardGrade)
   const cartQty = cartItem ? cartItem.qty : 0
@@ -40,15 +46,17 @@ function ProductCard({
   const gradeLabels: Record<Grade, { en: string; bn: string }> = {
     A: { en: 'A (Premium)', bn: 'A (প্রিমিয়াম)' },
     B: { en: 'B (Standard)', bn: 'B (দৈনন্দিন)' },
-    C: { en: 'C (Saasgoti)', bn: 'C (সাশ্রয়ী)' },
+    C: { en: 'C (Economy)', bn: 'C (সাশ্রয়ী)' },
   }
 
+  const isKg = p.unit.toLowerCase() === 'kg'
+
   return (
-    <article className={`product-tile premium-tile ${p.inStock ? '' : 'out'}`}>
+    <article className={`product-tile premium-tile glass-product-tile ${p.inStock ? '' : 'out'}`}>
       <div className="product-media photo">
         <img
           src={img}
-          alt={lang === 'bn' ? p.bnName : p.name}
+          alt={`${p.bnName} ${p.name}`}
           className="product-photo"
           loading="lazy"
           onError={(e) => {
@@ -71,66 +79,91 @@ function ProductCard({
       </div>
 
       <div className="product-info">
-        <h3>{lang === 'bn' ? p.bnName : p.name}</h3>
+        {/* Dual Bengali + English Name */}
+        <div className="product-title-dual">
+          <h3 className="product-bn-name">{p.bnName}</h3>
+          <span className="product-en-name">{p.name}</span>
+        </div>
+
         <p className="subtle">{catLabel(lang, p.category)}</p>
 
         {/* Grade selector chips */}
-        <div className="grade-selector" style={{ display: 'flex', gap: '0.25rem', margin: '0.4rem 0' }}>
+        <div className="grade-selector-glass">
           {GRADES.map((g) => (
             <button
               key={g}
               type="button"
-              className={`grade-chip ${cardGrade === g ? 'active' : ''}`}
+              className={`grade-chip-glass ${cardGrade === g ? 'active' : ''}`}
               onClick={() => setCardGrade(g)}
-              style={{
-                fontSize: '0.75rem',
-                padding: '0.25rem 0.5rem',
-                borderRadius: '6px',
-                border: cardGrade === g ? '2px solid var(--green-600)' : '1px solid #d1d5db',
-                background: cardGrade === g ? 'var(--green-50)' : 'white',
-                fontWeight: cardGrade === g ? 'bold' : 'normal',
-                cursor: 'pointer',
-              }}
+              aria-label={`Grade ${g}`}
             >
               Grade {g}
             </button>
           ))}
-        </div>
-
-        <div className="price-row" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-          <span className="price" style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--green-700)' }}>
-            ₹{priceMap[cardGrade]} <small style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>/ {p.unit}</small>
-          </span>
           <button
             type="button"
-            className="info-btn"
-            style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.8rem', color: '#6b7280' }}
+            className="info-btn-glass"
             onClick={() => setShowGradeInfo(!showGradeInfo)}
+            title="Quality grade info"
           >
             ℹ️
           </button>
         </div>
 
         {showGradeInfo && (
-          <p className="grade-desc" style={{ fontSize: '0.75rem', color: '#4b5563', margin: '0.25rem 0', fontStyle: 'italic' }}>
+          <p className="grade-desc-glass">
             {gradeLabels[cardGrade][lang]}
           </p>
         )}
 
+        {/* Quick Weight Chips (for kg items) */}
+        {isKg && (
+          <div className="weight-chips-row">
+            {[
+              { val: 0.25, label: '250g' },
+              { val: 0.5, label: '500g' },
+              { val: 1, label: '1 kg' },
+              { val: 2, label: '2 kg' },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                className={`weight-chip ${weightMultiplier === chip.val ? 'active' : ''}`}
+                onClick={() => setWeightMultiplier(chip.val)}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Price Row with Glass-Mono tag */}
+        <div className="price-row-glass">
+          <div className="price-mono-group">
+            <span className="price-mono-val">₹{calculatedPrice}</span>
+            <span className="price-mono-unit">
+              / {weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
+            </span>
+          </div>
+        </div>
+
+        {/* Action Controls */}
         {cartQty > 0 ? (
-          <div className="qty-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <div className="qty-controls-glass">
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
+              className="qty-btn"
               onClick={() => onUpdateQty(p.id, cardGrade, cartQty - 1)}
+              aria-label="Decrease quantity"
             >
-              -
+              −
             </button>
-            <span style={{ fontWeight: 'bold' }}>{cartQty}</span>
+            <span className="qty-val-mono">{cartQty}</span>
             <button
               type="button"
-              className="btn btn-secondary btn-sm"
+              className="qty-btn"
               onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1)}
+              aria-label="Increase quantity"
             >
               +
             </button>
@@ -138,10 +171,9 @@ function ProductCard({
         ) : (
           <button
             type="button"
-            className="btn btn-primary btn-sm add-btn"
-            style={{ width: '100%', marginTop: '0.5rem' }}
+            className="btn-add-glass"
             disabled={!p.inStock}
-            onClick={() => onAdd(p, cardGrade)}
+            onClick={() => onAdd(p, cardGrade, 1)}
           >
             + {t(lang, 'addToCart')}
           </button>
@@ -153,19 +185,30 @@ function ProductCard({
 
 export default function Shop() {
   const { user } = useAuth()
-  const { products, orders, cart, lang, addToCart, updateCartQty, priceFor, cartTotal, reorderFromOrder, loading } = useStore()
+  const {
+    products,
+    orders,
+    cart,
+    lang,
+    addToCart,
+    updateCartQty,
+    priceFor,
+    cartTotal,
+    reorderFromOrder,
+    loading,
+  } = useStore()
+
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
-  const [picked, setPicked] = useState<Product | null>(null)
-  const [grade, setGrade] = useState<Grade>('B')
   const [heroSlide, setHeroSlide] = useState(0)
   const [showBasketModal, setShowBasketModal] = useState(false)
+  const [showUsualBasketModal, setShowUsualBasketModal] = useState(false)
 
-  // Auto-slide hero banner every 4.5 seconds
+  // Auto-slide hero banner every 5 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       setHeroSlide((prev) => (prev + 1) % 3)
-    }, 4500)
+    }, 5000)
     return () => clearInterval(timer)
   }, [])
 
@@ -176,9 +219,11 @@ export default function Shop() {
 
   const lastOrder = useMemo(() => {
     if (!user) return null
-    return orders
-      .filter((o) => o.userId === user.id && o.status !== 'cancelled')
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] || null
+    return (
+      orders
+        .filter((o) => o.userId === user.id && o.status !== 'cancelled')
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] || null
+    )
   }, [user, orders])
 
   const handleRepeatOrder = () => {
@@ -186,7 +231,7 @@ export default function Shop() {
     const { added: count } = reorderFromOrder(lastOrder)
     showToast(
       lang === 'bn'
-        ? `আগের অর্ডারের ${count} টি সবজি কার্টে যোগ হয়েছে!`
+        ? `আগের অর্ডারের ${count} টি সামগ্রী কার্টে যোগ হয়েছে!`
         : `${count} items from last order added to cart!`,
       '🔁'
     )
@@ -199,16 +244,22 @@ export default function Shop() {
     return ['All', ...Array.from(set)]
   }, [shopProducts])
 
-  const filtered = shopProducts.filter((p) => {
-    const catOk = category === 'All' || p.category === category
-    const q = search.trim().toLowerCase()
-    const searchOk =
-      !q ||
-      p.name.toLowerCase().includes(q) ||
-      p.bnName.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q)
-    return catOk && searchOk
-  })
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: shopProducts.length }
+    shopProducts.forEach((p) => {
+      counts[p.category] = (counts[p.category] || 0) + 1
+    })
+    return counts
+  }, [shopProducts])
+
+  // Banglish & phonetic smart search filter
+  const filtered = useMemo(() => {
+    return shopProducts.filter((p) => {
+      const catOk = category === 'All' || p.category === category
+      const searchOk = !search.trim() || matchesProductQuery(p, search)
+      return catOk && searchOk
+    })
+  }, [shopProducts, category, search])
 
   const available = filtered.filter((p) => p.inStock)
   const unavailable = filtered.filter((p) => !p.inStock)
@@ -218,40 +269,39 @@ export default function Shop() {
   const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
 
   const currentMonth = new Date().getMonth()
-  const currentSeason = (currentMonth >= 2 && currentMonth <= 4) ? 'summer' : (currentMonth >= 5 && currentMonth <= 8) ? 'rainy' : 'winter'
-  const seasonalInStock = available.filter(p => p.season === currentSeason)
-  
+  const currentSeason =
+    currentMonth >= 2 && currentMonth <= 4
+      ? 'summer'
+      : currentMonth >= 5 && currentMonth <= 8
+        ? 'rainy'
+        : 'winter'
+  const seasonalInStock = available.filter((p) => p.season === currentSeason)
+
   const suggestions = useMemo(() => {
     if (cartTotal >= 300 && cartTotal < MIN_ORDER_AMOUNT) {
       return available
-        .filter(p => priceFor(p, 'B') >= shortfall)
+        .filter((p) => priceFor(p, 'B') >= shortfall)
         .sort((a, b) => priceFor(a, 'B') - priceFor(b, 'B'))
         .slice(0, 2)
     }
     return []
-  }, [cartTotal, MIN_ORDER_AMOUNT, available, shortfall, priceFor])
+  }, [cartTotal, available, shortfall, priceFor])
 
-  const handleAddDirect = (p: Product, g: Grade) => {
+  const handleAddDirect = (p: Product, g: Grade, qty = 1) => {
     if (!p.inStock) return
-    addToCart(p.id, g, 1)
+    addToCart(p.id, g, qty)
     showToast(
       lang === 'bn'
-        ? `${p.bnName} (গ্রেড ${g}) কার্টে যোগ হয়েছে!`
-        : `${p.name} (Grade ${g}) added to cart!`,
+        ? `${p.bnName} (${g}) কার্টে যোগ হয়েছে!`
+        : `${p.name} (${g}) added to cart!`,
       p.emoji || '✅'
     )
   }
 
-  const confirmAdd = () => {
-    if (!picked) return
-    addToCart(picked.id, grade, 1)
-    setPicked(null)
-    showToast(
-      lang === 'bn'
-        ? `${picked.bnName} কার্টে যোগ হয়েছে!`
-        : `${picked.name} added to cart!`,
-      picked.emoji || '✅'
-    )
+  const handleAddBulkStaples = (items: { product: Product; grade: Grade; qty: number }[]) => {
+    items.forEach((item) => {
+      addToCart(item.product.id, item.grade, item.qty)
+    })
   }
 
   const scrollToGrid = () => {
@@ -305,7 +355,7 @@ export default function Shop() {
 
   return (
     <div className="page shop-page">
-      {/* 🚀 Auto-Sliding Hero Banner */}
+      {/* 🚀 Hero Banner */}
       <section
         className="hero-full hero-slider-wrapper"
         style={{
@@ -315,7 +365,6 @@ export default function Shop() {
       >
         <div className="hero-full-shade hero-shade-strong" />
 
-        {/* Previous Arrow */}
         <button
           type="button"
           aria-label="Previous Slide"
@@ -325,7 +374,6 @@ export default function Shop() {
           ‹
         </button>
 
-        {/* Next Arrow */}
         <button
           type="button"
           aria-label="Next Slide"
@@ -339,12 +387,15 @@ export default function Shop() {
           <p className="hero-kicker hero-anim-1">{slides[heroSlide].kicker}</p>
           <h1 className="brand-hero light hero-anim-2">{slides[heroSlide].title}</h1>
           <p className="hero-sub hero-anim-3">{slides[heroSlide].sub}</p>
-          <button type="button" className="btn btn-primary hero-cta hero-anim-4" onClick={slides[heroSlide].onClick}>
+          <button
+            type="button"
+            className="btn btn-primary hero-cta hero-anim-4"
+            onClick={slides[heroSlide].onClick}
+          >
             {slides[heroSlide].buttonText}
           </button>
         </div>
 
-        {/* Dots */}
         <div className="hero-dots">
           {slides.map((_, i) => (
             <button
@@ -393,149 +444,173 @@ export default function Shop() {
       <div className="shop-body" id="veg-grid">
         {/* Repeat Last Order banner for returning customers */}
         {lastOrder && (
-          <div className="repeat-order-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '1px solid #86efac', borderRadius: '14px', padding: '0.85rem 1.1rem', marginBottom: '1.25rem' }}>
+          <div className="repeat-order-banner glass-mono-banner">
             <div>
-              <strong style={{ color: '#166534', fontSize: '0.95rem', display: 'block', marginBottom: '0.15rem' }}>
+              <strong className="repeat-banner-title">
                 {lang === 'bn' ? '🔁 আগের অর্ডার পুনরাবৃত্তি করুন' : '🔁 Repeat Your Last Order'}
               </strong>
-              <span style={{ fontSize: '0.82rem', color: '#15803d' }}>
-                {lang === 'bn'
-                  ? `${lastOrder.items.length}টি আইটেম (${lastOrder.items.map((i) => i.name).join(', ')})`
-                  : `${lastOrder.items.length} items (${lastOrder.items.map((i) => i.name).join(', ')})`}
+              <span className="repeat-banner-sub">
+                {lastOrder.items.length} {lang === 'bn' ? 'টি সামগ্রী' : 'items'} ({lastOrder.items.map((i) => i.name).join(', ')})
               </span>
             </div>
             <button
               type="button"
-              className="btn btn-primary"
+              className="glass-action-pill-btn"
               onClick={handleRepeatOrder}
-              style={{ whiteSpace: 'nowrap', padding: '0.45rem 0.9rem', fontSize: '0.88rem' }}
             >
-              {lang === 'bn' ? '১-ট্যাপ যোগ করুন' : '1-Tap Re-order'}
+              {lang === 'bn' ? '১-ট্যাপে যোগ করুন' : '1-Tap Re-order'}
             </button>
           </div>
         )}
 
-        {/* 🧺 Weekly Family Basket Promo Banner */}
-        <div
-          className="weekly-basket-promo-banner"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '0.85rem',
-            background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-            border: '1.5px solid #86efac',
-            borderRadius: '14px',
-            padding: '0.9rem 1.2rem',
-            marginBottom: '1.25rem',
-            boxShadow: '0 4px 12px rgba(22, 101, 52, 0.08)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-            <span style={{ fontSize: '2rem' }}>🧺</span>
-            <div>
-              <strong style={{ color: '#166534', fontSize: '0.98rem', display: 'block', marginBottom: '0.15rem' }}>
-                {lang === 'bn' ? 'সাপ্তাহিক পারিবারিক সবজি বাস্কেট' : 'Weekly Family Fresh Basket'}
-              </strong>
-              <span style={{ fontSize: '0.82rem', color: '#15803d' }}>
-                {lang === 'bn'
-                  ? 'আলু, পেঁয়াজ, টমেটো ও কাঁচা লঙ্কা — ৪টি দরকারি সবজির ১-ক্লিক প্যাক'
-                  : 'Potato, Onion, Tomato & Green Chili — 1-Tap complete fresh pack'}
-              </span>
-            </div>
-          </div>
+        {/* 🌟 Ultra-Compact Glass Quick-Actions Bar (Low Space, Clean & Premium) */}
+        <div className="glass-quick-bar">
           <button
             type="button"
-            className="btn btn-primary"
-            onClick={() => setShowBasketModal(true)}
-            style={{
-              whiteSpace: 'nowrap',
-              padding: '0.5rem 1rem',
-              fontSize: '0.88rem',
-              fontWeight: 700,
-              background: '#166534',
-              borderColor: '#166534',
-              borderRadius: '10px',
-              cursor: 'pointer',
-            }}
+            className="glass-quick-pill"
+            onClick={() => setShowUsualBasketModal(true)}
           >
-            {lang === 'bn' ? 'বাস্কেট দেখুন ➔' : 'View Basket ➔'}
+            <span className="glass-pill-icon">🧺</span>
+            <div className="glass-pill-text">
+              <strong className="glass-pill-bn">{lang === 'bn' ? 'আমার পছন্দের ফর্দ' : 'My Usual Basket'}</strong>
+              <span className="glass-pill-hint">1-Tap Essentials</span>
+            </div>
+            <span className="glass-pill-arrow">➔</span>
+          </button>
+
+          <button
+            type="button"
+            className="glass-quick-pill secondary"
+            onClick={() => setShowBasketModal(true)}
+          >
+            <span className="glass-pill-icon">📦</span>
+            <div className="glass-pill-text">
+              <strong className="glass-pill-bn">{lang === 'bn' ? 'পারিবারিক বাস্কেট' : 'Family Basket'}</strong>
+              <span className="glass-pill-hint">Curated Combo</span>
+            </div>
+            <span className="glass-pill-arrow">➔</span>
           </button>
         </div>
+
         {/* Cart minimum progress bar */}
-        <div className="cart-progress-wrap">
+        <div className="cart-progress-wrap glass-progress-wrap">
           <div className="cart-progress-header">
             <span className="cart-progress-label">
               {cartTotal === 0
-                ? (lang === 'bn' ? '🛒 কার্টে কিছু নেই' : '🛒 Cart is empty')
+                ? lang === 'bn'
+                  ? '🛒 কার্টে কিছু নেই'
+                  : '🛒 Cart is empty'
                 : progressPct >= 100
-                  ? (lang === 'bn' ? '🎉 মিনিমাম পূরণ হয়েছে!' : '🎉 Minimum reached!')
-                  : (lang === 'bn'
-                      ? `আর মাত্র ₹${shortfall} যোগ করুন — বিনামূল্যে ডেলিভারি পান!`
-                      : `Add ₹${shortfall} more for free delivery!`)}
+                  ? lang === 'bn'
+                    ? '🎉 মিনিমাম পূরণ হয়েছে!'
+                    : '🎉 Minimum reached!'
+                  : lang === 'bn'
+                    ? `আর মাত্র ₹${shortfall} যোগ করুন — বিনামূল্যে ডেলিভারি পান!`
+                    : `Add ₹${shortfall} more for free delivery!`}
             </span>
-            <span className="cart-progress-amount">₹{cartTotal} / ₹{MIN_ORDER_AMOUNT}</span>
+            <span className="cart-progress-amount-mono">₹{cartTotal} / ₹{MIN_ORDER_AMOUNT}</span>
           </div>
-          <div className="cart-progress-track" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100}>
+          <div
+            className="cart-progress-track"
+            role="progressbar"
+            aria-valuenow={progressPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
             <div className="cart-progress-fill" style={{ width: `${progressPct}%` }} />
           </div>
           {suggestions.length > 0 && (
             <div className="cart-suggestions">
-              {suggestions.map(p => (
+              {suggestions.map((p) => (
                 <button key={p.id} type="button" onClick={() => addToCart(p.id, 'B', 1)}>
-                  + {lang === 'bn' ? 'যোগ করুন' : 'Add'} {lang === 'bn' ? p.bnName : p.name} {p.unit} (₹{priceFor(p, 'B')}) {lang === 'bn' ? `₹${MIN_ORDER_AMOUNT} পৌঁছাতে` : `to reach ₹${MIN_ORDER_AMOUNT}`}
+                  + {lang === 'bn' ? 'যোগ করুন' : 'Add'} {p.bnName} / {p.name} (₹{priceFor(p, 'B')})
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        <div className="toolbar">
-          <label className="search-field">
-            <span className="sr-only">{t(lang, 'search')}</span>
+        {/* 🔍 Search Field with Banglish & Phonetic Support */}
+        <div className="shop-search-toolbar">
+          <div className="glass-search-field">
+            <span className="search-glass-icon">🔍</span>
             <input
+              type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={t(lang, 'search')}
+              placeholder={lang === 'bn' ? 'সবজি, মাছ বা Banglish খুঁজুন (যেমন: alu, potol, chingri, ada)…' : 'Search veggies, fish or Banglish (alu, potol, chingri)…'}
+              className="glass-search-input"
             />
-          </label>
-          <div className="cat-filters">
-            {categories.map((c) => (
+            {search && (
               <button
-                key={c}
                 type="button"
-                className={`chip ${category === c ? 'active' : ''}`}
-                onClick={() => setCategory(c)}
+                className="search-clear-btn"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
               >
-                {catLabel(lang, c)}
+                ✕
               </button>
-            ))}
+            )}
           </div>
         </div>
 
+        {/* 🏷️ Horizontal Visual Category Chips Bar */}
+        <CategoryBar
+          categories={categories}
+          selectedCategory={category}
+          onSelectCategory={setCategory}
+          lang={lang}
+          categoryCounts={categoryCounts}
+        />
+
         {loading ? (
           <div className="product-grid premium-grid">
-            {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+            {Array.from({ length: 8 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         ) : filtered.length === 0 ? (
-          <p className="empty">
-            {lang === 'bn' ? 'কোনো সবজি পাওয়া যায়নি।' : 'No vegetables match your search.'}
-          </p>
+          <div className="glass-empty-box">
+            <span className="glass-empty-icon">🔍</span>
+            <p className="glass-empty-text">
+              {lang === 'bn'
+                ? `"${search}" এর সাথে কোনো সবজি বা মাছ পাওয়া যায়নি।`
+                : `No items found matching "${search}".`}
+            </p>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setSearch('')
+                setCategory('All')
+              }}
+            >
+              {lang === 'bn' ? 'সব দেখুন' : 'Show All Items'}
+            </button>
+          </div>
         ) : (
           <>
             {seasonalInStock.length > 0 && category === 'All' && search === '' && (
-              <div className="season-banner">
-                {currentSeason === 'summer' ? '☀️' : currentSeason === 'rainy' ? '🌧️' : '❄️'} 
-                {lang === 'bn' ? 
-                  (currentSeason === 'summer' ? ' গ্রীষ্মকালীন' : currentSeason === 'rainy' ? ' বর্ষাকালীন' : ' শীতকালীন') + ` স্পেশাল (${seasonalInStock.length})` 
+              <div className="season-banner glass-season-banner">
+                {currentSeason === 'summer' ? '☀️' : currentSeason === 'rainy' ? '🌧️' : '❄️'}
+                {lang === 'bn'
+                  ? (currentSeason === 'summer'
+                      ? ' গ্রীষ্মকালীন'
+                      : currentSeason === 'rainy'
+                        ? ' বর্ষাকালীন'
+                        : ' শীতকালীন') + ` স্পেশাল (${seasonalInStock.length})`
                   : ` ${currentSeason.charAt(0).toUpperCase() + currentSeason.slice(1)} Season Specials (${seasonalInStock.length})`}
               </div>
             )}
+
             <section className="shop-section">
-              <h2 className="section-title">
-                {lang === 'bn' ? 'আজকের স্টক' : 'Available today'}
-                <span className="muted"> ({available.length})</span>
-              </h2>
+              <div className="section-title-row">
+                <h2 className="section-title">
+                  {lang === 'bn' ? 'আজকের তাজা স্টক' : 'Available Today'}
+                </h2>
+                <span className="section-count-mono">{available.length} ITEMS</span>
+              </div>
+
               {available.length === 0 ? (
                 <p className="empty">
                   {lang === 'bn' ? 'এখন স্টকে কিছু নেই।' : 'Nothing in stock right now.'}
@@ -558,14 +633,16 @@ export default function Shop() {
 
             {unavailable.length > 0 && (
               <section className="shop-section shop-section-old">
-                <h2 className="section-title">
-                  {lang === 'bn' ? 'এখন নেই (পরে আসতে পারে)' : 'Currently unavailable'}
-                  <span className="muted"> ({unavailable.length})</span>
-                </h2>
+                <div className="section-title-row">
+                  <h2 className="section-title">
+                    {lang === 'bn' ? 'এখন নেই (পরে আসতে পারে)' : 'Currently Out of Stock'}
+                  </h2>
+                  <span className="section-count-mono">{unavailable.length} ITEMS</span>
+                </div>
                 <p className="hint">
                   {lang === 'bn'
-                    ? 'স্টক আউট আইটেম নিচে সরে যায় — কার্টে যোগ করা যায় না।'
-                    : 'Out-of-stock items move here automatically — cannot add to cart.'}
+                    ? 'স্টক শেষ আইটেম নিচে দেখানো হচ্ছে — শীঘ্রই নতুন স্টক আসবে।'
+                    : 'Out-of-stock items shown here for reference.'}
                 </p>
                 <div className="product-grid premium-grid">
                   {unavailable.map((p) => (
@@ -587,51 +664,20 @@ export default function Shop() {
         <p className="shop-footnote">
           <Link to="/cart">{t(lang, 'viewCart')}</Link>
           {' · '}
-          {lang === 'bn'
-            ? 'পেমেন্ট: UPI QR + ম্যানুয়াল UTR'
-            : 'Pay via UPI QR + manual UTR'}
+          {lang === 'bn' ? 'পেমেন্ট: UPI QR + ম্যানুয়াল UTR' : 'Pay via UPI QR + manual UTR'}
         </p>
       </div>
 
-      {picked && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setPicked(null)}>
-          <div
-            className="modal premium-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="grade-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-photo">
-              <img src={resolveProductImage(picked.id, picked.imageUrl, `${picked.name} ${picked.bnName}`)} alt={picked.name} />
-            </div>
-            <h2 id="grade-title">{lang === 'bn' ? picked.bnName : picked.name}</h2>
-            <p className="muted">{t(lang, 'selectGrade')}</p>
-            <div className="grade-picker">
-              {(['A', 'B', 'C'] as Grade[]).map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  className={`grade-btn ${grade === g ? 'active' : ''}`}
-                  onClick={() => setGrade(g)}
-                >
-                  {t(lang, 'grade')} {g} · ₹{priceFor(picked, g)}
-                </button>
-              ))}
-            </div>
-            <div className="form-actions">
-              <button type="button" className="btn btn-primary" onClick={confirmAdd}>
-                {t(lang, 'addToCart')}
-              </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setPicked(null)}>
-                {t(lang, 'cancel')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 🧺 My Usual Basket Modal (Glass-Mono Popup) */}
+      <MyUsualBasketModal
+        isOpen={showUsualBasketModal}
+        onClose={() => setShowUsualBasketModal(false)}
+        products={products}
+        lang={lang}
+        onAddBulk={handleAddBulkStaples}
+      />
 
-      {/* 🧺 Weekly Family Basket Modal */}
+      {/* 📦 Weekly Family Basket Modal */}
       {showBasketModal && <WeeklyBasketModal onClose={() => setShowBasketModal(false)} />}
     </div>
   )
