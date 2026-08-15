@@ -289,31 +289,62 @@ export async function updateProfileDetails(userId: string, details: { name?: str
   return updateProfileField(userId, email, phone, details)
 }
 
-export async function fetchProducts(): Promise<Product[]> {
+// ── SWR Product In-Memory & LocalStorage Cache ─────────────────────────
+let memoryProductCache: { data: Product[]; timestamp: number } | null = null
+const PRODUCT_CACHE_TTL_MS = 4 * 60 * 1000 // 4 minutes client-side TTL
+
+export function invalidateProductCache(): void {
+  memoryProductCache = null
+  try {
+    localStorage.removeItem('gv_products_cache_v2')
+  } catch {}
+}
+
+export async function fetchProducts(forceRefresh = false): Promise<Product[]> {
+  const now = Date.now()
+
+  // 1. Return in-memory cache if valid & not forced
+  if (!forceRefresh && memoryProductCache && now - memoryProductCache.timestamp < PRODUCT_CACHE_TTL_MS) {
+    return memoryProductCache.data
+  }
+
+  // 2. Check localStorage cache if in-memory is empty
+  if (!forceRefresh && !memoryProductCache) {
+    try {
+      const raw = localStorage.getItem('gv_products_cache_v2')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (
+          parsed.timestamp &&
+          now - parsed.timestamp < PRODUCT_CACHE_TTL_MS &&
+          Array.isArray(parsed.data) &&
+          parsed.data.length > 0
+        ) {
+          memoryProductCache = { data: parsed.data, timestamp: parsed.timestamp }
+          return parsed.data
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Lightweight fetch from Supabase
   const client = requireClient()
   const { data, error } = await client.from('products').select('*').order('name')
   if (error) throw error
   const fetched = (data as ProductRow[]).map(mapProduct)
-  const fetchedIds = new Set(fetched.map((p) => p.id))
-  const missingSeeds = SEED_PRODUCTS.filter((sp) => !fetchedIds.has(sp.id))
+  const result = ensureAllSeedProducts(fetched)
 
-  if (missingSeeds.length > 0) {
-    try {
-      const rows = missingSeeds.map(productToRow)
-      await client.from('products').upsert(rows)
-      const { data: newData } = await client.from('products').select('*').order('name')
-      if (newData) {
-        const reFetched = (newData as ProductRow[]).map(mapProduct)
-        return ensureAllSeedProducts(reFetched)
-      }
-    } catch (e) {
-      console.warn('Failed to auto-sync seed products to cloud DB, merging locally:', e)
-    }
-  }
-  return ensureAllSeedProducts(fetched)
+  // Update in-memory & localStorage caches
+  memoryProductCache = { data: result, timestamp: now }
+  try {
+    localStorage.setItem('gv_products_cache_v2', JSON.stringify({ data: result, timestamp: now }))
+  } catch {}
+
+  return result
 }
 
 export async function upsertProduct(product: Product): Promise<Product> {
+  invalidateProductCache()
   const client = requireClient()
   const row = productToRow(product)
   let { data, error } = await client.from('products').upsert(row).select('*').single()
@@ -326,11 +357,13 @@ export async function upsertProduct(product: Product): Promise<Product> {
 }
 
 export async function insertProduct(product: Omit<Product, 'id'>): Promise<Product> {
+  invalidateProductCache()
   const id = `p-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
   return upsertProduct({ ...product, id })
 }
 
 export async function deleteProductApi(id: string): Promise<void> {
+  invalidateProductCache()
   const client = requireClient()
   const { error } = await client.from('products').delete().eq('id', id)
   if (error) {
@@ -340,10 +373,12 @@ export async function deleteProductApi(id: string): Promise<void> {
 }
 
 export async function setAllProductsInStock(): Promise<void> {
+  invalidateProductCache()
   const client = requireClient()
   const { error } = await client.from('products').update({ in_stock: true }).neq('id', '')
   if (error) throw error
 }
+
 
 export async function fetchOrders(userRole?: string, userId?: string, userEmail?: string, userPhone?: string): Promise<Order[]> {
   const client = requireClient()

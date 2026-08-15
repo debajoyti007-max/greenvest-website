@@ -237,14 +237,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!cloud) return
     return subscribeProducts(async () => {
       try {
-        const prods = await fetchProducts()
+        const prods = await fetchProducts(true)
         setProducts(prods)
-      } catch { /* */ }
+      } catch {}
     })
   }, [cloud])
 
   useEffect(() => {
+    // ⚡ Smart WebSocket Throttling:
+    // Only open persistent order websocket channels for staff (seller, admin, rider) who need live alerts.
+    // Regular customers use instant optimistic state updates to save concurrent connection limits and eliminate server load!
     if (!cloud || !user) return
+    const isStaff = user.role === 'seller' || user.role === 'admin' || user.role === 'rider'
+    if (!isStaff) return
+
     return subscribeOrders(() => {
       void refreshCloud()
     })
