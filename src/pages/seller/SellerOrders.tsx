@@ -10,7 +10,7 @@ import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled', 'refunded']
 
-type Filter = 'active' | 'utr' | 'to_pack' | 'today' | 'done' | 'cancelled' | 'all'
+type Filter = 'active' | 'utr' | 'to_pack' | 'today' | 'done' | 'archived' | 'cancelled' | 'all'
 
 const suffix = (n: number) => {
   if (n % 10 === 1 && n % 100 !== 11) return 'st'
@@ -19,37 +19,173 @@ const suffix = (n: number) => {
   return 'th'
 }
 
+// 🔔 4-Tone Pleasant Melodic Ringtone & Multi-Vibrate for Incoming Orders
 function playAlert() {
   try {
-    const ctx = new AudioContext()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.frequency.value = 800
-    gain.gain.value = 0.3
-    osc.start()
-    osc.stop(ctx.currentTime + 0.15)
-    setTimeout(() => {
-      const osc2 = ctx.createOscillator()
-      const gain2 = ctx.createGain()
-      osc2.connect(gain2)
-      gain2.connect(ctx.destination)
-      osc2.frequency.value = 1000
-      gain2.gain.value = 0.3
-      osc2.start()
-      osc2.stop(ctx.currentTime + 0.2)
-    }, 180)
-  } catch { /* */ }
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextClass) return
+    const ctx = new AudioContextClass()
+    
+    // Notes: C5 (523Hz), E5 (659Hz), G5 (784Hz), C6 (1046Hz)
+    const notes = [523.25, 659.25, 783.99, 1046.50]
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.1)
+      gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + i * 0.1 + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.1 + 0.3)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(ctx.currentTime + i * 0.1)
+      osc.stop(ctx.currentTime + i * 0.1 + 0.35)
+    })
+
+    if ('vibrate' in navigator) {
+      navigator.vibrate([300, 100, 300, 100, 400])
+    }
+  } catch (e) {
+    console.warn('Audio alert error:', e)
+  }
 }
 
 function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString()
 }
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+
+function isArchivedOld(order: Order) {
+  const isDone = order.status === 'delivered' || order.status === 'cancelled'
+  return isDone && (Date.now() - new Date(order.createdAt).getTime() > SEVEN_DAYS_MS)
+}
+
 function isCancelledOld(order: Order) {
   if (order.status !== 'cancelled') return false
   return Date.now() - new Date(order.updatedAt || order.createdAt).getTime() > 24 * 60 * 60 * 1000
+}
+
+// ⏱️ Order Age Badges: 🟢 Just Now (<10m) ➔ 🟡 Waiting 10-60m ➔ 🔴 Delayed >1h
+function renderOrderAgeBadge(createdAt: string, status: OrderStatus, lang: 'bn' | 'en') {
+  if (status === 'delivered' || status === 'cancelled') return null
+  const elapsedMins = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000))
+  
+  if (elapsedMins < 10) {
+    return (
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '3px',
+        fontSize: '0.68rem',
+        fontWeight: 700,
+        padding: '2px 7px',
+        borderRadius: '12px',
+        background: '#dcfce7',
+        color: '#15803d',
+        border: '1px solid #86efac',
+      }}>
+        🟢 {lang === 'bn' ? `সদ্য এসেছে (${elapsedMins} মি)` : `Just Now (${elapsedMins}m)`}
+      </span>
+    )
+  } else if (elapsedMins < 60) {
+    return (
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '3px',
+        fontSize: '0.68rem',
+        fontWeight: 700,
+        padding: '2px 7px',
+        borderRadius: '12px',
+        background: '#fef9c3',
+        color: '#854d0e',
+        border: '1px solid #fde047',
+      }}>
+        🟡 {lang === 'bn' ? `অপেক্ষমাণ (${elapsedMins} মি)` : `Waiting (${elapsedMins}m)`}
+      </span>
+    )
+  } else {
+    const hours = Math.floor(elapsedMins / 60)
+    const mins = elapsedMins % 60
+    return (
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '3px',
+        fontSize: '0.68rem',
+        fontWeight: 700,
+        padding: '2px 7px',
+        borderRadius: '12px',
+        background: '#fee2e2',
+        color: '#b91c1c',
+        border: '1px solid #fca5a5',
+      }}>
+        🔴 {lang === 'bn' ? `দেরি হচ্ছে (${hours}ঘ ${mins}মি)` : `Delayed (${hours}h ${mins}m)`}
+      </span>
+    )
+  }
+}
+
+// 📊 1-Click Excel / CSV Export
+function exportOrdersToCSV(ordersToExport: Order[], lang: 'bn' | 'en') {
+  if (ordersToExport.length === 0) {
+    showToast(lang === 'bn' ? 'এক্সপোর্ট করার মতো কোনো অর্ডার নেই' : 'No orders to export', '⚠️')
+    return
+  }
+
+  const headers = [
+    'Order ID',
+    'Date',
+    'Time',
+    'Customer Name',
+    'Phone',
+    'Address',
+    'PIN',
+    'Total Amount (INR)',
+    'Advance Paid (INR)',
+    'Balance Due (INR)',
+    'UTR / Ref',
+    'Status',
+    'Items Summary'
+  ]
+
+  const rows = ordersToExport.map(o => {
+    const d = new Date(o.createdAt)
+    const dateStr = d.toLocaleDateString('en-IN')
+    const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    const balance = Math.max(0, o.total - (o.advanceAmount || 0))
+    const itemsSummary = o.items.map(i => `${i.name} (${i.qty}x)`).join('; ')
+
+    return [
+      `"${o.id}"`,
+      `"${dateStr}"`,
+      `"${timeStr}"`,
+      `"${(o.userName || '').replace(/"/g, '""')}"`,
+      `"${o.phone || ''}"`,
+      `"${(o.address || '').replace(/"/g, '""')}"`,
+      `"${o.pin || ''}"`,
+      o.total,
+      o.advanceAmount || 0,
+      balance,
+      `"${o.utr || ''}"`,
+      `"${o.status}"`,
+      `"${itemsSummary.replace(/"/g, '""')}"`
+    ].join(',')
+  })
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n')
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.setAttribute('href', url)
+  link.setAttribute('download', `GreenVest_Orders_${new Date().toISOString().slice(0, 10)}.csv`)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+
+  showToast(lang === 'bn' ? '📊 এক্সেল / CSV রিপোর্ট ডাউনলোড হয়েছে!' : '📊 Orders exported to CSV!', '🎉')
 }
 
 const statusBn: Record<OrderStatus, string> = {
@@ -216,13 +352,14 @@ export default function SellerOrders() {
     // Category / Status Filter
     return sorted.filter(o => {
       if (filter === 'all') return true
-      if (filter !== 'cancelled' && isCancelledOld(o)) return false
+      if (filter === 'archived') return isArchivedOld(o)
+      if (filter === 'done') return o.status === 'delivered' && !isArchivedOld(o)
+      if (filter === 'cancelled') return o.status === 'cancelled'
+      if (isCancelledOld(o)) return false
       if (filter === 'utr') return !o.utrVerified && o.status !== 'cancelled'
       if (filter === 'to_pack') return (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))
       if (filter === 'today') return isToday(o.createdAt)
       if (filter === 'active') return o.status !== 'delivered' && o.status !== 'cancelled'
-      if (filter === 'done') return o.status === 'delivered'
-      if (filter === 'cancelled') return o.status === 'cancelled'
       return true
     })
   }, [orders, filter, customerFilter, searchQuery])
@@ -250,7 +387,8 @@ export default function SellerOrders() {
     { id: 'utr', en: 'Pending UTR ⏳', bn: 'UTR বাকি ⏳', count: orders.filter(o => !o.utrVerified && o.status !== 'cancelled').length },
     { id: 'to_pack', en: 'To Pack 📦', bn: 'প্যাকিং বাকি 📦', count: orders.filter(o => (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))).length },
     { id: 'today', en: 'Today 📅', bn: 'আজ 📅', count: todayOrders.length },
-    { id: 'done', en: 'Done ✅', bn: 'ডেলিভারড ✅', count: orders.filter(o => o.status === 'delivered').length },
+    { id: 'done', en: 'Done ✅', bn: 'ডেলিভারড ✅', count: orders.filter(o => o.status === 'delivered' && !isArchivedOld(o)).length },
+    { id: 'archived', en: 'Archived 📂', bn: 'আর্কাইভ 📂', count: orders.filter(o => isArchivedOld(o)).length },
     { id: 'cancelled', en: 'Trash / Cancelled ❌', bn: 'বাতিল / ট্র্যাশ ❌', count: orders.filter(o => o.status === 'cancelled').length },
     { id: 'all', en: 'All 🌐', bn: 'সব 🌐' },
   ]
@@ -259,11 +397,33 @@ export default function SellerOrders() {
 
   return (
     <div className="page" style={{ maxWidth: '800px', margin: '0 auto', paddingBottom: '3rem' }}>
-      <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: '1.2rem', margin: 0 }}>{lang === 'bn' ? '📋 অর্ডার ম্যানেজমেন্ট' : '📋 Order Management'}</h1>
-        <Link to="/seller" className="btn btn-ghost" style={{ fontSize: '0.85rem' }}>
-          {lang === 'bn' ? '← ড্যাশবোর্ড' : '← Dashboard'}
-        </Link>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => exportOrdersToCSV(filtered, lang)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              background: '#f0fdf4',
+              border: '1.5px solid #86efac',
+              color: '#166534',
+              padding: '0.35rem 0.75rem',
+              borderRadius: '8px',
+              cursor: 'pointer',
+            }}
+            title={lang === 'bn' ? 'এক্সেল / CSV ফাইল ডাউনলোড করুন' : 'Download orders as CSV / Excel spreadsheet'}
+          >
+            📊 {lang === 'bn' ? 'এক্সেল CSV' : 'Export CSV'} ({filtered.length})
+          </button>
+          <Link to="/seller" className="btn btn-ghost" style={{ fontSize: '0.85rem' }}>
+            {lang === 'bn' ? '← ড্যাশবোর্ড' : '← Dashboard'}
+          </Link>
+        </div>
       </div>
 
       {/* S7: Today's Summary Bar */}
@@ -424,6 +584,7 @@ export default function SellerOrders() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{o.userName}</span>
+                      {renderOrderAgeBadge(o.createdAt, o.status, lang)}
                       {/* S8: Quick call */}
                       <a href={`tel:${o.phone}`} onClick={e => e.stopPropagation()} style={{ fontSize: '0.85rem', textDecoration: 'none' }}>📞</a>
                       {historyCount <= 1 ? (
