@@ -525,6 +525,28 @@ export async function checkDuplicateUtrApi(utr: string): Promise<boolean> {
   return Boolean(data && data.length > 0)
 }
 
+export async function findRecentOrderByUtrApi(userId: string, utr: string): Promise<Order | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  const clean = utr.trim().toUpperCase()
+  if (!clean) return null
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*, order_items(*)')
+      .eq('user_id', userId)
+      .eq('utr', clean)
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (!error && data && data.length > 0) {
+      return mapOrder(data[0] as OrderRow)
+    }
+  } catch (e) {
+    console.warn('findRecentOrderByUtrApi fallback check error:', e)
+  }
+  return null
+}
+
 export async function verifyUtrApi(id: string, verified: boolean): Promise<void> {
   const client = requireClient()
   const patch: Record<string, unknown> = {

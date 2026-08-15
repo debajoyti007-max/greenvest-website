@@ -12,6 +12,7 @@ import {
 import {
   bulkUpdateOrderStatusApi,
   checkDuplicateUtrApi,
+  findRecentOrderByUtrApi,
   createOrder,
   deleteProductApi,
   fetchOrders,
@@ -92,6 +93,7 @@ interface StoreContextValue {
   updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>
   bulkUpdateOrderStatus: (ids: string[], status: OrderStatus) => Promise<void>
   checkDuplicateUtr: (utr: string) => Promise<boolean>
+  findRecentOrderByUtr: (utr: string) => Promise<Order | null>
   verifyUtr: (id: string, verified: boolean) => Promise<void>
   deleteOrder: (id: string) => Promise<void>
   refresh: () => Promise<void>
@@ -509,6 +511,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud],
   )
 
+  const findRecentOrderByUtr = useCallback(
+    async (utr: string): Promise<Order | null> => {
+      const clean = utr.trim().toUpperCase()
+      if (!clean || !user) return null
+      if (cloud) return findRecentOrderByUtrApi(user.id, clean)
+      const existing = getOrders()
+      const found = existing.find(
+        (o) => o.userId === user.id && o.utr.toUpperCase() === clean && o.status !== 'cancelled',
+      )
+      return found || null
+    },
+    [cloud, user],
+  )
+
   const updateOrderStatus = useCallback(
     async (id: string, status: OrderStatus) => {
       // Optimistically update React state for 0ms UI delay
@@ -723,6 +739,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateOrderStatus,
       bulkUpdateOrderStatus,
       checkDuplicateUtr,
+      findRecentOrderByUtr,
       verifyUtr,
       deleteOrder,
       refresh,
@@ -761,6 +778,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateOrderStatus,
       bulkUpdateOrderStatus,
       checkDuplicateUtr,
+      findRecentOrderByUtr,
       verifyUtr,
       deleteOrder,
       refresh,

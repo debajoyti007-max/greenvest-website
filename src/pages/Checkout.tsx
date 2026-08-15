@@ -7,14 +7,33 @@ import { calcDeliveryFee } from '../lib/delivery'
 import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
+import {
+  validateUtrStrict,
+  validatePhoneStrict,
+  getOrCreateCartIdempotencyKey,
+  clearCartIdempotencyKey,
+} from '../lib/validation'
 import type { Address, DeliveryZone } from '../types'
 
 export default function Checkout() {
   const { user } = useAuth()
-  const { cart, cartTotal, lang, placeOrder, orders, checkDuplicateUtr, fetchAddresses, fetchDeliveryZones, saveAddress, validateCoupon } = useStore()
+  const {
+    cart,
+    cartTotal,
+    lang,
+    placeOrder,
+    orders,
+    checkDuplicateUtr,
+    findRecentOrderByUtr,
+    fetchAddresses,
+    fetchDeliveryZones,
+    saveAddress,
+    validateCoupon,
+  } = useStore()
   const navigate = useNavigate()
 
   const userEditedAddress = useRef(false)
+  const submitLockRef = useRef(false)
   const [house, setHouse] = useState('')
   const [landmark, setLandmark] = useState('')
   const [area, setArea] = useState('')
@@ -31,6 +50,8 @@ export default function Checkout() {
   const [copied, setCopied] = useState(false)
   const [prefilled, setPrefilled] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [slowNetwork, setSlowNetwork] = useState(false)
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true)
 
   const [couponCode, setCouponCode] = useState('')
   const [couponApplied, setCouponApplied] = useState<{ discount: number; message: string } | null>(null)
@@ -47,11 +68,35 @@ export default function Checkout() {
   const advance = Math.ceil(grandTotal * 0.5)
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!user) return
     let active = true
-    fetchAddresses(user.id).then(addrs => { if (active) setSavedAddresses(addrs) })
-    fetchDeliveryZones().then(z => { if (active) { setZones(z); setZonesLoading(false) } }).catch(() => { setZonesLoading(false) })
-    return () => { active = false }
+    fetchAddresses(user.id).then((addrs) => {
+      if (active) setSavedAddresses(addrs)
+    })
+    fetchDeliveryZones()
+      .then((z) => {
+        if (active) {
+          setZones(z)
+          setZonesLoading(false)
+        }
+      })
+      .catch(() => {
+        setZonesLoading(false)
+      })
+    return () => {
+      active = false
+    }
   }, [user, fetchAddresses, fetchDeliveryZones])
 
   useEffect(() => {
@@ -101,9 +146,9 @@ export default function Checkout() {
     try {
       await navigator.clipboard.writeText(UPI_ID)
       setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
+      setTimeout(() => setCopied(false), 2000)
     } catch {
-      setCopied(false)
+      setError(lang === 'bn' ? 'কপি করা যায়নি — নিজে টাইপ করুন' : 'Could not copy — please type manually')
     }
   }
 
@@ -127,79 +172,157 @@ export default function Checkout() {
       () => {
         setDetectingGps(false)
         setError(lang === 'bn' ? 'GPS অবস্থান পাওয়া যায়নি' : 'Unable to detect GPS position')
-      }
+      },
     )
   }
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (submitting) return
+    // Anti-double-click atomic ref guard
+    if (submitLockRef.current || submitting) return
+    submitLockRef.current = true
     setError('')
-    setSubmitting(true)
+    setSlowNetwork(false)
 
     const fullAddress = `${house.trim()} ${landmark.trim() ? `(Near: ${landmark.trim()})` : ''} ${area.trim()} ${geoCoords ? `[Maps: ${geoCoords}]` : ''}`.trim()
 
     if (!house.trim() || !area.trim()) {
       setError(lang === 'bn' ? 'বাড়ি ও এলাকার নাম দিন' : 'Please enter your House name and Area/Village')
-      setSubmitting(false)
+      submitLockRef.current = false
       return
     }
-    if (!phone.trim()) {
-      setError(lang === 'bn' ? 'ফোন নম্বর দিন' : 'Please enter your phone number')
-      setSubmitting(false)
+
+    // 1. Strict 10-digit Indian Mobile Validation & Fake Blacklist Check
+    const phoneVal = validatePhoneStrict(phone)
+    if (!phoneVal.isValid) {
+      setError(lang === 'bn' ? phoneVal.errorBn : phoneVal.errorEn)
+      submitLockRef.current = false
       return
     }
+
     if (!pin.trim() || !/^\d{6}$/.test(pin.trim())) {
       setError(lang === 'bn' ? '৬ সংখ্যার পিন কোড দিন (যেমন: ৭২১৬৩২)' : 'Enter your 6-digit PIN code (e.g. 721632)')
-      setSubmitting(false)
+      submitLockRef.current = false
       return
     }
-    if (!utr.trim()) {
-      setError(lang === 'bn' ? 'UTR নম্বর দিন' : 'Please enter your UTR number')
-      setSubmitting(false)
+
+    // 2. Strict 12-digit UPI UTR Validation & Fake Blacklist Check
+    const utrVal = validateUtrStrict(utr)
+    if (!utrVal.isValid) {
+      setError(lang === 'bn' ? utrVal.errorBn : utrVal.errorEn)
+      submitLockRef.current = false
       return
     }
-    if (utr.trim().length < 8) {
-      setError(lang === 'bn' ? 'সঠিক UTR দিন' : 'Enter a valid UTR (min 8 characters)')
-      setSubmitting(false)
-      return
-    }
+
     if (cartTotal < MIN_ORDER_AMOUNT) {
       setError(
         lang === 'bn'
           ? `সর্বনিম্ন অর্ডার ₹${MIN_ORDER_AMOUNT}`
           : `Minimum order is ₹${MIN_ORDER_AMOUNT}`,
       )
-      setSubmitting(false)
+      submitLockRef.current = false
       return
     }
-    const isDup = await checkDuplicateUtr(utr.trim())
-    if (isDup) {
-      setError(
-        lang === 'bn'
-          ? 'এই UTR নম্বরটি আগেই ব্যবহৃত হয়েছে। নতুন UTR নম্বর দিন।'
-          : 'This UTR number has already been used for another order.',
-      )
-      setSubmitting(false)
-      return
-    }
+
+    setSubmitting(true)
+    // Trigger reassuring feedback if network takes >2.5s
+    const slowTimer = setTimeout(() => {
+      setSlowNetwork(true)
+    }, 2500)
+
     try {
+      // 3. Duplicate UTR check in database
+      const isDup = await checkDuplicateUtr(utrVal.cleanedValue)
+      if (isDup) {
+        setError(
+          lang === 'bn'
+            ? 'এই UTR নম্বরটি আগেই ব্যবহৃত হয়েছে। অনুগ্রহ করে আপনার নতুন পেমেন্টের আসল UTR নম্বর দিন।'
+            : 'This UTR number has already been used for another order. Please enter your new payment UTR.',
+        )
+        clearTimeout(slowTimer)
+        setSlowNetwork(false)
+        setSubmitting(false)
+        submitLockRef.current = false
+        return
+      }
+
+      // 4. Save address if opted
       if (saveAddressToDb) {
         try {
-          await saveAddress({ user_id: user.id, label: 'Saved', address: fullAddress, phone, pin: pin.trim(), is_default: savedAddresses.length === 0 })
+          await saveAddress({
+            user_id: user.id,
+            label: 'Saved',
+            address: fullAddress,
+            phone: phoneVal.cleanedValue,
+            pin: pin.trim(),
+            is_default: savedAddresses.length === 0,
+          })
         } catch (addrErr) {
           console.warn('Address save failed:', addrErr)
         }
       }
-      const order = await placeOrder({ address: fullAddress, phone, pin: pin.trim(), utr, deliverySlot: 'morning', discountAmount: couponApplied?.discount || 0, zones, geoLat, geoLng })
-      if (order) navigate(`/orders/success/${order.id}`, { state: { order } })
-      else setError(lang === 'bn' ? 'অর্ডার প্রসেস করা যাচ্ছে না। আবার চেষ্টা করুন।' : 'Could not place order. Please try again.')
+
+      // 5. Track idempotency session
+      getOrCreateCartIdempotencyKey(user.id, grandTotal)
+
+      // 6. Execute order placement
+      const order = await placeOrder({
+        address: fullAddress,
+        phone: phoneVal.cleanedValue,
+        pin: pin.trim(),
+        utr: utrVal.cleanedValue,
+        deliverySlot: 'morning',
+        discountAmount: couponApplied?.discount || 0,
+        zones,
+        geoLat,
+        geoLng,
+      })
+
+      clearTimeout(slowTimer)
+      clearCartIdempotencyKey(user.id)
+
+      if (order) {
+        navigate(`/orders/success/${order.id}`, { state: { order } })
+      } else {
+        // Fallback recovery check: did Supabase insert it despite network lag?
+        const recovered = await findRecentOrderByUtr(utrVal.cleanedValue)
+        if (recovered) {
+          navigate(`/orders/success/${recovered.id}`, { state: { order: recovered } })
+        } else {
+          setError(
+            lang === 'bn'
+              ? 'অর্ডার প্রসেস করা যাচ্ছে না। অনুগ্রহ করে ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।'
+              : 'Could not place order. Please check your internet connection and try again.',
+          )
+        }
+      }
     } catch (err) {
+      clearTimeout(slowTimer)
+      // Check if order succeeded despite client-side network drop
+      try {
+        const recovered = await findRecentOrderByUtr(utrVal.cleanedValue)
+        if (recovered) {
+          clearCartIdempotencyKey(user.id)
+          navigate(`/orders/success/${recovered.id}`, { state: { order: recovered } })
+          return
+        }
+      } catch (recErr) {
+        console.warn('Recovery check error:', recErr)
+      }
+
       const raw = err instanceof Error ? err.message : 'Order failed'
       if (/row-level security|policy/i.test(raw)) {
-        setError(lang === 'bn' ? 'অর্ডার করার অনুমতি নেই। আবার লগইন করুন।' : 'Permission denied. Please log out and log in again.')
+        setError(
+          lang === 'bn'
+            ? 'অর্ডার করার অনুমতি নেই। অনুগ্রহ করে একবার লগআউট করে আবার লগইন করুন।'
+            : 'Permission denied. Please log out and log in again.',
+        )
       } else if (/network|fetch|timeout/i.test(raw)) {
-        setError(lang === 'bn' ? 'ইন্টারনেট সমস্যা। আবার চেষ্টা করুন।' : 'Network error. Check your internet and try again.')
+        setError(
+          lang === 'bn'
+            ? 'ইন্টারনেট সমস্যা বা সংযোগ বিচ্ছিন্ন হয়েছে। আবার চেষ্টা করুন।'
+            : 'Network timeout. Check your internet connection and try again.',
+        )
       } else {
         setError(raw)
       }
@@ -430,13 +553,55 @@ export default function Checkout() {
             ⚡ <strong>{lang === 'bn' ? 'ডেলিভারি সময়:' : 'Delivery Timeframe:'}</strong> {lang === 'bn' ? `অর্ডার করার ${DELIVERY_WINDOW_BN}-এর মধ্যে সরাসরি ডোরস্টেপ ডেলিভারি।` : `Guaranteed doorstep delivery within ${DELIVERY_WINDOW}.`}
           </div>
 
+          {/* 📶 Network Offline Alert */}
+          {!isOnline && (
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1.5px solid #fca5a5',
+                borderRadius: '12px',
+                padding: '0.75rem 1rem',
+                color: '#991b1b',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.5rem',
+              }}
+            >
+              <span>⚠️</span>
+              <span>
+                {lang === 'bn'
+                  ? 'আপনার ইন্টারনেট সংযোগ বিচ্ছিন্ন! পুনরায় কানেক্ট হওয়ার চেষ্টা চলছে...'
+                  : 'You appear to be offline! Attempting to reconnect...'}
+              </span>
+            </div>
+          )}
+
           <label>
-            {t(lang, 'phone')}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span>{t(lang, 'phone')}</span>
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontFamily: 'monospace',
+                  fontWeight: 700,
+                  color: phone.length === 10 ? '#16a34a' : '#6b7280',
+                }}
+              >
+                {phone.length === 10
+                  ? (lang === 'bn' ? '✅ ১০ সংখ্যা ঠিক আছে' : '✅ 10 digits')
+                  : `${phone.length}/10 ${lang === 'bn' ? 'সংখ্যা' : 'digits'}`}
+              </span>
+            </div>
             <input
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
               required
-              placeholder={lang === 'bn' ? '১০ সংখ্যার মোবাইল' : '10-digit mobile'}
+              inputMode="numeric"
+              maxLength={10}
+              placeholder={lang === 'bn' ? '১০ সংখ্যার মোবাইল (যেমন 9876543210)' : '10-digit mobile (e.g. 9876543210)'}
             />
           </label>
           <label>
@@ -455,14 +620,33 @@ export default function Checkout() {
             {lang === 'bn' ? 'ভবিষ্যতের জন্য এই ঠিকানা সংরক্ষণ করুন' : 'Save this address for future'}
           </label>
           <label>
-            {t(lang, 'utrLabel')}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span>{t(lang, 'utrLabel')}</span>
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontFamily: 'monospace',
+                  fontWeight: 700,
+                  color: utr.length === 12 ? '#16a34a' : '#6b7280',
+                }}
+              >
+                {utr.length === 12
+                  ? (lang === 'bn' ? '✅ ১২ সংখ্যা সম্পূর্ণ' : '✅ 12 digits valid')
+                  : `${utr.length}/12 ${lang === 'bn' ? 'সংখ্যা' : 'digits'}`}
+              </span>
+            </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <input
                 value={utr}
-                onChange={(e) => setUtr(e.target.value)}
-                placeholder={lang === 'bn' ? 'যেমন 123456789012' : 'e.g. 123456789012'}
+                onChange={(e) => {
+                  setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))
+                  setError('')
+                }}
+                placeholder={lang === 'bn' ? '১২ সংখ্যার UTR (যেমন 408123456789)' : '12-digit UTR (e.g. 408123456789)'}
                 required
-                style={{ flex: 1 }}
+                maxLength={12}
+                inputMode="numeric"
+                style={{ flex: 1, letterSpacing: '0.05rem', fontFamily: 'monospace', fontWeight: 700 }}
               />
               <button
                 type="button"
@@ -470,8 +654,9 @@ export default function Checkout() {
                 onClick={async () => {
                   try {
                     const text = await navigator.clipboard.readText()
-                    if (text && /^\d{12,}$/.test(text.trim())) {
-                      setUtr(text.trim())
+                    const cleaned = text.replace(/\D/g, '').slice(0, 12)
+                    if (cleaned) {
+                      setUtr(cleaned)
                       setUtrPasted(true)
                     }
                   } catch (err) {}
@@ -484,7 +669,38 @@ export default function Checkout() {
           {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '-0.5rem' }}>UTR auto-filled from clipboard</p>}
           {error && <p className="form-error">{error}</p>}
 
-          <button type="submit" className="btn btn-primary" disabled={submitting}>
+          {/* ⏳ Slow Network Status Box */}
+          {submitting && slowNetwork && (
+            <div
+              style={{
+                background: '#eff6ff',
+                border: '1.5px solid #93c5fd',
+                borderRadius: '12px',
+                padding: '0.85rem 1rem',
+                color: '#1e40af',
+                fontSize: '0.85rem',
+                lineHeight: 1.4,
+                marginBottom: '0.75rem',
+                display: 'flex',
+                gap: '0.75rem',
+                alignItems: 'center',
+              }}
+            >
+              <span style={{ fontSize: '1.4rem' }}>⏳</span>
+              <div>
+                <strong style={{ display: 'block', marginBottom: '0.15rem' }}>
+                  {lang === 'bn' ? 'নেটওয়ার্ক ধীরগতির — প্রসেসিং চলছে...' : 'Slow Connection — Processing order...'}
+                </strong>
+                <span>
+                  {lang === 'bn'
+                    ? 'আপনার অর্ডারটি নিরাপদে রেকর্ড হচ্ছে। অনুগ্রহ করে পেজ রিফ্রেশ বা ব্যাক করবেন না।'
+                    : 'Your order is being securely saved. Please do not refresh or close this tab.'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <button type="submit" className="btn btn-primary" disabled={submitting || !isOnline}>
             {submitting ? (lang === 'bn' ? '⏳ অর্ডার হচ্ছে...' : '⏳ Placing order...') : t(lang, 'placeOrder')}
           </button>
         </form>
