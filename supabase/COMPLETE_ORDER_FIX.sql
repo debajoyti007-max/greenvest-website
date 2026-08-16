@@ -1,5 +1,5 @@
 -- ================================================================
--- GREENVEST — COMPLETE DATABASE & ORDER FIX (MASTER SCRIPT)
+-- GREENVEST — COMPLETE DATABASE & ORDER FIX (MASTER SCRIPT V2)
 -- Copy and run this entire script in Supabase Dashboard -> SQL Editor -> Run
 -- ================================================================
 
@@ -7,7 +7,81 @@
 DROP TRIGGER IF EXISTS validate_order_total_trigger ON public.orders;
 DROP FUNCTION IF EXISTS public.validate_order_total();
 
--- 2. FIX FOREIGN KEYS ON PROFILES & ORDERS (Allow Phone Login UUIDs)
+-- 2. ENSURE ALL TABLES EXIST WITH BASE SCHEMA
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id text PRIMARY KEY,
+  email text,
+  name text,
+  role text NOT NULL DEFAULT 'customer',
+  phone text,
+  "isBlocked" boolean NOT NULL DEFAULT false,
+  is_blocked boolean NOT NULL DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.addresses (
+  id bigserial PRIMARY KEY,
+  user_id text NOT NULL,
+  label text,
+  address text NOT NULL,
+  phone text NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.coupons (
+  id bigserial PRIMARY KEY,
+  code text NOT NULL UNIQUE,
+  discount_type text NOT NULL DEFAULT 'flat' CHECK (discount_type IN ('flat', 'percent')),
+  discount_value numeric NOT NULL DEFAULT 0,
+  min_order numeric NOT NULL DEFAULT 0,
+  max_uses int,
+  used_count int NOT NULL DEFAULT 0,
+  valid_from timestamptz DEFAULT now(),
+  valid_until timestamptz,
+  expires_at timestamptz,
+  active boolean NOT NULL DEFAULT true,
+  valid boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.orders (
+  id text PRIMARY KEY,
+  user_id text,
+  user_name text,
+  user_email text,
+  subtotal numeric NOT NULL DEFAULT 0,
+  delivery_fee numeric NOT NULL DEFAULT 0,
+  discount numeric NOT NULL DEFAULT 0,
+  total numeric NOT NULL DEFAULT 0,
+  advance_amount numeric NOT NULL DEFAULT 0,
+  payment_type text NOT NULL DEFAULT 'advance',
+  utr text,
+  utr_verified boolean NOT NULL DEFAULT false,
+  status text NOT NULL DEFAULT 'pending',
+  address text,
+  phone text,
+  pin text,
+  delivery_slot text DEFAULT 'morning',
+  geo_lat double precision,
+  geo_lng double precision,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.order_items (
+  id bigserial PRIMARY KEY,
+  order_id text,
+  product_id text,
+  name text,
+  emoji text,
+  grade text DEFAULT 'B',
+  qty numeric NOT NULL DEFAULT 1,
+  unit_price numeric NOT NULL DEFAULT 0,
+  weight_multiplier numeric NOT NULL DEFAULT 1,
+  weight_label text NOT NULL DEFAULT '1 kg'
+);
+
+-- 3. FIX FOREIGN KEYS ON PROFILES & ORDERS (Allow Phone Login UUIDs)
 DO $$
 BEGIN
   -- Drop restrictive auth.users FK on profiles if present
@@ -34,7 +108,7 @@ BEGIN
   END IF;
 END $$;
 
--- 3. ENSURE ALL ORDER COLUMNS EXIST
+-- 4. ENSURE ALL COLUMNS EXIST ON ORDERS, ORDER_ITEMS, PROFILES
 ALTER TABLE public.orders 
   ADD COLUMN IF NOT EXISTS discount numeric NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS payment_type text NOT NULL DEFAULT 'advance',
@@ -42,17 +116,15 @@ ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS geo_lat double precision,
   ADD COLUMN IF NOT EXISTS geo_lng double precision;
 
--- 4. ENSURE ALL ORDER_ITEMS COLUMNS EXIST
 ALTER TABLE public.order_items 
   ADD COLUMN IF NOT EXISTS weight_multiplier numeric NOT NULL DEFAULT 1,
   ADD COLUMN IF NOT EXISTS weight_label text NOT NULL DEFAULT '1 kg';
 
--- 5. ENSURE PROFILES COLUMNS EXIST
 ALTER TABLE public.profiles 
   ADD COLUMN IF NOT EXISTS "isBlocked" boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS is_blocked boolean NOT NULL DEFAULT false;
 
--- 6. CONFIGURE RLS POLICIES FOR ORDERS & ORDER_ITEMS
+-- 5. CONFIGURE RLS POLICIES
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -87,7 +159,7 @@ CREATE POLICY "Allow public all on profiles" ON public.profiles FOR ALL TO anon,
 CREATE POLICY "Allow public all on addresses" ON public.addresses FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public select on coupons" ON public.coupons FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- 7. RE-CREATE UTR VALIDATOR (Only check active uniqueness)
+-- 6. RE-CREATE UTR VALIDATOR (Active order uniqueness)
 CREATE OR REPLACE FUNCTION public.validate_utr()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -113,10 +185,10 @@ BEFORE INSERT OR UPDATE ON public.orders
 FOR EACH ROW
 EXECUTE FUNCTION public.validate_utr();
 
--- 8. ATOMIC ORDER CREATION RPC
+-- 7. ATOMIC ORDER CREATION RPC
 CREATE OR REPLACE FUNCTION public.create_order_atomic(
   p_id text,
-  p_user_id uuid,
+  p_user_id text,
   p_user_name text,
   p_user_email text,
   p_address text,
@@ -199,7 +271,7 @@ BEGIN
   INSERT INTO public.profiles (id, email, name, role, phone, created_at)
   VALUES (
     p_user_id,
-    COALESCE(p_user_email, p_user_id::text || '@greenvest.shop'),
+    COALESCE(p_user_email, p_user_id || '@greenvest.shop'),
     COALESCE(p_user_name, 'Customer'),
     'customer',
     p_phone,
