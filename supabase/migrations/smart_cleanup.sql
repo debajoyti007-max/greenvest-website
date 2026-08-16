@@ -122,8 +122,8 @@ BEGIN
   WITH deleted AS (
     DELETE FROM public.profiles
     WHERE role = 'customer'
-      AND (is_blocked IS NULL OR is_blocked = false)
-      AND coalesce(last_active_at, created_at) < (now() - (days_inactive || ' days')::interval)
+      AND ("isBlocked" IS NULL OR "isBlocked" = false)
+      AND coalesce(created_at, now()) < (now() - (days_inactive || ' days')::interval)
       -- Safeguard: do not delete users who have completed orders in the last 60 days
       AND id NOT IN (
         SELECT DISTINCT user_id FROM public.orders 

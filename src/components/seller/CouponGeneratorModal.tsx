@@ -122,7 +122,7 @@ export default function CouponGeneratorModal({ onClose }: CouponGeneratorModalPr
   }
 
   const handleShareWhatsApp = (msg: string) => {
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank')
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
   }
 
   return (

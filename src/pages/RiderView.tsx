@@ -56,7 +56,7 @@ export default function RiderView() {
     const msg = encodeURIComponent(
       `নমস্কার ${userName}, আপনার GreenVest অর্ডার #${id.slice(0, 6)} রাইডারের কাছে ডেলিভারির জন্য রওয়ানা হয়েছে! 🛵`
     )
-    window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
+    window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank', 'noopener,noreferrer')
   }
 
   const sendDeliveredInvoiceWA = (o: typeof orders[0]) => {
@@ -66,7 +66,7 @@ export default function RiderView() {
     const msg = encodeURIComponent(
       `🎉 *GreenVest ডেলিভারি সম্পন্ন*\n\nনমস্কার ${o.userName},\nআপনার অর্ডার #${o.id.slice(0, 6)} সফলভাবে ডেলিভারি করা হয়েছে।\n\n📦 *সামগ্রী:*\n${itemsText}\n\n💰 মোট: ₹${o.total}\n💵 সংগৃহীত ক্যাশ: ₹${balance}\n\nধন্যবাদ! তাজা শাকসবজির জন্য আবার GreenVest ব্যবহার করুন 🌱`
     )
-    window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
+    window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank', 'noopener,noreferrer')
   }
 
   return (

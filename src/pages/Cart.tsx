@@ -44,9 +44,12 @@ export default function Cart() {
         {cart.map((item) => {
           const p = products.find((x) => x.id === item.productId)
           if (!p) return null
-          const line = priceFor(p, item.grade) * item.qty
+          const mult = item.weightMultiplier || 1
+          const unitPrice = Math.round(priceFor(p, item.grade) * mult)
+          const line = unitPrice * item.qty
+          const weightDisplay = item.weightLabel || (mult === 1 ? p.unit : mult === 0.25 ? '250g' : mult === 0.5 ? '500g' : `${mult}kg`)
           return (
-            <li key={`${item.productId}-${item.grade}`} className="cart-row">
+            <li key={`${item.productId}-${item.grade}-${mult}`} className="cart-row">
               <span className="cart-emoji">{p.emoji}</span>
               <div className="cart-info">
                 <div className="cart-dual-title">
@@ -54,20 +57,21 @@ export default function Cart() {
                   <span className="cart-en">{p.name}</span>
                 </div>
                 <span className="cart-meta-mono">
-                  {t(lang, 'grade')} {item.grade} · ₹{priceFor(p, item.grade)}/{p.unit}
+                  {t(lang, 'grade')} {item.grade} {weightDisplay ? `· ${weightDisplay}` : ''} · ₹{unitPrice}
+                  {mult !== 1 ? ` (₹${priceFor(p, item.grade)}/${p.unit})` : `/${p.unit}`}
                 </span>
               </div>
               <div className="qty-controls">
                 <button
                   type="button"
-                  onClick={() => updateCartQty(item.productId, item.grade, item.qty - 1)}
+                  onClick={() => updateCartQty(item.productId, item.grade, item.qty - 1, mult)}
                 >
                   −
                 </button>
                 <span>{item.qty}</span>
                 <button
                   type="button"
-                  onClick={() => updateCartQty(item.productId, item.grade, item.qty + 1)}
+                  onClick={() => updateCartQty(item.productId, item.grade, item.qty + 1, mult)}
                 >
                   +
                 </button>
@@ -76,7 +80,7 @@ export default function Cart() {
               <button
                 type="button"
                 className="btn btn-ghost"
-                onClick={() => removeFromCart(item.productId, item.grade)}
+                onClick={() => removeFromCart(item.productId, item.grade, mult)}
               >
                 {t(lang, 'remove')}
               </button>
@@ -152,13 +156,16 @@ export default function Cart() {
             const lines = cart.map(c => {
               const p = products.find(x => x.id === c.productId)
               const name = p ? (lang === 'bn' ? p.bnName : p.name) : 'Item'
-              const price = p ? priceFor(p, c.grade) * c.qty : 0
-              return `• ${name} (Grade ${c.grade}) × ${c.qty} = ₹${price}`
+              const mult = c.weightMultiplier || 1
+              const unitPrice = p ? Math.round(priceFor(p, c.grade) * mult) : 0
+              const price = unitPrice * c.qty
+              const wLbl = c.weightLabel ? ` [${c.weightLabel}]` : ''
+              return `• ${name}${wLbl} (Grade ${c.grade}) × ${c.qty} = ₹${price}`
             })
             const text = encodeURIComponent(
               `নমস্কার GreenVest, আমি নিচের সবজিগুলো অর্ডার করতে চাই:\n\n${lines.join('\n')}\n\nমোট মূল্য: ₹${cartTotal}\n\nঅনুগ্রহ করে ডেলিভারি ও পেমেন্ট কনফার্ম করুন।`
             )
-            window.open(`https://wa.me/${SUPPORT_WHATSAPP}?text=${text}`, '_blank')
+            window.open(`https://wa.me/${SUPPORT_WHATSAPP}?text=${text}`, '_blank', 'noopener,noreferrer')
           }}
           style={{
             display: 'flex',

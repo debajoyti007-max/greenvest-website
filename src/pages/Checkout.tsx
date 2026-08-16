@@ -279,6 +279,8 @@ export default function Checkout() {
         zones,
         geoLat,
         geoLng,
+        paymentType: paymentMode,
+        advanceAmount: payableAmount,
       })
 
       clearTimeout(slowTimer)
@@ -333,7 +335,9 @@ export default function Checkout() {
         setError(raw)
       }
     } finally {
+      clearTimeout(slowTimer)
       setSubmitting(false)
+      setSlowNetwork(false)
     }
   }
 
@@ -740,7 +744,7 @@ export default function Checkout() {
                       setUtr(cleaned)
                       setUtrPasted(true)
                     }
-                  } catch (err) {}
+                  } catch {}
                 }}
               >
                 📋 {lang === 'bn' ? 'পেস্ট' : 'Paste'}

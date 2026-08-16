@@ -1,19 +1,31 @@
 import type { Order } from '../types'
 import { DELIVERY_SLOTS } from './business'
 
+function escapeHtml(str: unknown): string {
+  if (str == null) return ''
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
 export function printOrderInvoice(order: Order) {
   const rows = order.items
     .map(
-      (it) =>
-        `<tr><td>${it.emoji} ${it.name} (G${it.grade})</td><td>${it.qty}</td><td>₹${it.unitPrice}</td><td>₹${it.unitPrice * it.qty}</td></tr>`,
+      (it) => {
+        const weightText = it.weightLabel ? ` [${escapeHtml(it.weightLabel)}]` : ''
+        return `<tr><td>${escapeHtml(it.emoji)} ${escapeHtml(it.name)}${weightText} (G${escapeHtml(it.grade)})</td><td>${Number(it.qty)}</td><td>₹${Number(it.unitPrice)}</td><td>₹${Number(it.unitPrice) * Number(it.qty)}</td></tr>`
+      }
     )
     .join('')
 
   const slotLabel = order.deliverySlot
-    ? DELIVERY_SLOTS[order.deliverySlot].en
+    ? escapeHtml(DELIVERY_SLOTS[order.deliverySlot].en)
     : '—'
 
-  const html = `<!DOCTYPE html><html><head><title>Invoice ${order.id}</title>
+  const html = `<!DOCTYPE html><html><head><title>Invoice ${escapeHtml(order.id)}</title>
   <style>
     body{font-family:'Hind Siliguri','Noto Sans Bengali','Nirmala UI',system-ui,sans-serif;padding:24px;color:#111}
     h1{margin:0 0 4px} .muted{color:#666;font-size:14px}
@@ -23,21 +35,23 @@ export function printOrderInvoice(order: Order) {
     .tot{margin-top:16px;font-size:16px}
   </style></head><body>
   <h1>GreenVest Invoice</h1>
-  <p class="muted">${order.id} · ${new Date(order.createdAt).toLocaleString()}</p>
-  <p><strong>${order.userName}</strong><br/>${order.phone}<br/>${order.address}<br/>PIN ${order.pin}<br/>Slot: ${slotLabel}</p>
+  <p class="muted">${escapeHtml(order.id)} · ${new Date(order.createdAt).toLocaleString()}</p>
+  <p><strong>${escapeHtml(order.userName)}</strong><br/>${escapeHtml(order.phone)}<br/>${escapeHtml(order.address)}<br/>PIN ${escapeHtml(order.pin)}<br/>Slot: ${slotLabel}</p>
   <table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
   <tbody>${rows}</tbody></table>
   <div class="tot">
-    <div>Subtotal: ₹${order.subtotal}</div>
-    <div>Delivery: ₹${order.deliveryFee}</div>
-    <div><strong>Total: ₹${order.total}</strong></div>
-    <div>Advance (50%): ₹${order.advanceAmount}</div>
-    <div>UTR: ${order.utr} ${order.utrVerified ? '(verified)' : '(pending)'}</div>
+    <div>Subtotal: ₹${Number(order.subtotal)}</div>
+    <div>Delivery: ₹${Number(order.deliveryFee)}</div>
+    ${order.discountAmount ? `<div style="color:#16a34a">Discount: -₹${Number(order.discountAmount)}</div>` : ''}
+    <div><strong>Total: ₹${Number(order.total)}</strong></div>
+    <div>Paid Amount: ₹${Number(order.advanceAmount)} (${order.paymentType === 'full' ? '100% Full' : '50% Advance'})</div>
+    <div>Balance Due: ₹${Math.max(0, Number(order.total) - Number(order.advanceAmount))}</div>
+    <div>UTR: ${escapeHtml(order.utr)} ${order.utrVerified ? '(verified)' : '(pending)'}</div>
   </div>
   <script>window.onload=()=>window.print()</script>
   </body></html>`
 
-  const w = window.open('', '_blank', 'width=720,height=900')
+  const w = window.open('', '_blank', 'width=720,height=900,noopener,noreferrer')
   if (!w) return
   w.document.write(html)
   w.document.close()
@@ -47,16 +61,18 @@ export function printOrderInvoice(order: Order) {
 export function printThermalReceipt(order: Order) {
   const rows = order.items
     .map(
-      (it) =>
-        `<div>${it.name.slice(0, 14)} (G${it.grade}) x${it.qty} = ₹${it.unitPrice * it.qty}</div>`,
+      (it) => {
+        const weightText = it.weightLabel ? ` [${escapeHtml(it.weightLabel)}]` : ''
+        return `<div>${escapeHtml(it.name.slice(0, 14))}${weightText} (G${escapeHtml(it.grade)}) x${Number(it.qty)} = ₹${Number(it.unitPrice) * Number(it.qty)}</div>`
+      }
     )
     .join('')
 
   const slot = order.deliverySlot
-    ? DELIVERY_SLOTS[order.deliverySlot].en
+    ? escapeHtml(DELIVERY_SLOTS[order.deliverySlot].en)
     : 'Standard'
 
-  const html = `<!DOCTYPE html><html><head><title>Thermal Receipt ${order.id}</title>
+  const html = `<!DOCTYPE html><html><head><title>Thermal Receipt ${escapeHtml(order.id)}</title>
   <style>
     @page { size: 58mm auto; margin: 0; }
     body { font-family: monospace; width: 58mm; padding: 4px; margin: 0; font-size: 11px; color: #000; }
@@ -67,25 +83,27 @@ export function printThermalReceipt(order: Order) {
   <div class="c b">GREENVEST</div>
   <div class="c">Fresh Vegetables</div>
   <div class="hr"></div>
-  <div>ID: ${order.id}</div>
+  <div>ID: ${escapeHtml(order.id)}</div>
   <div>Date: ${new Date(order.createdAt).toLocaleDateString()}</div>
-  <div>Cust: ${order.userName.slice(0, 16)}</div>
-  <div>Ph: ${order.phone}</div>
+  <div>Cust: ${escapeHtml(order.userName.slice(0, 16))}</div>
+  <div>Ph: ${escapeHtml(order.phone)}</div>
   <div>Slot: ${slot}</div>
   <div class="hr"></div>
   ${rows}
   <div class="hr"></div>
-  <div>Subtotal: ₹${order.subtotal}</div>
-  <div>Delivery: ₹${order.deliveryFee}</div>
-  <div class="b">Total: ₹${order.total}</div>
-  <div>Advance: ₹${order.advanceAmount}</div>
-  <div>UTR: ${order.utr}</div>
+  <div>Subtotal: ₹${Number(order.subtotal)}</div>
+  <div>Delivery: ₹${Number(order.deliveryFee)}</div>
+  ${order.discountAmount ? `<div>Discount: -₹${Number(order.discountAmount)}</div>` : ''}
+  <div class="b">Total: ₹${Number(order.total)}</div>
+  <div>Paid: ₹${Number(order.advanceAmount)}</div>
+  <div>Due: ₹${Math.max(0, Number(order.total) - Number(order.advanceAmount))}</div>
+  <div>UTR: ${escapeHtml(order.utr)}</div>
   <div class="hr"></div>
   <div class="c">Thank You!</div>
   <script>window.onload=()=>window.print()</script>
   </body></html>`
 
-  const w = window.open('', '_blank', 'width=320,height=600')
+  const w = window.open('', '_blank', 'width=320,height=600,noopener,noreferrer')
   if (!w) return
   w.document.write(html)
   w.document.close()
@@ -101,39 +119,42 @@ export function printPackingList(orders: Order[], lang: 'en' | 'bn' = 'en') {
 
   const section = (title: string, list: Order[]) => {
     if (list.length === 0) {
-      return `<h2>${title}</h2><p class="muted">${lang === 'bn' ? 'কোনো অর্ডার নেই' : 'No orders'}</p>`
+      return `<h2>${escapeHtml(title)}</h2><p class="muted">${lang === 'bn' ? 'কোনো অর্ডার নেই' : 'No orders'}</p>`
     }
     const blocks = list
       .map((o) => {
         const items = o.items
-          .map((it) => `<li>${it.emoji} ${it.name} (G${it.grade}) × ${it.qty}</li>`)
+          .map((it) => {
+            const weightText = it.weightLabel ? ` [${escapeHtml(it.weightLabel)}]` : ''
+            return `<li>${escapeHtml(it.emoji)} ${escapeHtml(it.name)}${weightText} (G${escapeHtml(it.grade)}) × ${Number(it.qty)}</li>`
+          })
           .join('')
         return `<div class="block">
-          <strong>${o.id}</strong> · ${o.userName} · ${o.phone}
-          <div class="muted">${o.address}${o.pin ? ` · PIN ${o.pin}` : ''}</div>
+          <strong>${escapeHtml(o.id)}</strong> · ${escapeHtml(o.userName)} · ${escapeHtml(o.phone)}
+          <div class="muted">${escapeHtml(o.address)}${o.pin ? ` · PIN ${escapeHtml(o.pin)}` : ''}</div>
           <ul>${items}</ul>
         </div>`
       })
       .join('')
-    return `<h2>${title} (${list.length})</h2>${blocks}`
+    return `<h2>${escapeHtml(title)} (${list.length})</h2>${blocks}`
   }
 
   const title = lang === 'bn' ? 'ডেলিভারি প্যাকিং লিস্ট' : 'Delivery packing list'
-  const html = `<!DOCTYPE html><html><head><title>${title}</title>
+  const html = `<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title>
   <style>
     body{font-family:'Hind Siliguri','Noto Sans Bengali','Nirmala UI',system-ui,sans-serif;padding:24px;color:#111}
     h1{margin:0 0 8px} h2{margin:24px 0 8px;border-bottom:2px solid #166534;padding-bottom:4px}
     .muted{color:#666;font-size:14px} .block{margin:12px 0;padding:10px 0;border-bottom:1px solid #eee}
     ul{margin:6px 0 0;padding-left:18px}
   </style></head><body>
-  <h1>${title}</h1>
+  <h1>${escapeHtml(title)}</h1>
   <p class="muted">${new Date().toLocaleString()}</p>
   ${section(lang === 'bn' ? 'সকাল' : 'Morning (8 AM – 12 PM)', morning)}
   ${section(lang === 'bn' ? 'সন্ধ্যা' : 'Evening (4 PM – 8 PM)', evening)}
   <script>window.onload=()=>window.print()</script>
   </body></html>`
 
-  const w = window.open('', '_blank', 'width=800,height=1000')
+  const w = window.open('', '_blank', 'width=800,height=1000,noopener,noreferrer')
   if (!w) return
   w.document.write(html)
   w.document.close()
@@ -166,7 +187,10 @@ export function printRiderManifest(orders: Order[], lang: 'en' | 'bn' = 'en') {
         const balance = Math.max(0, o.total - o.advanceAmount)
         totalBalanceToCollect += balance
         const itemsStr = o.items
-          .map((it) => `${it.emoji} ${it.name} (${it.grade}) ×${it.qty}`)
+          .map((it) => {
+            const weightText = it.weightLabel ? ` [${escapeHtml(it.weightLabel)}]` : ''
+            return `${escapeHtml(it.emoji)} ${escapeHtml(it.name)}${weightText} (${escapeHtml(it.grade)}) ×${Number(it.qty)}`
+          })
           .join(', ')
         const slot =
           o.deliverySlot === 'morning'
@@ -178,16 +202,16 @@ export function printRiderManifest(orders: Order[], lang: 'en' | 'bn' = 'en') {
         <tr>
           <td>${idx + 1}</td>
           <td>
-            <strong>${o.userName}</strong><br/>
-            <span class="muted">${o.phone}</span>
+            <strong>${escapeHtml(o.userName)}</strong><br/>
+            <span class="muted">${escapeHtml(o.phone)}</span>
           </td>
           <td>
-            ${o.address}<br/>
-            <span class="badge">${slot}</span>
+            ${escapeHtml(o.address)}<br/>
+            <span class="badge">${escapeHtml(slot)}</span>
           </td>
           <td><small>${itemsStr}</small></td>
-          <td>₹${o.total}</td>
-          <td>₹${o.advanceAmount}</td>
+          <td>₹${Number(o.total)}</td>
+          <td>₹${Number(o.advanceAmount)}</td>
           <td class="bal">₹${balance}</td>
           <td class="check">[ &nbsp; ]</td>
         </tr>
@@ -196,7 +220,7 @@ export function printRiderManifest(orders: Order[], lang: 'en' | 'bn' = 'en') {
       .join('')
 
     bodyHtml += `
-      <div class="zone-header">📍 PIN Zone: ${pin} (${list.length} orders)</div>
+      <div class="zone-header">📍 PIN Zone: ${escapeHtml(pin)} (${list.length} orders)</div>
       <table>
         <thead>
           <tr>
@@ -222,7 +246,7 @@ export function printRiderManifest(orders: Order[], lang: 'en' | 'bn' = 'en') {
     day: 'numeric',
     year: 'numeric',
   })
-  const html = `<!DOCTYPE html><html><head><title>${title}</title>
+  const html = `<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title>
   <style>
     body{font-family:'Hind Siliguri','Noto Sans Bengali',system-ui,sans-serif;padding:20px;color:#111;font-size:13px}
     h1{margin:0 0 4px;font-size:22px;color:#166534} .muted{color:#666;font-size:12px}
@@ -239,8 +263,8 @@ export function printRiderManifest(orders: Order[], lang: 'en' | 'bn' = 'en') {
   </style></head><body>
   <div class="header-box">
     <div>
-      <h1>🌿 GreenVest ${title}</h1>
-      <div class="muted">Date: ${dateStr} · Active Orders: ${active.length}</div>
+      <h1>🌿 GreenVest ${escapeHtml(title)}</h1>
+      <div class="muted">Date: ${escapeHtml(dateStr)} · Active Orders: ${active.length}</div>
     </div>
     <div style="text-align:right">
       <div style="font-size:16px;font-weight:bold;color:#dc2626">Total Cash to Collect: ₹${totalBalanceToCollect}</div>
@@ -258,7 +282,7 @@ export function printRiderManifest(orders: Order[], lang: 'en' | 'bn' = 'en') {
   <script>window.onload=()=>window.print()</script>
   </body></html>`
 
-  const w = window.open('', '_blank', 'width=900,height=1000')
+  const w = window.open('', '_blank', 'width=900,height=1000,noopener,noreferrer')
   if (!w) return
   w.document.write(html)
   w.document.close()

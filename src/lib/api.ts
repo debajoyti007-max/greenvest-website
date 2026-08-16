@@ -42,8 +42,10 @@ type OrderRow = {
   user_email: string
   subtotal: number
   delivery_fee: number
+  discount?: number | null
   total: number
   advance_amount: number
+  payment_type?: string | null
   utr: string
   utr_verified: boolean
   status: OrderStatus
@@ -66,6 +68,8 @@ type OrderItemRow = {
   grade: Grade
   qty: number
   unit_price: number
+  weight_multiplier?: number | null
+  weight_label?: string | null
 }
 
 type ProfileRow = {
@@ -108,15 +112,15 @@ function mapProduct(row: ProductRow): Product {
     pA: Number(row.p_a),
     pB: Number(row.p_b),
     pC: Number(row.p_c),
-    inStock: row.in_stock,
-    archived: Boolean(row.archived),
-    stockQty: row.stock_qty == null ? undefined : Number(row.stock_qty),
-    season: ['all', 'summer', 'winter', 'rainy'].includes(season) ? season : 'all',
+    inStock: Boolean(row.in_stock),
+    archived: row.archived ?? false,
+    stockQty: row.stock_qty != null ? Number(row.stock_qty) : undefined,
+    season,
     category: row.category,
     unit: row.unit,
-    imageUrl: row.image_url || undefined,
-    soldAs: (row.sold_as as Product['soldAs']) || undefined,
-    gramOptions: row.gram_options || undefined,
+    imageUrl: row.image_url ?? undefined,
+    soldAs: (row.sold_as as 'loose' | 'packet' | 'both') || undefined,
+    gramOptions: Array.isArray(row.gram_options) ? row.gram_options : undefined,
   }
 }
 
@@ -149,6 +153,8 @@ function mapOrderItem(row: OrderItemRow): OrderItem {
     grade: row.grade,
     qty: Number(row.qty),
     unitPrice: Number(row.unit_price),
+    weightMultiplier: row.weight_multiplier != null ? Number(row.weight_multiplier) : undefined,
+    weightLabel: row.weight_label || undefined,
   }
 }
 
@@ -162,8 +168,10 @@ function mapOrder(row: OrderRow): Order {
     items: (row.order_items || []).map(mapOrderItem),
     subtotal: Number(row.subtotal),
     deliveryFee: Number(row.delivery_fee),
+    discountAmount: row.discount != null ? Number(row.discount) : undefined,
     total: Number(row.total),
     advanceAmount: Number(row.advance_amount),
+    paymentType: row.payment_type === 'full' ? 'full' : 'advance',
     utr: row.utr,
     utrVerified: row.utr_verified,
     status: row.status,
@@ -466,22 +474,22 @@ export async function createOrder(order: Order): Promise<Order> {
       phone: order.phone,
       created_at: new Date().toISOString(),
     }).select()
-    // If insert fails due to existing row, that's fine — we don't overwrite
   } catch (profErr) {
-    // Profile already exists — role is preserved as-is
     console.debug('Profile already exists, role preserved:', profErr)
   }
 
   // Step 1: Insert order row
   const payload: any = {
     id: order.id,
-    user_id: order.userId,  // Use actual userId (text), not toUuid conversion
+    user_id: order.userId,
     user_name: order.userName,
     user_email: order.userEmail,
     subtotal: order.subtotal,
     delivery_fee: order.deliveryFee,
+    discount: order.discountAmount || 0,
     total: order.total,
     advance_amount: order.advanceAmount,
+    payment_type: order.paymentType || 'advance',
     utr: order.utr,
     utr_verified: order.utrVerified,
     status: order.status,
@@ -497,10 +505,12 @@ export async function createOrder(order: Order): Promise<Order> {
   if (order.geoLng != null) payload.geo_lng = order.geoLng
 
   let { error: orderError } = await client.from('orders').insert(payload)
-  if (orderError && /(delivery_slot|geo_lat|geo_lng)/i.test(orderError.message)) {
-    delete payload.delivery_slot
-    delete payload.geo_lat
-    delete payload.geo_lng
+  if (orderError && /(delivery_slot|geo_lat|geo_lng|discount|payment_type)/i.test(orderError.message)) {
+    if (orderError.message.includes('discount')) delete payload.discount
+    if (orderError.message.includes('payment_type')) delete payload.payment_type
+    if (orderError.message.includes('delivery_slot')) delete payload.delivery_slot
+    if (orderError.message.includes('geo_lat')) delete payload.geo_lat
+    if (orderError.message.includes('geo_lng')) delete payload.geo_lng
     ;({ error: orderError } = await client.from('orders').insert(payload))
   }
   if (orderError) {
@@ -517,8 +527,15 @@ export async function createOrder(order: Order): Promise<Order> {
     grade: it.grade,
     qty: it.qty,
     unit_price: it.unitPrice,
+    weight_multiplier: it.weightMultiplier || 1,
+    weight_label: it.weightLabel || '1 kg',
   }))
-  const { error: itemsError } = await client.from('order_items').insert(items)
+  let { error: itemsError } = await client.from('order_items').insert(items)
+  if (itemsError && /(weight_multiplier|weight_label)/i.test(itemsError.message)) {
+    // Fallback without weight columns if old schema
+    const fallbackItems = items.map(({ weight_multiplier: _wm, weight_label: _wl, ...rest }) => rest)
+    ;({ error: itemsError } = await client.from('order_items').insert(fallbackItems))
+  }
   if (itemsError) {
     console.error('createOrder → order_items insert failed:', itemsError)
     await client.from('orders').delete().eq('id', order.id)
@@ -660,27 +677,36 @@ export async function validateCoupon(code: string, orderTotal: number): Promise<
   // 1. Try Supabase RPC if configured
   if (supabase) {
     try {
-      const { data, error } = await supabase.rpc('validate_coupon', { code_val: cleanCode, total_val: orderTotal })
-      if (!error && data && typeof data === 'object' && (data as any).valid) {
-        return data as Coupon
+      const { data, error } = await supabase.rpc('validate_coupon', { p_code: cleanCode, p_order_total: orderTotal })
+      if (!error && data && Array.isArray(data) && data[0]?.valid) {
+        const res = data[0]
+        return {
+          code: cleanCode,
+          discount_type: 'flat',
+          discount_value: Number(res.discount),
+          min_order: 0,
+          valid: true,
+          discount: Number(res.discount),
+          message: res.message || `✅ Coupon applied: ₹${res.discount} off`,
+        }
       }
     } catch {}
 
-    // 2. Direct table fallback if RPC doesn't exist
+    // 2. Direct table fallback
     try {
       const { data: row, error } = await supabase
         .from('coupons')
         .select('*')
         .eq('code', cleanCode)
-        .eq('valid', true)
         .maybeSingle()
 
       if (!error && row) {
-        // Check expiration
-        if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+        const isValid = row.valid !== false && row.active !== false
+        const expiry = row.expires_at || row.valid_until
+        if (!isValid) return null
+        if (expiry && new Date(expiry).getTime() < Date.now()) {
           return null
         }
-        // Check minimum order
         if (orderTotal < (row.min_order || 0)) {
           return null
         }
@@ -696,6 +722,9 @@ export async function validateCoupon(code: string, orderTotal: number): Promise<
           discount_value: discVal,
           min_order: row.min_order || 0,
           valid: true,
+          active: true,
+          expires_at: expiry || undefined,
+          valid_until: expiry || undefined,
           discount: computedDiscount,
           message: `✅ Coupon applied: ₹${computedDiscount} off`,
         }
@@ -707,8 +736,11 @@ export async function validateCoupon(code: string, orderTotal: number): Promise<
   try {
     const localCoupons = JSON.parse(localStorage.getItem('gv_coupons') || '{}')
     const match = localCoupons[cleanCode]
-    if (match && match.valid) {
-      if (match.expires_at && new Date(match.expires_at).getTime() < Date.now()) {
+    if (match) {
+      const isValid = match.valid !== false && match.active !== false
+      const expiry = match.expires_at || match.valid_until
+      if (!isValid) return null
+      if (expiry && new Date(expiry).getTime() < Date.now()) {
         return null
       }
       if (orderTotal < (match.min_order || 0)) {
@@ -725,6 +757,9 @@ export async function validateCoupon(code: string, orderTotal: number): Promise<
         discount_value: discVal,
         min_order: match.min_order || 0,
         valid: true,
+        active: true,
+        expires_at: expiry || undefined,
+        valid_until: expiry || undefined,
         discount: computedDiscount,
         message: `✅ Coupon applied: ₹${computedDiscount} off`,
       }
@@ -743,9 +778,13 @@ export async function createCoupon(coupon: {
   expires_at?: string
 }): Promise<boolean> {
   const cleanCode = coupon.code.trim().toUpperCase()
-  const payload = {
+  const payload: any = {
     ...coupon,
     code: cleanCode,
+    valid: coupon.valid ?? true,
+    active: coupon.valid ?? true,
+    expires_at: coupon.expires_at || null,
+    valid_until: coupon.expires_at || null,
     created_at: new Date().toISOString(),
   }
 
@@ -759,7 +798,19 @@ export async function createCoupon(coupon: {
   if (!supabase) return true
 
   try {
-    const { error } = await supabase.from('coupons').upsert(payload)
+    let { error } = await supabase.from('coupons').upsert(payload)
+    if (error && /(active|valid_until|expires_at|valid)/i.test(error.message)) {
+      // Retry with alternative field mapping
+      const altPayload = {
+        code: cleanCode,
+        discount_type: coupon.discount_type,
+        discount_value: coupon.discount_value,
+        min_order: coupon.min_order,
+        active: coupon.valid,
+        valid_until: coupon.expires_at,
+      }
+      ;({ error } = await supabase.from('coupons').upsert(altPayload))
+    }
     return !error
   } catch {
     return true // Local cache succeeded

@@ -85,7 +85,7 @@ export default function AdminUsers() {
             lang === 'bn' ? 'হোয়াটসঅ্যাপে গ্রাহককে জানাবেন?' : 'Notify customer via WhatsApp?'
           )
         ) {
-          window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
+          window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank', 'noopener,noreferrer')
         }
       }
     } finally {

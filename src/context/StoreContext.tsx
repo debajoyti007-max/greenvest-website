@@ -67,6 +67,8 @@ interface PlaceOrderOpts {
   zones?: DeliveryZone[]
   geoLat?: number
   geoLng?: number
+  paymentType?: 'full' | 'advance'
+  advanceAmount?: number
 }
 
 interface StoreContextValue {
@@ -76,9 +78,9 @@ interface StoreContextValue {
   lang: Lang
   loading: boolean
   setLang: (lang: Lang) => void
-  addToCart: (productId: string, grade: Grade, qty?: number) => void
-  updateCartQty: (productId: string, grade: Grade, qty: number) => void
-  removeFromCart: (productId: string, grade: Grade) => void
+  addToCart: (productId: string, grade: Grade, qty?: number, weightMultiplier?: number, weightLabel?: string) => void
+  updateCartQty: (productId: string, grade: Grade, qty: number, weightMultiplier?: number) => void
+  removeFromCart: (productId: string, grade: Grade, weightMultiplier?: number) => void
   clearCart: () => void
   cartCount: number
   cartTotal: number
@@ -275,33 +277,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCart(getCart(user?.id))
   }, [user?.id])
 
-  const addToCart = useCallback((productId: string, grade: Grade, qty = 1) => {
+  const addToCart = useCallback((productId: string, grade: Grade, qty = 1, weightMultiplier = 1, weightLabel?: string) => {
     const p = products.find((x) => x.id === productId)
     if (p && !p.inStock) return
 
     const current = getCart(user?.id)
-    const idx = current.findIndex((c) => c.productId === productId && c.grade === grade)
+    const mult = weightMultiplier || 1
+    const label = weightLabel || (mult === 1 ? p?.unit || '1 kg' : mult === 0.25 ? '250g' : mult === 0.5 ? '500g' : `${mult}kg`)
+    const idx = current.findIndex((c) => c.productId === productId && c.grade === grade && (c.weightMultiplier || 1) === mult)
 
     let next: CartItem[]
     if (idx >= 0) {
       next = current.map((c, i) => (i === idx ? { ...c, qty: c.qty + qty } : c))
     } else {
-      next = [...current, { productId, grade, qty }]
+      next = [...current, { productId, grade, qty, weightMultiplier: mult, weightLabel: label }]
     }
     saveCart(next, user?.id)
     setCart(next)
   }, [products, user?.id])
 
-  const updateCartQty = useCallback((productId: string, grade: Grade, qty: number) => {
+  const updateCartQty = useCallback((productId: string, grade: Grade, qty: number, weightMultiplier = 1) => {
+    const mult = weightMultiplier || 1
     const next = getCart(user?.id)
-      .map((c) => (c.productId === productId && c.grade === grade ? { ...c, qty } : c))
+      .map((c) => (c.productId === productId && c.grade === grade && (c.weightMultiplier || 1) === mult ? { ...c, qty } : c))
       .filter((c) => c.qty > 0)
     saveCart(next, user?.id)
     setCart(next)
   }, [user?.id])
 
-  const removeFromCart = useCallback((productId: string, grade: Grade) => {
-    const next = getCart(user?.id).filter((c) => !(c.productId === productId && c.grade === grade))
+  const removeFromCart = useCallback((productId: string, grade: Grade, weightMultiplier = 1) => {
+    const mult = weightMultiplier || 1
+    const next = getCart(user?.id).filter((c) => !(c.productId === productId && c.grade === grade && (c.weightMultiplier || 1) === mult))
     saveCart(next, user?.id)
     setCart(next)
   }, [user?.id])
@@ -317,7 +323,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return cart.reduce((sum, item) => {
       const p = products.find((x) => x.id === item.productId)
       if (!p) return sum
-      return sum + priceFor(p, item.grade) * item.qty
+      const weight = item.weightMultiplier || 1
+      const unitPrice = Math.round(priceFor(p, item.grade) * weight)
+      return sum + unitPrice * item.qty
     }, 0)
   }, [cart, products, priceFor])
 
@@ -332,13 +340,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .map((c) => {
           const p = catalog.find((x) => x.id === c.productId)
           if (!p) return null
+          const weight = c.weightMultiplier || 1
+          const unitPrice = Math.round(priceFor(p, c.grade) * weight)
+          const weightLabel = c.weightLabel || (weight === 1 ? p.unit : weight === 0.25 ? '250g' : weight === 0.5 ? '500g' : `${weight}kg`)
           return {
             productId: c.productId,
-            name: p.name,
+            name: weightLabel && weightLabel !== p.unit ? `${p.name} (${weightLabel})` : p.name,
             emoji: p.emoji,
             grade: c.grade,
             qty: c.qty,
-            unitPrice: priceFor(p, c.grade),
+            unitPrice,
+            weightMultiplier: weight,
+            weightLabel,
           }
         })
         .filter((item): item is NonNullable<typeof item> => item !== null)
@@ -349,6 +362,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (subtotal < MIN_ORDER_AMOUNT) return null
       const { fee: deliveryFee } = calcDeliveryFee(opts.pin, opts.zones)
       const total = Math.max(0, subtotal + deliveryFee - (opts.discountAmount || 0))
+      const isFull = opts.paymentType === 'full'
+      const advanceAmount = isFull ? total : (opts.advanceAmount != null ? opts.advanceAmount : Math.ceil(total * 0.5))
+
       const now = new Date().toISOString()
       const order: Order = {
         id: crypto.randomUUID(),   // UUID required by DB — uid('ord') was generating invalid IDs
@@ -358,8 +374,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         items,
         subtotal,
         deliveryFee,
+        discountAmount: opts.discountAmount || 0,
         total,
-        advanceAmount: Math.ceil(total * 0.5),
+        advanceAmount,
+        paymentType: isFull ? 'full' : 'advance',
         utr: opts.utr.trim().toUpperCase(),
         utrVerified: false,
         status: 'pending',
@@ -426,11 +444,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           skipped += 1
           continue
         }
-        const idx = next.findIndex((c) => c.productId === it.productId && c.grade === it.grade)
+        const mult = it.weightMultiplier || 1
+        const idx = next.findIndex((c) => c.productId === it.productId && c.grade === it.grade && (c.weightMultiplier || 1) === mult)
         if (idx >= 0) {
           next[idx] = { ...next[idx], qty: next[idx].qty + it.qty }
         } else {
-          next.push({ productId: it.productId, grade: it.grade, qty: it.qty })
+          next.push({
+            productId: it.productId,
+            grade: it.grade,
+            qty: it.qty,
+            weightMultiplier: mult,
+            weightLabel: it.weightLabel,
+          })
         }
         added += 1
       }

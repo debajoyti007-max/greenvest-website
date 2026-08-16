@@ -187,12 +187,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const all = getUsers()
     setUsers(all)
     if (!id) {
-      if (!user) setUser(null)
+      if (userRef.current) {
+        setUser(null)
+        userRef.current = null
+      }
     } else {
       const found = all.find((u) => u.id === id) || null
-      if (found) setUser(ensureAdminRole(found))
+      if (found) {
+        const checked = ensureAdminRole(found)
+        setUser(checked)
+        userRef.current = checked
+      }
     }
-  }, [user])
+  }, [])
 
   const refresh = useCallback(async () => {
     // Bug 7 fix: use ref so this callback isn't recreated each time initialized changes

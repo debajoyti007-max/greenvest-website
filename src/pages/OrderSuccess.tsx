@@ -63,7 +63,7 @@ export default function OrderSuccess() {
   const shareWhatsAppCustomer = () => {
     if (!order) return
     const text = `GreenVest Order #${order.id}\nTotal: ₹${order.total}\nAdvance Paid: ₹${order.advanceAmount}\nBalance: ₹${order.total - order.advanceAmount}\nStatus: ${order.status}`
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
   }
 
   if (!user) return <Navigate to="/auth" replace />

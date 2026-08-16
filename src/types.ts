@@ -43,6 +43,8 @@ export interface CartItem {
   productId: string
   grade: Grade
   qty: number
+  weightMultiplier?: number
+  weightLabel?: string
 }
 
 export interface OrderItem {
@@ -52,6 +54,8 @@ export interface OrderItem {
   grade: Grade
   qty: number
   unitPrice: number
+  weightMultiplier?: number
+  weightLabel?: string
 }
 
 export interface Order {
@@ -62,8 +66,10 @@ export interface Order {
   items: OrderItem[]
   subtotal: number
   deliveryFee: number
+  discountAmount?: number
   total: number
   advanceAmount: number
+  paymentType?: 'full' | 'advance'
   utr: string
   utrVerified: boolean
   status: OrderStatus
@@ -82,7 +88,18 @@ export interface Order {
 export type Lang = 'en' | 'bn'
 
 export interface Address { id?: number; user_id?: string; label: string; address: string; phone: string; pin: string; is_default: boolean }
-export interface Coupon { code: string; discount_type: 'flat' | 'percent'; discount_value: number; min_order: number; valid: boolean; discount?: number; message?: string }
+export interface Coupon {
+  code: string
+  discount_type: 'flat' | 'percent'
+  discount_value: number
+  min_order: number
+  valid: boolean
+  active?: boolean
+  expires_at?: string
+  valid_until?: string
+  discount?: number
+  message?: string
+}
 export interface DailyReport { id?: number; report_date: string; total_orders: number; total_revenue: number; total_cancelled: number; mandi_cost: number; delivery_cost: number; profit: number }
 export interface DeliveryZone { pin_prefix: string; zone: string; fee: number; eta_hours: string }
 export interface AppNotification { id: string; userId?: string; title: string; message: string; sender: string; createdAt: string }

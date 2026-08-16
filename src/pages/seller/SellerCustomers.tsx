@@ -91,10 +91,6 @@ export default function SellerCustomers() {
     }
   }
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
-    return <Navigate to="/" replace />
-  }
-
   // Combine users from AuthContext + Orders
   const customerList: CustomerRow[] = useMemo(() => {
     const userMap = new Map<string, CustomerRow>()
@@ -155,6 +151,10 @@ export default function SellerCustomers() {
     return Array.from(userMap.values()).sort((a, b) => b.spent - a.spent || b.lastOrderAt.localeCompare(a.lastOrderAt))
   }, [users, orders, filterMonth, filterYear, spendMode])
 
+  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+    return <Navigate to="/" replace />
+  }
+
   const handleResetPin = async () => {
     if (!resetModalUser) return
     if (!newPin || newPin.length !== 4) {
@@ -169,7 +169,7 @@ export default function SellerCustomers() {
       `নমস্কার ${resetModalUser.name}, GreenVest-এ আপনার অ্যাকাউন্ট পিন নতুন পরিবর্তন করা হয়েছে: ${newPin}\nলগইন করুন: https://greenvest.shop/auth`
     )
     if (window.confirm(lang === 'bn' ? 'হোয়াটসঅ্যাপে কাস্টমারকে নতুন পিন পাঠাবেন?' : 'Send new PIN to customer via WhatsApp?')) {
-      window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
+      window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank', 'noopener,noreferrer')
     }
     setResetModalUser(null)
   }

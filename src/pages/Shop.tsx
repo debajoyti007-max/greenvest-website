@@ -26,8 +26,8 @@ function ProductCard({
   p: Product
   lang: Lang
   cart: CartItem[]
-  onAdd: (p: Product, grade: Grade, qty?: number) => void
-  onUpdateQty: (productId: string, grade: Grade, qty: number) => void
+  onAdd: (p: Product, grade: Grade, qty?: number, weightMultiplier?: number, weightLabel?: string) => void
+  onUpdateQty: (productId: string, grade: Grade, qty: number, weightMultiplier?: number) => void
 }) {
   const [cardGrade, setCardGrade] = useState<Grade>('B')
   const [showGradeInfo, setShowGradeInfo] = useState(false)
@@ -40,7 +40,9 @@ function ProductCard({
   const basePrice = (cardGrade === 'A' ? p.pA : cardGrade === 'C' ? p.pC : p.pB) || p.pB || p.pA
   const calculatedPrice = Math.round(basePrice * weightMultiplier)
 
-  const cartItem = cart.find((c) => c.productId === p.id && c.grade === cardGrade)
+  const cartItem = cart.find(
+    (c) => c.productId === p.id && c.grade === cardGrade && (c.weightMultiplier || 1) === weightMultiplier,
+  )
   const cartQty = cartItem ? cartItem.qty : 0
 
   const gradeLabels: Record<Grade, { en: string; bn: string }> = {
@@ -153,7 +155,7 @@ function ProductCard({
             <button
               type="button"
               className="qty-btn"
-              onClick={() => onUpdateQty(p.id, cardGrade, cartQty - 1)}
+              onClick={() => onUpdateQty(p.id, cardGrade, cartQty - 1, weightMultiplier)}
               aria-label="Decrease quantity"
             >
               −
@@ -162,7 +164,7 @@ function ProductCard({
             <button
               type="button"
               className="qty-btn"
-              onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1)}
+              onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1, weightMultiplier)}
               aria-label="Increase quantity"
             >
               +
@@ -173,7 +175,10 @@ function ProductCard({
             type="button"
             className="btn-add-glass"
             disabled={!p.inStock}
-            onClick={() => onAdd(p, cardGrade, 1)}
+            onClick={() => {
+              const label = weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`
+              onAdd(p, cardGrade, 1, weightMultiplier, label)
+            }}
           >
             + {t(lang, 'addToCart')}
           </button>
@@ -292,14 +297,15 @@ export default function Shop() {
     return []
   }, [cartTotal, available, shortfall, priceFor, cart])
 
-  const handleAddDirect = (p: Product, g: Grade, qty = 1) => {
+  const handleAddDirect = (p: Product, g: Grade, qty = 1, weightMultiplier = 1, weightLabel?: string) => {
     if (!p.inStock) return
-    addToCart(p.id, g, qty)
+    addToCart(p.id, g, qty, weightMultiplier, weightLabel)
+    const lbl = weightLabel && weightLabel !== p.unit ? ` (${weightLabel})` : ''
     showToast(
       lang === 'bn'
-        ? `${p.bnName} (${g}) কার্টে যোগ হয়েছে!`
-        : `${p.name} (${g}) added to cart!`,
-      p.emoji || '✅'
+        ? `${p.bnName}${lbl} (${g}) কার্টে যোগ হয়েছে!`
+        : `${p.name}${lbl} (${g}) added to cart!`,
+      p.emoji || '✅',
     )
   }
 
