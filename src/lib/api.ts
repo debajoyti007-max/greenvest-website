@@ -375,7 +375,7 @@ export async function deleteProductApi(id: string): Promise<void> {
 export async function setAllProductsInStock(): Promise<void> {
   invalidateProductCache()
   const client = requireClient()
-  const { error } = await client.from('products').update({ in_stock: true }).neq('id', '')
+  const { error } = await client.from('products').update({ in_stock: true }).neq('archived', true)
   if (error) throw error
 }
 

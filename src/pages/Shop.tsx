@@ -272,20 +272,25 @@ export default function Shop() {
   const currentSeason =
     currentMonth >= 2 && currentMonth <= 4
       ? 'summer'
-      : currentMonth >= 5 && currentMonth <= 8
+      : currentMonth >= 5 && currentMonth <= 9
         ? 'rainy'
         : 'winter'
   const seasonalInStock = available.filter((p) => p.season === currentSeason)
 
   const suggestions = useMemo(() => {
-    if (cartTotal >= 300 && cartTotal < MIN_ORDER_AMOUNT) {
+    if (cartTotal >= 250 && cartTotal < MIN_ORDER_AMOUNT) {
+      const inCartIds = new Set(cart.map((c) => c.productId))
       return available
-        .filter((p) => priceFor(p, 'B') >= shortfall)
-        .sort((a, b) => priceFor(a, 'B') - priceFor(b, 'B'))
-        .slice(0, 2)
+        .filter((p) => !inCartIds.has(p.id) && priceFor(p, 'B') > 0)
+        .sort((a, b) => {
+          const diffA = Math.abs(priceFor(a, 'B') - shortfall)
+          const diffB = Math.abs(priceFor(b, 'B') - shortfall)
+          return diffA - diffB
+        })
+        .slice(0, 3)
     }
     return []
-  }, [cartTotal, available, shortfall, priceFor])
+  }, [cartTotal, available, shortfall, priceFor, cart])
 
   const handleAddDirect = (p: Product, g: Grade, qty = 1) => {
     if (!p.inStock) return

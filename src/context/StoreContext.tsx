@@ -499,7 +499,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await refreshCloud()
       return
     }
-    const next = getProducts().map((p) => ({ ...p, inStock: true }))
+    const next = getProducts().map((p) => (p.archived ? p : { ...p, inStock: true }))
     saveProducts(next)
     setProducts(next)
   }, [cloud, refreshCloud])

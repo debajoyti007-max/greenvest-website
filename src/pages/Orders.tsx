@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import OrderChat from '../components/OrderChat'
 import FreshnessRating from '../components/FreshnessRating'
@@ -6,7 +6,7 @@ import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { t } from '../lib/i18n'
-import type { Order } from '../types'
+import type { Order, OrderItem } from '../types'
 
 export default function Orders() {
   const { user } = useAuth()
@@ -31,37 +31,44 @@ export default function Orders() {
     localStorage.setItem('gv_cleared_orders', JSON.stringify(clearedIds))
   }, [clearedIds])
 
+  const mine = useMemo(() => {
+    if (!user) return []
+    return orders.filter((o) => o.userId === user.id || (user.phone && o.phone === user.phone))
+  }, [orders, user])
+
+  const { recentOrders, archivedOrders, clearedOrders } = useMemo(() => {
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000
+    const rec: Order[] = []
+    const arch: Order[] = []
+    const clr: Order[] = []
+
+    mine.forEach((o: Order) => {
+      const isCompleted = o.status === 'delivered' || o.status === 'cancelled'
+      const isOld = (Date.now() - new Date(o.createdAt).getTime()) >= SEVEN_DAYS
+      const isManuallyArchived = archivedIds.includes(o.id)
+      const isCleared = clearedIds.includes(o.id)
+
+      if (isCleared) {
+        clr.push(o)
+      } else if ((isOld && isCompleted) || (isCompleted && isManuallyArchived)) {
+        arch.push(o)
+      } else {
+        rec.push(o)
+      }
+    })
+
+    return { recentOrders: rec, archivedOrders: arch, clearedOrders: clr }
+  }, [mine, archivedIds, clearedIds])
+
+  const displayOrders = useMemo(() => {
+    return activeTab === 'recent'
+      ? recentOrders
+      : mine.filter((o: Order) => archivedOrders.includes(o) || (showCleared && clearedOrders.includes(o)))
+  }, [activeTab, recentOrders, mine, archivedOrders, showCleared, clearedOrders])
+
+  const archivedCount = archivedOrders.length + (showCleared ? clearedOrders.length : 0)
+
   if (!user) return <Navigate to="/auth" replace />
-
-  const mine = orders.filter((o) => o.userId === user.id)
-
-  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-  
-  const recentOrders: typeof mine = [];
-  const archivedOrders: typeof mine = [];
-  const clearedOrders: typeof mine = [];
-
-  mine.forEach((o) => {
-    const isCompleted = o.status === 'delivered' || o.status === 'cancelled';
-    const isOld = (Date.now() - new Date(o.createdAt).getTime()) >= SEVEN_DAYS;
-    
-    const isManuallyArchived = archivedIds.includes(o.id);
-    const isCleared = clearedIds.includes(o.id);
-
-    if (isCleared) {
-      clearedOrders.push(o);
-    } else if ((isOld && isCompleted) || (isCompleted && isManuallyArchived)) {
-      archivedOrders.push(o);
-    } else {
-      recentOrders.push(o);
-    }
-  });
-
-  const displayOrders = activeTab === 'recent' 
-    ? recentOrders 
-    : mine.filter(o => archivedOrders.includes(o) || (showCleared && clearedOrders.includes(o)));
-
-  const archivedCount = archivedOrders.length + (showCleared ? clearedOrders.length : 0);
 
   const onReorder = (o: Order) => {
     const { added, skipped } = reorderFromOrder(o)
@@ -133,7 +140,7 @@ export default function Orders() {
               className="btn btn-secondary" 
               style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
               onClick={() => {
-                setClearedIds(prev => [...new Set([...prev, ...archivedOrders.map(o => o.id)])])
+                setClearedIds(prev => [...new Set([...prev, ...archivedOrders.map((o: Order) => o.id)])])
               }}
             >
               {lang === 'bn' ? 'সব মুছুন' : 'Clear All'}
@@ -153,7 +160,7 @@ export default function Orders() {
         </div>
       ) : (
         <div className="order-list">
-          {displayOrders.map((o) => (
+          {displayOrders.map((o: Order) => (
             <article key={o.id} className="order-card">
               <header>
                 <div>
@@ -180,7 +187,7 @@ export default function Orders() {
                 deliverySlot={o.deliverySlot} 
               />
               <ul>
-                {o.items.map((it) => (
+                {o.items.map((it: OrderItem) => (
                   <li key={`${it.productId}-${it.grade}`}>
                     {it.emoji} {it.name} · {t(lang, 'grade')} {it.grade} × {it.qty} — ₹
                     {it.unitPrice * it.qty}

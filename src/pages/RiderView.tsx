@@ -9,10 +9,7 @@ export default function RiderView() {
   const { user } = useAuth()
   const { orders, lang, updateOrderStatus } = useStore()
   const [tab, setTab] = useState<'active' | 'done' | 'all'>('active')
-
-  if (!user || (user.role !== 'rider' && user.role !== 'seller' && user.role !== 'admin')) {
-    return <Navigate to="/" replace />
-  }
+  const [completingId, setCompletingId] = useState<string | null>(null)
 
   const activeDeliveries = useMemo(() => {
     return orders
@@ -35,15 +32,39 @@ export default function RiderView() {
     return activeDeliveries
   }, [tab, activeDeliveries, deliveredToday, orders])
 
-  const handleCompleteDelivery = async (orderId: string, userName: string) => {
-    await updateOrderStatus(orderId, 'delivered')
-    showToast(lang === 'bn' ? `✅ ${userName}-এর অর্ডার ডেলিভারি সম্পন্ন হয়েছে!` : `✅ Order for ${userName} delivered!`, '🎉')
+  if (!user || (user.role !== 'rider' && user.role !== 'seller' && user.role !== 'admin')) {
+    return <Navigate to="/" replace />
+  }
+
+  const handleCompleteDelivery = async (orderId: string, userName: string, balance: number) => {
+    const confirmMsg = lang === 'bn'
+      ? `${userName}-এর অর্ডার ডেলিভারি সম্পন্ন হয়েছে এবং বাকি ₹${balance} ক্যাশ সংগৃহীত হয়েছে?`
+      : `Confirm delivery completed for ${userName} and ₹${balance} balance collected?`
+    if (!confirm(confirmMsg)) return
+
+    try {
+      setCompletingId(orderId)
+      await updateOrderStatus(orderId, 'delivered')
+      showToast(lang === 'bn' ? `✅ ${userName}-এর অর্ডার ডেলিভারি সম্পন্ন হয়েছে!` : `✅ Order for ${userName} delivered!`, '🎉')
+    } finally {
+      setCompletingId(null)
+    }
   }
 
   const sendOutForDeliveryWA = (phone: string, userName: string, id: string) => {
     const waDigits = formatWhatsAppPhone(phone)
     const msg = encodeURIComponent(
       `নমস্কার ${userName}, আপনার GreenVest অর্ডার #${id.slice(0, 6)} রাইডারের কাছে ডেলিভারির জন্য রওয়ানা হয়েছে! 🛵`
+    )
+    window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
+  }
+
+  const sendDeliveredInvoiceWA = (o: typeof orders[0]) => {
+    const waDigits = formatWhatsAppPhone(o.phone)
+    const balance = Math.max(0, o.total - o.advanceAmount)
+    const itemsText = o.items.map(it => `• ${it.name} (${it.qty}x)`).join('\n')
+    const msg = encodeURIComponent(
+      `🎉 *GreenVest ডেলিভারি সম্পন্ন*\n\nনমস্কার ${o.userName},\nআপনার অর্ডার #${o.id.slice(0, 6)} সফলভাবে ডেলিভারি করা হয়েছে।\n\n📦 *সামগ্রী:*\n${itemsText}\n\n💰 মোট: ₹${o.total}\n💵 সংগৃহীত ক্যাশ: ₹${balance}\n\nধন্যবাদ! তাজা শাকসবজির জন্য আবার GreenVest ব্যবহার করুন 🌱`
     )
     window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank')
   }
@@ -167,13 +188,23 @@ export default function RiderView() {
                   </a>
                 </div>
 
-                {o.status !== 'delivered' && (
+                {o.status !== 'delivered' ? (
                   <button
                     type="button"
                     className="btn btn-primary rider-complete-btn"
-                    onClick={() => handleCompleteDelivery(o.id, o.userName)}
+                    disabled={completingId === o.id}
+                    onClick={() => handleCompleteDelivery(o.id, o.userName, balance)}
                   >
-                    ✓ {lang === 'bn' ? 'ডেলিভারি সম্পন্ন হয়েছে চিহ্নিত করুন' : 'Mark as Delivered & Collect Cash'}
+                    {completingId === o.id ? '⏳...' : `✓ ${lang === 'bn' ? `ডেলিভারি ও ক্যাশ (₹${balance}) সম্পন্ন` : `Mark Delivered & Collect ₹${balance}`}`}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ width: '100%', marginTop: '0.5rem', background: '#f0fdf4', color: '#166534', borderColor: '#bbf7d0', fontWeight: 600, fontSize: '0.85rem' }}
+                    onClick={() => sendDeliveredInvoiceWA(o)}
+                  >
+                    🧾 {lang === 'bn' ? 'কাস্টমারকে WhatsApp রসিদ পাঠান' : 'Send WhatsApp Invoice'}
                   </button>
                 )}
               </div>

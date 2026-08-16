@@ -40,27 +40,27 @@ export function getSlotCutoffStatus(): {
   const eveningAvailable = hour < 13
   const eveningNotice = hour >= 13 ? 'Closed for today (Order before 1 PM for same-day evening)' : undefined
 
-  let eveningCountdown;
+  let eveningCountdown: string | undefined
   if (eveningAvailable) {
-    const minLeft = (13 * 60) - (hour * 60 + minute);
-    if (minLeft > 0 && minLeft <= 4 * 60) {
-      const h = Math.floor(minLeft / 60);
-      const m = minLeft % 60;
-      eveningCountdown = h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+    const minLeft = (13 * 60) - (hour * 60 + minute)
+    if (minLeft > 0) {
+      const h = Math.floor(minLeft / 60)
+      const m = minLeft % 60
+      eveningCountdown = h > 0 ? `${h}h ${m}m left` : `${m}m left`
     }
   }
 
-  // Morning slot cut-off is 10:00 PM (22:00) for next morning, or morning hours
+  // Morning slot cut-off is 10:00 PM (22:00) for next morning delivery
   const morningAvailable = hour < 22
   const morningNotice = hour >= 22 ? 'Closed for tomorrow morning (Order before 10 PM)' : undefined
 
-  let morningCountdown;
+  let morningCountdown: string | undefined
   if (morningAvailable) {
-    const minLeft = (22 * 60) - (hour * 60 + minute);
-    if (minLeft > 0 && minLeft <= 4 * 60) {
-      const h = Math.floor(minLeft / 60);
-      const m = minLeft % 60;
-      morningCountdown = h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+    const minLeft = (22 * 60) - (hour * 60 + minute)
+    if (minLeft > 0) {
+      const h = Math.floor(minLeft / 60)
+      const m = minLeft % 60
+      morningCountdown = h > 0 ? `${h}h ${m}m left` : `${m}m left`
     }
   }
 

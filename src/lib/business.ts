@@ -65,8 +65,9 @@ export function formatOrderId(id: string): string {
   return `ORD-${clean.slice(-6).toUpperCase()}`
 }
 
-/** Generates a simple, unique 6-digit numeric Order ID (e.g. ORD-849201). */
+/** Generates a collision-resistant 6-digit numeric Order ID (e.g. ORD-849201). */
 export function generateShortOrderId(): string {
-  const num = Math.floor(100000 + Math.random() * 900000)
-  return `ORD-${num}`
+  const timeSlice = Date.now().toString().slice(-4)
+  const rand = Math.floor(10 + Math.random() * 90)
+  return `ORD-${timeSlice}${rand}`
 }
