@@ -305,7 +305,13 @@ export default function Checkout() {
       }
 
       const raw = err instanceof Error ? err.message : 'Order failed'
-      if (/row-level security|policy/i.test(raw)) {
+      if (/already been used|duplicate/i.test(raw)) {
+        setError(
+          lang === 'bn'
+            ? 'এই UTR নম্বরটি দিয়ে ইতিমধ্যে একটি অর্ডার করা হয়েছে। নতুন পেমেন্টের সঠিক UTR দিন।'
+            : 'This UTR number has already been used for another active order. Please provide a new UTR.',
+        )
+      } else if (/row-level security|policy/i.test(raw)) {
         setError(
           lang === 'bn'
             ? 'অর্ডার করার অনুমতি নেই। অনুগ্রহ করে একবার লগআউট করে আবার লগইন করুন।'
@@ -318,7 +324,11 @@ export default function Checkout() {
             : 'Network timeout. Check your internet connection and try again.',
         )
       } else {
-        setError(raw)
+        setError(
+          lang === 'bn'
+            ? `অর্ডার ব্যর্থ হয়েছে: ${raw}`
+            : `Order failed: ${raw}`,
+        )
       }
     } finally {
       clearTimeout(slowTimer)

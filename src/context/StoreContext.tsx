@@ -406,7 +406,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const msg = err instanceof Error ? err.message : String(err)
           console.error('placeOrder failed:', msg)
           showToast(`Order failed: ${msg}`, 'error')
-          return null
+          throw err
         }
         saveDelivery(user.id, {
           address: order.address,

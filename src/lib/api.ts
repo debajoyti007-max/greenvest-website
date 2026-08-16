@@ -512,7 +512,13 @@ export async function createOrder(order: Order): Promise<Order> {
     if (!rpcErr && atomicRes && (atomicRes as any).success) {
       return order
     }
-  } catch (rpcEx) {
+    if (rpcErr && rpcErr.message && /already been used/i.test(rpcErr.message)) {
+      throw new Error(rpcErr.message)
+    }
+  } catch (rpcEx: any) {
+    if (rpcEx?.message && /already been used/i.test(rpcEx.message)) {
+      throw rpcEx
+    }
     console.debug('Atomic RPC fallback to direct insert:', rpcEx)
   }
 
@@ -543,13 +549,27 @@ export async function createOrder(order: Order): Promise<Order> {
   if (order.geoLng != null) payload.geo_lng = order.geoLng
 
   let { error: orderError } = await client.from('orders').insert(payload)
-  if (orderError && /(delivery_slot|geo_lat|geo_lng|discount|payment_type)/i.test(orderError.message)) {
-    if (orderError.message.includes('discount')) delete payload.discount
-    if (orderError.message.includes('payment_type')) delete payload.payment_type
-    if (orderError.message.includes('delivery_slot')) delete payload.delivery_slot
-    if (orderError.message.includes('geo_lat')) delete payload.geo_lat
-    if (orderError.message.includes('geo_lng')) delete payload.geo_lng
-    ;({ error: orderError } = await client.from('orders').insert(payload))
+  if (orderError) {
+    // Retry with essential core columns in case of unmigrated schema extensions
+    const cleanPayload = {
+      id: order.id,
+      user_id: order.userId,
+      user_name: order.userName,
+      user_email: order.userEmail,
+      subtotal: order.subtotal,
+      delivery_fee: order.deliveryFee,
+      total: order.total,
+      advance_amount: order.advanceAmount,
+      utr: order.utr,
+      utr_verified: order.utrVerified,
+      status: order.status,
+      address: order.address,
+      phone: order.phone,
+      pin: order.pin,
+      created_at: order.createdAt,
+      updated_at: order.updatedAt,
+    }
+    ;({ error: orderError } = await client.from('orders').insert(cleanPayload))
   }
   if (orderError) {
     console.error('createOrder → orders insert failed:', orderError)
@@ -569,7 +589,7 @@ export async function createOrder(order: Order): Promise<Order> {
     weight_label: it.weightLabel || '1 kg',
   }))
   let { error: itemsError } = await client.from('order_items').insert(items)
-  if (itemsError && /(weight_multiplier|weight_label)/i.test(itemsError.message)) {
+  if (itemsError) {
     // Fallback without weight columns if old schema
     const fallbackItems = items.map(({ weight_multiplier: _wm, weight_label: _wl, ...rest }) => rest)
     ;({ error: itemsError } = await client.from('order_items').insert(fallbackItems))
