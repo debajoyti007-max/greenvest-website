@@ -421,54 +421,6 @@ export default function Shop() {
         </div>
       </section>
 
-      {/* 🏪 Physical Store & In-Store Shopping Showcase */}
-      <div style={{
-        background: 'linear-gradient(90deg, #f0fdf4 0%, #ecfdf5 100%)',
-        border: '1.5px solid #86efac',
-        borderRadius: '14px',
-        padding: '0.75rem 1rem',
-        margin: '0.85rem 0',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '0.75rem',
-        boxShadow: '0 2px 8px rgba(22, 101, 52, 0.06)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-          <span style={{ fontSize: '1.4rem' }}>🏪</span>
-          <div>
-            <strong style={{ color: '#166534', fontSize: '0.92rem', display: 'block' }}>
-              {lang === 'bn' ? 'অফলাইনে সরাসরি দোকানে এসে কিনুন (Physical Store)' : 'Visit Our Physical Store (Buy In-Person)'}
-            </strong>
-            <span style={{ color: '#4b5563', fontSize: '0.78rem' }}>
-              📍 {STORE_LOCATION.name} · {lang === 'bn' ? 'সুতাহাটা - মহিষাদল রোড (পিন ৭২১৬৩২)' : 'Sutahata - Mahishadal Road (PIN 721632)'} · 🟢 {lang === 'bn' ? 'খোলা আছে (সকাল ৭টা - রাত ৯টা)' : 'Open (7 AM - 9 PM)'}
-            </span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-          <a
-            href={STORE_LOCATION.mapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              background: '#166534',
-              color: '#ffffff',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              fontWeight: 700,
-              fontSize: '0.78rem',
-              textDecoration: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            🗺️ {lang === 'bn' ? 'গুগল ম্যাপ' : 'Google Maps'}
-          </a>
-        </div>
-      </div>
-
       {/* Trust strips */}
       <div className="trust-strips">
         <div className="trust-item">
@@ -720,6 +672,56 @@ export default function Shop() {
             )}
           </>
         )}
+
+        {/* 🏪 Physical Store & Google Maps Showcase Card (Lower side) */}
+        <div style={{
+          background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+          border: '2px solid #86efac',
+          borderRadius: '16px',
+          padding: '1.25rem',
+          margin: '2rem 0 1rem',
+          boxShadow: '0 4px 14px rgba(22, 101, 52, 0.08)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+              <span style={{ fontSize: '1.5rem' }}>🏪</span>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#166534', margin: 0 }}>
+                  {lang === 'bn' ? `${STORE_LOCATION.nameBn} - আমাদের ফিজিক্যাল স্টোর ও আউটলেট` : `${STORE_LOCATION.name} - Physical Store & Outlet`}
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>
+                  🟢 {lang === 'bn' ? `খোলা থাকে · ${STORE_LOCATION.hoursBn}` : `Open Daily · ${STORE_LOCATION.hours}`}
+                </span>
+              </div>
+            </div>
+            <span style={{ fontSize: '0.74rem', background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: '12px', fontWeight: 700, border: '1px solid #86efac' }}>
+              {lang === 'bn' ? 'সরাসরি দোকানে এসে কিনুন' : 'Walk-in & Buy Offline'}
+            </span>
+          </div>
+
+          <p style={{ fontSize: '0.88rem', color: '#374151', margin: '0 0 0.75rem', lineHeight: 1.45 }}>
+            📍 <strong>{lang === 'bn' ? 'ঠিকানা:' : 'Address:'}</strong> {lang === 'bn' ? STORE_LOCATION.addressBn : STORE_LOCATION.address}
+          </p>
+
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <a
+              href={STORE_LOCATION.mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-primary"
+              style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none', background: '#166534' }}
+            >
+              🗺️ {lang === 'bn' ? 'Google Maps-এ দেখুন ও নেভিগেট করুন' : 'Open in Google Maps'}
+            </a>
+            <a
+              href={`tel:${STORE_LOCATION.phone}`}
+              className="btn btn-secondary"
+              style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}
+            >
+              📞 {lang === 'bn' ? 'দোকানে ফোন করুন' : 'Call Store'}
+            </a>
+          </div>
+        </div>
 
         <p className="shop-footnote">
           <Link to="/cart">{t(lang, 'viewCart')}</Link>

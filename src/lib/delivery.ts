@@ -1,14 +1,14 @@
 import type { DeliveryZone as DbDeliveryZone } from '../types'
 
 export const STORE_LOCATION = {
-  name: 'CHITRAVAS',
-  nameBn: 'চিত্রাবাস',
-  address: 'CHITRAVAS, Sutahata - Mahishadal Road, Purba Medinipur, PIN 721632',
-  addressBn: 'চিত্রাবাস, সুতাহাটা - মহিষাদল রোড, পূর্ব মেদিনীপুর, পিন ৭২১৬৩২',
+  name: 'GreenVest Store',
+  nameBn: 'গ্রীনভেস্ট স্টোর',
+  address: 'GreenVest Store, Sutahata - Mahishadal Road, Purba Medinipur, PIN 721635',
+  addressBn: 'গ্রীনভেস্ট স্টোর, সুতাহাটা - মহিষাদল রোড, পূর্ব মেদিনীপুর, পিন ৭২১৬৩৫',
   lat: 22.1723059,
   lng: 87.8677517,
   mapsUrl: 'https://maps.app.goo.gl/zjHaYvddzvXjHkap6',
-  pin: '721632',
+  pin: '721635',
   phone: '8170859653',
   hours: '7:00 AM – 9:00 PM',
   hoursBn: 'সকাল ৭:০০ – রাত ৯:০০',
@@ -33,10 +33,13 @@ export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lo
   return Math.round(R * c * 10) / 10 // 1 decimal place
 }
 
-/** Known PIN distances from CHITRAVAS Hub (22.1723, 87.8677) */
+/** Known PIN distances from Store Hub (22.1723, 87.8677) */
 const PIN_DISTANCE_MAP: Record<string, number> = {
-  '721632': 2.0,  // Sutahata / Chaitanyapur (< 5km)
-  '721633': 4.5,  // Mahishadal (< 5km)
+  '721635': 2.0,  // Sutahata (< 5km)
+  '721645': 3.5,  // Chaitanyapur (< 5km)
+  '721628': 4.5,  // Mahishadal (< 5km)
+  '721632': 3.0,  // Local Purba Medinipur (< 5km)
+  '721633': 4.5,  // Local Purba Medinipur (< 5km)
   '721654': 8.5,  // Geonkhali (5-15km)
   '721657': 11.0, // Kukrahati (5-15km)
   '721607': 10.0, // Durgachak / Haldia (5-15km)
@@ -70,8 +73,8 @@ export function calcDeliveryFee(
       distanceKm: 0,
       isPickup: true,
       isOutOfRange: false,
-      noticeEn: 'Self-Pickup from CHITRAVAS Store (₹0 Delivery Charge)',
-      noticeBn: 'সরাসরি চিত্রাবাস দোকান থেকে সংগ্রহ (₹০ ডেলিভারি চার্জ)',
+      noticeEn: 'Self-Pickup from GreenVest Store (₹0 Delivery Charge)',
+      noticeBn: 'সরাসরি গ্রীনভেস্ট দোকান থেকে সংগ্রহ (₹০ ডেলিভারি চার্জ)',
     }
   }
 
