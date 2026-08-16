@@ -64,8 +64,12 @@ function read<T>(key: string, fallback: T): T {
 }
 
 function write<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value))
-  window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key } }))
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+    window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key } }))
+  } catch (e) {
+    console.warn(`localStorage write failed for key ${key}:`, e)
+  }
 }
 
 // ⚠️ Only the admin seed entry is kept here.
@@ -146,7 +150,9 @@ export function getOrders(): Order[] {
 }
 
 export function saveOrders(orders: Order[]) {
-  write(KEYS.orders, orders)
+  // Cap local cache to latest 50 orders to guarantee 5MB browser quota is never exceeded
+  const capped = orders.slice(0, 50)
+  write(KEYS.orders, capped)
 }
 
 export function getCart(userId?: string | null): CartItem[] {

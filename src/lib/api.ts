@@ -388,7 +388,13 @@ export async function setAllProductsInStock(): Promise<void> {
 }
 
 
-export async function fetchOrders(userRole?: string, userId?: string, userEmail?: string, userPhone?: string): Promise<Order[]> {
+export async function fetchOrders(
+  userRole?: string,
+  userId?: string,
+  userEmail?: string,
+  userPhone?: string,
+  limitCount = 100,
+): Promise<Order[]> {
   const client = requireClient()
   const isStaff = userRole === 'seller' || userRole === 'admin' || userRole === 'rider'
 
@@ -401,7 +407,12 @@ export async function fetchOrders(userRole?: string, userId?: string, userEmail?
   let itemsData: OrderItemRow[] = []
 
   try {
-    let query = client.from('orders').select('*, order_items(*)').order('created_at', { ascending: false })
+    let query = client
+      .from('orders')
+      .select('*, order_items(*)')
+      .order('created_at', { ascending: false })
+      .limit(limitCount)
+
     if (!isStaff) {
       const filters: string[] = []
       if (userId) filters.push(`user_id.eq.${userId}`)
@@ -421,7 +432,12 @@ export async function fetchOrders(userRole?: string, userId?: string, userEmail?
 
   // Fallback: 2-step separate query if nested select failed
   try {
-    let ordersQuery = client.from('orders').select('*').order('created_at', { ascending: false })
+    let ordersQuery = client
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limitCount)
+
     if (!isStaff) {
       const filters: string[] = []
       if (userId) filters.push(`user_id.eq.${userId}`)

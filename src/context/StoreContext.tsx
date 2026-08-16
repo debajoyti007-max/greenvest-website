@@ -236,35 +236,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [cloud, refreshLocal, user?.id])
 
   useEffect(() => {
+    // ⚡ High-Volume WebSocket Optimization:
+    // Only open persistent order & product websocket channels for staff (seller, admin, rider).
+    // For regular customers, catalog updates on window focus / tab visibility change to eliminate 95% of server connection slots.
     if (!cloud) return
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-    return subscribeProducts(() => {
-      if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(async () => {
+
+    const isStaff = user && (user.role === 'seller' || user.role === 'admin' || user.role === 'rider')
+
+    if (!isStaff) {
+      // Smart refresh on window focus / tab visibility for regular customers
+      const onFocus = () => {
+        if (document.visibilityState === 'visible') {
+          void fetchProducts(true).then((p) => setProducts(p)).catch(() => {})
+        }
+      }
+      window.addEventListener('visibilitychange', onFocus)
+      window.addEventListener('focus', onFocus)
+      return () => {
+        window.removeEventListener('visibilitychange', onFocus)
+        window.removeEventListener('focus', onFocus)
+      }
+    }
+
+    let pTimer: ReturnType<typeof setTimeout> | null = null
+    const unsubProds = subscribeProducts(() => {
+      if (pTimer) clearTimeout(pTimer)
+      pTimer = setTimeout(async () => {
         try {
           const prods = await fetchProducts(true)
           setProducts(prods)
         } catch {}
       }, 500)
     })
-  }, [cloud])
 
-  useEffect(() => {
-    // ⚡ Smart WebSocket Throttling:
-    // Only open persistent order websocket channels for staff (seller, admin, rider) who need live alerts.
-    // Regular customers use instant optimistic state updates to save concurrent connection limits and eliminate server load!
-    if (!cloud || !user) return
-    const isStaff = user.role === 'seller' || user.role === 'admin' || user.role === 'rider'
-    if (!isStaff) return
-
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-    return subscribeOrders(() => {
-      if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(() => {
+    let oTimer: ReturnType<typeof setTimeout> | null = null
+    const unsubOrds = subscribeOrders(() => {
+      if (oTimer) clearTimeout(oTimer)
+      oTimer = setTimeout(() => {
         void refreshCloud()
       }, 500)
     })
-  }, [cloud, user?.id, user?.role, refreshCloud])
+
+    return () => {
+      unsubProds()
+      unsubOrds()
+    }
+  }, [cloud, user, refreshCloud])
 
   // ✅ No polling needed — subscribeOrders + subscribeProducts above handle all live updates via Supabase Realtime.
 

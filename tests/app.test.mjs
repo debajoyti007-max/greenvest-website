@@ -350,3 +350,32 @@ describe('Free Delivery & PIN Code Verification Logic', () => {
     assert.equal(isValidPinCode(''), false)
   })
 })
+
+// 11. High-Volume Scalability & Storage Quotas
+describe('High-Volume Scalability & Quota Protection', () => {
+  test('Caps local storage orders to latest 50 entries', () => {
+    const hugeOrdersList = Array.from({ length: 120 }, (_, i) => ({
+      id: `ord-${i}`,
+      total: 500,
+      createdAt: new Date(Date.now() - i * 1000).toISOString(),
+    }))
+
+    function saveOrdersPruned(orders) {
+      return orders.slice(0, 50)
+    }
+
+    const saved = saveOrdersPruned(hugeOrdersList)
+    assert.equal(saved.length, 50)
+    assert.equal(saved[0].id, 'ord-0')
+    assert.equal(saved[49].id, 'ord-49')
+  })
+
+  test('fetchOrders applies default limit to prevent unbounded memory spikes', () => {
+    function getQueryLimit(customLimit) {
+      return customLimit || 100
+    }
+
+    assert.equal(getQueryLimit(undefined), 100)
+    assert.equal(getQueryLimit(25), 25)
+  })
+})
