@@ -188,7 +188,7 @@ export default function Layout() {
               <h4 className="footer-col-title">{lang === 'bn' ? '🏪 আউটলেট' : '🏪 Our Outlet'}</h4>
               <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '0 0 0.5rem', lineHeight: 1.4 }}>
                 <strong>GreenVest Store</strong><br />
-                {lang === 'bn' ? 'সুতাহাটা - মহিষাদল রোড, পূর্ব মেদিনীপুর, পিন ৭২১৬৩৫' : 'Sutahata - Mahishadal Rd, Purba Medinipur, 721635'}
+                {lang === 'bn' ? 'পূর্ব মেদিনীপুর, পিন: ৭২১৬৪৮' : 'Purba Medinipur, PIN 721648'}
               </p>
               <a
                 href="https://maps.app.goo.gl/zjHaYvddzvXjHkap6"

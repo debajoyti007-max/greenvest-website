@@ -3,12 +3,12 @@ import type { DeliveryZone as DbDeliveryZone } from '../types'
 export const STORE_LOCATION = {
   name: 'GreenVest Store',
   nameBn: 'গ্রীনভেস্ট স্টোর',
-  address: 'GreenVest Store, Sutahata - Mahishadal Road, Purba Medinipur, PIN 721635',
-  addressBn: 'গ্রীনভেস্ট স্টোর, সুতাহাটা - মহিষাদল রোড, পূর্ব মেদিনীপুর, পিন ৭২১৬৩৫',
+  address: 'GreenVest Store, Purba Medinipur, PIN 721648',
+  addressBn: 'গ্রীনভেস্ট স্টোর, পূর্ব মেদিনীপুর, পিন: ৭২১৬৪৮',
   lat: 22.1723059,
   lng: 87.8677517,
   mapsUrl: 'https://maps.app.goo.gl/zjHaYvddzvXjHkap6',
-  pin: '721635',
+  pin: '721648',
   phone: '8170859653',
   hours: '7:00 AM – 9:00 PM',
   hoursBn: 'সকাল ৭:০০ – রাত ৯:০০',
@@ -35,18 +35,18 @@ export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lo
 
 /** Known PIN distances from Store Hub (22.1723, 87.8677) */
 const PIN_DISTANCE_MAP: Record<string, number> = {
-  '721635': 2.0,  // Sutahata (< 5km)
-  '721645': 3.5,  // Chaitanyapur (< 5km)
-  '721628': 4.5,  // Mahishadal (< 5km)
-  '721632': 3.0,  // Local Purba Medinipur (< 5km)
-  '721633': 4.5,  // Local Purba Medinipur (< 5km)
-  '721654': 8.5,  // Geonkhali (5-15km)
+  '721648': 1.5,  // Byabattarhat / Mayachar / Store Hub (< 5km)
+  '721665': 2.5,  // Kalyanchak (< 5km)
+  '721632': 3.5,  // Nandakumar (< 5km)
+  '721635': 5.5,  // Sutahata (5-15km)
+  '721645': 6.0,  // Chaitanyapur (5-15km)
+  '721628': 6.5,  // Mahishadal (5-15km)
+  '721654': 9.0,  // Geonkhali (5-15km)
   '721657': 11.0, // Kukrahati (5-15km)
-  '721607': 10.0, // Durgachak / Haldia (5-15km)
+  '721607': 12.0, // Durgachak / Haldia (5-15km)
   '721658': 13.0, // Barda / Bhabanipur (5-15km)
   '721606': 16.5, // Haldia Township (> 15km)
-  '721631': 17.5, // Nandakumar (> 15km)
-  '721636': 19.0, // Tamluk Town (> 15km)
+  '721636': 18.0, // Tamluk Town (> 15km)
   '721656': 20.0, // Nandigram (> 15km)
 }
 
