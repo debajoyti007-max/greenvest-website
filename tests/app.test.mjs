@@ -324,3 +324,29 @@ describe('Optimistic Updates State Rollback', () => {
     assert.equal(ordersState[0].status, 'delivered', 'State updates successfully on API success')
   })
 })
+
+// 10. Free Delivery & PIN Code Verification Logic
+describe('Free Delivery & PIN Code Verification Logic', () => {
+  function calcDeliveryFee(_pin) {
+    return { fee: 0, zone: 'Free Delivery' }
+  }
+
+  function isValidPinCode(pin) {
+    if (!pin) return false
+    const cleaned = String(pin).replace(/\D/g, '')
+    return cleaned.length === 6
+  }
+
+  test('Always provides ₹0 free delivery regardless of PIN location', () => {
+    assert.equal(calcDeliveryFee('721632').fee, 0)
+    assert.equal(calcDeliveryFee('700001').fee, 0)
+    assert.equal(calcDeliveryFee('110001').fee, 0)
+  })
+
+  test('Validates 6-digit PIN code format for address verification', () => {
+    assert.equal(isValidPinCode('721632'), true)
+    assert.equal(isValidPinCode(' 721632 '), true)
+    assert.equal(isValidPinCode('72163'), false)
+    assert.equal(isValidPinCode(''), false)
+  })
+})

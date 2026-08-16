@@ -110,8 +110,8 @@ export default function Cart() {
           <span>{t(lang, 'advance')}</span>
           <strong>₹{Math.ceil(cartTotal * 0.5)}</strong>
         </div>
-        <p className="hint" style={{ fontSize: '0.8rem', color: '#6b7280', margin: '0.25rem 0' }}>
-          {lang === 'bn' ? '+ ডেলিভারি চার্জ চেকআউটে যোগ হবে' : '+ delivery fee added at checkout'}
+        <p className="hint" style={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: 600, margin: '0.25rem 0' }}>
+          {lang === 'bn' ? '✓ বিনামূল্যে হোম ডেলিভারি (₹0 Delivery Charge)' : '✓ Free Home Delivery (₹0 Delivery Fee)'}
         </p>
         {!canCheckout && (
           <p className="form-error">

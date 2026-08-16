@@ -3,25 +3,15 @@ import type { DeliveryZone as DbDeliveryZone } from '../types'
 /** Delivery zones by PIN prefix (West Bengal). */
 export type DeliveryZone = 'local' | 'nearby' | 'far' | 'standard'
 
-export function calcDeliveryFee(pin?: string, zones?: DbDeliveryZone[]): { fee: number; zone: DeliveryZone | string } {
-  if (!pin || !pin.trim()) return { fee: 30, zone: 'local' }
-  const p = pin.replace(/\D/g, '')
-  
-  if (zones && zones.length > 0) {
-    const sortedZones = [...zones].sort((a, b) => b.pin_prefix.length - a.pin_prefix.length)
-    const match = sortedZones.find(z => p.startsWith(z.pin_prefix))
-    if (match) {
-      return { fee: match.fee, zone: match.zone }
-    }
-  }
+export function calcDeliveryFee(_pin?: string, _zones?: DbDeliveryZone[]): { fee: number; zone: DeliveryZone | string } {
+  // Free delivery across all service areas; PIN code is used strictly for address verification & routing
+  return { fee: 0, zone: 'Free Delivery' }
+}
 
-  if (p.length < 3) return { fee: 30, zone: 'local' }
-  if (p.startsWith('72163')) return { fee: 30, zone: 'local' }
-  if (p.startsWith('7216') || p.startsWith('7211')) return { fee: 50, zone: 'nearby' }
-  if (p.startsWith('721') || p.startsWith('700') || p.startsWith('711')) return { fee: 50, zone: 'nearby' }
-  if (p.startsWith('71') || p.startsWith('72')) return { fee: 50, zone: 'nearby' }
-  if (p.length >= 6) return { fee: 80, zone: 'far' }
-  return { fee: 30, zone: 'local' }
+export function isValidPinCode(pin?: string): boolean {
+  if (!pin) return false
+  const cleaned = pin.replace(/\D/g, '')
+  return cleaned.length === 6
 }
 
 export function getSlotCutoffStatus(): {

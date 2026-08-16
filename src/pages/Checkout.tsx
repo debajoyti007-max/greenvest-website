@@ -13,7 +13,7 @@ import {
   getOrCreateCartIdempotencyKey,
   clearCartIdempotencyKey,
 } from '../lib/validation'
-import type { Address, DeliveryZone } from '../types'
+import type { Address } from '../types'
 
 export default function Checkout() {
   const { user, updateUserProfile } = useAuth()
@@ -26,7 +26,6 @@ export default function Checkout() {
     checkDuplicateUtr,
     findRecentOrderByUtr,
     fetchAddresses,
-    fetchDeliveryZones,
     saveAddress,
     validateCoupon,
   } = useStore()
@@ -59,11 +58,9 @@ export default function Checkout() {
   const [couponError, setCouponError] = useState('')
 
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
-  const [zones, setZones] = useState<DeliveryZone[]>([])
-  const [zonesLoading, setZonesLoading] = useState(true)
   const [saveAddressToDb, setSaveAddressToDb] = useState(false)
 
-  const delivery = useMemo(() => calcDeliveryFee(pin || '721632', zones), [zones, pin])
+  const delivery = useMemo(() => calcDeliveryFee(pin), [pin])
   const grandTotal = Math.max(0, cartTotal + delivery.fee - (couponApplied?.discount || 0))
   const [paymentMode, setPaymentMode] = useState<'advance' | 'full'>('advance')
   const advance = Math.ceil(grandTotal * 0.5)
@@ -80,23 +77,6 @@ export default function Checkout() {
       window.removeEventListener('offline', handleOffline)
     }
   }, [])
-
-  useEffect(() => {
-    let active = true
-    fetchDeliveryZones()
-      .then((z) => {
-        if (active) {
-          setZones(z)
-          setZonesLoading(false)
-        }
-      })
-      .catch(() => {
-        if (active) setZonesLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [fetchDeliveryZones])
 
   useEffect(() => {
     if (!user) return
@@ -283,7 +263,6 @@ export default function Checkout() {
         utr: utrVal.cleanedValue,
         deliverySlot: 'morning',
         discountAmount: couponApplied?.discount || 0,
-        zones,
         geoLat,
         geoLng,
         paymentType: paymentMode,
@@ -450,28 +429,28 @@ export default function Checkout() {
                 </span>
                 <div className="upi-app-grid">
                   <a
-                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
+                    href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#0f9d58' }}>●</span> GPay
                   </a>
                   <a
-                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
+                    href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#5f259f' }}>●</span> PhonePe
                   </a>
                   <a
-                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
+                    href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#00baf2' }}>●</span> Paytm
                   </a>
                   <a
-                    href={zonesLoading ? '#' : `upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
+                    href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
                     className="upi-app-btn"
                     style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
                   >
@@ -489,7 +468,9 @@ export default function Checkout() {
             </div>
             <div>
               <dt>{t(lang, 'delivery')}</dt>
-              <dd>₹{delivery.fee}</dd>
+              <dd style={{ color: '#16a34a', fontWeight: 700 }}>
+                {delivery.fee === 0 ? (lang === 'bn' ? 'বিনামূল্যে (FREE)' : 'FREE') : `₹${delivery.fee}`}
+              </dd>
             </div>
             {couponApplied && (
               <div>
