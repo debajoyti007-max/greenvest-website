@@ -392,6 +392,11 @@ export async function fetchOrders(userRole?: string, userId?: string, userEmail?
   const client = requireClient()
   const isStaff = userRole === 'seller' || userRole === 'admin' || userRole === 'rider'
 
+  // Privacy isolation: non-staff users must provide an identifier
+  if (!isStaff && !userId && !userEmail && !userPhone) {
+    return []
+  }
+
   let ordersData: OrderRow[] = []
   let itemsData: OrderItemRow[] = []
 
@@ -476,6 +481,39 @@ export async function createOrder(order: Order): Promise<Order> {
     }).select()
   } catch (profErr) {
     console.debug('Profile already exists, role preserved:', profErr)
+  }
+
+  // Attempt atomic server-side RPC transaction first
+  try {
+    const { data: atomicRes, error: rpcErr } = await client.rpc('create_order_atomic', {
+      p_id: order.id,
+      p_user_id: order.userId,
+      p_user_name: order.userName,
+      p_user_email: order.userEmail || `${order.userId}@greenvest.shop`,
+      p_address: order.address,
+      p_phone: order.phone,
+      p_pin: order.pin,
+      p_delivery_slot: order.deliverySlot || 'morning',
+      p_utr: order.utr,
+      p_delivery_fee: order.deliveryFee,
+      p_discount: order.discountAmount || 0,
+      p_payment_type: order.paymentType || 'advance',
+      p_items: order.items.map((it) => ({
+        productId: it.productId,
+        name: it.name,
+        emoji: it.emoji,
+        grade: it.grade,
+        qty: it.qty,
+        weightMultiplier: it.weightMultiplier || 1,
+        weightLabel: it.weightLabel || '1 kg',
+      })),
+    })
+
+    if (!rpcErr && atomicRes && (atomicRes as any).success) {
+      return order
+    }
+  } catch (rpcEx) {
+    console.debug('Atomic RPC fallback to direct insert:', rpcEx)
   }
 
   // Step 1: Insert order row
@@ -648,7 +686,7 @@ export function subscribeProducts(onChange: () => void) {
 
 
 export async function fetchAddresses(userId: string): Promise<Address[]> {
-  if (!supabase) return []
+  if (!supabase || !userId) return []
   try {
     const { data, error } = await supabase.from('addresses').select('*').eq('user_id', userId)
     if (error) return []

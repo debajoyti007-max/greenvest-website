@@ -237,11 +237,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!cloud) return
-    return subscribeProducts(async () => {
-      try {
-        const prods = await fetchProducts(true)
-        setProducts(prods)
-      } catch {}
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    return subscribeProducts(() => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(async () => {
+        try {
+          const prods = await fetchProducts(true)
+          setProducts(prods)
+        } catch {}
+      }, 500)
     })
   }, [cloud])
 
@@ -253,8 +257,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const isStaff = user.role === 'seller' || user.role === 'admin' || user.role === 'rider'
     if (!isStaff) return
 
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
     return subscribeOrders(() => {
-      void refreshCloud()
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        void refreshCloud()
+      }, 500)
     })
   }, [cloud, user?.id, user?.role, refreshCloud])
 
@@ -469,9 +477,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateProduct = useCallback(
     async (product: Product) => {
+      let prevSnapshot: Product[] = []
+      setProducts((prev) => {
+        prevSnapshot = prev
+        return prev.map((p) => (p.id === product.id ? product : p))
+      })
+
       if (cloud) {
-        const saved = await upsertProduct(product)
-        setProducts((prev) => prev.map((p) => (p.id === saved.id ? saved : p)))
+        try {
+          const saved = await upsertProduct(product)
+          setProducts((prev) => prev.map((p) => (p.id === saved.id ? saved : p)))
+        } catch (err: any) {
+          console.error('updateProduct failed, reverting UI:', err)
+          setProducts(prevSnapshot)
+          showToast(`Failed to update product: ${err.message || err}`, 'error')
+          throw err
+        }
         return
       }
       const next = getProducts().map((p) => (p.id === product.id ? product : p))
@@ -484,8 +505,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addProduct = useCallback(
     async (product: Omit<Product, 'id'>) => {
       if (cloud) {
-        const saved = await insertProduct(product)
-        setProducts((prev) => [...prev, saved])
+        try {
+          const saved = await insertProduct(product)
+          setProducts((prev) => [...prev, saved])
+        } catch (err: any) {
+          console.error('addProduct failed:', err)
+          showToast(`Failed to add product: ${err.message || err}`, 'error')
+          throw err
+        }
         return
       }
       const next = [...getProducts(), { ...product, id: uid('p') }]
@@ -497,9 +524,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const deleteProduct = useCallback(
     async (id: string) => {
+      let prevSnapshot: Product[] = []
+      setProducts((prev) => {
+        prevSnapshot = prev
+        return prev.filter((p) => p.id !== id)
+      })
+
       if (cloud) {
-        await deleteProductApi(id)
-        setProducts((prev) => prev.filter((p) => p.id !== id))
+        try {
+          await deleteProductApi(id)
+        } catch (err: any) {
+          console.error('deleteProduct failed, reverting UI:', err)
+          setProducts(prevSnapshot)
+          showToast(`Failed to delete product: ${err.message || err}`, 'error')
+          throw err
+        }
         return
       }
       const next = getProducts().filter((p) => p.id !== id)
@@ -558,18 +597,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateOrderStatus = useCallback(
     async (id: string, status: OrderStatus) => {
-      // Optimistically update React state for 0ms UI delay
-      setOrders((prev) =>
-        prev.map((o) => (o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o)),
-      )
+      let prevSnapshot: Order[] = []
+      setOrders((prev) => {
+        prevSnapshot = prev
+        return prev.map((o) => (o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o))
+      })
+
       if (cloud) {
         try {
           await updateOrderStatusApi(id, status)
-          await refreshCloud()
         } catch (err: any) {
-          console.error('updateOrderStatus failed:', err)
+          console.error('updateOrderStatus failed, reverting UI:', err)
+          setOrders(prevSnapshot)
           showToast(`Error updating order: ${err.message || err}`, 'error')
-          await refreshCloud()
           throw err
         }
       } else {
@@ -579,23 +619,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveOrders(next)
       }
     },
-    [cloud, refreshCloud],
+    [cloud],
   )
 
   const bulkUpdateOrderStatus = useCallback(
     async (ids: string[], status: OrderStatus) => {
       if (ids.length === 0) return
-      setOrders((prev) =>
-        prev.map((o) => (ids.includes(o.id) ? { ...o, status, updatedAt: new Date().toISOString() } : o)),
-      )
+      let prevSnapshot: Order[] = []
+      setOrders((prev) => {
+        prevSnapshot = prev
+        return prev.map((o) => (ids.includes(o.id) ? { ...o, status, updatedAt: new Date().toISOString() } : o))
+      })
+
       if (cloud) {
         try {
           await bulkUpdateOrderStatusApi(ids, status)
-          await refreshCloud()
         } catch (err: any) {
-          console.error('bulkUpdateOrderStatus failed:', err)
+          console.error('bulkUpdateOrderStatus failed, reverting UI:', err)
+          setOrders(prevSnapshot)
           showToast(`Bulk update failed: ${err.message || err}`, 'error')
-          await refreshCloud()
           throw err
         }
       } else {
@@ -605,13 +647,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveOrders(next)
       }
     },
-    [cloud, refreshCloud],
+    [cloud],
   )
 
   const verifyUtr = useCallback(
     async (id: string, verified: boolean) => {
-      setOrders((prev) =>
-        prev.map((o) =>
+      let prevSnapshot: Order[] = []
+      setOrders((prev) => {
+        prevSnapshot = prev
+        return prev.map((o) =>
           o.id === id
             ? {
                 ...o,
@@ -620,16 +664,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 updatedAt: new Date().toISOString(),
               }
             : o,
-        ),
-      )
+        )
+      })
+
       if (cloud) {
         try {
           await verifyUtrApi(id, verified)
-          await refreshCloud()
         } catch (err: any) {
-          console.error('verifyUtr failed:', err)
+          console.error('verifyUtr failed, reverting UI:', err)
+          setOrders(prevSnapshot)
           showToast(`Verify UTR failed: ${err.message || err}`, 'error')
-          await refreshCloud()
           throw err
         }
       } else {
@@ -646,21 +690,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveOrders(next)
       }
     },
-    [cloud, refreshCloud],
+    [cloud],
   )
 
   const deleteOrder = useCallback(
     async (id: string) => {
-      // Optimistically remove order from local state immediately
-      setOrders((prev) => prev.filter((o) => o.id !== id))
+      let prevSnapshot: Order[] = []
+      setOrders((prev) => {
+        prevSnapshot = prev
+        return prev.filter((o) => o.id !== id)
+      })
+
       if (cloud) {
         try {
           await deleteOrderApi(id)
-          await refreshCloud()
         } catch (err: any) {
-          console.error('deleteOrder failed:', err)
+          console.error('deleteOrder failed, reverting UI:', err)
+          setOrders(prevSnapshot)
           showToast(`Delete order failed: ${err.message || err}`, 'error')
-          await refreshCloud()
           throw err
         }
       } else {
@@ -668,7 +715,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveOrders(next)
       }
     },
-    [cloud, refreshCloud],
+    [cloud],
   )
 
   const fetchAddresses = useCallback(async (userId: string) => {

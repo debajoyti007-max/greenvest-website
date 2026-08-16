@@ -33,7 +33,12 @@ export default function Orders() {
 
   const mine = useMemo(() => {
     if (!user) return []
-    return orders.filter((o) => o.userId === user.id || (user.phone && o.phone === user.phone))
+    return orders.filter(
+      (o) =>
+        o.userId === user.id ||
+        (user.phone && o.phone === user.phone) ||
+        (user.email && o.userEmail.toLowerCase() === user.email.toLowerCase()),
+    )
   }, [orders, user])
 
   const { recentOrders, archivedOrders, clearedOrders } = useMemo(() => {

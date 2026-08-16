@@ -36,16 +36,27 @@ export default function RiderView() {
     return <Navigate to="/" replace />
   }
 
-  const handleCompleteDelivery = async (orderId: string, userName: string, balance: number) => {
+  const handleCompleteDelivery = async (o: typeof orders[0]) => {
+    const isReady = o.utrVerified || o.status === 'confirmed' || o.status === 'advance_paid'
+    if (!isReady) {
+      alert(
+        lang === 'bn'
+          ? '⚠️ সেলারের পেমেন্ট ভেরিফিকেশন অথবা অর্ডার কনফার্মেশন ছাড়া ডেলিভারি সম্পন্ন করা যাবে না।'
+          : '⚠️ This order requires seller payment verification or confirmation before it can be marked as delivered.',
+      )
+      return
+    }
+
+    const balance = Math.max(0, o.total - o.advanceAmount)
     const confirmMsg = lang === 'bn'
-      ? `${userName}-এর অর্ডার ডেলিভারি সম্পন্ন হয়েছে এবং বাকি ₹${balance} ক্যাশ সংগৃহীত হয়েছে?`
-      : `Confirm delivery completed for ${userName} and ₹${balance} balance collected?`
+      ? `${o.userName}-এর অর্ডার ডেলিভারি সম্পন্ন হয়েছে এবং বাকি ₹${balance} ক্যাশ সংগৃহীত হয়েছে?`
+      : `Confirm delivery completed for ${o.userName} and ₹${balance} balance collected?`
     if (!confirm(confirmMsg)) return
 
     try {
-      setCompletingId(orderId)
-      await updateOrderStatus(orderId, 'delivered')
-      showToast(lang === 'bn' ? `✅ ${userName}-এর অর্ডার ডেলিভারি সম্পন্ন হয়েছে!` : `✅ Order for ${userName} delivered!`, '🎉')
+      setCompletingId(o.id)
+      await updateOrderStatus(o.id, 'delivered')
+      showToast(lang === 'bn' ? `✅ ${o.userName}-এর অর্ডার ডেলিভারি সম্পন্ন হয়েছে!` : `✅ Order for ${o.userName} delivered!`, '🎉')
     } finally {
       setCompletingId(null)
     }
@@ -189,14 +200,20 @@ export default function RiderView() {
                 </div>
 
                 {o.status !== 'delivered' ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary rider-complete-btn"
-                    disabled={completingId === o.id}
-                    onClick={() => handleCompleteDelivery(o.id, o.userName, balance)}
-                  >
-                    {completingId === o.id ? '⏳...' : `✓ ${lang === 'bn' ? `ডেলিভারি ও ক্যাশ (₹${balance}) সম্পন্ন` : `Mark Delivered & Collect ₹${balance}`}`}
-                  </button>
+                  (o.utrVerified || o.status === 'confirmed' || o.status === 'advance_paid') ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary rider-complete-btn"
+                      disabled={completingId === o.id}
+                      onClick={() => handleCompleteDelivery(o)}
+                    >
+                      {completingId === o.id ? '⏳...' : `✓ ${lang === 'bn' ? `ডেলিভারি ও ক্যাশ (₹${balance}) সম্পন্ন` : `Mark Delivered & Collect ₹${balance}`}`}
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#fef3c7', border: '1px solid #fde047', borderRadius: '8px', fontSize: '0.8rem', color: '#92400e', textAlign: 'center', fontWeight: 600 }}>
+                      ⏳ {lang === 'bn' ? 'সেলার কর্তৃক পেমেন্ট যাচাই অপেক্ষমাণ' : 'Payment Verification Pending from Seller'}
+                    </div>
+                  )
                 ) : (
                   <button
                     type="button"

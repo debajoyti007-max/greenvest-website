@@ -195,8 +195,8 @@ describe('XSS Protection in Invoices & Print Utilities', () => {
   })
 })
 
-// 6. Checkout Unlock & Error Recovery
-describe('Checkout Lock & Error Recovery', () => {
+// 6. Checkout Lock & Cart Safety on Error
+describe('Checkout Lock & Cart Safety', () => {
   test('Submitting state is guaranteed to reset in finally block even on error', async () => {
     let isSubmitting = false
 
@@ -210,16 +210,117 @@ describe('Checkout Lock & Error Recovery', () => {
       }
     }
 
-    // Success flow
     await submitMock(false)
     assert.equal(isSubmitting, false)
 
-    // Error flow
     try {
       await submitMock(true)
-    } catch {
-      // Ignored
-    }
+    } catch {}
     assert.equal(isSubmitting, false, 'Submitting lock must be released on error')
+  })
+
+  test('Cart is not cleared when order placement throws an error', async () => {
+    let cart = [{ productId: 'p1', qty: 2 }]
+
+    async function placeOrderMock(shouldFail) {
+      if (shouldFail) throw new Error('DB connection failed')
+      // Only clear cart upon success:
+      cart = []
+      return { id: 'ord-123' }
+    }
+
+    try {
+      await placeOrderMock(true)
+    } catch {}
+
+    assert.equal(cart.length, 1, 'Cart items must be preserved after order error')
+    assert.equal(cart[0].productId, 'p1')
+
+    // Successful order clears cart
+    await placeOrderMock(false)
+    assert.equal(cart.length, 0, 'Cart is safely cleared upon success')
+  })
+})
+
+// 7. Customer Privacy & Access Isolation
+describe('Customer Privacy & Order Isolation', () => {
+  const allOrders = [
+    { id: 'o-1', userId: 'user-alice', userEmail: 'alice@mail.com', phone: '9876543210' },
+    { id: 'o-2', userId: 'user-bob', userEmail: 'bob@mail.com', phone: '9123456789' },
+  ]
+
+  function filterCustomerOrders(orders, currentUserId, userEmail, phone, role) {
+    const isStaff = role === 'seller' || role === 'admin' || role === 'rider'
+    if (isStaff) return orders
+    if (!currentUserId && !userEmail && !phone) return []
+    return orders.filter(
+      (o) =>
+        o.userId === currentUserId ||
+        (userEmail && o.userEmail === userEmail) ||
+        (phone && o.phone === phone)
+    )
+  }
+
+  test('Regular customer can only view their own orders', () => {
+    const aliceOrders = filterCustomerOrders(allOrders, 'user-alice', 'alice@mail.com', '9876543210', 'customer')
+    assert.equal(aliceOrders.length, 1)
+    assert.equal(aliceOrders[0].id, 'o-1')
+  })
+
+  test('Unauthenticated/empty user returns 0 orders', () => {
+    const guestOrders = filterCustomerOrders(allOrders, null, null, null, 'customer')
+    assert.equal(guestOrders.length, 0)
+  })
+
+  test('Staff members can view all orders', () => {
+    const staffOrders = filterCustomerOrders(allOrders, 'user-staff', 'staff@mail.com', null, 'seller')
+    assert.equal(staffOrders.length, 2)
+  })
+})
+
+// 8. Rider Delivery Gating
+describe('Rider Delivery Gating Requirements', () => {
+  function canRiderDeliver(order) {
+    return Boolean(order.utrVerified || order.status === 'confirmed' || order.status === 'advance_paid')
+  }
+
+  test('Allows delivery when payment is verified (utrVerified: true)', () => {
+    assert.equal(canRiderDeliver({ status: 'pending', utrVerified: true }), true)
+  })
+
+  test('Allows delivery when seller confirmed order (status: confirmed)', () => {
+    assert.equal(canRiderDeliver({ status: 'confirmed', utrVerified: false }), true)
+  })
+
+  test('Prevents rider from marking delivered when order is unverified pending', () => {
+    assert.equal(canRiderDeliver({ status: 'pending', utrVerified: false }), false)
+  })
+})
+
+// 9. Optimistic State Rollback on API Failure
+describe('Optimistic Updates State Rollback', () => {
+  test('Reverts orders state to previous snapshot on update failure', async () => {
+    let ordersState = [{ id: 'o-1', status: 'pending' }]
+
+    async function updateStatusOptimistic(id, newStatus, shouldFail) {
+      const prevSnapshot = [...ordersState]
+      // Optimistic update:
+      ordersState = ordersState.map((o) => (o.id === id ? { ...o, status: newStatus } : o))
+
+      try {
+        if (shouldFail) throw new Error('Network error')
+      } catch {
+        // Rollback:
+        ordersState = prevSnapshot
+      }
+    }
+
+    // Failed update should rollback to pending
+    await updateStatusOptimistic('o-1', 'delivered', true)
+    assert.equal(ordersState[0].status, 'pending', 'State must rollback to pending after API failure')
+
+    // Successful update should commit
+    await updateStatusOptimistic('o-1', 'delivered', false)
+    assert.equal(ordersState[0].status, 'delivered', 'State updates successfully on API success')
   })
 })

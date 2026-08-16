@@ -82,11 +82,7 @@ export default function Checkout() {
   }, [])
 
   useEffect(() => {
-    if (!user) return
     let active = true
-    fetchAddresses(user.id).then((addrs) => {
-      if (active) setSavedAddresses(addrs)
-    })
     fetchDeliveryZones()
       .then((z) => {
         if (active) {
@@ -95,12 +91,23 @@ export default function Checkout() {
         }
       })
       .catch(() => {
-        setZonesLoading(false)
+        if (active) setZonesLoading(false)
       })
     return () => {
       active = false
     }
-  }, [user, fetchAddresses, fetchDeliveryZones])
+  }, [fetchDeliveryZones])
+
+  useEffect(() => {
+    if (!user) return
+    let active = true
+    fetchAddresses(user.id).then((addrs) => {
+      if (active) setSavedAddresses(addrs)
+    })
+    return () => {
+      active = false
+    }
+  }, [user, fetchAddresses])
 
   useEffect(() => {
     if (userEditedAddress.current) return
