@@ -479,7 +479,44 @@ export async function fetchOrders(
   })
 }
 
+export async function fetchOrderByPublicQuery(rawQuery: string): Promise<Order | null> {
+  if (!supabase) return null
 
+  const cleaned = (rawQuery || '').trim().toLowerCase().replace(/^#/, '')
+  const digitsOnly = cleaned.replace(/\D/g, '')
+  if (!cleaned) return null
+
+  try {
+    let query = supabase.from('orders').select('*, order_items(*)')
+    const filters: string[] = [`id.eq.${cleaned}`, `id.ilike.%${cleaned}`]
+    if (digitsOnly.length >= 10) {
+      filters.push(`phone.eq.${digitsOnly.slice(-10)}`)
+    }
+    const { data, error } = await query.or(filters.join(',')).limit(1).maybeSingle()
+    if (!error && data) {
+      return mapOrder(data as OrderRow)
+    }
+  } catch (err) {
+    console.debug('fetchOrderByPublicQuery error:', err)
+  }
+  return null
+}
+
+export async function updateOrderUtrApi(orderId: string, utr: string): Promise<boolean> {
+  const client = requireClient()
+
+  const cleanedUtr = (utr || '').trim().toUpperCase()
+  const { error } = await client
+    .from('orders')
+    .update({ utr: cleanedUtr, updated_at: new Date().toISOString() })
+    .eq('id', orderId)
+    .eq('utr_verified', false)
+
+  if (error) {
+    throw error
+  }
+  return true
+}
 
 export async function createOrder(order: Order): Promise<Order> {
   const client = requireClient()

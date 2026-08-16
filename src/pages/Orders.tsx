@@ -10,9 +10,37 @@ import type { Order, OrderItem } from '../types'
 
 export default function Orders() {
   const { user } = useAuth()
-  const { orders, lang, reorderFromOrder, updateOrderStatus } = useStore()
+  const { orders, lang, reorderFromOrder, updateOrderStatus, updateOrderUtr } = useStore()
   const navigate = useNavigate()
   const [msg, setMsg] = useState('')
+
+  const onEditUtr = async (orderId: string, currentUtr: string) => {
+    const entered = prompt(
+      lang === 'bn' ? 'সঠিক ১২ সংখ্যার UTR নম্বর লিখুন:' : 'Enter correct 12-digit UTR number:',
+      currentUtr,
+    )
+    if (!entered || entered.trim() === currentUtr.trim()) return
+    const clean = entered.trim().replace(/\D/g, '')
+    if (clean.length !== 12) {
+      alert(
+        lang === 'bn'
+          ? 'UTR নম্বর অবশ্যই ১২ সংখ্যার হতে হবে।'
+          : 'UTR must be exactly 12 numeric digits.',
+      )
+      return
+    }
+    try {
+      await updateOrderUtr(orderId, clean)
+    } catch {}
+  }
+
+  const onShareReceipt = (o: Order) => {
+    const itemsText = o.items
+      .map((it) => `• ${it.name} (${it.grade}) × ${it.qty} = ₹${it.unitPrice * it.qty}`)
+      .join('\n')
+    const text = `🌿 *GreenVest Order #${o.id}*\n📅 Date: ${new Date(o.createdAt).toLocaleDateString()}\n\n*Items:*\n${itemsText}\n\n*Total:* ₹${o.total}\n*Advance Paid:* ₹${o.advanceAmount}\n*Balance Due:* ₹${Math.max(0, o.total - o.advanceAmount)}\n*Delivery Address:* ${o.address} (PIN ${o.pin})\n\n📍 Track: https://greenvest.shop/track?id=${o.id}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+  }
 
   const [activeTab, setActiveTab] = useState<'recent' | 'archived'>('recent')
   const [archivedIds, setArchivedIds] = useState<string[]>(() => {
@@ -245,6 +273,22 @@ export default function Orders() {
                       {lang === 'bn' ? 'আবার অর্ডার' : 'Reorder'}
                     </button>
                   )}
+                  {o.status !== 'cancelled' && !o.utrVerified && o.status === 'pending' && (Date.now() - new Date(o.createdAt).getTime() < 30 * 60 * 1000) && (
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      onClick={() => onEditUtr(o.id, o.utr)}
+                    >
+                      ✏️ {lang === 'bn' ? 'UTR সংশোধন' : 'Edit UTR'}
+                    </button>
+                  )}
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => onShareReceipt(o)}
+                  >
+                    💬 {lang === 'bn' ? 'WhatsApp রসিদ' : 'WhatsApp Receipt'}
+                  </button>
                   {o.status !== 'cancelled' && (o.status === 'pending' || o.status === 'advance_paid') && (Date.now() - new Date(o.createdAt).getTime() < 30 * 60 * 1000) && (
                     <button 
                       type="button" 

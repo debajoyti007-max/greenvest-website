@@ -379,3 +379,46 @@ describe('High-Volume Scalability & Quota Protection', () => {
     assert.equal(getQueryLimit(25), 25)
   })
 })
+
+// 12. Guest Order Tracking, UTR Edit, and Daily Manifest
+describe('Guest Tracking, UTR Edit & Manifest Logic', () => {
+  test('Public order query normalizes search inputs correctly', () => {
+    function cleanTrackingQuery(raw) {
+      return (raw || '').trim().toLowerCase().replace(/^#/, '')
+    }
+
+    assert.equal(cleanTrackingQuery('#ORD-849201'), 'ord-849201')
+    assert.equal(cleanTrackingQuery(' 849201 '), '849201')
+    assert.equal(cleanTrackingQuery('#849201'), '849201')
+  })
+
+  test('UTR edit is only allowed for unverified pending orders within 30 minutes', () => {
+    function canEditUtr(order) {
+      if (order.status !== 'pending') return false
+      if (order.utrVerified) return false
+      const elapsed = Date.now() - new Date(order.createdAt).getTime()
+      return elapsed < 30 * 60 * 1000
+    }
+
+    const recentPending = { status: 'pending', utrVerified: false, createdAt: new Date().toISOString() }
+    const verifiedPending = { status: 'pending', utrVerified: true, createdAt: new Date().toISOString() }
+    const confirmedOrder = { status: 'confirmed', utrVerified: true, createdAt: new Date().toISOString() }
+    const oldPending = { status: 'pending', utrVerified: false, createdAt: new Date(Date.now() - 40 * 60 * 1000).toISOString() }
+
+    assert.equal(canEditUtr(recentPending), true)
+    assert.equal(canEditUtr(verifiedPending), false)
+    assert.equal(canEditUtr(confirmedOrder), false)
+    assert.equal(canEditUtr(oldPending), false)
+  })
+
+  test('Rider daily manifest calculates correct total balance to collect', () => {
+    const orders = [
+      { total: 500, advanceAmount: 250, status: 'confirmed' },
+      { total: 1000, advanceAmount: 1000, status: 'confirmed' },
+      { total: 800, advanceAmount: 400, status: 'confirmed' },
+    ]
+
+    const totalCashToCollect = orders.reduce((sum, o) => sum + Math.max(0, o.total - o.advanceAmount), 0)
+    assert.equal(totalCashToCollect, 650) // 250 + 0 + 400 = 650
+  })
+})

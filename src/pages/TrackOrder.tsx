@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import { useStore } from '../context/StoreContext'
 import { formatOrderId } from '../lib/business'
+import { fetchOrderByPublicQuery } from '../lib/api'
 import { t } from '../lib/i18n'
 import type { Order } from '../types'
 
@@ -12,17 +13,18 @@ export default function TrackOrder() {
   const [query, setQuery] = useState('')
   const [matched, setMatched] = useState<Order | null>(null)
   const [searched, setSearched] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   // Auto-track if URL contains ?id=849201 or ?order=849201
   useEffect(() => {
     const paramId = searchParams.get('id') || searchParams.get('order') || searchParams.get('num')
-    if (paramId && orders.length > 0) {
+    if (paramId) {
       setQuery(paramId)
       const rawInput = paramId.trim().toLowerCase().replace(/^#/, '')
       const digitsOnly = rawInput.replace(/\D/g, '')
 
-      const found = orders.find((o) => {
+      let found = orders.find((o) => {
         const oIdRaw = o.id.toLowerCase()
         const oIdFormatted = formatOrderId(o.id).toLowerCase()
         const oPhoneDigits = o.phone.replace(/\D/g, '').slice(-10)
@@ -39,11 +41,21 @@ export default function TrackOrder() {
       if (found) {
         setMatched(found)
         setSearched(true)
+      } else {
+        // Query Supabase directly if not found in local memory
+        setLoading(true)
+        void fetchOrderByPublicQuery(rawInput).then((res) => {
+          setLoading(false)
+          if (res) {
+            setMatched(res)
+            setSearched(true)
+          }
+        })
       }
     }
   }, [searchParams, orders])
 
-  const onTrack = (e: FormEvent) => {
+  const onTrack = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
     setMatched(null)
@@ -61,38 +73,39 @@ export default function TrackOrder() {
       return
     }
 
-    // Flexible multi-format search
-    const found = orders.find((o) => {
+    // 1. Check in-memory store orders first
+    let found = orders.find((o) => {
       const oIdRaw = o.id.toLowerCase()
       const oIdFormatted = formatOrderId(o.id).toLowerCase()
       const oPhoneDigits = o.phone.replace(/\D/g, '').slice(-10)
       const oUtr = (o.utr || '').trim().toLowerCase()
 
-      // 1. Direct or formatted Order ID match (e.g. ORD-849201, 849201)
       if (oIdRaw === rawInput || oIdFormatted === rawInput || oIdFormatted === `ord-${rawInput}`) {
         return true
       }
-
-      // 2. Simple 4-6 Digit suffix match (e.g. user typed last 4 or 6 numbers like "849201" or "9201")
       if (rawInput.length >= 4 && (oIdRaw.endsWith(rawInput) || oIdFormatted.endsWith(rawInput))) {
         return true
       }
       if (digitsOnly.length >= 4 && oIdRaw.replace(/\D/g, '').endsWith(digitsOnly)) {
         return true
       }
-
-      // 3. Mobile Number match (10 digits)
       if (digitsOnly.length >= 10 && (oPhoneDigits === digitsOnly || (o.userEmail && o.userEmail.includes(digitsOnly)))) {
         return true
       }
-
-      // 4. Payment UTR match
       if (oUtr && (oUtr === rawInput || oUtr.includes(rawInput))) {
         return true
       }
-
       return false
     })
+
+    // 2. Query Supabase directly if not found in local memory (e.g. guest WhatsApp tracking link)
+    if (!found) {
+      setLoading(true)
+      try {
+        found = (await fetchOrderByPublicQuery(rawInput)) || undefined
+      } catch {}
+      setLoading(false)
+    }
 
     if (found) {
       setMatched(found)
@@ -132,8 +145,10 @@ export default function TrackOrder() {
 
         {error && <p className="form-error">{error}</p>}
 
-        <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }}>
-          🔍 {lang === 'bn' ? 'স্ট্যাটাস দেখুন' : 'Track Order'}
+        <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }} disabled={loading}>
+          {loading
+            ? (lang === 'bn' ? '⏳ খোঁজা হচ্ছে...' : '⏳ Searching...')
+            : (`🔍 ${lang === 'bn' ? 'স্ট্যাটাস দেখুন' : 'Track Order'}`)}
         </button>
       </form>
 

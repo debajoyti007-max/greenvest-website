@@ -25,6 +25,7 @@ import {
   deleteOrderApi,
   upsertProduct,
   verifyUtrApi,
+  updateOrderUtrApi,
   fetchAddresses as fetchAddressesApi,
   saveAddress as saveAddressApi,
   deleteAddress as deleteAddressApi,
@@ -96,6 +97,7 @@ interface StoreContextValue {
   bulkUpdateOrderStatus: (ids: string[], status: OrderStatus) => Promise<void>
   checkDuplicateUtr: (utr: string) => Promise<boolean>
   findRecentOrderByUtr: (utr: string) => Promise<Order | null>
+  updateOrderUtr: (orderId: string, utr: string) => Promise<void>
   verifyUtr: (id: string, verified: boolean) => Promise<void>
   deleteOrder: (id: string) => Promise<void>
   refresh: () => Promise<void>
@@ -710,6 +712,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud],
   )
 
+  const updateOrderUtr = useCallback(
+    async (orderId: string, newUtr: string) => {
+      const prevOrders = [...orders]
+      const cleaned = (newUtr || '').trim().toUpperCase()
+      if (!cleaned) throw new Error('Invalid UTR')
+
+      // Optimistic update
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, utr: cleaned, updatedAt: new Date().toISOString() } : o)),
+      )
+
+      try {
+        if (cloud) {
+          await updateOrderUtrApi(orderId, cleaned)
+        } else {
+          const current = getOrders()
+          saveOrders(
+            current.map((o) => (o.id === orderId ? { ...o, utr: cleaned, updatedAt: new Date().toISOString() } : o)),
+          )
+        }
+        showToast('✓ UTR successfully updated!', '✅')
+      } catch (err: any) {
+        setOrders(prevOrders)
+        showToast(`Failed to update UTR: ${err.message || 'Error'}`, 'error')
+        throw err
+      }
+    },
+    [cloud, orders],
+  )
+
   const deleteOrder = useCallback(
     async (id: string) => {
       let prevSnapshot: Order[] = []
@@ -835,6 +867,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       bulkUpdateOrderStatus,
       checkDuplicateUtr,
       findRecentOrderByUtr,
+      updateOrderUtr,
       verifyUtr,
       deleteOrder,
       refresh,
@@ -874,6 +907,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       bulkUpdateOrderStatus,
       checkDuplicateUtr,
       findRecentOrderByUtr,
+      updateOrderUtr,
       verifyUtr,
       deleteOrder,
       refresh,
