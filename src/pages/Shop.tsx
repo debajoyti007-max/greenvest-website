@@ -12,6 +12,7 @@ import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'
 import { HERO_IMAGE, HERO_VEGGIES_IMAGE, HERO_FISH_IMAGE, resolveProductImage } from '../lib/productImages'
 import { matchesProductQuery } from '../lib/searchUtils'
+import { STORE_LOCATION } from '../lib/delivery'
 import type { Grade, Lang, Product, CartItem } from '../types'
 
 const GRADES: Grade[] = ['A', 'B', 'C']
@@ -419,6 +420,54 @@ export default function Shop() {
           ))}
         </div>
       </section>
+
+      {/* 🏪 Physical Store & In-Store Shopping Showcase */}
+      <div style={{
+        background: 'linear-gradient(90deg, #f0fdf4 0%, #ecfdf5 100%)',
+        border: '1.5px solid #86efac',
+        borderRadius: '14px',
+        padding: '0.75rem 1rem',
+        margin: '0.85rem 0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '0.75rem',
+        boxShadow: '0 2px 8px rgba(22, 101, 52, 0.06)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <span style={{ fontSize: '1.4rem' }}>🏪</span>
+          <div>
+            <strong style={{ color: '#166534', fontSize: '0.92rem', display: 'block' }}>
+              {lang === 'bn' ? 'অফলাইনে সরাসরি দোকানে এসে কিনুন (Physical Store)' : 'Visit Our Physical Store (Buy In-Person)'}
+            </strong>
+            <span style={{ color: '#4b5563', fontSize: '0.78rem' }}>
+              📍 {STORE_LOCATION.name} · {lang === 'bn' ? 'সুতাহাটা - মহিষাদল রোড (পিন ৭২১৬৩২)' : 'Sutahata - Mahishadal Road (PIN 721632)'} · 🟢 {lang === 'bn' ? 'খোলা আছে (সকাল ৭টা - রাত ৯টা)' : 'Open (7 AM - 9 PM)'}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <a
+            href={STORE_LOCATION.mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: '#166534',
+              color: '#ffffff',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              fontWeight: 700,
+              fontSize: '0.78rem',
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            🗺️ {lang === 'bn' ? 'গুগল ম্যাপ' : 'Google Maps'}
+          </a>
+        </div>
+      </div>
 
       {/* Trust strips */}
       <div className="trust-strips">

@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
-import { calcDeliveryFee } from '../lib/delivery'
+import { calcDeliveryFee, STORE_LOCATION } from '../lib/delivery'
 import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
@@ -59,8 +59,10 @@ export default function Checkout() {
 
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [saveAddressToDb, setSaveAddressToDb] = useState(false)
+  const [fulfillmentMode, setFulfillmentMode] = useState<'delivery' | 'pickup'>('delivery')
 
-  const delivery = useMemo(() => calcDeliveryFee(pin), [pin])
+  const coords = useMemo(() => (geoLat && geoLng ? { lat: geoLat, lng: geoLng } : null), [geoLat, geoLng])
+  const delivery = useMemo(() => calcDeliveryFee(pin, coords, fulfillmentMode), [pin, coords, fulfillmentMode])
   const grandTotal = Math.max(0, cartTotal + delivery.fee - (couponApplied?.discount || 0))
   const [paymentMode, setPaymentMode] = useState<'advance' | 'full'>('advance')
   const advance = Math.ceil(grandTotal * 0.5)
@@ -174,9 +176,12 @@ export default function Checkout() {
     setError('')
     setSlowNetwork(false)
 
-    const fullAddress = `${house.trim()} ${landmark.trim() ? `(Near: ${landmark.trim()})` : ''} ${area.trim()} ${geoCoords ? `[Maps: ${geoCoords}]` : ''}`.trim()
+    const isPickup = fulfillmentMode === 'pickup'
+    const fullAddress = isPickup
+      ? `Store Pickup - ${STORE_LOCATION.name} (${STORE_LOCATION.address})`
+      : `${house.trim()} ${landmark.trim() ? `(Near: ${landmark.trim()})` : ''} ${area.trim()} ${geoCoords ? `[Maps: ${geoCoords}]` : ''}`.trim()
 
-    if (!house.trim() || !area.trim()) {
+    if (!isPickup && (!house.trim() || !area.trim())) {
       setError(lang === 'bn' ? 'বাড়ি ও এলাকার নাম দিন' : 'Please enter your House name and Area/Village')
       submitLockRef.current = false
       return
@@ -190,8 +195,18 @@ export default function Checkout() {
       return
     }
 
-    if (!pin.trim() || !/^\d{6}$/.test(pin.trim())) {
+    if (!isPickup && (!pin.trim() || !/^\d{6}$/.test(pin.trim()))) {
       setError(lang === 'bn' ? '৬ সংখ্যার পিন কোড দিন (যেমন: ৭২১৬৩২)' : 'Enter your 6-digit PIN code (e.g. 721632)')
+      submitLockRef.current = false
+      return
+    }
+
+    if (!isPickup && delivery.isOutOfRange) {
+      setError(
+        lang === 'bn'
+          ? `আপনার দূরত্ব (${delivery.distanceKm} কিমি) আমাদের সর্বোচ্চ ১৫ কিমি ডেলিভারি সীমার বাইরে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন বা WhatsApp-এ যোগাযোগ করুন।`
+          : `Distance (${delivery.distanceKm} km) is beyond our 15 km home delivery limit. Please select "Store Pickup" or contact us on WhatsApp.`,
+      )
       submitLockRef.current = false
       return
     }
@@ -259,7 +274,7 @@ export default function Checkout() {
       const order = await placeOrder({
         address: fullAddress,
         phone: phoneVal.cleanedValue,
-        pin: pin.trim(),
+        pin: isPickup ? STORE_LOCATION.pin : pin.trim(),
         utr: utrVal.cleanedValue,
         deliverySlot: 'morning',
         discountAmount: couponApplied?.discount || 0,
@@ -567,73 +582,190 @@ export default function Checkout() {
         </div>
 
         <form className="form" onSubmit={onSubmit}>
-          {savedAddresses.length > 0 && (
-            <label>
-              {lang === 'bn' ? 'সংরক্ষিত ঠিকানা নির্বাচন করুন' : 'Select a saved address'}
-              <select onChange={e => {
-                if (!e.target.value) return
-                const addr = savedAddresses.find(a => a.id === Number(e.target.value))
-                if (addr) {
-                  setHouse(addr.address)
-                  setPhone(addr.phone)
-                  setPrefilled(true)
-                }
-              }}>
-                <option value="">{lang === 'bn' ? 'নতুন ঠিকানা লিখুন...' : 'Enter new address...'}</option>
-                {savedAddresses.map(a => (
-                  <option key={a.id} value={a.id}>{a.label || a.address.slice(0, 35)}</option>
-                ))}
-              </select>
-            </label>
-          )}
+          {/* 🚚 Fulfillment Option: Home Delivery vs Store Pickup */}
+          <div style={{ marginBottom: '1rem', background: '#f8fafc', border: '1.5px solid #cbd5e1', borderRadius: '14px', padding: '0.75rem' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: '0.45rem' }}>
+              📦 {lang === 'bn' ? 'অর্ডার গ্রহণের মাধ্যম:' : 'Fulfillment Option:'}
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setFulfillmentMode('delivery')}
+                style={{
+                  padding: '0.65rem 0.5rem',
+                  borderRadius: '10px',
+                  border: fulfillmentMode === 'delivery' ? '2px solid #166534' : '1px solid #cbd5e1',
+                  background: fulfillmentMode === 'delivery' ? '#f0fdf4' : '#ffffff',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: fulfillmentMode === 'delivery' ? '#166534' : '#1e293b' }}>
+                  🚚 {lang === 'bn' ? 'হোম ডেলিভারি' : 'Home Delivery'}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '0.15rem' }}>
+                  {lang === 'bn' ? '০-৫কিমি ₹৩০ · ৫-১৫কিমি ₹৫০' : '0-5km ₹30 · 5-15km ₹50'}
+                </div>
+              </button>
 
-          {/* Option 2: GPS Auto-Location Button */}
-          <div className="gps-detector-box" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.85rem 1rem', borderRadius: '12px', marginBottom: '0.5rem' }}>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleDetectGps}
-              disabled={detectingGps}
-              style={{ width: '100%', background: '#16a34a' }}
-            >
-              📍 {detectingGps ? (lang === 'bn' ? '⏳ অবস্থান চিহ্নিত করা হচ্ছে...' : '⏳ Detecting GPS...') : (lang === 'bn' ? 'আমার বর্তমান অবস্থান চিহ্নিত করুন (GPS)' : 'Auto-Fill My Location (GPS)')}
-            </button>
-            {geoCoords && <p className="hint" style={{ color: '#16a34a', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>✓ {lang === 'bn' ? 'GPS অবস্থান সফলভাবে পিন করা হয়েছে!' : 'GPS coordinates linked for delivery rider!'}</p>}
+              <button
+                type="button"
+                onClick={() => setFulfillmentMode('pickup')}
+                style={{
+                  padding: '0.65rem 0.5rem',
+                  borderRadius: '10px',
+                  border: fulfillmentMode === 'pickup' ? '2px solid #166534' : '1px solid #cbd5e1',
+                  background: fulfillmentMode === 'pickup' ? '#f0fdf4' : '#ffffff',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: fulfillmentMode === 'pickup' ? '#166534' : '#1e293b' }}>
+                  🏪 {lang === 'bn' ? 'দোকান থেকে পিকআপ' : 'Store Pickup'}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#16a34a', fontWeight: 600, marginTop: '0.15rem' }}>
+                  {lang === 'bn' ? '✓ ₹০ ডেলিভারি চার্জ' : '✓ ₹0 Delivery Charge'}
+                </div>
+              </button>
+            </div>
           </div>
 
-          {/* Option 1: Guided 3-Field Address Box */}
-          <label>
-            🏡 {lang === 'bn' ? 'বাড়ি / শপ / পারা নাম' : 'House / Shop / Para Name'}
-            <input
-              value={house}
-              onChange={(e) => { setHouse(e.target.value); userEditedAddress.current = true }}
-              required
-              placeholder={lang === 'bn' ? 'যেমন: কয়েল বাগান, বিশ্বাস বাড়ি / House #12' : 'e.g. Biswas House, House #12'}
-            />
-          </label>
+          {/* 🏪 Store Pickup Showcase Card */}
+          {fulfillmentMode === 'pickup' && (
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '1rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '1.3rem' }}>🏪</span>
+                <strong style={{ color: '#166534', fontSize: '0.95rem' }}>
+                  {lang === 'bn' ? `${STORE_LOCATION.nameBn} আউটলেট থেকে সরাসরি সংগ্রহ` : `Pickup at ${STORE_LOCATION.name} Store Outlet`}
+                </strong>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: '#374151', margin: '0 0 0.5rem', lineHeight: 1.4 }}>
+                📍 <strong>{lang === 'bn' ? 'ঠিকানা:' : 'Address:'}</strong> {lang === 'bn' ? STORE_LOCATION.addressBn : STORE_LOCATION.address}
+              </p>
+              <p style={{ fontSize: '0.82rem', color: '#15803d', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                🟢 {lang === 'bn' ? `খোলা থাকে: ${STORE_LOCATION.hoursBn}` : `Store Hours: ${STORE_LOCATION.hours}`} · 📞 {STORE_LOCATION.phone}
+              </p>
+              <a
+                href={STORE_LOCATION.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary"
+                style={{ fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+              >
+                🗺️ {lang === 'bn' ? 'Google Maps-এ দোকানের রাস্তা দেখুন' : 'Get Store Directions on Google Maps'}
+              </a>
+            </div>
+          )}
 
-          <label>
-            🏛️ {lang === 'bn' ? 'কাছের পরিচিত চিহ্নিত স্থান (ল্যান্ডমার্ক)' : 'Nearby Famous Landmark'}
-            <input
-              value={landmark}
-              onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
-              placeholder={lang === 'bn' ? 'যেমন: প্রাইমারি স্কুলের পাশে / হাসপাতাল মোড়' : 'e.g. Near Primary School / Hospital More'}
-            />
-          </label>
+          {/* 🚚 Home Delivery Distance & Address Section */}
+          {fulfillmentMode === 'delivery' && (
+            <>
+              <div style={{
+                background: delivery.isOutOfRange ? '#fef2f2' : '#f0fdf4',
+                border: delivery.isOutOfRange ? '1.5px solid #fca5a5' : '1px solid #bbf7d0',
+                padding: '0.65rem 0.85rem',
+                borderRadius: '10px',
+                fontSize: '0.84rem',
+                color: delivery.isOutOfRange ? '#dc2626' : '#166534',
+                marginBottom: '0.75rem',
+                fontWeight: 600,
+              }}>
+                {lang === 'bn' ? delivery.noticeBn : delivery.noticeEn}
+              </div>
 
-          <label>
-            📍 {lang === 'bn' ? 'গ্রাম / শহর / এলাকা' : 'Village / Town / Area Name'}
-            <input
-              value={area}
-              onChange={(e) => { setArea(e.target.value); userEditedAddress.current = true }}
-              required
-              placeholder={lang === 'bn' ? 'যেমন: কাঁথি শহর / সাবাজপুট' : 'e.g. Contai Town / Sabajput'}
-            />
-          </label>
+              {savedAddresses.length > 0 && (
+                <label>
+                  {lang === 'bn' ? 'সংরক্ষিত ঠিকানা নির্বাচন করুন' : 'Select a saved address'}
+                  <select onChange={e => {
+                    if (!e.target.value) return
+                    const addr = savedAddresses.find(a => a.id === Number(e.target.value))
+                    if (addr) {
+                      setHouse(addr.address)
+                      setPhone(addr.phone)
+                      setPrefilled(true)
+                    }
+                  }}>
+                    <option value="">{lang === 'bn' ? 'নতুন ঠিকানা লিখুন...' : 'Enter new address...'}</option>
+                    {savedAddresses.map(a => (
+                      <option key={a.id} value={a.id}>{a.label || a.address.slice(0, 35)}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {/* Option 2: GPS Auto-Location Button */}
+              <div className="gps-detector-box" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.85rem 1rem', borderRadius: '12px', marginBottom: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleDetectGps}
+                  disabled={detectingGps}
+                  style={{ width: '100%', background: '#166534' }}
+                >
+                  📍 {detectingGps ? (lang === 'bn' ? '⏳ অবস্থান চিহ্নিত করা হচ্ছে...' : '⏳ Detecting GPS...') : (lang === 'bn' ? 'আমার বর্তমান অবস্থান চিহ্নিত করুন (GPS)' : 'Auto-Fill My Location (GPS)')}
+                </button>
+                {geoCoords && <p className="hint" style={{ color: '#166534', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>✓ {lang === 'bn' ? 'GPS অবস্থান সফলভাবে পিন করা হয়েছে!' : 'GPS coordinates linked for delivery rider!'}</p>}
+              </div>
+
+              {/* Option 1: Guided 3-Field Address Box */}
+              <label>
+                🏡 {lang === 'bn' ? 'বাড়ি / শপ / পারা নাম' : 'House / Shop / Para Name'}
+                <input
+                  value={house}
+                  onChange={(e) => { setHouse(e.target.value); userEditedAddress.current = true }}
+                  required={fulfillmentMode === 'delivery'}
+                  placeholder={lang === 'bn' ? 'যেমন: কয়েল বাগান, বিশ্বাস বাড়ি / House #12' : 'e.g. Biswas House, House #12'}
+                />
+              </label>
+
+              <label>
+                🏛️ {lang === 'bn' ? 'কাছের পরিচিত চিহ্নিত স্থান (ল্যান্ডমার্ক)' : 'Nearby Famous Landmark'}
+                <input
+                  value={landmark}
+                  onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
+                  placeholder={lang === 'bn' ? 'যেমন: প্রাইমারি স্কুলের পাশে / হাসপাতাল মোড়' : 'e.g. Near Primary School / Hospital More'}
+                />
+              </label>
+
+              <label>
+                📍 {lang === 'bn' ? 'গ্রাম / শহর / এলাকা' : 'Village / Town / Area Name'}
+                <input
+                  value={area}
+                  onChange={(e) => { setArea(e.target.value); userEditedAddress.current = true }}
+                  required={fulfillmentMode === 'delivery'}
+                  placeholder={lang === 'bn' ? 'যেমন: সুতাহাটা বাজার / মহিষাদল' : 'e.g. Sutahata Bazar / Mahishadal'}
+                />
+              </label>
+
+              <label>
+                📮 {lang === 'bn' ? '৬ সংখ্যার পিন কোড' : '6-Digit PIN Code'}
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={pin}
+                  onChange={(e) => {
+                    setPin(e.target.value.replace(/\D/g, ''))
+                    userEditedAddress.current = true
+                  }}
+                  required={fulfillmentMode === 'delivery'}
+                  placeholder={lang === 'bn' ? 'যেমন: ৭২১৬৩২' : 'e.g. 721632'}
+                />
+              </label>
+
+              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '-0.25rem' }}>
+                <input type="checkbox" checked={saveAddressToDb} onChange={e => setSaveAddressToDb(e.target.checked)} />
+                {lang === 'bn' ? 'ভবিষ্যতের জন্য এই ঠিকানা সংরক্ষণ করুন' : 'Save this address for future'}
+              </label>
+            </>
+          )}
 
           {/* 12-24 Hour Guaranteed Delivery Timeframe Banner */}
           <div className="delivery-timeframe-box" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.85rem 1rem', borderRadius: '12px', fontSize: '0.9rem', color: '#166534' }}>
-            ⚡ <strong>{lang === 'bn' ? 'ডেলিভারি সময়:' : 'Delivery Timeframe:'}</strong> {lang === 'bn' ? `অর্ডার করার ${DELIVERY_WINDOW_BN}-এর মধ্যে সরাসরি ডোরস্টেপ ডেলিভারি।` : `Guaranteed doorstep delivery within ${DELIVERY_WINDOW}.`}
+            ⚡ <strong>{lang === 'bn' ? 'অর্ডার সময়সীমা:' : 'Order Timeframe:'}</strong> {fulfillmentMode === 'pickup'
+              ? (lang === 'bn' ? 'অর্ডার কনফার্ম হওয়ার পর দোকানে এসে সংগ্রহ করুন।' : 'Ready for pickup at our store after order confirmation.')
+              : (lang === 'bn' ? `অর্ডার করার ${DELIVERY_WINDOW_BN}-এর মধ্যে সরাসরি ডোরস্টেপ ডেলিভারি।` : `Guaranteed doorstep delivery within ${DELIVERY_WINDOW}.`)}
           </div>
 
           {/* 📶 Network Offline Alert */}
@@ -662,6 +794,7 @@ export default function Checkout() {
             </div>
           )}
 
+          {/* 📱 Customer Mobile Number */}
           <label>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span>{t(lang, 'phone')}</span>
@@ -686,21 +819,6 @@ export default function Checkout() {
               maxLength={10}
               placeholder={lang === 'bn' ? '১০ সংখ্যার মোবাইল (যেমন 9876543210)' : '10-digit mobile (e.g. 9876543210)'}
             />
-          </label>
-          <label>
-            📮 {lang === 'bn' ? 'আপনার এলাকার পিন কোড (৬ সংখ্যা)' : 'Your Area PIN Code (6 digits)'}
-            <input
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              required
-              maxLength={6}
-              inputMode="numeric"
-              placeholder={lang === 'bn' ? 'যেমন: ৭২১৬৩২' : 'e.g. 721632'}
-            />
-          </label>
-          <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '-0.5rem' }}>
-            <input type="checkbox" checked={saveAddressToDb} onChange={e => setSaveAddressToDb(e.target.checked)} />
-            {lang === 'bn' ? 'ভবিষ্যতের জন্য এই ঠিকানা সংরক্ষণ করুন' : 'Save this address for future'}
           </label>
           <label>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>

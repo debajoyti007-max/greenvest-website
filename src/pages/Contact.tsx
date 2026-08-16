@@ -1,5 +1,6 @@
 import { useStore } from '../context/StoreContext'
-import { SUPPORT_PHONE, SUPPORT_HOURS } from '../lib/business'
+import { SUPPORT_PHONE } from '../lib/business'
+import { STORE_LOCATION } from '../lib/delivery'
 
 const WA_NUMBER = '919932871027'
 const WA_MSG = encodeURIComponent('Hi GreenVest! I need help with my order. 🛒')
@@ -33,6 +34,65 @@ export default function Contact() {
         {lang === 'bn' ? 'WhatsApp-এ মেসেজ করুন' : 'Message us on WhatsApp'}
       </a>
 
+      {/* 🌿 Physical Storefront Card */}
+      <div style={{
+        background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+        border: '2px solid #86efac',
+        borderRadius: '16px',
+        padding: '1.25rem',
+        margin: '1.5rem 0',
+        boxShadow: '0 4px 12px rgba(22, 101, 52, 0.08)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '1.5rem' }}>🏪</span>
+            <div>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#166534', margin: 0 }}>
+                {lang === 'bn' ? `${STORE_LOCATION.nameBn} - আমাদের ফিজিক্যাল স্টোর` : `${STORE_LOCATION.name} - Physical Store & Outlet`}
+              </h2>
+              <span style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>
+                🟢 {lang === 'bn' ? `খোলা আছে · ${STORE_LOCATION.hoursBn}` : `Open Now · ${STORE_LOCATION.hours}`}
+              </span>
+            </div>
+          </div>
+          <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: '12px', fontWeight: 700, border: '1px solid #86efac' }}>
+            {lang === 'bn' ? 'সরাসরি দোকানে এসে কিনুন' : 'Walk-in & Buy In-Store'}
+          </span>
+        </div>
+
+        <p style={{ fontSize: '0.9rem', color: '#374151', margin: '0 0 0.75rem', lineHeight: 1.5 }}>
+          📍 <strong>{lang === 'bn' ? 'ঠিকানা:' : 'Address:'}</strong> {lang === 'bn' ? STORE_LOCATION.addressBn : STORE_LOCATION.address}
+        </p>
+
+        <div style={{ background: '#ffffff', borderRadius: '10px', padding: '0.75rem 1rem', border: '1px solid #bbf7d0', marginBottom: '1rem', fontSize: '0.85rem', color: '#166534' }}>
+          <strong>✨ {lang === 'bn' ? 'অফলাইন সুবিধা:' : 'In-Store Advantages:'}</strong>
+          <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.2rem', lineHeight: 1.4 }}>
+            <li>{lang === 'bn' ? 'সরাসরি দেখে জ্যান্ত নদী/পুকুরের মাছ ও মাঠের সবজি বেছে নিন' : 'Hand-pick live fresh fish and farm-harvested vegetables in person'}</li>
+            <li>{lang === 'bn' ? 'দোকান থেকে সংগ্রহ করলে ₹০ ডেলিভারি চার্জ' : 'Self-Pickup available with ₹0 Delivery Charge'}</li>
+            <li>{lang === 'bn' ? 'ক্যাশ বা UPI (Google Pay, PhonePe, Paytm) পেমেন্ট সুবিধা' : 'Pay via Cash or UPI (Google Pay, PhonePe, Paytm)'}</li>
+          </ul>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <a
+            href={STORE_LOCATION.mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}
+          >
+            🗺️ {lang === 'bn' ? 'Google Maps-এ লোকেশন দেখুন' : 'Open in Google Maps'}
+          </a>
+          <a
+            href={`tel:${STORE_LOCATION.phone}`}
+            className="btn btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}
+          >
+            📞 {lang === 'bn' ? 'দোকানে ফোন করুন' : 'Call Store'}
+          </a>
+        </div>
+      </div>
+
       {/* Info cards */}
       <div className="contact-cards">
         <div className="contact-card">
@@ -54,16 +114,18 @@ export default function Contact() {
         <div className="contact-card">
           <span className="contact-card-icon">🕐</span>
           <div>
-            <p className="contact-card-label">{lang === 'bn' ? 'সাপোর্ট সময়' : 'Support Hours'}</p>
-            <p className="contact-card-value">{SUPPORT_HOURS}</p>
+            <p className="contact-card-label">{lang === 'bn' ? 'দোকানের সময়' : 'Store Hours'}</p>
+            <p className="contact-card-value">{STORE_LOCATION.hours}</p>
           </div>
         </div>
 
         <div className="contact-card">
           <span className="contact-card-icon">🚚</span>
           <div>
-            <p className="contact-card-label">{lang === 'bn' ? 'ডেলিভারি সময়' : 'Delivery Time'}</p>
-            <p className="contact-card-value">{lang === 'bn' ? '১২–২৪ ঘণ্টা' : '12–24 hours'}</p>
+            <p className="contact-card-label">{lang === 'bn' ? 'ডেলিভারি চার্জ' : 'Delivery Charges'}</p>
+            <p className="contact-card-value" style={{ fontSize: '0.85rem' }}>
+              {lang === 'bn' ? '০-৫ কিমি: ₹৩০ · ৫-১৫ কিমি: ₹৫০' : '0-5km: ₹30 · 5-15km: ₹50'}
+            </p>
           </div>
         </div>
       </div>

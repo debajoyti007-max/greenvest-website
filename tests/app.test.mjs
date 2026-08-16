@@ -422,3 +422,68 @@ describe('Guest Tracking, UTR Edit & Manifest Logic', () => {
     assert.equal(totalCashToCollect, 650) // 250 + 0 + 400 = 650
   })
 })
+
+// 13. Distance-Based Delivery & Store Pickup Logic
+describe('Store Location & Distance-Based Delivery Tiers', () => {
+  const STORE_LOCATION = {
+    lat: 22.1723059,
+    lng: 87.8677517,
+  }
+
+  function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+    const R = 6371
+    const dLat = ((lat2 - lat1) * Math.PI) / 180
+    const dLon = ((lon2 - lon1) * Math.PI) / 180
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return Math.round(R * c * 10) / 10
+  }
+
+  function calcDeliveryFee(distanceKm, fulfillmentMode) {
+    if (fulfillmentMode === 'pickup') {
+      return { fee: 0, isPickup: true, isOutOfRange: false }
+    }
+    if (distanceKm <= 5) {
+      return { fee: 30, isPickup: false, isOutOfRange: false }
+    }
+    if (distanceKm <= 15) {
+      return { fee: 50, isPickup: false, isOutOfRange: false }
+    }
+    return { fee: 50, isPickup: false, isOutOfRange: true }
+  }
+
+  test('Haversine distance calculation is accurate', () => {
+    const d = calculateDistanceKm(STORE_LOCATION.lat, STORE_LOCATION.lng, 22.19, 87.88)
+    assert.ok(d > 2.0 && d < 3.5)
+  })
+
+  test('Store pickup has zero (0) delivery charge', () => {
+    const res = calcDeliveryFee(8.0, 'pickup')
+    assert.equal(res.fee, 0)
+    assert.equal(res.isPickup, true)
+    assert.equal(res.isOutOfRange, false)
+  })
+
+  test('Under 5 km charges exactly ₹30 delivery fee', () => {
+    const res = calcDeliveryFee(3.2, 'delivery')
+    assert.equal(res.fee, 30)
+    assert.equal(res.isOutOfRange, false)
+  })
+
+  test('5 km to 15 km charges exactly ₹50 delivery fee', () => {
+    const res = calcDeliveryFee(10.5, 'delivery')
+    assert.equal(res.fee, 50)
+    assert.equal(res.isOutOfRange, false)
+  })
+
+  test('Beyond 15 km is flagged as out of delivery range', () => {
+    const res = calcDeliveryFee(18.2, 'delivery')
+    assert.equal(res.isOutOfRange, true)
+  })
+})
+

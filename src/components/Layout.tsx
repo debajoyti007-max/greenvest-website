@@ -183,6 +183,23 @@ export default function Layout() {
               </nav>
             </div>
 
+            {/* Store Location column */}
+            <div className="footer-col">
+              <h4 className="footer-col-title">{lang === 'bn' ? '🏪 আউটলেট' : '🏪 Our Outlet'}</h4>
+              <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '0 0 0.5rem', lineHeight: 1.4 }}>
+                <strong>CHITRAVAS</strong><br />
+                {lang === 'bn' ? 'সুতাহাটা - মহিষাদল রোড, পূর্ব মেদিনীপুর, পিন ৭২১৬৩২' : 'Sutahata - Mahishadal Rd, Purba Medinipur, 721632'}
+              </p>
+              <a
+                href="https://maps.app.goo.gl/zjHaYvddzvXjHkap6"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#86efac', fontSize: '0.8rem', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              >
+                🗺️ {lang === 'bn' ? 'গুগল ম্যাপে দেখুন' : 'View on Google Maps'}
+              </a>
+            </div>
+
             {/* Legal column */}
             <div className="footer-col">
               <h4 className="footer-col-title">{lang === 'bn' ? 'সহায়তা' : 'Support'}</h4>

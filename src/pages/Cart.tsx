@@ -110,8 +110,10 @@ export default function Cart() {
           <span>{t(lang, 'advance')}</span>
           <strong>₹{Math.ceil(cartTotal * 0.5)}</strong>
         </div>
-        <p className="hint" style={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: 600, margin: '0.25rem 0' }}>
-          {lang === 'bn' ? '✓ বিনামূল্যে হোম ডেলিভারি (₹0 Delivery Charge)' : '✓ Free Home Delivery (₹0 Delivery Fee)'}
+        <p className="hint" style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, margin: '0.25rem 0' }}>
+          {lang === 'bn'
+            ? '🚚 হোম ডেলিভারি (০-৫ কিমি: ₹৩০ · ৫-১৫ কিমি: ₹৫০) বা 🏪 ফ্রি দোকান থেকে সংগ্রহ (₹০)'
+            : '🚚 Home Delivery (0-5km: ₹30 · 5-15km: ₹50) or 🏪 Free Store Pickup (₹0)'}
         </p>
         {!canCheckout && (
           <p className="form-error">
