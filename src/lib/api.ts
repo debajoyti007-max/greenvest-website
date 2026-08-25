@@ -355,6 +355,32 @@ export async function upsertProduct(product: Product): Promise<Product> {
   invalidateProductCache()
   const client = requireClient()
   const row = productToRow(product)
+
+  // 1. Direct update for existing products
+  if (product.id) {
+    let { data: updated, error: updateErr } = await client
+      .from('products')
+      .update(row)
+      .eq('id', product.id)
+      .select('*')
+      .maybeSingle()
+
+    if (updateErr && /(archived|stock_qty|season|sold_as|gram_options)/i.test(updateErr.message)) {
+      const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
+      ;({ data: updated, error: updateErr } = await client
+        .from('products')
+        .update(rest)
+        .eq('id', product.id)
+        .select('*')
+        .maybeSingle())
+    }
+
+    if (!updateErr && updated) {
+      return mapProduct(updated as ProductRow)
+    }
+  }
+
+  // 2. Fallback to upsert
   let { data, error } = await client.from('products').upsert(row).select('*').single()
   if (error && /(archived|stock_qty|season|sold_as|gram_options)/i.test(error.message)) {
     const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
