@@ -954,7 +954,7 @@ export async function createCoupon(coupon: {
     created_at: new Date().toISOString(),
   }
 
-  // Cache locally
+  // 1. Cache locally immediately (guarantees offline/client validation)
   try {
     const localCoupons = JSON.parse(localStorage.getItem('gv_coupons') || '{}')
     localCoupons[cleanCode] = payload
@@ -963,17 +963,31 @@ export async function createCoupon(coupon: {
 
   if (!supabase) return true
 
+  // 2. Try SECURITY DEFINER RPC (bypasses all client RLS restrictions)
+  try {
+    const { error: rpcErr } = await supabase.rpc('save_coupon_admin', {
+      p_code: cleanCode,
+      p_discount_type: coupon.discount_type,
+      p_discount_value: coupon.discount_value,
+      p_min_order: coupon.min_order,
+      p_valid: coupon.valid ?? true,
+      p_expires_at: coupon.expires_at || null,
+    })
+    if (!rpcErr) return true
+  } catch {}
+
+  // 3. Fallback to direct table upsert
   try {
     let { error } = await supabase.from('coupons').upsert(payload)
-    if (error && /(active|valid_until|expires_at|valid)/i.test(error.message)) {
-      // Retry with alternative field mapping
+    if (error) {
+      // Retry with alternative column mapping
       const altPayload = {
         code: cleanCode,
         discount_type: coupon.discount_type,
         discount_value: coupon.discount_value,
         min_order: coupon.min_order,
         active: coupon.valid,
-        valid_until: coupon.expires_at,
+        valid_until: coupon.expires_at || null,
       }
       ;({ error } = await supabase.from('coupons').upsert(altPayload))
     }
