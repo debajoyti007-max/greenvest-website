@@ -77,6 +77,19 @@ export function formatAuthIdentifier(input: string): string {
   return trimmed
 }
 
+/** Robust phone extractor for stored profiles and synthetic phone emails */
+export function extractPhone(phone?: string | null, email?: string | null): string | undefined {
+  if (phone && phone.trim()) {
+    const digits = phone.replace(/\D/g, '')
+    if (digits.length >= 10) return digits.slice(-10)
+  }
+  if (email && email.endsWith('@greenvest.shop')) {
+    const digits = email.replace('@greenvest.shop', '').replace(/\D/g, '')
+    if (digits.length >= 10) return digits.slice(-10)
+  }
+  return undefined
+}
+
 /** Pad 4-digit PIN to meet Supabase 6-char minimum. */
 function padPin(pin: string): string {
   return pin.length < 6 ? pin + '0'.repeat(6 - pin.length) : pin
@@ -220,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               email: profileRow.email,
               name: profileRow.name,
               role: profileRow.role,
-              phone: profileRow.phone || undefined,
+              phone: extractPhone(profileRow.phone, profileRow.email),
               isBlocked: profileRow.isBlocked || false,
               createdAt: profileRow.created_at,
             })
@@ -379,7 +392,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: profileRow.email as string,
             name: profileRow.name as string,
             role: profileRow.role as Role,
-            phone: (profileRow.phone as string) || undefined,
+            phone: extractPhone(profileRow.phone as string, profileRow.email as string),
             isBlocked: (profileRow.isBlocked as boolean) || false,
             createdAt: profileRow.created_at as string,
           })

@@ -236,14 +236,14 @@ async function updateProfileField(
 
   // 1. Try by exact ID
   if (userId) {
-    const { data: byId, error: errId } = await client.from('profiles').update(fields).eq('id', userId).select()
-    if (!errId && byId && byId.length > 0) return
+    const { error: errId } = await client.from('profiles').update(fields).eq('id', userId)
+    if (!errId) return
   }
 
   // 2. Try by email if provided
   if (email && email.trim()) {
-    const { data: byEmail, error: errEmail } = await client.from('profiles').update(fields).eq('email', email.trim().toLowerCase()).select()
-    if (!errEmail && byEmail && byEmail.length > 0) return
+    const { error: errEmail } = await client.from('profiles').update(fields).eq('email', email.trim().toLowerCase())
+    if (!errEmail) return
   }
 
   // 3. Try by phone or formatted phone email (e.g. 8350087877@greenvest.shop)
@@ -252,17 +252,17 @@ async function updateProfileField(
     const digits = rawIdentifier.replace(/\D/g, '')
     if (digits.length >= 10) {
       const phoneEmail = `${digits.slice(-10)}@greenvest.shop`
-      const { data: byPhoneEmail, error: errPhoneEmail } = await client.from('profiles').update(fields).eq('email', phoneEmail).select()
-      if (!errPhoneEmail && byPhoneEmail && byPhoneEmail.length > 0) return
+      const { error: errPhoneEmail } = await client.from('profiles').update(fields).eq('email', phoneEmail)
+      if (!errPhoneEmail) return
 
-      const { data: byPhone, error: errPhone } = await client.from('profiles').update(fields).eq('phone', digits).select()
-      if (!errPhone && byPhone && byPhone.length > 0) return
+      const { error: errPhone } = await client.from('profiles').update(fields).eq('phone', digits.slice(-10))
+      if (!errPhone) return
     }
   }
 
   // 4. Fallback: auto-create/upsert missing profile row in database
   const targetEmail = (email && email.trim()) ? email.trim().toLowerCase() : (phone ? `${phone.replace(/\D/g, '').slice(-10)}@greenvest.shop` : `${userId}@greenvest.shop`)
-  const targetPhone = phone ? phone.replace(/\D/g, '') : undefined
+  const targetPhone = phone ? phone.replace(/\D/g, '').slice(-10) : undefined
 
   const payload: Record<string, unknown> = {
     id: userId || crypto.randomUUID(),
@@ -529,11 +529,19 @@ export async function createOrder(order: Order): Promise<Order> {
       email: order.userEmail || `${order.userId}@greenvest.shop`,
       name: order.userName || 'Customer',
       role: 'customer',
-      phone: order.phone,
+      phone: order.phone ? order.phone.replace(/\D/g, '').slice(-10) : undefined,
       created_at: new Date().toISOString(),
-    }).select()
+    })
   } catch (profErr) {
     console.debug('Profile already exists, role preserved:', profErr)
+  }
+
+  // Also backfill phone on existing profile if provided in order
+  if (order.phone && order.userId) {
+    const cleanPh = order.phone.replace(/\D/g, '').slice(-10)
+    if (cleanPh.length >= 10) {
+      void client.from('profiles').update({ phone: cleanPh }).eq('id', order.userId)
+    }
   }
 
   // Attempt atomic server-side RPC transaction first
