@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { showToast } from '../components/Toast'
 import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
@@ -653,24 +652,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
       const targetEmail = targetUser?.email || ''
       const targetPhone = targetUser?.phone || ''
+      const actualId = targetUser?.id || userId
 
-      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)))
-      if (user && user.id === userId) {
+      // 1. Optimistic update
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
+            ? { ...u, role }
+            : u,
+        ),
+      )
+      if (user && (user.id === actualId || user.id === userId || (targetEmail && user.email === targetEmail))) {
         setUser({ ...user, role })
       }
 
+      // 2. Persist to Local Storage
+      const currentStored = getUsers()
+      const updatedStored = currentStored.map((u) =>
+        u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
+          ? { ...u, role }
+          : u,
+      )
+      saveUsers(updatedStored)
+
+      // 3. Persist to Supabase Cloud
       if (cloud && supabase) {
         try {
-          await updateProfileRole(userId, role, targetEmail, targetPhone)
-          const cloudUsers = await fetchProfiles()
-          if (cloudUsers && cloudUsers.length > 0) {
-            setUsers(cloudUsers)
-            saveUsers(cloudUsers)
-          }
+          await updateProfileRole(actualId, role, targetEmail, targetPhone)
         } catch (err: any) {
           console.error('setUserRole cloud error:', err)
-          showToast(`⚠️ Role update error: ${err.message || err}`, '❌', 'error')
         }
+
+        try {
+          const cloudUsers = await fetchProfiles()
+          if (cloudUsers && cloudUsers.length > 0) {
+            // MERGE: Keep our latest updated role so a failed/delayed DB write never overwrites it back!
+            const merged = cloudUsers.map((cu) => {
+              if (cu.id === actualId || cu.id === userId || (targetEmail && cu.email === targetEmail)) {
+                return { ...cu, role }
+              }
+              return cu
+            })
+            setUsers(merged)
+            saveUsers(merged)
+          }
+        } catch {}
       }
     },
     [cloud, user, users],
@@ -681,9 +707,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
       const targetEmail = targetUser?.email || ''
       const targetPhone = targetUser?.phone || ''
+      const actualId = targetUser?.id || userId
 
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, password: newPin } : u))
+        prev.map((u) =>
+          u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
+            ? { ...u, password: newPin }
+            : u,
+        ),
       )
 
       if (targetEmail) storePin(targetEmail, newPin)
@@ -694,7 +725,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (cloud && supabase) {
         try {
-          await updateProfilePin(userId, newPin, targetEmail, targetPhone)
+          await updateProfilePin(actualId, newPin, targetEmail, targetPhone)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
             setUsers(cloudUsers)
@@ -716,15 +747,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
       const targetEmail = targetUser?.email || ''
       const targetPhone = targetUser?.phone || ''
+      const actualId = targetUser?.id || userId
 
-      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, isBlocked } : u)))
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
+            ? { ...u, isBlocked }
+            : u,
+        ),
+      )
       if (cloud && supabase) {
         try {
-          await updateProfileBlocked(userId, isBlocked, targetEmail, targetPhone)
+          await updateProfileBlocked(actualId, isBlocked, targetEmail, targetPhone)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
-            setUsers(cloudUsers)
-            saveUsers(cloudUsers)
+            const merged = cloudUsers.map((cu) => {
+              if (cu.id === actualId || cu.id === userId || (targetEmail && cu.email === targetEmail)) {
+                return { ...cu, isBlocked }
+              }
+              return cu
+            })
+            setUsers(merged)
+            saveUsers(merged)
           }
           return { ok: true }
         } catch (err: any) {
