@@ -175,14 +175,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cloudUsers = []
       }
 
+      // Preserve local promotions in case of background sync lag
+      const storedUsers = getUsers()
+      const roleMap = new Map<string, Role>()
+      storedUsers.forEach((su) => {
+        if (su.role && su.role !== 'customer') {
+          if (su.id) roleMap.set(su.id, su.role)
+          if (su.email) roleMap.set(su.email.toLowerCase(), su.role)
+          if (su.phone) roleMap.set(su.phone, su.role)
+        }
+      })
+
       const map = new Map<string, User>()
       cloudUsers.forEach((u) => {
-        if (u.id) map.set(u.id, u)
+        const overrideRole =
+          roleMap.get(u.id) ||
+          (u.email && roleMap.get(u.email.toLowerCase())) ||
+          (u.phone && roleMap.get(u.phone))
+
+        const finalUser = overrideRole ? { ...u, role: overrideRole } : u
+        if (finalUser.id) map.set(finalUser.id, finalUser)
       })
       if (profile && profile.id) {
-        map.set(profile.id, profile)
+        map.set(profile.id, ensureAdminRole(profile)!)
       }
-      setUsers(Array.from(map.values()))
+      const finalUsers = Array.from(map.values())
+      setUsers(finalUsers)
+      saveUsers(finalUsers)
       return
     }
 

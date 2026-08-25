@@ -244,24 +244,24 @@ async function updateProfileField(
   // 1. Try atomic SECURITY DEFINER RPC (bypasses all RLS restrictions)
   if (normalizedFields.role && typeof normalizedFields.role === 'string') {
     try {
-      const { error: rpcErr } = await client.rpc('update_user_role_admin', {
+      const { data: rpcData, error: rpcErr } = await client.rpc('update_user_role_admin', {
         p_user_id: userId,
         p_role: normalizedFields.role,
       })
-      if (!rpcErr) return
+      if (!rpcErr && rpcData) return
     } catch {}
   }
 
   // 2. Try by exact ID
   if (userId) {
-    const { error: errId } = await client.from('profiles').update(normalizedFields).eq('id', userId)
-    if (!errId) return
+    const { data: idRows, error: errId } = await client.from('profiles').update(normalizedFields).eq('id', userId).select()
+    if (!errId && idRows && idRows.length > 0) return
   }
 
   // 3. Try by email if provided
   if (email && email.trim()) {
-    const { error: errEmail } = await client.from('profiles').update(normalizedFields).eq('email', email.trim().toLowerCase())
-    if (!errEmail) return
+    const { data: emailRows, error: errEmail } = await client.from('profiles').update(normalizedFields).eq('email', email.trim().toLowerCase()).select()
+    if (!errEmail && emailRows && emailRows.length > 0) return
   }
 
   // 4. Try by phone or formatted phone email (e.g. 8350087877@greenvest.shop)
@@ -270,17 +270,17 @@ async function updateProfileField(
     const digits = rawIdentifier.replace(/\D/g, '')
     if (digits.length >= 10) {
       const phoneEmail = `${digits.slice(-10)}@greenvest.shop`
-      const { error: errPhoneEmail } = await client.from('profiles').update(normalizedFields).eq('email', phoneEmail)
-      if (!errPhoneEmail) return
+      const { data: peRows, error: errPhoneEmail } = await client.from('profiles').update(normalizedFields).eq('email', phoneEmail).select()
+      if (!errPhoneEmail && peRows && peRows.length > 0) return
 
-      const { error: errPhone } = await client.from('profiles').update(normalizedFields).eq('phone', digits.slice(-10))
-      if (!errPhone) return
+      const { data: pRows, error: errPhone } = await client.from('profiles').update(normalizedFields).eq('phone', digits.slice(-10)).select()
+      if (!errPhone && pRows && pRows.length > 0) return
     }
   }
 
   // 5. Fallback: auto-create/upsert missing profile row in database
   const targetEmail = (email && email.trim()) ? email.trim().toLowerCase() : (phone ? `${phone.replace(/\D/g, '').slice(-10)}@greenvest.shop` : `${userId}@greenvest.shop`)
-  const targetPhone = phone ? phone.replace(/\D/g, '').slice(-10) : undefined
+  const targetPhone = phone ? phone.replace(/\D/g, '').slice(-10) : (userId.replace(/\D/g, '').length >= 10 ? userId.replace(/\D/g, '').slice(-10) : undefined)
 
   const payload: Record<string, unknown> = {
     id: userId || crypto.randomUUID(),
@@ -292,7 +292,7 @@ async function updateProfileField(
   }
   if (targetPhone) payload.phone = targetPhone
 
-  const { error: upsertErr } = await client.from('profiles').upsert(payload)
+  const { error: upsertErr } = await client.from('profiles').upsert(payload, { onConflict: 'id' })
   if (upsertErr) {
     console.error('updateProfileField upsert error:', upsertErr)
     throw new Error(upsertErr.message || 'Failed to save profile to database')
