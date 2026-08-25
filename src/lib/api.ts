@@ -1,5 +1,7 @@
 import type {
   Address,
+  AppNotification,
+  ChatMessage,
   Coupon,
   DailyReport,
   DeliveryZone,
@@ -1020,4 +1022,109 @@ export async function fetchDeliveryZones(): Promise<DeliveryZone[]> {
     if (error) return []
     return data || []
   } catch { return [] }
+}
+
+// ── Persistent Notifications ────────────────────────────────────────────────
+export async function fetchNotificationsApi(userId?: string): Promise<AppNotification[]> {
+  if (!supabase) return []
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(30)
+    if (error || !data) return []
+
+    return (data as any[])
+      .filter((n) => !n.user_id || n.user_id === 'all' || (userId && n.user_id === userId))
+      .map((n) => ({
+        id: String(n.id || n.title),
+        userId: n.user_id || 'all',
+        title: n.title || '',
+        message: n.message || '',
+        sender: n.sender || 'GreenVest',
+        createdAt: n.created_at || new Date().toISOString(),
+      }))
+  } catch {
+    return []
+  }
+}
+
+export async function saveNotificationApi(notif: AppNotification): Promise<void> {
+  if (!supabase) return
+  try {
+    const row = {
+      id: notif.id,
+      user_id: notif.userId || 'all',
+      title: notif.title,
+      message: notif.message,
+      sender: notif.sender,
+      created_at: notif.createdAt || new Date().toISOString(),
+    }
+    await supabase.from('notifications').upsert(row)
+  } catch {}
+}
+
+// ── Realtime Order Messages / Chat ──────────────────────────────────────────
+export async function fetchOrderMessagesApi(orderId: string): Promise<ChatMessage[]> {
+  if (!supabase || !orderId) return []
+  try {
+    const { data, error } = await supabase
+      .from('order_messages')
+      .select('*')
+      .eq('order_id', orderId)
+      .order('created_at', { ascending: true })
+
+    if (error || !data) return []
+
+    return (data as any[]).map((r) => ({
+      id: String(r.id),
+      orderId: r.order_id,
+      sender: r.sender_role as 'customer' | 'seller',
+      text: r.message || r.text || '',
+      time: r.created_at
+        ? new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: r.created_at,
+    }))
+  } catch {
+    return []
+  }
+}
+
+export async function sendOrderMessageApi(
+  orderId: string,
+  sender: 'customer' | 'seller',
+  text: string
+): Promise<ChatMessage> {
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const newMsg: ChatMessage = {
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    orderId,
+    sender,
+    text: text.trim(),
+    time,
+    createdAt: new Date().toISOString(),
+  }
+
+  // Cache locally
+  try {
+    const storageKey = `greenvest_chat_${orderId}`
+    const existing = JSON.parse(localStorage.getItem(storageKey) || '[]')
+    localStorage.setItem(storageKey, JSON.stringify([...existing, newMsg]))
+  } catch {}
+
+  if (!supabase) return newMsg
+
+  try {
+    await supabase.from('order_messages').insert({
+      id: newMsg.id,
+      order_id: orderId,
+      sender_role: sender,
+      message: newMsg.text,
+      created_at: newMsg.createdAt,
+    })
+  } catch {}
+
+  return newMsg
 }

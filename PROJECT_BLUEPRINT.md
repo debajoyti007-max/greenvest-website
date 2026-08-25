@@ -95,6 +95,12 @@
 6. **Real-time Staff Profile & Customer Directory Sync (`AuthContext.tsx`, `SellerCustomers.tsx`):**
    * Staff (`admin`/`seller`) subscribes to realtime `public.profiles` changes with 800ms debounce.
    * `SellerCustomers` indexes customers by `id`, `email`, and 10-digit normalized phone, guaranteeing zero orphan orders and real-time visibility of new signups.
+7. **Lazy On-Demand Realtime Order Chat (`OrderChat.tsx`, `TrackOrder.tsx`):**
+   * WebSocket channel `order-chat-{id}` opens ONLY while chat window is mounted on screen; disconnects immediately on close.
+   * Messages persist to Supabase `order_messages` table and local cache.
+8. **Persistent Announcements & PWA (`CustomerNotificationBanner.tsx`, `PwaInstallPrompt.tsx`):**
+   * Notifications hydrate from Supabase `notifications` table on app mount and show top banner.
+   * PWA prompt detects Android/iOS standalone state and triggers native installation.
 
 ---
 

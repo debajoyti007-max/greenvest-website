@@ -211,7 +211,34 @@ ALTER TABLE public.addresses ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "addresses_all_access" ON public.addresses;
 CREATE POLICY "addresses_all_access" ON public.addresses FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- 5. REALTIME REPLICATION (ALL TABLES)
+-- 5. NOTIFICATIONS TABLE
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id text PRIMARY KEY,
+  user_id text DEFAULT 'all',
+  title text NOT NULL,
+  message text NOT NULL,
+  sender text DEFAULT 'GreenVest',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "notifications_all_access" ON public.notifications;
+CREATE POLICY "notifications_all_access" ON public.notifications FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 6. ORDER MESSAGES / CHAT TABLE
+CREATE TABLE IF NOT EXISTS public.order_messages (
+  id text PRIMARY KEY,
+  order_id text NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+  sender_role text NOT NULL CHECK (sender_role IN ('customer', 'seller')),
+  message text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.order_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "order_messages_all_access" ON public.order_messages;
+CREATE POLICY "order_messages_all_access" ON public.order_messages FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 7. REALTIME REPLICATION (ALL ACTIVE TABLES)
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'products') THEN
@@ -229,4 +256,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'coupons') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.coupons;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'notifications') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'order_messages') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.order_messages;
+  END IF;
 END $$;
+

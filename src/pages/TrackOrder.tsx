@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
+import OrderChat from '../components/OrderChat'
 import { useStore } from '../context/StoreContext'
 import { formatOrderId } from '../lib/business'
 import { fetchOrderByPublicQuery } from '../lib/api'
@@ -195,6 +196,10 @@ export default function TrackOrder() {
               )}
             </span>
           </footer>
+
+          <div style={{ marginTop: '1rem' }}>
+            <OrderChat orderId={matched.id} role="customer" lang={lang} />
+          </div>
         </article>
       )}
 

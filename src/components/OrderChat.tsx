@@ -1,11 +1,7 @@
-import { useState, useEffect } from 'react'
-
-interface Message {
-  id: string
-  sender: 'customer' | 'seller'
-  text: string
-  time: string
-}
+import { useState, useEffect, useRef } from 'react'
+import type { ChatMessage } from '../types'
+import { fetchOrderMessagesApi, sendOrderMessageApi } from '../lib/api'
+import { supabase } from '../lib/supabase'
 
 interface OrderChatProps {
   orderId: string
@@ -15,31 +11,101 @@ interface OrderChatProps {
 
 export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
   const storageKey = `greenvest_chat_${orderId}`
-  const [messages, setMessages] = useState<Message[]>([])
-  const [inputText, setInputText] = useState('')
-
-  useEffect(() => {
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
-      const saved = localStorage.getItem(storageKey)
-      if (saved) setMessages(JSON.parse(saved))
-    } catch {}
-  }, [storageKey])
-
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!inputText.trim()) return
-
-    const newMsg: Message = {
-      id: Date.now().toString(),
-      sender: role,
-      text: inputText.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      return JSON.parse(localStorage.getItem(storageKey) || '[]')
+    } catch {
+      return []
     }
+  })
+  const [inputText, setInputText] = useState('')
+  const [sending, setSending] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
 
-    const updated = [...messages, newMsg]
-    setMessages(updated)
-    localStorage.setItem(storageKey, JSON.stringify(updated))
+  // 1. Lazy On-Demand Supabase Realtime Subscription (Zero background waste)
+  useEffect(() => {
+    if (!orderId) return
+
+    // Load fresh messages from database on mount
+    void fetchOrderMessagesApi(orderId).then((cloudMsgs) => {
+      if (cloudMsgs.length > 0) {
+        setMessages(cloudMsgs)
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(cloudMsgs))
+        } catch {}
+      }
+    })
+
+    if (!supabase) return
+
+    // Subscribe to order-specific channel ONLY while this component is on-screen
+    const channelName = `order-chat-${orderId}`
+    const ch = supabase
+      .channel(channelName)
+      .on('broadcast', { event: 'new_msg' }, ({ payload }: { payload: unknown }) => {
+        const msg = payload as ChatMessage
+        if (msg && msg.orderId === orderId) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === msg.id)) return prev
+            const next = [...prev, msg]
+            try {
+              localStorage.setItem(storageKey, JSON.stringify(next))
+            } catch {}
+            return next
+          })
+        }
+      })
+      .subscribe()
+
+    return () => {
+      // Instantly disconnect when user navigates away
+      if (supabase) {
+        void supabase.removeChannel(ch)
+      }
+    }
+  }, [orderId, storageKey])
+
+  // Auto scroll to bottom
+  useEffect(() => {
+    if (boxRef.current) {
+      boxRef.current.scrollTop = boxRef.current.scrollHeight
+    }
+  }, [messages])
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const text = inputText.trim()
+    if (!text || sending) return
+
+    setSending(true)
     setInputText('')
+
+    try {
+      const savedMsg = await sendOrderMessageApi(orderId, role, text)
+
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === savedMsg.id)) return prev
+        const next = [...prev, savedMsg]
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(next))
+        } catch {}
+        return next
+      })
+
+      // Broadcast to other participant
+      if (supabase) {
+        const ch = supabase.channel(`order-chat-${orderId}`)
+        await ch.send({
+          type: 'broadcast',
+          event: 'new_msg',
+          payload: savedMsg,
+        })
+      }
+    } catch (err) {
+      console.warn('Chat send fallback error:', err)
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -48,7 +114,7 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
         <span>💬 {role === 'seller' ? (lang === 'bn' ? 'কাস্টমার নোট ও চ্যাট' : 'Customer Note & Chat') : (lang === 'bn' ? 'সেলার লাইভ চ্যাট' : 'Direct Chat with Seller')}</span>
       </div>
 
-      <div className="chat-messages-box">
+      <div className="chat-messages-box" ref={boxRef}>
         {messages.length === 0 ? (
           <p className="chat-empty">
             {role === 'customer'
@@ -74,8 +140,9 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           placeholder={lang === 'bn' ? 'মেসেজ লিখুন...' : 'Type a message...'}
+          disabled={sending}
         />
-        <button type="submit" className="btn btn-primary btn-sm">
+        <button type="submit" className="btn btn-primary btn-sm" disabled={sending || !inputText.trim()}>
           {lang === 'bn' ? 'পাঠান' : 'Send'}
         </button>
       </form>

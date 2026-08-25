@@ -34,6 +34,8 @@ import {
   saveDailyReport as saveDailyReportApi,
   fetchDailyReport as fetchDailyReportApi,
   fetchDeliveryZones as fetchDeliveryZonesApi,
+  fetchNotificationsApi,
+  saveNotificationApi,
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
@@ -184,6 +186,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } else {
         setOrders([])
       }
+
+      // 4. Hydrate cloud persistent notifications (offline support)
+      try {
+        const cloudNotifs = await fetchNotificationsApi(user?.id)
+        if (cloudNotifs.length > 0) {
+          setNotifications(cloudNotifs)
+          saveAppNotifications(cloudNotifs)
+        }
+      } catch {}
     } catch (err) {
       console.error(err)
     } finally {
@@ -824,15 +835,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setNotifications(next)
 
       // Broadcast via Supabase Realtime → reaches ALL online users instantly
-      if (cloud && notifChannelRef.current) {
-        try {
-          await notifChannelRef.current.send({
-            type: 'broadcast',
-            event: 'notif',
-            payload: newNotif,
-          })
-        } catch (e) {
-          console.warn('Realtime broadcast failed:', e)
+      if (cloud) {
+        void saveNotificationApi(newNotif)
+        if (notifChannelRef.current) {
+          try {
+            await notifChannelRef.current.send({
+              type: 'broadcast',
+              event: 'notif',
+              payload: newNotif,
+            })
+          } catch (e) {
+            console.warn('Realtime broadcast failed:', e)
+          }
         }
       }
 

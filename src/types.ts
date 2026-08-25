@@ -103,4 +103,12 @@ export interface Coupon {
 export interface DailyReport { id?: number; report_date: string; total_orders: number; total_revenue: number; total_cancelled: number; mandi_cost: number; delivery_cost: number; profit: number }
 export interface DeliveryZone { pin_prefix: string; zone: string; fee: number; eta_hours: string }
 export interface AppNotification { id: string; userId?: string; title: string; message: string; sender: string; createdAt: string }
+export interface ChatMessage {
+  id: string
+  orderId: string
+  sender: 'customer' | 'seller'
+  text: string
+  time: string
+  createdAt?: string
+}
 

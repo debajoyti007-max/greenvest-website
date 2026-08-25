@@ -12,6 +12,7 @@ import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/bu
 import MandiTicker from './MandiTicker'
 import NotificationBell from './NotificationBell'
 import CustomerNotificationBanner from './CustomerNotificationBanner'
+import PwaInstallPrompt from './PwaInstallPrompt'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -31,6 +32,7 @@ export default function Layout() {
   return (
     <div className="app-shell">
       <CustomerNotificationBanner />
+      <PwaInstallPrompt />
       <NetworkStatus />
       <ConfigBanner />
       <MandiTicker />
