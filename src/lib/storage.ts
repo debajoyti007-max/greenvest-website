@@ -126,7 +126,7 @@ export function saveUsers(users: User[]) {
 
 export function getProducts(): Product[] {
   const stored = read<Product[]>(KEYS.products, SEED_PRODUCTS)
-  return ensureAllSeedProducts(stored)
+  return stored.length > 0 ? stored : SEED_PRODUCTS
 }
 
 export function saveProducts(products: Product[]) {

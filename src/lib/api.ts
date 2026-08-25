@@ -13,7 +13,7 @@ import type {
   Season,
   User,
 } from '../types'
-import { SEED_PRODUCTS, ensureAllSeedProducts } from '../data/seed'
+import { SEED_PRODUCTS } from '../data/seed'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 type ProductRow = {
@@ -340,7 +340,7 @@ export async function fetchProducts(forceRefresh = false): Promise<Product[]> {
   const { data, error } = await client.from('products').select('*').order('name')
   if (error) throw error
   const fetched = (data as ProductRow[]).map(mapProduct)
-  const result = ensureAllSeedProducts(fetched)
+  const result = fetched.length > 0 ? fetched : SEED_PRODUCTS
 
   // Update in-memory & localStorage caches
   memoryProductCache = { data: result, timestamp: now }
