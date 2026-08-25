@@ -356,7 +356,28 @@ export async function upsertProduct(product: Product): Promise<Product> {
   const client = requireClient()
   const row = productToRow(product)
 
-  // 1. Direct update for existing products
+  // 1. Try atomic SECURITY DEFINER RPC (bypasses all RLS restrictions)
+  try {
+    const { data: rpcData, error: rpcErr } = await client.rpc('save_product_admin', {
+      p_id: product.id,
+      p_name: product.name,
+      p_bn_name: product.bnName || '',
+      p_p_a: product.pA,
+      p_p_b: product.pB,
+      p_p_c: product.pC,
+      p_in_stock: product.inStock,
+      p_category: product.category,
+      p_unit: product.unit,
+      p_image_url: product.imageUrl || null,
+      p_emoji: product.emoji || '🥬',
+      p_archived: Boolean(product.archived),
+    })
+    if (!rpcErr && rpcData) {
+      return mapProduct(rpcData as ProductRow)
+    }
+  } catch {}
+
+  // 2. Direct update for existing products
   if (product.id) {
     let { data: updated, error: updateErr } = await client
       .from('products')
@@ -380,7 +401,7 @@ export async function upsertProduct(product: Product): Promise<Product> {
     }
   }
 
-  // 2. Fallback to upsert
+  // 3. Fallback to upsert
   let { data, error } = await client.from('products').upsert(row).select('*').single()
   if (error && /(archived|stock_qty|season|sold_as|gram_options)/i.test(error.message)) {
     const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
