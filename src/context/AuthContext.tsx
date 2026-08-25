@@ -42,6 +42,7 @@ interface AuthContextValue {
   adminResetUserPin: (userId: string, newPin: string) => Promise<AuthResult>
   toggleBlockUser: (userId: string, isBlocked: boolean) => Promise<AuthResult>
   refresh: () => Promise<void>
+  refreshUsers: () => Promise<void>
   checkAccountExists: (email: string) => Promise<boolean>
 }
 
@@ -220,7 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (cloud && supabase) {
       // Restore session from localStorage userId (we don't use Supabase Auth sessions)
       const localId = getSessionUserId()
-      if (localId && !userRef.current) {
+      if (localId) {
         try {
           const { data: profileRow } = await supabase
             .from('profiles')
@@ -265,6 +266,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Removed `initialized` from deps — it was a stale-closure that caused double-init (Bug 7)
   }, [cloud, allowLocal, refreshLocal, loadUsersIfStaff])
 
+  const refreshUsers = useCallback(async () => {
+    if (userRef.current) {
+      await loadUsersIfStaff(userRef.current)
+    } else if (user) {
+      await loadUsersIfStaff(user)
+    }
+  }, [user, loadUsersIfStaff])
+
   useEffect(() => {
     void refresh()
     // No supabase.auth listener needed — sessions are managed via localStorage
@@ -301,6 +310,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (supabase) void supabase.removeChannel(channel)
     }
   }, [cloud, user?.id])
+
+  // ── Staff Realtime: auto-sync newly registered customers and live profile edits ──
+  useEffect(() => {
+    if (!cloud || !supabase || !user) return
+    const isStaff = user.role === 'admin' || user.role === 'seller'
+    if (!isStaff) return
+
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const staffChannel = supabase
+      .channel('staff-all-profiles-live-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        () => {
+          if (timer) clearTimeout(timer)
+          timer = setTimeout(() => {
+            void loadUsersIfStaff(user)
+          }, 800)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      if (timer) clearTimeout(timer)
+      if (supabase) void supabase.removeChannel(staffChannel)
+    }
+  }, [cloud, user, loadUsersIfStaff])
 
 
   const login = useCallback(
@@ -785,6 +821,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adminResetUserPin,
       toggleBlockUser,
       refresh,
+      refreshUsers,
       checkAccountExists,
     }),
     [
@@ -803,6 +840,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adminResetUserPin,
       toggleBlockUser,
       refresh,
+      refreshUsers,
       checkAccountExists,
     ],
   )

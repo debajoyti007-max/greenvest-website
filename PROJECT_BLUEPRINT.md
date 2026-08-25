@@ -92,6 +92,9 @@
 5. **Atomic Order Confirmation & Mandi Sourcing (`SellerOrders.tsx`, `SellerHome.tsx`):**
    * 1-Tap Accept Order executes `verifyUtr(id, true)` + `updateOrderStatus(id, 'confirmed')` atomically.
    * Daily Mandi Procurement Sheet aggregates exact net kilograms (`qty * weightMultiplier`) with Grade A/B/C breakdown.
+6. **Real-time Staff Profile & Customer Directory Sync (`AuthContext.tsx`, `SellerCustomers.tsx`):**
+   * Staff (`admin`/`seller`) subscribes to realtime `public.profiles` changes with 800ms debounce.
+   * `SellerCustomers` indexes customers by `id`, `email`, and 10-digit normalized phone, guaranteeing zero orphan orders and real-time visibility of new signups.
 
 ---
 

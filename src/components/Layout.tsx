@@ -97,6 +97,9 @@ export default function Layout() {
                     <NavLink to="/seller" onClick={closeMenu}>
                       {t(lang, 'seller')}
                     </NavLink>
+                    <NavLink to="/seller/customers" onClick={closeMenu}>
+                      {lang === 'bn' ? 'কাস্টমার' : 'Customers'}
+                    </NavLink>
                     <NavLink to="/rider" onClick={closeMenu}>
                       {lang === 'bn' ? 'রাইডার' : 'Rider'}
                     </NavLink>

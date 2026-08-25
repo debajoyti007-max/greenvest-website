@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
@@ -9,7 +9,7 @@ import DatabaseCleaner from '../../components/admin/DatabaseCleaner'
 import type { Role } from '../../types'
 
 export default function AdminUsers() {
-  const { user, users, setUserRole, adminResetUserPin, toggleBlockUser, mode: dataMode } = useAuth()
+  const { user, users, setUserRole, adminResetUserPin, toggleBlockUser, refreshUsers, mode: dataMode } = useAuth()
   const {
     products,
     orders,
@@ -19,6 +19,11 @@ export default function AdminUsers() {
     updateOrderStatus,
     refresh,
   } = useStore()
+
+  useEffect(() => {
+    void refreshUsers()
+    void refresh()
+  }, [refreshUsers, refresh])
 
   const [adminTab, setAdminTab] = useState<'users' | 'database'>('users')
   const [resettingPinId, setResettingPinId] = useState<string | null>(null)

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
@@ -29,8 +29,13 @@ function waCustomer(phone: string, name: string) {
 }
 
 export default function SellerCustomers() {
-  const { user, users, adminResetUserPin, toggleBlockUser } = useAuth()
-  const { orders, lang, sendNotification, createCoupon } = useStore()
+  const { user, users, adminResetUserPin, toggleBlockUser, refreshUsers } = useAuth()
+  const { orders, lang, sendNotification, createCoupon, refresh } = useStore()
+
+  useEffect(() => {
+    void refreshUsers()
+    void refresh()
+  }, [refreshUsers, refresh])
 
   const [resetModalUser, setResetModalUser] = useState<{ id: string; name: string; phone: string } | null>(null)
   const [newPin, setNewPin] = useState('1234')
@@ -94,34 +99,45 @@ export default function SellerCustomers() {
   // Combine users from AuthContext + Orders
   const customerList: CustomerRow[] = useMemo(() => {
     const userMap = new Map<string, CustomerRow>()
+    const idMap = new Map<string, CustomerRow>()
+    const emailMap = new Map<string, CustomerRow>()
+    const phoneMap = new Map<string, CustomerRow>()
 
     // 1. Add registered users
     users.forEach((u) => {
-      userMap.set(u.id, {
+      const cleanPhone = u.phone ? u.phone.replace(/\D/g, '').slice(-10) : ''
+      const row: CustomerRow = {
         key: u.id,
         userId: u.id,
         name: u.name,
         email: u.email,
-        phone: u.phone || '',
+        phone: cleanPhone || u.phone || '',
         orders: 0,
         spent: 0,
         lastOrderAt: u.createdAt,
         lastAddress: 'No address saved yet',
         role: u.role,
         isBlocked: u.isBlocked,
-      })
+      }
+      userMap.set(u.id, row)
+      idMap.set(u.id, row)
+      if (u.email) emailMap.set(u.email.toLowerCase(), row)
+      if (cleanPhone) phoneMap.set(cleanPhone, row)
     })
 
     // 2. Aggregate orders
     orders.forEach((o) => {
       if (o.status === 'cancelled') return
-      // Month filtering
       const orderDate = new Date(o.createdAt)
       const matchesMonth = spendMode === 'all' ||
         (orderDate.getMonth() === filterMonth && orderDate.getFullYear() === filterYear)
-      const key = o.userId || o.phone || o.userEmail
-      const existing = userMap.get(key) || userMap.get(o.userId)
+      const orderCleanPhone = o.phone ? o.phone.replace(/\D/g, '').slice(-10) : ''
       const spentAdd = (o.utrVerified && matchesMonth) ? o.total : 0
+
+      // Match by exact User ID -> Phone -> Email
+      const existing = (o.userId ? idMap.get(o.userId) : null) ||
+        (orderCleanPhone ? phoneMap.get(orderCleanPhone) : null) ||
+        (o.userEmail ? emailMap.get(o.userEmail.toLowerCase()) : null)
 
       if (existing) {
         existing.orders += 1
@@ -129,22 +145,27 @@ export default function SellerCustomers() {
         if (o.createdAt > existing.lastOrderAt) {
           existing.lastOrderAt = o.createdAt
           existing.lastAddress = o.address
-          existing.phone = existing.phone || o.phone
+          existing.phone = existing.phone || orderCleanPhone || o.phone
           existing.name = existing.name || o.userName
         }
       } else {
-        userMap.set(key, {
-          key,
+        const fallbackKey = o.userId || orderCleanPhone || o.userEmail || o.id
+        const newRow: CustomerRow = {
+          key: fallbackKey,
           userId: o.userId,
           name: o.userName,
           email: o.userEmail,
-          phone: o.phone,
+          phone: orderCleanPhone || o.phone,
           orders: 1,
           spent: spentAdd,
           lastOrderAt: o.createdAt,
           lastAddress: o.address,
           role: 'customer',
-        })
+        }
+        userMap.set(fallbackKey, newRow)
+        if (o.userId) idMap.set(o.userId, newRow)
+        if (orderCleanPhone) phoneMap.set(orderCleanPhone, newRow)
+        if (o.userEmail) emailMap.set(o.userEmail.toLowerCase(), newRow)
       }
     })
 
