@@ -7,7 +7,7 @@ import Toast from './Toast'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { t } from '../lib/i18n'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SUPPORT_HOURS } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 
 import MandiTicker from './MandiTicker'
 import NotificationBell from './NotificationBell'
@@ -209,7 +209,7 @@ export default function Layout() {
                 <Link to="/terms">{t(lang, 'terms')}</Link>
               </nav>
               <p className="footer-hours">
-                🕐 {SUPPORT_HOURS}
+                🕐 {lang === 'bn' ? 'সকাল ৭টা – রাত ৯টা' : '7:00 am – 9:00 pm'}
               </p>
             </div>
           </div>

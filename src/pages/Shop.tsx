@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import WeeklyBasketModal from '../components/WeeklyBasketModal'
 import MyUsualBasketModal from '../components/MyUsualBasketModal'
@@ -82,10 +82,18 @@ function ProductCard({
       </div>
 
       <div className="product-info">
-        {/* Dual Bengali + English Name */}
-        <div className="product-title-dual">
-          <h3 className="product-bn-name">{p.bnName}</h3>
-          <span className="product-en-name">{p.name}</span>
+        {/* Dual Bengali + English Name & Prominent Price Badge */}
+        <div className="product-title-dual-row">
+          <div className="product-title-dual">
+            <h3 className="product-bn-name">{p.bnName}</h3>
+            <span className="product-en-name">{p.name}</span>
+          </div>
+          <div className="product-price-badge-top" aria-label={`Price: ₹${calculatedPrice}`}>
+            <span className="price-bold-val">₹{calculatedPrice}</span>
+            <span className="price-sub-unit">
+              /{weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
+            </span>
+          </div>
         </div>
 
         <p className="subtle">{catLabel(lang, p.category)}</p>
@@ -463,6 +471,30 @@ export default function Shop() {
       </div>
 
       <div className="shop-body" id="veg-grid">
+        {/* 🔍 Search Field with Banglish & Phonetic Support (Top Positioned for Quick Access) */}
+        <div className="shop-search-toolbar">
+          <div className="glass-search-field">
+            <span className="search-glass-icon">🔍</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={lang === 'bn' ? 'সবজি, মাছ বা Banglish খুঁজুন (যেমন: alu, potol, chingri, ada)…' : 'Search veggies, fish or Banglish (alu, potol, chingri)…'}
+              className="glass-search-input"
+            />
+            {search && (
+              <button
+                type="button"
+                className="search-clear-btn"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Repeat Last Order banner for returning customers */}
         {lastOrder && (
           <div className="repeat-order-banner glass-mono-banner">
@@ -513,22 +545,25 @@ export default function Shop() {
           </button>
         </div>
 
-        {/* Cart minimum progress bar */}
+        {/* Cart minimum progress bar with interactive affordance */}
         <div className="cart-progress-wrap glass-progress-wrap">
           <div className="cart-progress-header">
-            <span className="cart-progress-label">
-              {cartTotal === 0
-                ? lang === 'bn'
-                  ? '🛒 কার্টে কিছু নেই'
-                  : '🛒 Cart is empty'
-                : progressPct >= 100
+            <Link to="/cart" className="cart-progress-label-link" title={t(lang, 'viewCart')}>
+              <span className="cart-progress-label">
+                {cartTotal === 0
                   ? lang === 'bn'
-                    ? '🎉 মিনিমাম পূরণ হয়েছে!'
-                    : '🎉 Minimum reached!'
-                  : lang === 'bn'
-                    ? `আর মাত্র ₹${shortfall} যোগ করুন — বিনামূল্যে ডেলিভারি পান!`
-                    : `Add ₹${shortfall} more for free delivery!`}
-            </span>
+                    ? '🛒 কার্টে কিছু নেই'
+                    : '🛒 Cart is empty'
+                  : progressPct >= 100
+                    ? lang === 'bn'
+                      ? '🎉 মিনিমাম পূরণ হয়েছে!'
+                      : '🎉 Minimum reached!'
+                    : lang === 'bn'
+                      ? `আর মাত্র ₹${shortfall} যোগ করুন — বিনামূল্যে ডেলিভারি পান!`
+                      : `Add ₹${shortfall} more for free delivery!`}
+              </span>
+              <span className="cart-progress-view-hint">{lang === 'bn' ? 'কার্ট দেখুন ➔' : 'View Cart ➔'}</span>
+            </Link>
             <span className="cart-progress-amount-mono">₹{cartTotal} / ₹{MIN_ORDER_AMOUNT}</span>
           </div>
           <div
@@ -549,30 +584,6 @@ export default function Shop() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* 🔍 Search Field with Banglish & Phonetic Support */}
-        <div className="shop-search-toolbar">
-          <div className="glass-search-field">
-            <span className="search-glass-icon">🔍</span>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={lang === 'bn' ? 'সবজি, মাছ বা Banglish খুঁজুন (যেমন: alu, potol, chingri, ada)…' : 'Search veggies, fish or Banglish (alu, potol, chingri)…'}
-              className="glass-search-input"
-            />
-            {search && (
-              <button
-                type="button"
-                className="search-clear-btn"
-                onClick={() => setSearch('')}
-                aria-label="Clear search"
-              >
-                ✕
-              </button>
-            )}
-          </div>
         </div>
 
         {/* 🏷️ Horizontal Visual Category Chips Bar */}
@@ -683,49 +694,42 @@ export default function Shop() {
         )}
 
         {/* 🏪 Physical Store & Google Maps Showcase Card (Lower side) */}
-        <div style={{
-          background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
-          border: '2px solid #86efac',
-          borderRadius: '16px',
-          padding: '1.25rem',
-          margin: '2rem 0 1rem',
-          boxShadow: '0 4px 14px rgba(22, 101, 52, 0.08)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-              <span style={{ fontSize: '1.5rem' }}>🏪</span>
+        <div className="store-outlet-card">
+          <div className="store-outlet-header">
+            <div className="store-outlet-title-group">
+              <span className="store-outlet-icon">🏪</span>
               <div>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#166534', margin: 0 }}>
-                  {lang === 'bn' ? `${STORE_LOCATION.nameBn} - আমাদের ফিজিক্যাল স্টোর ও আউটলেট` : `${STORE_LOCATION.name} - Physical Store & Outlet`}
-                </h3>
-                <span style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>
+                <div className="store-outlet-name-row">
+                  <h3 className="store-outlet-title">
+                    {lang === 'bn' ? `${STORE_LOCATION.nameBn} - আমাদের ফিজিক্যাল স্টোর ও আউটলেট` : `${STORE_LOCATION.name} - Physical Store & Outlet`}
+                  </h3>
+                  <span className="store-outlet-badge">
+                    {lang === 'bn' ? 'সরাসরি দোকানে এসে কিনুন' : 'Walk-in & Buy Offline'}
+                  </span>
+                </div>
+                <span className="store-outlet-status">
                   🟢 {lang === 'bn' ? `খোলা থাকে · ${STORE_LOCATION.hoursBn}` : `Open Daily · ${STORE_LOCATION.hours}`}
                 </span>
               </div>
             </div>
-            <span style={{ fontSize: '0.74rem', background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: '12px', fontWeight: 700, border: '1px solid #86efac' }}>
-              {lang === 'bn' ? 'সরাসরি দোকানে এসে কিনুন' : 'Walk-in & Buy Offline'}
-            </span>
           </div>
 
-          <p style={{ fontSize: '0.88rem', color: '#374151', margin: '0 0 0.75rem', lineHeight: 1.45 }}>
+          <p className="store-outlet-address">
             📍 <strong>{lang === 'bn' ? 'ঠিকানা:' : 'Address:'}</strong> {lang === 'bn' ? STORE_LOCATION.addressBn : STORE_LOCATION.address}
           </p>
 
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="store-outlet-actions">
             <a
               href={STORE_LOCATION.mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-primary"
-              style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none', background: '#166534' }}
             >
               🗺️ {lang === 'bn' ? 'Google Maps-এ দেখুন ও নেভিগেট করুন' : 'Open in Google Maps'}
             </a>
             <a
               href={`tel:${STORE_LOCATION.phone}`}
               className="btn btn-secondary"
-              style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}
             >
               📞 {lang === 'bn' ? 'দোকানে ফোন করুন' : 'Call Store'}
             </a>
