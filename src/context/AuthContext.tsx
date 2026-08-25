@@ -167,32 +167,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsers(profile ? [profile] : [])
       return
     }
-    ensureSeeded()
-    const localUsers = getUsers()
-    let cloudUsers: User[] = []
-    try {
-      cloudUsers = await fetchProfiles()
-    } catch {
-      cloudUsers = []
+
+    if (cloud) {
+      let cloudUsers: User[] = []
+      try {
+        cloudUsers = await fetchProfiles()
+      } catch {
+        cloudUsers = []
+      }
+
+      const map = new Map<string, User>()
+      cloudUsers.forEach((u) => {
+        if (u.id) map.set(u.id, u)
+      })
+      if (profile && profile.id) {
+        map.set(profile.id, profile)
+      }
+      setUsers(Array.from(map.values()))
+      return
     }
 
+    ensureSeeded()
+    const localUsers = getUsers()
     const map = new Map<string, User>()
-    // 1. Add local & seeded demo users first
     localUsers.forEach((u) => {
       if (u.email) map.set(u.email.toLowerCase(), u)
     })
-    // 2. Add cloud profiles (overriding local if email matches)
-    cloudUsers.forEach((u) => {
-      if (u.email) map.set(u.email.toLowerCase(), u)
-    })
-    // 3. Ensure current active logged in profile is present
     if (profile && profile.email) {
       map.set(profile.email.toLowerCase(), profile)
     }
-
-    const merged = Array.from(map.values())
-    setUsers(merged)
-  }, [])
+    setUsers(Array.from(map.values()))
+  }, [cloud])
 
 
   const refreshLocal = useCallback(() => {
