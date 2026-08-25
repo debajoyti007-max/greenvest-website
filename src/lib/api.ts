@@ -235,34 +235,50 @@ async function updateProfileField(
   fields: Record<string, unknown>
 ): Promise<void> {
   const client = requireClient()
+  const normalizedFields: Record<string, unknown> = { ...fields }
+  if ('isBlocked' in fields) {
+    normalizedFields.is_blocked = fields.isBlocked
+    delete normalizedFields.isBlocked
+  }
 
-  // 1. Try by exact ID
+  // 1. Try atomic SECURITY DEFINER RPC (bypasses all RLS restrictions)
+  if (normalizedFields.role && typeof normalizedFields.role === 'string') {
+    try {
+      const { error: rpcErr } = await client.rpc('update_user_role_admin', {
+        p_user_id: userId,
+        p_role: normalizedFields.role,
+      })
+      if (!rpcErr) return
+    } catch {}
+  }
+
+  // 2. Try by exact ID
   if (userId) {
-    const { error: errId } = await client.from('profiles').update(fields).eq('id', userId)
+    const { error: errId } = await client.from('profiles').update(normalizedFields).eq('id', userId)
     if (!errId) return
   }
 
-  // 2. Try by email if provided
+  // 3. Try by email if provided
   if (email && email.trim()) {
-    const { error: errEmail } = await client.from('profiles').update(fields).eq('email', email.trim().toLowerCase())
+    const { error: errEmail } = await client.from('profiles').update(normalizedFields).eq('email', email.trim().toLowerCase())
     if (!errEmail) return
   }
 
-  // 3. Try by phone or formatted phone email (e.g. 8350087877@greenvest.shop)
+  // 4. Try by phone or formatted phone email (e.g. 8350087877@greenvest.shop)
   const rawIdentifier = phone || email || userId
   if (rawIdentifier) {
     const digits = rawIdentifier.replace(/\D/g, '')
     if (digits.length >= 10) {
       const phoneEmail = `${digits.slice(-10)}@greenvest.shop`
-      const { error: errPhoneEmail } = await client.from('profiles').update(fields).eq('email', phoneEmail)
+      const { error: errPhoneEmail } = await client.from('profiles').update(normalizedFields).eq('email', phoneEmail)
       if (!errPhoneEmail) return
 
-      const { error: errPhone } = await client.from('profiles').update(fields).eq('phone', digits.slice(-10))
+      const { error: errPhone } = await client.from('profiles').update(normalizedFields).eq('phone', digits.slice(-10))
       if (!errPhone) return
     }
   }
 
-  // 4. Fallback: auto-create/upsert missing profile row in database
+  // 5. Fallback: auto-create/upsert missing profile row in database
   const targetEmail = (email && email.trim()) ? email.trim().toLowerCase() : (phone ? `${phone.replace(/\D/g, '').slice(-10)}@greenvest.shop` : `${userId}@greenvest.shop`)
   const targetPhone = phone ? phone.replace(/\D/g, '').slice(-10) : undefined
 
@@ -272,7 +288,7 @@ async function updateProfileField(
     name: targetEmail.split('@')[0],
     role: 'customer',
     created_at: new Date().toISOString(),
-    ...fields,
+    ...normalizedFields,
   }
   if (targetPhone) payload.phone = targetPhone
 

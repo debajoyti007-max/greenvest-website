@@ -3,7 +3,7 @@
 -- Run this ONCE in Supabase Dashboard -> SQL Editor -> New Query -> Run
 -- ============================================================================
 
--- 1. PROFILES TABLE
+-- 1. PROFILES TABLE & ROLE RPC
 CREATE TABLE IF NOT EXISTS public.profiles (
   id text PRIMARY KEY,
   email text,
@@ -16,9 +16,35 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at timestamptz DEFAULT now()
 );
 
+-- Drop legacy role constraint if it blocked 'rider' and recreate cleanly
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('customer', 'seller', 'admin', 'rider'));
+
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "profiles_all_access" ON public.profiles;
 CREATE POLICY "profiles_all_access" ON public.profiles FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- Atomic Role Update RPC (Immune to all RLS restrictions)
+CREATE OR REPLACE FUNCTION public.update_user_role_admin(
+  p_user_id text,
+  p_role text
+) RETURNS jsonb AS $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  UPDATE public.profiles
+  SET role = p_role, updated_at = now()
+  WHERE id = p_user_id
+     OR email = p_user_id
+     OR phone = p_user_id
+     OR email = (p_user_id || '@greenvest.shop')
+  RETURNING to_jsonb(public.profiles.*) INTO v_result;
+
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.update_user_role_admin TO anon, authenticated, service_role;
 
 -- 2. PRODUCTS TABLE & RPC
 CREATE TABLE IF NOT EXISTS public.products (
