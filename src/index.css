@@ -19,7 +19,30 @@
   --warn: #b45309;
   --ok: #15803d;
   --shadow: 0 10px 30px rgba(20, 83, 45, 0.08);
-  --radius: 14px;
+
+  /* Unified Typographic Scale (7 tokens) */
+  --text-xs: 0.75rem;   /* 12px - Badges, sub-captions */
+  --text-sm: 0.875rem;  /* 14px - Body secondary, chips, trust items */
+  --text-base: 1.00rem; /* 16px - Standard body text, inputs */
+  --text-md: 1.125rem;  /* 18px - Subheadings, card titles */
+  --text-lg: 1.25rem;   /* 20px - Section headers */
+  --text-xl: 1.50rem;   /* 24px - Page titles */
+  --text-2xl: 2.00rem;  /* 32px - Hero headings */
+
+  /* Consolidated Text Colors (5 semantic tokens) */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-brand: #166534;
+  --color-text-inverse: #ffffff;
+
+  /* Standardized Corner Radii (4 tokens) */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+  --radius: var(--radius-lg);
+
   /* Hind Siliguri + Noto cover Bengali; DM Sans for Latin */
   --font: 'Hind Siliguri', 'Noto Sans Bengali', 'DM Sans', 'Nirmala UI', 'Vrinda', system-ui, sans-serif;
   --display: 'Hind Siliguri', 'Noto Sans Bengali', 'Fraunces', 'Nirmala UI', Georgia, serif;
@@ -306,11 +329,14 @@ img {
   padding: 1.5rem 0 2rem;
 }
 
-/* Full-bleed hero breaks out of content width */
+/* Full-bleed hero with safe width bounds */
 .shop-page .hero-full {
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  box-sizing: border-box;
+  overflow: hidden;
   min-height: min(72vh, 560px);
   position: relative;
   display: grid;
@@ -404,24 +430,25 @@ img {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  justify-content: center;
 }
 
 .hero-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.45);
-  border: none;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(0, 0, 0, 0.25);
   cursor: pointer;
   padding: 0;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
 }
 
 .hero-dot.active {
-  width: 28px;
-  border-radius: 6px;
-  background: #4ade80;
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+  width: 26px;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 @keyframes hero-rise {
@@ -437,11 +464,11 @@ img {
 
 .hero-kicker {
   margin: 0 0 0.4rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-weight: 600;
-  opacity: 0.9;
+  font-size: var(--text-sm);
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-weight: 700;
+  opacity: 0.95;
 }
 
 .brand-hero.light {
@@ -487,11 +514,11 @@ img {
   gap: 2rem;
 }
 
-/* 3-column grid */
+/* 4-column balanced grid with equal top alignment */
 .footer-grid {
   display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr;
-  gap: 2rem 3rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 2rem;
   align-items: start;
 }
 
@@ -2176,14 +2203,15 @@ button.linkish {
   gap: 0.1rem;
 }
 .trust-item strong {
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--ink);
-  line-height: 1.2;
+  line-height: 1.25;
 }
 .trust-item span {
-  font-size: 0.73rem;
-  color: var(--muted);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.35;
 }
 
 /* ── Skeleton Cards ──────────────────────────────── */
@@ -3294,17 +3322,17 @@ button.linkish {
 }
 
 .product-bn-name {
-  font-size: 1.05rem;
+  font-size: var(--text-md);
   font-weight: 700;
-  color: #111827;
+  color: var(--color-text-primary);
   line-height: 1.25;
   margin: 0;
 }
 
 .product-en-name {
   display: block;
-  font-size: 0.78rem;
-  color: #6b7280;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
   font-weight: 500;
   margin-top: 0.1rem;
 }

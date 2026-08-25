@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import WeeklyBasketModal from '../components/WeeklyBasketModal'
 import MyUsualBasketModal from '../components/MyUsualBasketModal'
@@ -90,8 +90,11 @@ function ProductCard({
 
         <p className="subtle">{catLabel(lang, p.category)}</p>
 
-        {/* Grade selector chips */}
-        <div className="grade-selector-glass">
+        {/* Grade selector chips with accessible group label */}
+        <div className="grade-selector-glass" role="radiogroup" aria-labelledby={`grade-lbl-${p.id}`}>
+          <span className="chip-group-label" id={`grade-lbl-${p.id}`}>
+            {lang === 'bn' ? 'গ্রেড:' : 'Grade:'}
+          </span>
           {GRADES.map((g) => (
             <button
               key={g}
@@ -99,6 +102,7 @@ function ProductCard({
               className={`grade-chip-glass ${cardGrade === g ? 'active' : ''}`}
               onClick={() => setCardGrade(g)}
               aria-label={`Grade ${g}`}
+              aria-pressed={cardGrade === g}
             >
               Grade {g}
             </button>
@@ -108,6 +112,7 @@ function ProductCard({
             className="info-btn-glass"
             onClick={() => setShowGradeInfo(!showGradeInfo)}
             title="Quality grade info"
+            aria-label="Quality grade information"
           >
             ℹ️
           </button>
@@ -119,9 +124,12 @@ function ProductCard({
           </p>
         )}
 
-        {/* Quick Weight Chips (for kg items) */}
+        {/* Quick Weight Chips (for kg items) with accessible group label */}
         {isKg && (
-          <div className="weight-chips-row">
+          <div className="weight-chips-row" role="radiogroup" aria-labelledby={`weight-lbl-${p.id}`}>
+            <span className="chip-group-label" id={`weight-lbl-${p.id}`}>
+              {lang === 'bn' ? 'ওজন:' : 'Size:'}
+            </span>
             {[
               { val: 0.25, label: '250g' },
               { val: 0.5, label: '500g' },
@@ -133,6 +141,7 @@ function ProductCard({
                 type="button"
                 className={`weight-chip ${weightMultiplier === chip.val ? 'active' : ''}`}
                 onClick={() => setWeightMultiplier(chip.val)}
+                aria-pressed={weightMultiplier === chip.val}
               >
                 {chip.label}
               </button>
@@ -722,12 +731,6 @@ export default function Shop() {
             </a>
           </div>
         </div>
-
-        <p className="shop-footnote">
-          <Link to="/cart">{t(lang, 'viewCart')}</Link>
-          {' · '}
-          {lang === 'bn' ? 'পেমেন্ট: UPI QR + ম্যানুয়াল UTR' : 'Pay via UPI QR + manual UTR'}
-        </p>
       </div>
 
       {/* 🧺 My Usual Basket Modal (Glass-Mono Popup) */}

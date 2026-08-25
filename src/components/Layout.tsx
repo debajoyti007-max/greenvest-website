@@ -62,10 +62,10 @@ export default function Layout() {
             {user?.role === 'rider' ? (
               <>
                 <NavLink to="/rider" onClick={closeMenu}>
-                  🛵 {lang === 'bn' ? 'রাইডার ড্যাশবোর্ড' : 'Rider View'}
+                  {lang === 'bn' ? 'রাইডার ভিউ' : 'Rider View'}
                 </NavLink>
                 <NavLink to="/profile" onClick={closeMenu}>
-                  👤 {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
+                  {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
                 </NavLink>
                 <NotificationBell />
               </>
@@ -79,7 +79,7 @@ export default function Layout() {
                   {cartCount > 0 && <span className="badge">{cartCount}</span>}
                 </NavLink>
                 <NavLink to="/track" onClick={closeMenu}>
-                  {lang === 'bn' ? 'ট্র্যাক' : 'Track'}
+                  {lang === 'bn' ? 'ট্র্যাক' : 'Track Order'}
                 </NavLink>
                 <NotificationBell />
                 {user && (
@@ -89,7 +89,7 @@ export default function Layout() {
                 )}
                 {user && (
                   <NavLink to="/profile" onClick={closeMenu}>
-                    {lang === 'bn' ? '👤 প্রোফাইল' : '👤 Profile'}
+                    {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
                   </NavLink>
                 )}
                 {(user?.role === 'seller' || user?.role === 'admin') && (
@@ -98,7 +98,7 @@ export default function Layout() {
                       {t(lang, 'seller')}
                     </NavLink>
                     <NavLink to="/rider" onClick={closeMenu}>
-                      🛵 {lang === 'bn' ? 'রাইডার' : 'Rider'}
+                      {lang === 'bn' ? 'রাইডার' : 'Rider'}
                     </NavLink>
                   </>
                 )}
