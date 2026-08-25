@@ -20,6 +20,16 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('customer', 'seller', 'admin', 'rider'));
 
+-- Drop any legacy trigger on profiles that blocked role updates with "Only administrators can change user roles"
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT trigger_name FROM information_schema.triggers WHERE event_object_table = 'profiles' AND trigger_schema = 'public') LOOP
+        EXECUTE 'DROP TRIGGER IF EXISTS ' || quote_ident(r.trigger_name) || ' ON public.profiles CASCADE;';
+    END LOOP;
+END $$;
+
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "profiles_all_access" ON public.profiles;
 CREATE POLICY "profiles_all_access" ON public.profiles FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
