@@ -276,7 +276,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (oTimer) clearTimeout(oTimer)
       oTimer = setTimeout(() => {
         void refreshCloud()
-      }, 500)
+      }, 1200)
     })
 
     return () => {

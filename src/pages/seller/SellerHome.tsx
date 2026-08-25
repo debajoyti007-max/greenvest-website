@@ -64,11 +64,14 @@ export default function SellerHome() {
       .filter((o) => o.status !== 'cancelled' && o.status !== 'delivered')
       .forEach((o) => {
         o.items.forEach((it) => {
-          const key = `${it.emoji} ${it.name}`
-          map.set(key, (map.get(key) || 0) + it.qty)
+          const weightMult = Number(it.weightMultiplier) || 1
+          const totalKg = it.qty * weightMult
+          const gradeLabel = it.grade ? ` (Grade ${it.grade})` : ''
+          const key = `${it.emoji} ${it.name}${gradeLabel}`
+          map.set(key, (map.get(key) || 0) + totalKg)
         })
       })
-    return Array.from(map.entries()).map(([name, qty]) => `• ${name}: ${qty}`)
+    return Array.from(map.entries()).map(([name, kg]) => `• ${name}: ${kg.toFixed(kg % 1 === 0 ? 0 : 2)} kg`)
   }, [orders])
 
   const generateSheet = () => {

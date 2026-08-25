@@ -89,6 +89,9 @@
    * Strict 12-digit alphanumeric uppercase trimming.
    * Duplicate UTR gating against active non-cancelled database records.
    * 30-minute guest typo editing window in `TrackOrder.tsx`.
+5. **Atomic Order Confirmation & Mandi Sourcing (`SellerOrders.tsx`, `SellerHome.tsx`):**
+   * 1-Tap Accept Order executes `verifyUtr(id, true)` + `updateOrderStatus(id, 'confirmed')` atomically.
+   * Daily Mandi Procurement Sheet aggregates exact net kilograms (`qty * weightMultiplier`) with Grade A/B/C breakdown.
 
 ---
 

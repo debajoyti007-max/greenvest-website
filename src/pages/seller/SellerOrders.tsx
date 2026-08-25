@@ -261,14 +261,13 @@ export default function SellerOrders() {
   // S3: One-tap accept (verify UTR + confirm + WhatsApp)
   const handleAcceptOrder = async (o: Order) => {
     try {
-      if (!o.utrVerified) {
-        await verifyUtr(o.id, true)
-      } else {
-        await updateOrderStatus(o.id, 'confirmed')
-      }
+      await verifyUtr(o.id, true)
+      await updateOrderStatus(o.id, 'confirmed')
       window.open(orderStatusWhatsAppUrl(o, 'confirmed'), '_blank', 'noopener,noreferrer')
+      showToast(lang === 'bn' ? '✅ অর্ডার কনফার্ম হয়েছে!' : '✅ Order confirmed!', '🎉')
     } catch (err) {
       console.error('Accept order error:', err)
+      showToast(lang === 'bn' ? 'অর্ডার গ্রহণ ব্যর্থ হয়েছে' : 'Failed to accept order', '❌', 'error')
     }
   }
 
