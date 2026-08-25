@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { t } from '../lib/i18n'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
+import { STORE_LOCATION } from '../lib/delivery'
 
 import MandiTicker from './MandiTicker'
 import NotificationBell from './NotificationBell'
@@ -196,7 +197,7 @@ export default function Layout() {
                 {lang === 'bn' ? 'পূর্ব মেদিনীপুর, পিন: ৭২১৬৪৮' : 'Purba Medinipur, PIN 721648'}
               </p>
               <a
-                href="https://maps.app.goo.gl/zjHaYvddzvXjHkap6"
+                href={STORE_LOCATION.mapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ color: '#86efac', fontSize: '0.8rem', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}

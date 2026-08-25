@@ -426,8 +426,8 @@ describe('Guest Tracking, UTR Edit & Manifest Logic', () => {
 // 13. Distance-Based Delivery & Store Pickup Logic
 describe('Store Location & Distance-Based Delivery Tiers', () => {
   const STORE_LOCATION = {
-    lat: 22.1723059,
-    lng: 87.8677517,
+    lat: 22.1746825,
+    lng: 87.9106158,
   }
 
   function calculateDistanceKm(lat1, lon1, lat2, lon2) {
@@ -459,7 +459,7 @@ describe('Store Location & Distance-Based Delivery Tiers', () => {
 
   test('Haversine distance calculation is accurate', () => {
     const d = calculateDistanceKm(STORE_LOCATION.lat, STORE_LOCATION.lng, 22.19, 87.88)
-    assert.ok(d > 2.0 && d < 3.5)
+    assert.ok(d >= 3.0 && d <= 4.0)
   })
 
   test('Store pickup has zero (0) delivery charge', () => {
