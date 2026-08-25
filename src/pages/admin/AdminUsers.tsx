@@ -348,13 +348,17 @@ export default function AdminUsers() {
                                       : `Make ${u.name} a Seller?`
                                   )
                                 ) {
-                                  await setUserRole(u.id, 'seller' as Role)
-                                  showToast(
-                                    lang === 'bn'
-                                      ? `🏪 ${u.name} এখন সেলার!`
-                                      : `🏪 ${u.name} is now a Seller!`,
-                                    '🏪'
-                                  )
+                                  const res = await setUserRole(u.id, 'seller' as Role)
+                                  if (res && !res.ok) {
+                                    showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
+                                  } else {
+                                    showToast(
+                                      lang === 'bn'
+                                        ? `🏪 ${u.name} এখন সেলার!`
+                                        : `🏪 ${u.name} is now a Seller!`,
+                                      '🏪'
+                                    )
+                                  }
                                 }
                               }}
                             >
@@ -372,13 +376,17 @@ export default function AdminUsers() {
                                       : `Revoke Seller from ${u.name}?`
                                   )
                                 ) {
-                                  await setUserRole(u.id, 'customer' as Role)
-                                  showToast(
-                                    lang === 'bn'
-                                      ? `${u.name}-এর সেলার বাতিল হয়েছে`
-                                      : `Revoked Seller from ${u.name}`,
-                                    'ℹ️'
-                                  )
+                                  const res = await setUserRole(u.id, 'customer' as Role)
+                                  if (res && !res.ok) {
+                                    showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
+                                  } else {
+                                    showToast(
+                                      lang === 'bn'
+                                        ? `${u.name}-এর সেলার বাতিল হয়েছে`
+                                        : `Revoked Seller from ${u.name}`,
+                                      'ℹ️'
+                                    )
+                                  }
                                 }
                               }}
                             >
@@ -400,13 +408,17 @@ export default function AdminUsers() {
                                       : `Make ${u.name} a Delivery Rider?`
                                   )
                                 ) {
-                                  await setUserRole(u.id, 'rider' as Role)
-                                  showToast(
-                                    lang === 'bn'
-                                      ? `🛵 ${u.name} এখন ডেলিভারি রাইডার!`
-                                      : `🛵 ${u.name} is now a Delivery Rider!`,
-                                    '🛵'
-                                  )
+                                  const res = await setUserRole(u.id, 'rider' as Role)
+                                  if (res && !res.ok) {
+                                    showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
+                                  } else {
+                                    showToast(
+                                      lang === 'bn'
+                                        ? `🛵 ${u.name} এখন ডেলিভারি রাইডার!`
+                                        : `🛵 ${u.name} is now a Delivery Rider!`,
+                                      '🛵'
+                                    )
+                                  }
                                 }
                               }}
                             >
@@ -424,13 +436,17 @@ export default function AdminUsers() {
                                       : `Revoke Rider from ${u.name}?`
                                   )
                                 ) {
-                                  await setUserRole(u.id, 'customer' as Role)
-                                  showToast(
-                                    lang === 'bn'
-                                      ? `${u.name}-এর রাইডার বাতিল হয়েছে`
-                                      : `Revoked Rider from ${u.name}`,
-                                    'ℹ️'
-                                  )
+                                  const res = await setUserRole(u.id, 'customer' as Role)
+                                  if (res && !res.ok) {
+                                    showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
+                                  } else {
+                                    showToast(
+                                      lang === 'bn'
+                                        ? `${u.name}-এর রাইডার বাতিল হয়েছে`
+                                        : `Revoked Rider from ${u.name}`,
+                                      'ℹ️'
+                                    )
+                                  }
                                 }
                               }}
                             >

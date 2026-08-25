@@ -36,7 +36,7 @@ interface AuthContextValue {
   logout: () => Promise<void>
   resetPassword: (name: string, email: string, newPin: string) => Promise<AuthResult>
   updatePassword: (password: string) => Promise<AuthResult>
-  setUserRole: (userId: string, role: Role) => Promise<void>
+  setUserRole: (userId: string, role: Role) => Promise<AuthResult>
   updateUserProfile: (data: { name?: string; phone?: string }) => Promise<void>
   adminResetUserPin: (userId: string, newPin: string) => Promise<AuthResult>
   toggleBlockUser: (userId: string, isBlocked: boolean) => Promise<AuthResult>
@@ -667,7 +667,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const setUserRole = useCallback(
-    async (userId: string, role: Role) => {
+    async (userId: string, role: Role): Promise<AuthResult> => {
       const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
       const targetEmail = targetUser?.email || ''
       const targetPhone = targetUser?.phone || ''
@@ -698,14 +698,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cloud && supabase) {
         try {
           await updateProfileRole(actualId, role, targetEmail, targetPhone)
-        } catch (err: any) {
-          console.error('setUserRole cloud error:', err)
-        }
-
-        try {
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
-            // MERGE: Keep our latest updated role so a failed/delayed DB write never overwrites it back!
             const merged = cloudUsers.map((cu) => {
               if (cu.id === actualId || cu.id === userId || (targetEmail && cu.email === targetEmail)) {
                 return { ...cu, role }
@@ -715,8 +709,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUsers(merged)
             saveUsers(merged)
           }
-        } catch {}
+          return { ok: true }
+        } catch (err: any) {
+          console.error('setUserRole cloud error:', err)
+          return {
+            ok: false,
+            error: err.message || 'Failed to save role update in Supabase database. Please ensure SQL script is run in Supabase.',
+          }
+        }
       }
+      return { ok: true }
     },
     [cloud, user, users],
   )
