@@ -62,6 +62,7 @@ function ProductCard({
           alt={`${p.bnName} ${p.name}`}
           className="product-photo"
           loading="lazy"
+          decoding="async"
           onError={(e) => {
             const el = e.currentTarget
             const fallback = resolveProductImage(p.id, undefined, `${p.name} ${p.bnName}`)

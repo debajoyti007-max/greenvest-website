@@ -7,44 +7,44 @@ function asset(path: string) {
 }
 
 export const PRODUCT_IMAGES: Record<string, string> = {
-  p1:  asset('veg/tomato.jpg'),
-  p2:  asset('veg/potato.jpg'),
-  p3:  asset('veg/onion.jpg'),
-  p4:  asset('veg/spinach.jpg'),
-  p5:  asset('veg/carrot.jpg'),
-  p6:  asset('veg/cucumber.jpg'),
-  p7:  asset('veg/chili.jpg'),
-  p8:  asset('veg/cauliflower.jpg'),
-  p9:  asset('veg/brinjal.jpg'),
-  p10: asset('veg/cabbage.jpg'),
-  p11: asset('veg/capsicum.jpg'),
-  p12: asset('veg/garlic.jpg'),
-  p13: asset('veg/ginger.jpg'),
-  p14: asset('veg/okra.jpg'),
-  p15: asset('veg/beans.jpg'),
-  p16: asset('veg/coriander.jpg'),
-  p17: asset('veg/lemon.jpg'),
-  p18: asset('veg/bottlegourd.jpg'),
-  p19: asset('veg/bittergourd.jpg'),
-  p20: asset('veg/radish.jpg'),
-  p21: asset('veg/peas.jpg'),
-  p22: asset('veg/potol.jpg?v=2'),
-  // Fish — v=2 forces CDN + browser cache refresh with new unique studio photos
-  f1:  asset('veg/rohu.jpg?v=2'),
-  f2:  asset('veg/catla.jpg?v=2'),
-  f3:  asset('veg/prawns.jpg?v=2'),
-  f4:  asset('veg/hilsa.jpg?v=2'),
-  f5:  asset('veg/tilapia.jpg?v=2'),
-  f6:  asset('veg/bhetki.jpg?v=3'),
-  f7:  asset('veg/pabda.jpg?v=3'),
-  f8:  asset('veg/tangra.jpg?v=2'),
-  f9:  asset('veg/parshe.jpg?v=2'),
-  f10: asset('veg/pomfret.jpg?v=2'),
+  p1:  asset('veg/tomato.webp'),
+  p2:  asset('veg/potato.webp'),
+  p3:  asset('veg/onion.webp'),
+  p4:  asset('veg/spinach.webp'),
+  p5:  asset('veg/carrot.webp'),
+  p6:  asset('veg/cucumber.webp'),
+  p7:  asset('veg/chili.webp'),
+  p8:  asset('veg/cauliflower.webp'),
+  p9:  asset('veg/brinjal.webp'),
+  p10: asset('veg/cabbage.webp'),
+  p11: asset('veg/capsicum.webp'),
+  p12: asset('veg/garlic.webp'),
+  p13: asset('veg/ginger.webp'),
+  p14: asset('veg/okra.webp'),
+  p15: asset('veg/beans.webp'),
+  p16: asset('veg/coriander.webp'),
+  p17: asset('veg/lemon.webp'),
+  p18: asset('veg/bottlegourd.webp'),
+  p19: asset('veg/bittergourd.webp'),
+  p20: asset('veg/radish.webp'),
+  p21: asset('veg/peas.webp'),
+  p22: asset('veg/potol.webp?v=3'),
+  // Fish — v=3 WebP format
+  f1:  asset('veg/rohu.webp?v=3'),
+  f2:  asset('veg/catla.webp?v=3'),
+  f3:  asset('veg/prawns.webp?v=3'),
+  f4:  asset('veg/hilsa.webp?v=3'),
+  f5:  asset('veg/tilapia.webp?v=3'),
+  f6:  asset('veg/bhetki.webp?v=3'),
+  f7:  asset('veg/pabda.webp?v=3'),
+  f8:  asset('veg/tangra.webp?v=3'),
+  f9:  asset('veg/parshe.webp?v=3'),
+  f10: asset('veg/pomfret.webp?v=3'),
 }
 
-export const HERO_IMAGE = asset('veg/hero.jpg')
-export const HERO_VEGGIES_IMAGE = asset('veg/hero_veggies.jpg')
-export const HERO_FISH_IMAGE = asset('veg/hero_fish.jpg')
+export const HERO_IMAGE = asset('veg/hero.webp')
+export const HERO_VEGGIES_IMAGE = asset('veg/hero_veggies.webp')
+export const HERO_FISH_IMAGE = asset('veg/hero_fish.webp')
 
 /** Map of product name keywords → local image (always wins over DB URL) */
 const NAME_MAP: Array<[string[], string]> = [
