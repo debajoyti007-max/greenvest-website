@@ -10,7 +10,15 @@ import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'
-import { HERO_IMAGE, HERO_VEGGIES_IMAGE, HERO_FISH_IMAGE, resolveProductImage } from '../lib/productImages'
+import {
+  HERO_IMAGE,
+  HERO_VEGGIES_IMAGE,
+  HERO_FISH_IMAGE,
+  HERO_MOBILE_IMAGE,
+  HERO_VEGGIES_MOBILE_IMAGE,
+  HERO_FISH_MOBILE_IMAGE,
+  resolveProductImage,
+} from '../lib/productImages'
 import { matchesProductQuery } from '../lib/searchUtils'
 import { STORE_LOCATION } from '../lib/delivery'
 import type { Grade, Lang, Product, CartItem } from '../types'
@@ -342,6 +350,7 @@ export default function Shop() {
     () => [
       {
         image: HERO_VEGGIES_IMAGE,
+        mobileImage: HERO_VEGGIES_MOBILE_IMAGE,
         kicker: lang === 'bn' ? '🚜 সরাসরি খামার থেকে প্রতিদিন তাজা' : '🚜 Farm-Fresh Daily Harvest',
         title: lang === 'bn' ? 'তাজা সবজি ও আলু-টমেটো' : 'Fresh Vegetables & Organic Produce',
         sub:
@@ -356,6 +365,7 @@ export default function Shop() {
       },
       {
         image: HERO_FISH_IMAGE,
+        mobileImage: HERO_FISH_MOBILE_IMAGE,
         kicker: lang === 'bn' ? '🐟 নদী ও সমুদ্রের টাটকা মাছ' : '🐟 Fresh River & Sea Catch',
         title: lang === 'bn' ? 'তাজা রুই, ইলিশ, চিংড়ি ও ভেটকি' : 'Fresh Rui, Hilsa, Prawns & Fish',
         sub:
@@ -370,6 +380,7 @@ export default function Shop() {
       },
       {
         image: HERO_IMAGE,
+        mobileImage: HERO_MOBILE_IMAGE,
         kicker: lang === 'bn' ? '⭐ সেরা মানের নিশ্চয়তা' : '⭐ Guaranteed Quality & Best Prices',
         title: lang === 'bn' ? 'আপনার বাজেটে এ, বি, সি গ্রেড' : 'Grade A, B, C For Every Budget',
         sub:
@@ -387,16 +398,23 @@ export default function Shop() {
     <div className="page shop-page">
       {/* 🚀 Hero Banner */}
       <section className="hero-full hero-slider-wrapper">
-        <img
-          src={slides[heroSlide].image}
-          alt={slides[heroSlide].title}
-          className="hero-slider-bg"
-          fetchPriority="high"
-          loading="eager"
-          decoding="async"
-          width="1200"
-          height="500"
-        />
+        <picture>
+          <source
+            media="(max-width: 640px)"
+            srcSet={slides[heroSlide].mobileImage}
+            type="image/webp"
+          />
+          <img
+            src={slides[heroSlide].image}
+            alt={slides[heroSlide].title}
+            className="hero-slider-bg"
+            fetchPriority="high"
+            loading="eager"
+            decoding="async"
+            width="1200"
+            height="500"
+          />
+        </picture>
         <div className="hero-full-shade hero-shade-strong" />
 
         <button

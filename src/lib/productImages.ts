@@ -46,6 +46,10 @@ export const HERO_IMAGE = asset('veg/hero.webp')
 export const HERO_VEGGIES_IMAGE = asset('veg/hero_veggies.webp')
 export const HERO_FISH_IMAGE = asset('veg/hero_fish.webp')
 
+export const HERO_MOBILE_IMAGE = asset('veg/hero_mobile.webp')
+export const HERO_VEGGIES_MOBILE_IMAGE = asset('veg/hero_veggies_mobile.webp')
+export const HERO_FISH_MOBILE_IMAGE = asset('veg/hero_fish_mobile.webp')
+
 /** Map of product name keywords → local image (always wins over DB URL) */
 const NAME_MAP: Array<[string[], string]> = [
   [['bitter', 'করলা', 'উচ্ছে', 'karela'],        PRODUCT_IMAGES.p19],

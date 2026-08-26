@@ -2542,6 +2542,8 @@ button.linkish {
 
 .mandi-ticker-content {
   display: inline-block;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
   animation: scrollMarquee 25s linear infinite;
 }
 
@@ -2550,8 +2552,8 @@ button.linkish {
 }
 
 @keyframes scrollMarquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
 }
 
 .mandi-ticker-item {

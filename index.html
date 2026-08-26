@@ -23,8 +23,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-    <!-- ⚡ Instant LCP: Preload mobile hero image with high priority -->
-    <link rel="preload" as="image" href="/veg/hero_veggies.webp" type="image/webp" fetchpriority="high" />
+    <!-- ⚡ Instant LCP: Responsive mobile and desktop hero image preloads -->
+    <link
+      rel="preload"
+      as="image"
+      href="/veg/hero_veggies_mobile.webp"
+      type="image/webp"
+      media="(max-width: 640px)"
+      fetchpriority="high"
+    />
+    <link
+      rel="preload"
+      as="image"
+      href="/veg/hero_veggies.webp"
+      type="image/webp"
+      media="(min-width: 641px)"
+      fetchpriority="high"
+    />
 
     <!-- Google Fonts: Streamlined Hind Siliguri + DM Sans (load async to never block render) -->
     <link
