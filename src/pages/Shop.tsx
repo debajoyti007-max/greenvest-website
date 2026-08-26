@@ -71,6 +71,8 @@ function ProductCard({
           className="product-photo"
           loading="lazy"
           decoding="async"
+          width="320"
+          height="320"
           onError={(e) => {
             const el = e.currentTarget
             const fallback = resolveProductImage(p.id, undefined, `${p.name} ${p.bnName}`)
