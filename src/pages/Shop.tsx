@@ -386,13 +386,14 @@ export default function Shop() {
   return (
     <div className="page shop-page">
       {/* 🚀 Hero Banner */}
-      <section
-        className="hero-full hero-slider-wrapper"
-        style={{
-          backgroundImage: `url(${slides[heroSlide].image})`,
-          transition: 'background-image 0.8s ease-in-out',
-        }}
-      >
+      <section className="hero-full hero-slider-wrapper">
+        <img
+          src={slides[heroSlide].image}
+          alt={slides[heroSlide].title}
+          className="hero-slider-bg"
+          fetchPriority="high"
+          decoding="async"
+        />
         <div className="hero-full-shade hero-shade-strong" />
 
         <button
@@ -570,6 +571,7 @@ export default function Shop() {
           <div
             className="cart-progress-track"
             role="progressbar"
+            aria-label={lang === 'bn' ? 'ন্যূনতম অর্ডারের অগ্রগতি' : 'Minimum order progress'}
             aria-valuenow={progressPct}
             aria-valuemin={0}
             aria-valuemax={100}
