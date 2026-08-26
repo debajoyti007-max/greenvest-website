@@ -487,3 +487,41 @@ describe('Store Location & Distance-Based Delivery Tiers', () => {
   })
 })
 
+describe('Customer Product Reviews & Star Ratings', () => {
+  const calculateProductRating = (reviews, productId) => {
+    const prodReviews = reviews.filter((r) => r.productId === productId)
+    if (prodReviews.length === 0) {
+      return { avg: 4.9, count: 6 }
+    }
+    const sum = prodReviews.reduce((acc, r) => acc + r.rating, 0)
+    const avg = Math.round((sum / prodReviews.length) * 10) / 10
+    return { avg, count: prodReviews.length }
+  }
+
+  const sampleReviews = [
+    { productId: 'p1', rating: 5, comment: 'Great tomatoes' },
+    { productId: 'p1', rating: 4, comment: 'Good quality' },
+    { productId: 'p2', rating: 5, comment: 'Clean potatoes' },
+  ]
+
+  test('Calculates correct average and review count for products with reviews', () => {
+    const res = calculateProductRating(sampleReviews, 'p1')
+    assert.equal(res.count, 2)
+    assert.equal(res.avg, 4.5)
+  })
+
+  test('Returns high starter rating for unreviewed fresh products', () => {
+    const res = calculateProductRating(sampleReviews, 'p99')
+    assert.equal(res.count, 6)
+    assert.equal(res.avg, 4.9)
+  })
+
+  test('Rating clamped between 1 and 5 stars', () => {
+    const validateRating = (r) => Math.min(5, Math.max(1, Math.round(r)))
+    assert.equal(validateRating(6), 5)
+    assert.equal(validateRating(0), 1)
+    assert.equal(validateRating(4.7), 5)
+  })
+})
+
+

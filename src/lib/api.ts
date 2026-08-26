@@ -11,6 +11,7 @@ import type {
   OrderItem,
   OrderStatus,
   Product,
+  ProductReview,
   Role,
   Season,
   User,
@@ -1143,4 +1144,74 @@ export async function sendOrderMessageApi(
   } catch {}
 
   return newMsg
+}
+
+// ── Customer Product Reviews ──────────────────────────────────────────────────
+
+export async function fetchProductReviewsApi(productId?: string): Promise<ProductReview[]> {
+  const localKey = productId ? `greenvest_reviews_${productId}` : 'greenvest_all_reviews'
+  const fallback = JSON.parse(localStorage.getItem(localKey) || '[]')
+
+  if (!supabase) return fallback
+
+  try {
+    let query = supabase.from('product_reviews').select('*').order('created_at', { ascending: false })
+    if (productId) {
+      query = query.eq('product_id', productId)
+    }
+    const { data, error } = await query
+    if (error || !data) return fallback
+
+    const mapped: ProductReview[] = data.map((r: any) => ({
+      id: r.id,
+      productId: r.product_id,
+      userId: r.user_id || undefined,
+      userName: r.user_name,
+      rating: Number(r.rating) || 5,
+      comment: r.comment || '',
+      tag: r.tag || undefined,
+      isVerifiedBuyer: r.is_verified_buyer ?? true,
+      createdAt: r.created_at,
+    }))
+
+    localStorage.setItem(localKey, JSON.stringify(mapped))
+    return mapped
+  } catch {
+    return fallback
+  }
+}
+
+export async function saveProductReviewApi(review: Omit<ProductReview, 'id' | 'createdAt'>): Promise<ProductReview> {
+  const newReview: ProductReview = {
+    id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    ...review,
+    createdAt: new Date().toISOString(),
+  }
+
+  // Save to local cache
+  try {
+    const key = `greenvest_reviews_${review.productId}`
+    const existing: ProductReview[] = JSON.parse(localStorage.getItem(key) || '[]')
+    localStorage.setItem(key, JSON.stringify([newReview, ...existing]))
+  } catch {}
+
+  if (!supabase) return newReview
+
+  try {
+    await supabase.from('product_reviews').insert({
+      id: newReview.id,
+      product_id: newReview.productId,
+      user_id: newReview.userId || null,
+      user_name: newReview.userName,
+      rating: newReview.rating,
+      comment: newReview.comment,
+      tag: newReview.tag || null,
+      is_verified_buyer: newReview.isVerifiedBuyer ?? true,
+      created_at: newReview.createdAt,
+    })
+  } catch (err) {
+    console.warn('saveProductReviewApi supabase error:', err)
+  }
+
+  return newReview
 }

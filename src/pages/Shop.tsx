@@ -4,6 +4,7 @@ import SkeletonCard from '../components/SkeletonCard'
 import WeeklyBasketModal from '../components/WeeklyBasketModal'
 import MyUsualBasketModal from '../components/MyUsualBasketModal'
 import CategoryBar from '../components/CategoryBar'
+import ProductReviewsModal from '../components/ProductReviewsModal'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
@@ -31,13 +32,17 @@ function ProductCard({
   cart,
   onAdd,
   onUpdateQty,
+  onOpenReviews,
 }: {
   p: Product
   lang: Lang
   cart: CartItem[]
   onAdd: (p: Product, grade: Grade, qty?: number, weightMultiplier?: number, weightLabel?: string) => void
   onUpdateQty: (productId: string, grade: Grade, qty: number, weightMultiplier?: number) => void
+  onOpenReviews: (p: Product) => void
 }) {
+  const { getProductRating } = useStore()
+  const ratingData = getProductRating(p.id)
   const [cardGrade, setCardGrade] = useState<Grade>('B')
   const [showGradeInfo, setShowGradeInfo] = useState(false)
   const [weightMultiplier, setWeightMultiplier] = useState<number>(1)
@@ -107,7 +112,23 @@ function ProductCard({
           </div>
         </div>
 
-        <p className="subtle">{catLabel(lang, p.category)}</p>
+        <div className="product-cat-rating-row">
+          <span className="product-cat-subtle">{catLabel(lang, p.category)}</span>
+          <button
+            type="button"
+            className="product-rating-chip"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenReviews(p)
+            }}
+            aria-label={`${ratingData.count} reviews, average rating ${ratingData.avg}`}
+            title={lang === 'bn' ? 'কাস্টমার রিভিউ ও রেটিং দেখুন' : 'View Customer Reviews & Ratings'}
+          >
+            <span className="star-icon-gold">★</span>
+            <span className="rating-score-val">{ratingData.avg.toFixed(1)}</span>
+            <span className="rating-count-sub">({ratingData.count})</span>
+          </button>
+        </div>
 
         {/* Grade selector chips with accessible group label */}
         <div className="grade-selector-glass" role="radiogroup" aria-labelledby={`grade-lbl-${p.id}`}>
@@ -237,6 +258,7 @@ export default function Shop() {
   const [heroSlide, setHeroSlide] = useState(0)
   const [showBasketModal, setShowBasketModal] = useState(false)
   const [showUsualBasketModal, setShowUsualBasketModal] = useState(false)
+  const [reviewProduct, setReviewProduct] = useState<Product | null>(null)
 
   // Auto-slide hero banner every 5 seconds
   useEffect(() => {
@@ -683,6 +705,7 @@ export default function Shop() {
                       cart={cart}
                       onAdd={handleAddDirect}
                       onUpdateQty={updateCartQty}
+                      onOpenReviews={setReviewProduct}
                     />
                   ))}
                 </div>
@@ -711,6 +734,7 @@ export default function Shop() {
                       cart={cart}
                       onAdd={handleAddDirect}
                       onUpdateQty={updateCartQty}
+                      onOpenReviews={setReviewProduct}
                     />
                   ))}
                 </div>
@@ -774,6 +798,14 @@ export default function Shop() {
 
       {/* 📦 Weekly Family Basket Modal */}
       {showBasketModal && <WeeklyBasketModal onClose={() => setShowBasketModal(false)} />}
+
+      {/* ⭐ Customer Reviews & Star Ratings Modal */}
+      {reviewProduct && (
+        <ProductReviewsModal
+          product={reviewProduct}
+          onClose={() => setReviewProduct(null)}
+        />
+      )}
     </div>
   )
 }

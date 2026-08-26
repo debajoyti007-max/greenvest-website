@@ -274,7 +274,26 @@ ALTER TABLE public.order_messages ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "order_messages_all_access" ON public.order_messages;
 CREATE POLICY "order_messages_all_access" ON public.order_messages FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- 7. REALTIME REPLICATION (ALL ACTIVE TABLES)
+-- 7. PRODUCT REVIEWS TABLE & RLS
+CREATE TABLE IF NOT EXISTS public.product_reviews (
+  id text PRIMARY KEY,
+  product_id text NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  user_id text,
+  user_name text NOT NULL,
+  rating int NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment text NOT NULL DEFAULT '',
+  tag text,
+  is_verified_buyer boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.product_reviews ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "product_reviews_read_all" ON public.product_reviews;
+CREATE POLICY "product_reviews_read_all" ON public.product_reviews FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "product_reviews_insert_all" ON public.product_reviews;
+CREATE POLICY "product_reviews_insert_all" ON public.product_reviews FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+-- 8. REALTIME REPLICATION (ALL ACTIVE TABLES)
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'products') THEN
@@ -298,5 +317,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'order_messages') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.order_messages;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'product_reviews') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.product_reviews;
+  END IF;
 END $$;
+
 

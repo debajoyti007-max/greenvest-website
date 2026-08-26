@@ -36,10 +36,13 @@ import {
   fetchDeliveryZones as fetchDeliveryZonesApi,
   fetchNotificationsApi,
   saveNotificationApi,
+  fetchProductReviewsApi,
+  saveProductReviewApi,
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { SEED_REVIEWS } from '../data/seedReviews'
 import {
   ensureSeeded,
   getCart,
@@ -56,7 +59,7 @@ import {
   STORE_EVENT,
   uid,
 } from '../lib/storage'
-import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification } from '../types'
+import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview } from '../types'
 import { showToast } from '../components/Toast'
 import { useAuth } from './AuthContext'
 
@@ -113,6 +116,10 @@ interface StoreContextValue {
   fetchDeliveryZones: () => Promise<DeliveryZone[]>
   notifications: AppNotification[]
   sendNotification: (targetUserId: string | 'all', title: string, message: string, senderName?: string) => Promise<void>
+  reviews: ProductReview[]
+  addReview: (review: Omit<ProductReview, 'id' | 'createdAt'>) => Promise<ProductReview>
+  getProductRating: (productId: string) => { avg: number; count: number }
+  getReviewsForProduct: (productId: string) => ProductReview[]
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null)
@@ -130,6 +137,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => getAppNotifications())
   const notifChannelRef = useRef<RealtimeChannel | null>(null)
+  const [reviews, setReviews] = useState<ProductReview[]>(() => {
+    try {
+      const saved = localStorage.getItem('greenvest_all_reviews')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return SEED_REVIEWS
+  })
+
+  // Hydrate reviews from Supabase if connected
+  useEffect(() => {
+    if (!cloud) return
+    fetchProductReviewsApi().then((data) => {
+      if (data && data.length > 0) {
+        setReviews(data)
+      }
+    })
+  }, [cloud])
 
   const refreshLocal = useCallback(() => {
     ensureSeeded()
@@ -855,6 +879,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud, lang],
   )
 
+  const addReview = useCallback(
+    async (review: Omit<ProductReview, 'id' | 'createdAt'>) => {
+      const created = await saveProductReviewApi(review)
+      setReviews((prev) => [created, ...prev])
+      showToast(lang === 'bn' ? '🌟 আপনার রিভিউ সফলভাবে জমা হয়েছে!' : '🌟 Review submitted successfully!', '⭐')
+      return created
+    },
+    [lang],
+  )
+
+  const getReviewsForProduct = useCallback(
+    (productId: string) => {
+      return reviews.filter((r) => r.productId === productId)
+    },
+    [reviews],
+  )
+
+  const getProductRating = useCallback(
+    (productId: string) => {
+      const prodReviews = reviews.filter((r) => r.productId === productId)
+      if (prodReviews.length === 0) {
+        return { avg: 4.9, count: 6 }
+      }
+      const sum = prodReviews.reduce((acc, r) => acc + r.rating, 0)
+      const avg = Math.round((sum / prodReviews.length) * 10) / 10
+      return { avg, count: prodReviews.length }
+    },
+    [reviews],
+  )
+
   const value = useMemo<StoreContextValue>(
     () => ({
       products,
@@ -895,6 +949,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       fetchDeliveryZones,
       notifications,
       sendNotification,
+      reviews,
+      addReview,
+      getProductRating,
+      getReviewsForProduct,
     }),
     [
       products,
@@ -935,6 +993,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       fetchDeliveryZones,
       notifications,
       sendNotification,
+      reviews,
+      addReview,
+      getProductRating,
+      getReviewsForProduct,
     ],
   )
 

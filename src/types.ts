@@ -112,3 +112,15 @@ export interface ChatMessage {
   createdAt?: string
 }
 
+export interface ProductReview {
+  id: string
+  productId: string
+  userId?: string
+  userName: string
+  rating: number
+  comment: string
+  tag?: string
+  isVerifiedBuyer?: boolean
+  createdAt: string
+}
+
