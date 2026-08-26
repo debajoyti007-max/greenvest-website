@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
+import { showToast } from '../../components/Toast'
 import { SEASON_LABELS } from '../../lib/business'
 import { t } from '../../lib/i18n'
 import { uploadProductImage } from '../../lib/imageUpload'
@@ -106,14 +107,20 @@ export default function SellerProducts() {
       ...form,
       imageUrl: form.imageUrl.trim() || undefined,
     }
-    if (editing) {
-      await updateProduct({ ...editing, ...payload })
-      setEditing(null)
-    } else {
-      await addProduct(payload)
+    try {
+      if (editing) {
+        await updateProduct({ ...editing, ...payload })
+        showToast(lang === 'bn' ? `✅ "${payload.bnName || payload.name}" আপডেট হয়েছে!` : `✅ "${payload.name}" updated!`, '✏️')
+        setEditing(null)
+      } else {
+        await addProduct(payload)
+        showToast(lang === 'bn' ? `✅ "${payload.bnName || payload.name}" সফলভাবে যোগ হয়েছে!` : `✅ "${payload.name}" added successfully!`, '🎉')
+      }
+      setForm(emptyForm)
+      setPhotoError('')
+    } catch (err: any) {
+      showToast(err.message || 'Error saving product', 'error')
     }
-    setForm(emptyForm)
-    setPhotoError('')
   }
 
   const setArchived = async (p: Product, archived: boolean) => {

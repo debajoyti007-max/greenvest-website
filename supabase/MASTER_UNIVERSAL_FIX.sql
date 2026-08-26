@@ -100,16 +100,20 @@ CREATE OR REPLACE FUNCTION public.save_product_admin(
   p_unit text DEFAULT 'kg',
   p_image_url text DEFAULT NULL,
   p_emoji text DEFAULT '🥬',
-  p_archived boolean DEFAULT false
+  p_archived boolean DEFAULT false,
+  p_stock_qty numeric DEFAULT 20,
+  p_season text DEFAULT 'all',
+  p_sold_as text DEFAULT 'loose',
+  p_gram_options jsonb DEFAULT '[]'::jsonb
 ) RETURNS jsonb AS $$
 DECLARE
   v_result jsonb;
 BEGIN
   INSERT INTO public.products (
-    id, name, bn_name, p_a, p_b, p_c, in_stock, category, unit, image_url, emoji, archived
+    id, name, bn_name, p_a, p_b, p_c, in_stock, category, unit, image_url, emoji, archived, stock_qty, season, sold_as, gram_options
   )
   VALUES (
-    p_id, p_name, p_bn_name, p_p_a, p_p_b, p_p_c, p_in_stock, p_category, p_unit, p_image_url, p_emoji, p_archived
+    p_id, p_name, p_bn_name, p_p_a, p_p_b, p_p_c, p_in_stock, p_category, p_unit, p_image_url, p_emoji, p_archived, p_stock_qty, p_season, p_sold_as, p_gram_options
   )
   ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -122,7 +126,11 @@ BEGIN
     unit = EXCLUDED.unit,
     image_url = COALESCE(EXCLUDED.image_url, public.products.image_url),
     emoji = COALESCE(EXCLUDED.emoji, public.products.emoji),
-    archived = EXCLUDED.archived
+    archived = EXCLUDED.archived,
+    stock_qty = EXCLUDED.stock_qty,
+    season = EXCLUDED.season,
+    sold_as = EXCLUDED.sold_as,
+    gram_options = EXCLUDED.gram_options
   RETURNING to_jsonb(public.products.*) INTO v_result;
 
   RETURN v_result;
@@ -130,6 +138,12 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION public.save_product_admin TO anon, authenticated, service_role;
+
+-- Storage: public product-images bucket setup
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('product-images', 'product-images', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
 
 -- 3. COUPONS TABLE & RPC
 CREATE TABLE IF NOT EXISTS public.coupons (
