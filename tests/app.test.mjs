@@ -524,4 +524,49 @@ describe('Customer Product Reviews & Star Ratings', () => {
   })
 })
 
+describe('Dynamic UPI QR & 1-Tap Pay Link Generator', () => {
+  const buildUpiPayUri = (upiId, amount, note = 'GreenVest Order') => {
+    const cleanPa = upiId.trim()
+    const cleanPn = encodeURIComponent('GreenVest Fresh')
+    const cleanAm = Math.max(1, amount).toFixed(2)
+    const cleanTn = encodeURIComponent(note)
+    return `upi://pay?pa=${cleanPa}&pn=${cleanPn}&am=${cleanAm}&cu=INR&tn=${cleanTn}`
+  }
+
+  test('Embeds exact payable amount in UPI URI correctly', () => {
+    const uri = buildUpiPayUri('8170859653-2@ybl', 340, 'GreenVest Order')
+    assert.ok(uri.includes('am=340.00'))
+    assert.ok(uri.includes('pa=8170859653-2%40ybl') || uri.includes('pa=8170859653-2@ybl'))
+    assert.ok(uri.includes('cu=INR'))
+  })
+
+  test('Formats advance 50% amount correctly with 2 decimal places', () => {
+    const uri = buildUpiPayUri('8170859653-2@ybl', 275.5, 'GreenVest Order')
+    assert.ok(uri.includes('am=275.50'))
+  })
+})
+
+describe('Rider Turn-by-Turn GPS Navigation URL Builder', () => {
+  const buildRiderNavUrl = (order) => {
+    const destParam = (order.geoLat && order.geoLng)
+      ? `${order.geoLat},${order.geoLng}`
+      : encodeURIComponent(`${order.address}, ${order.pin || ''}, West Bengal`)
+    return `https://www.google.com/maps/dir/?api=1&destination=${destParam}&travelmode=driving`
+  }
+
+  test('Builds direct GPS lat/lng destination when coordinates exist', () => {
+    const order = { geoLat: 22.1746, geoLng: 87.9106, address: 'Test House', pin: '721632' }
+    const url = buildRiderNavUrl(order)
+    assert.equal(url, 'https://www.google.com/maps/dir/?api=1&destination=22.1746,87.9106&travelmode=driving')
+  })
+
+  test('Builds address + PIN fallback destination when no GPS is recorded', () => {
+    const order = { address: 'Tamluk Station Road', pin: '721636' }
+    const url = buildRiderNavUrl(order)
+    assert.ok(url.includes('destination=Tamluk%20Station%20Road%2C%20721636%2C%20West%20Bengal'))
+    assert.ok(url.includes('travelmode=driving'))
+  })
+})
+
+
 

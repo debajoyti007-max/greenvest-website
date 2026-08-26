@@ -157,9 +157,11 @@ export default function RiderView() {
         <div className="rider-orders-list">
           {displayedOrders.map((o, idx) => {
             const balance = Math.max(0, o.total - o.advanceAmount)
-            const mapUrl = o.geoLat && o.geoLng
-              ? `https://www.google.com/maps/search/?api=1&query=${o.geoLat},${o.geoLng}`
-              : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${o.address} PIN ${o.pin}`)}`
+            const destParam = (o.geoLat && o.geoLng)
+              ? `${o.geoLat},${o.geoLng}`
+              : encodeURIComponent(`${o.address}, ${o.pin || ''}, West Bengal`)
+            const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${destParam}&travelmode=driving`
+
             return (
               <div key={o.id} className="rider-order-card">
                 <div className="rider-card-top">
@@ -189,13 +191,20 @@ export default function RiderView() {
 
                 <div className="rider-actions-grid" style={{ flexWrap: 'wrap' }}>
                   <a href={`tel:${o.phone}`} className="btn btn-secondary rider-btn">
-                    📞 Call
+                    📞 {lang === 'bn' ? 'ফোন' : 'Call'}
                   </a>
                   <button type="button" onClick={() => sendOutForDeliveryWA(o.phone, o.userName, o.id)} className="btn btn-secondary rider-btn">
-                    💬 WhatsApp Alert
+                    💬 {lang === 'bn' ? 'WhatsApp বার্তা' : 'WhatsApp'}
                   </button>
-                  <a href={mapUrl} className="btn btn-secondary rider-btn" target="_blank" rel="noopener noreferrer" style={o.geoLat && o.geoLng ? { background: '#dcfce7', color: '#166534', fontWeight: 600 } : {}}>
-                    {o.geoLat && o.geoLng ? '📍 GPS Maps' : '🗺️ Maps'}
+                  <a
+                    href={navUrl}
+                    className="btn btn-primary rider-btn rider-nav-btn"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    🧭 {o.geoLat && o.geoLng
+                      ? (lang === 'bn' ? 'GPS নেভিগেশন ➔' : 'GPS Navigate ➔')
+                      : (lang === 'bn' ? 'ম্যাপে চলুন ➔' : 'Navigate ➔')}
                   </a>
                 </div>
 

@@ -5,7 +5,7 @@ import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { calcDeliveryFee, STORE_LOCATION } from '../lib/delivery'
 import { t } from '../lib/i18n'
-import { UPI_BANK, UPI_ID, UPI_QR_SRC } from '../lib/payment'
+import { UPI_BANK, UPI_ID, UPI_QR_SRC, generateDynamicUpiQr, buildUpiPayUri } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
 import {
   validateUtrStrict,
@@ -68,6 +68,20 @@ export default function Checkout() {
   const advance = Math.ceil(grandTotal * 0.5)
   const payableAmount = paymentMode === 'full' ? grandTotal : advance
   const balanceDue = grandTotal - payableAmount
+  const [dynamicQr, setDynamicQr] = useState<string>('')
+
+  // Generate in-memory Dynamic UPI QR Code whenever payable amount changes
+  useEffect(() => {
+    let active = true
+    if (payableAmount > 0) {
+      generateDynamicUpiQr(payableAmount, `GreenVest Order ₹${payableAmount}`).then((dataUri) => {
+        if (active && dataUri) setDynamicQr(dataUri)
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [payableAmount])
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
@@ -428,13 +442,19 @@ export default function Checkout() {
           </div>
 
           <div className="upi-pay">
-            <img
-              src={UPI_QR_SRC}
-              alt={`UPI QR for ${UPI_ID}`}
-              className="upi-qr"
-              width={220}
-              height={220}
-            />
+            <div className="dynamic-qr-wrapper">
+              <img
+                src={dynamicQr || UPI_QR_SRC}
+                alt={`Dynamic UPI QR for ₹${payableAmount}`}
+                className="upi-qr"
+                width={220}
+                height={220}
+              />
+              <span className="dynamic-qr-badge">
+                🔒 {lang === 'bn' ? `₹${payableAmount} অটো-লক করা QR` : `₹${payableAmount} Auto-Locked QR`}
+              </span>
+            </div>
+
             <div className="upi-details">
               <p className="upi-label">UPI ID</p>
               <code className="upi-id">{UPI_ID}</code>
@@ -444,8 +464,8 @@ export default function Checkout() {
               <p className="muted upi-bank">{UPI_BANK}</p>
               <p className="hint">
                 {lang === 'bn'
-                  ? 'PhonePe / GPay / Paytm / যেকোনো UPI অ্যাপ'
-                  : 'Works on PhonePe, GPay, Paytm & all UPI apps'}
+                  ? 'PhonePe / GPay / Paytm দিয়ে স্ক্যান করলে স্বয়ংক্রিয়ভাবে ₹' + payableAmount + ' দেখাবে।'
+                  : 'Scanning with PhonePe/GPay auto-fills exact amount of ₹' + payableAmount + '.'}
               </p>
               {/* ⚡ 1-Tap UPI Intent Apps */}
               <div style={{ marginTop: '0.6rem' }}>
@@ -454,28 +474,28 @@ export default function Checkout() {
                 </span>
                 <div className="upi-app-grid">
                   <a
-                    href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
+                    href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#0f9d58' }}>●</span> GPay
                   </a>
                   <a
-                    href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
+                    href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#5f259f' }}>●</span> PhonePe
                   </a>
                   <a
-                    href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
+                    href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#00baf2' }}>●</span> Paytm
                   </a>
                   <a
-                    href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${payableAmount}&cu=INR&tn=GreenVest+Order`}
+                    href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
                     className="upi-app-btn"
                     style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
                   >

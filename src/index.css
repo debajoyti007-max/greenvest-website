@@ -5038,3 +5038,44 @@ button.linkish {
   line-height: 1.45;
 }
 
+/* ── 💳 Dynamic UPI QR Code & 1-Tap Pay ── */
+.dynamic-qr-wrapper {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dynamic-qr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  border: 1px solid #86efac;
+  letter-spacing: 0.02rem;
+  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.12);
+}
+
+/* ── 🧭 Rider Turn-by-Turn GPS Navigation Button ── */
+.rider-nav-btn {
+  background: #166534 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(22, 101, 52, 0.35) !important;
+  transition: all 0.2s ease !important;
+}
+
+.rider-nav-btn:hover {
+  background: #15803d !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 101, 52, 0.45) !important;
+}
+
+
