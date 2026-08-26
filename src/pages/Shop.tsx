@@ -392,7 +392,10 @@ export default function Shop() {
           alt={slides[heroSlide].title}
           className="hero-slider-bg"
           fetchPriority="high"
+          loading="eager"
           decoding="async"
+          width="1200"
+          height="500"
         />
         <div className="hero-full-shade hero-shade-strong" />
 
