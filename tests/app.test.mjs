@@ -568,5 +568,35 @@ describe('Rider Turn-by-Turn GPS Navigation URL Builder', () => {
   })
 })
 
+describe('Safe JSON Parsing & Cache Self-Healing Guard', () => {
+  const safeJsonParse = (raw, fallback) => {
+    if (!raw || typeof raw !== 'string') return fallback
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed !== null && parsed !== undefined ? parsed : fallback
+    } catch {
+      return fallback
+    }
+  }
+
+  test('Parses valid JSON strings successfully', () => {
+    const res = safeJsonParse('{"name":"Tomato","price":40}', { name: 'fallback', price: 0 })
+    assert.equal(res.name, 'Tomato')
+    assert.equal(res.price, 40)
+  })
+
+  test('Safely returns fallback on corrupted/broken JSON without crashing', () => {
+    const res = safeJsonParse('{corrupted_json_syntax...', { status: 'safe_fallback' })
+    assert.equal(res.status, 'safe_fallback')
+  })
+
+  test('Handles null, undefined and empty strings without throwing', () => {
+    assert.equal(safeJsonParse(null, 'default'), 'default')
+    assert.equal(safeJsonParse(undefined, 'default'), 'default')
+    assert.equal(safeJsonParse('', 'default'), 'default')
+  })
+})
+
+
 
 

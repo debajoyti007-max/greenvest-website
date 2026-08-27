@@ -1,5 +1,9 @@
 import { SEED_PRODUCTS, ensureAllSeedProducts } from '../data/seed'
+import { initCacheGuard, safeJsonParse } from './cacheManager'
 import type { CartItem, DeliverySlot, Lang, Order, Product, User } from '../types'
+
+// Automatically check and clean deprecated/corrupted cache on boot
+initCacheGuard()
 
 const KEYS = {
   users: 'gv_users',
@@ -21,14 +25,14 @@ const PINS_KEY = 'gv_pins'
 
 export function getStoredPin(email: string): string {
   try {
-    const pins = JSON.parse(localStorage.getItem(PINS_KEY) || '{}')
+    const pins = safeJsonParse<Record<string, string>>(localStorage.getItem(PINS_KEY), {})
     return pins[email.toLowerCase()] || ''
   } catch { return '' }
 }
 
 export function storePin(email: string, pin: string): void {
   try {
-    const pins = JSON.parse(localStorage.getItem(PINS_KEY) || '{}')
+    const pins = safeJsonParse<Record<string, string>>(localStorage.getItem(PINS_KEY), {})
     pins[email.toLowerCase()] = pin
     localStorage.setItem(PINS_KEY, JSON.stringify(pins))
   } catch {}
@@ -36,7 +40,7 @@ export function storePin(email: string, pin: string): void {
 
 export function removePin(email: string): void {
   try {
-    const pins = JSON.parse(localStorage.getItem(PINS_KEY) || '{}')
+    const pins = safeJsonParse<Record<string, string>>(localStorage.getItem(PINS_KEY), {})
     delete pins[email.toLowerCase()]
     localStorage.setItem(PINS_KEY, JSON.stringify(pins))
   } catch {}
@@ -56,8 +60,7 @@ export type SavedDelivery = {
 function read<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)
-    if (!raw) return fallback
-    return JSON.parse(raw) as T
+    return safeJsonParse<T>(raw, fallback)
   } catch {
     return fallback
   }

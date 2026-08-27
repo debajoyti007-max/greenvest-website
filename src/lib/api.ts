@@ -354,20 +354,35 @@ export async function fetchProducts(forceRefresh = false): Promise<Product[]> {
     } catch {}
   }
 
-  // 3. Lightweight fetch from Supabase
-  const client = requireClient()
-  const { data, error } = await client.from('products').select('*').order('name')
-  if (error) throw error
-  const fetched = (data as ProductRow[]).map(mapProduct)
-  const result = fetched.length > 0 ? fetched : SEED_PRODUCTS
-
-  // Update in-memory & localStorage caches
-  memoryProductCache = { data: result, timestamp: now }
+  // 3. Lightweight fetch from Supabase with safe fallback
   try {
-    localStorage.setItem('gv_products_cache_v2', JSON.stringify({ data: result, timestamp: now }))
-  } catch {}
+    const client = requireClient()
+    const { data, error } = await client.from('products').select('*').order('name')
+    if (error) throw error
+    const fetched = (data as ProductRow[]).map(mapProduct)
+    const result = fetched.length > 0 ? fetched : SEED_PRODUCTS
 
-  return result
+    // Update in-memory & localStorage caches
+    memoryProductCache = { data: result, timestamp: now }
+    try {
+      localStorage.setItem('gv_products_cache_v2', JSON.stringify({ data: result, timestamp: now }))
+    } catch {}
+
+    return result
+  } catch (err) {
+    console.warn('fetchProducts network issue, falling back to cache/seed:', err)
+    if (memoryProductCache?.data && memoryProductCache.data.length > 0) {
+      return memoryProductCache.data
+    }
+    try {
+      const raw = localStorage.getItem('gv_products_cache_v2')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed.data) && parsed.data.length > 0) return parsed.data
+      }
+    } catch {}
+    return SEED_PRODUCTS
+  }
 }
 
 export async function upsertProduct(product: Product): Promise<Product> {
