@@ -14,6 +14,7 @@ import MandiTicker from './MandiTicker'
 import NotificationBell from './NotificationBell'
 import CustomerNotificationBanner from './CustomerNotificationBanner'
 import PwaInstallPrompt from './PwaInstallPrompt'
+import SupportChatWidget from './SupportChatWidget'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -84,6 +85,9 @@ export default function Layout() {
                 </NavLink>
                 <NavLink to="/track" onClick={closeMenu}>
                   {lang === 'bn' ? 'ট্র্যাক' : 'Track Order'}
+                </NavLink>
+                <NavLink to="/support" onClick={closeMenu}>
+                  {lang === 'bn' ? '💬 সাপোর্ট' : '💬 Support'}
                 </NavLink>
                 <NotificationBell />
                 {user && (
@@ -177,6 +181,7 @@ export default function Layout() {
               { path: '/seller/khata', label: lang === 'bn' ? '📒 খাতা বুক' : '📒 Khata Book' },
               { path: '/seller/products', label: lang === 'bn' ? '🥬 প্রোডাক্ট ও দাম' : '🥬 Products & Rates' },
               { path: '/seller/customers', label: lang === 'bn' ? '👥 কাস্টমার' : '👥 Customers' },
+              { path: '/seller/support', label: lang === 'bn' ? '💬 সাপোর্ট ডেস্ক' : '💬 Support Desk' },
               { path: '/rider', label: lang === 'bn' ? '🛵 রাইডার' : '🛵 Rider' },
               ...(user.role === 'admin' ? [{ path: '/admin', label: lang === 'bn' ? '⚙️ অ্যাডমিন' : '⚙️ Admin' }] : []),
             ].map((tab) => {
@@ -211,6 +216,7 @@ export default function Layout() {
       </main>
 
       <CartBar />
+      <SupportChatWidget />
       <Toast />
 
       <footer className="site-footer">

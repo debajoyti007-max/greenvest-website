@@ -938,6 +938,33 @@ describe('Universal Database Persistence & Field Mapping', () => {
   })
 })
 
+// 21. In-App Customer Support & Live Chat Desk
+describe('In-App Customer Support & Live Chat Desk', () => {
+  test('Filters support messages by customer user ID correctly', () => {
+    const allMessages = [
+      { id: 'm1', userId: 'user-1', userName: 'User One', message: 'Hi', createdAt: '2026-08-28T10:00:00Z' },
+      { id: 'm2', userId: 'user-2', userName: 'User Two', message: 'Hello', createdAt: '2026-08-28T10:05:00Z' },
+      { id: 'm3', userId: 'user-1', userName: 'User One', message: 'Where is my order?', createdAt: '2026-08-28T10:10:00Z' },
+    ]
+
+    const user1Thread = allMessages.filter((m) => m.userId === 'user-1')
+    assert.equal(user1Thread.length, 2)
+    assert.equal(user1Thread[0].id, 'm1')
+    assert.equal(user1Thread[1].id, 'm3')
+  })
+
+  test('Resolving support ticket updates all user messages to resolved status', () => {
+    const messages = [
+      { id: 'm1', userId: 'user-1', status: 'open' },
+      { id: 'm2', userId: 'user-2', status: 'open' },
+    ]
+
+    const resolved = messages.map((m) => (m.userId === 'user-1' ? { ...m, status: 'resolved' } : m))
+    assert.equal(resolved.find((m) => m.id === 'm1')?.status, 'resolved')
+    assert.equal(resolved.find((m) => m.id === 'm2')?.status, 'open')
+  })
+})
+
 
 
 

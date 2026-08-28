@@ -223,3 +223,11 @@ export function saveAppNotifications(notifications: import('../types').AppNotifi
   write('gv_app_notifications', notifications)
 }
 
+export function getStoredSupportMessages(): import('../types').SupportMessage[] {
+  return read<import('../types').SupportMessage[]>('gv_support_messages', [])
+}
+
+export function saveStoredSupportMessages(messages: import('../types').SupportMessage[]) {
+  write('gv_support_messages', messages)
+}
+

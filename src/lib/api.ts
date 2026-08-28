@@ -1410,3 +1410,89 @@ export async function deletePromotionalDealApi(dealId: string): Promise<void> {
     console.warn('deletePromotionalDealApi error:', err)
   }
 }
+
+export async function fetchSupportMessagesApi(): Promise<import('../types').SupportMessage[]> {
+  const localKey = 'gv_support_messages'
+  let cached: import('../types').SupportMessage[] = []
+  try {
+    cached = JSON.parse(localStorage.getItem(localKey) || '[]')
+  } catch {}
+
+  if (!supabase) return cached
+
+  try {
+    const { data, error } = await supabase
+      .from('support_messages')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .limit(200)
+
+    if (!error && data) {
+      const mapped: import('../types').SupportMessage[] = data.map((r: any) => ({
+        id: r.id,
+        userId: r.user_id,
+        userName: r.user_name || 'Customer',
+        userPhone: r.user_phone,
+        senderRole: r.sender_role || 'customer',
+        message: r.message || '',
+        orderId: r.order_id,
+        status: r.status || 'open',
+        createdAt: r.created_at || new Date().toISOString(),
+      }))
+      try {
+        localStorage.setItem(localKey, JSON.stringify(mapped))
+      } catch {}
+      return mapped
+    }
+  } catch (err) {
+    console.warn('fetchSupportMessagesApi error:', err)
+  }
+
+  return cached
+}
+
+export async function sendSupportMessageApi(msg: import('../types').SupportMessage): Promise<import('../types').SupportMessage> {
+  const localKey = 'gv_support_messages'
+  try {
+    const existing: import('../types').SupportMessage[] = JSON.parse(localStorage.getItem(localKey) || '[]')
+    existing.push(msg)
+    localStorage.setItem(localKey, JSON.stringify(existing))
+  } catch {}
+
+  if (!supabase) return msg
+
+  try {
+    await supabase.from('support_messages').insert({
+      id: msg.id,
+      user_id: msg.userId,
+      user_name: msg.userName,
+      user_phone: msg.userPhone,
+      sender_role: msg.senderRole,
+      message: msg.message,
+      order_id: msg.orderId,
+      status: msg.status || 'open',
+      created_at: msg.createdAt,
+    })
+  } catch (err) {
+    console.warn('sendSupportMessageApi error:', err)
+  }
+
+  return msg
+}
+
+export async function resolveSupportTicketApi(userId: string): Promise<void> {
+  const localKey = 'gv_support_messages'
+  try {
+    const existing: import('../types').SupportMessage[] = JSON.parse(localStorage.getItem(localKey) || '[]')
+    const updated = existing.map(m => m.userId === userId ? { ...m, status: 'resolved' as const } : m)
+    localStorage.setItem(localKey, JSON.stringify(updated))
+  } catch {}
+
+  if (!supabase) return
+
+  try {
+    await supabase.from('support_messages').update({ status: 'resolved' }).eq('user_id', userId)
+  } catch (err) {
+    console.warn('resolveSupportTicketApi error:', err)
+  }
+}

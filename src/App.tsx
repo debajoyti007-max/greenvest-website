@@ -26,6 +26,8 @@ const SellerKhata = lazy(() => import('./pages/seller/SellerKhata'))
 const SellerDeals = lazy(() => import('./pages/seller/SellerDeals'))
 const RiderView = lazy(() => import('./pages/RiderView'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
+const Support = lazy(() => import('./pages/Support'))
+const SellerSupport = lazy(() => import('./pages/seller/SellerSupport'))
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
 
@@ -62,12 +64,21 @@ function AppRoutes() {
           <Route path="contact" element={<Contact />} />
           <Route path="privacy" element={<Privacy />} />
           <Route path="terms" element={<Terms />} />
+          <Route path="support" element={<Support />} />
           <Route path="refund" element={<Navigate to="/" replace />} />
           <Route
             path="seller"
             element={
               <RequireRole roles={['seller', 'admin']}>
                 <SellerHome />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="seller/support"
+            element={
+              <RequireRole roles={['seller', 'admin']}>
+                <SellerSupport />
               </RequireRole>
             }
           />

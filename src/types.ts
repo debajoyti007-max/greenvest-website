@@ -180,3 +180,15 @@ export interface PromotionalDeal {
   createdAt?: string
 }
 
+export interface SupportMessage {
+  id: string
+  userId: string
+  userName: string
+  userPhone?: string
+  senderRole: 'customer' | 'admin' | 'seller' | 'bot'
+  message: string
+  orderId?: string
+  status?: 'open' | 'resolved'
+  createdAt: string
+}
+

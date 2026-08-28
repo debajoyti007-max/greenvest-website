@@ -41,6 +41,9 @@ import {
   fetchPromotionalDealsApi,
   savePromotionalDealApi,
   deletePromotionalDealApi,
+  fetchSupportMessagesApi,
+  sendSupportMessageApi,
+  resolveSupportTicketApi,
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
@@ -56,6 +59,8 @@ import {
   getProducts,
   getAppNotifications,
   saveAppNotifications,
+  getStoredSupportMessages,
+  saveStoredSupportMessages,
   saveCart,
   saveDelivery,
   saveOrders,
@@ -64,7 +69,7 @@ import {
   STORE_EVENT,
   uid,
 } from '../lib/storage'
-import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, KhataEntry, CustomerTier, ShiftInfo, PromotionalDeal } from '../types'
+import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, KhataEntry, CustomerTier, ShiftInfo, PromotionalDeal, SupportMessage } from '../types'
 import { showToast } from '../components/Toast'
 import { useAuth } from './AuthContext'
 
@@ -138,6 +143,9 @@ interface StoreContextValue {
   deletePromotionalDeal: (dealId: string) => Promise<void>
   togglePromotionalDeal: (dealId: string, isActive: boolean) => Promise<void>
   autoCancelStaleOrders: (timeoutHours?: number) => Promise<number>
+  supportMessages: SupportMessage[]
+  sendSupportMessage: (msg: Omit<SupportMessage, 'id' | 'createdAt'>) => Promise<SupportMessage>
+  resolveSupportTicket: (userId: string) => Promise<void>
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null)
@@ -156,6 +164,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>(() => getAppNotifications())
   const [khataEntries, setKhataEntries] = useState<KhataEntry[]>(() => getStoredKhataEntries())
   const [promotionalDeals, setPromotionalDeals] = useState<PromotionalDeal[]>(() => getStoredPromotionalDeals())
+  const [supportMessages, setSupportMessages] = useState<SupportMessage[]>(() => getStoredSupportMessages())
   const [extendedDeliveryNotice, setExtendedDeliveryNotice] = useState<string | null>(() => {
     try {
       return localStorage.getItem('gv_extended_delivery_notice')
@@ -193,6 +202,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     fetchKhataEntriesApi().then((entries) => {
       if (entries && Array.isArray(entries) && entries.length > 0) {
         setKhataEntries(entries)
+      }
+    })
+
+    // Hydrate Support messages from Supabase if connected
+    fetchSupportMessagesApi().then((msgs) => {
+      if (msgs && Array.isArray(msgs) && msgs.length > 0) {
+        setSupportMessages(msgs)
       }
     })
   }, [cloud])
@@ -907,6 +923,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [orders, cloud],
   )
 
+  const sendSupportMessage = useCallback(
+    async (msgData: Omit<SupportMessage, 'id' | 'createdAt'>): Promise<SupportMessage> => {
+      const newMsg: SupportMessage = {
+        ...msgData,
+        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        createdAt: new Date().toISOString(),
+      }
+      setSupportMessages((prev) => {
+        const next = [...prev, newMsg]
+        saveStoredSupportMessages(next)
+        return next
+      })
+
+      if (cloud) {
+        try {
+          await sendSupportMessageApi(newMsg)
+        } catch (err) {
+          console.warn('Failed to cloud sync support message', err)
+        }
+      }
+      return newMsg
+    },
+    [cloud],
+  )
+
+  const resolveSupportTicket = useCallback(
+    async (userId: string) => {
+      setSupportMessages((prev) => {
+        const next = prev.map((m) => (m.userId === userId ? { ...m, status: 'resolved' as const } : m))
+        saveStoredSupportMessages(next)
+        return next
+      })
+
+      if (cloud) {
+        try {
+          await resolveSupportTicketApi(userId)
+        } catch (err) {
+          console.warn('Failed to cloud sync resolve support ticket', err)
+        }
+      }
+    },
+    [cloud],
+  )
+
   const bulkUpdateOrderStatus = useCallback(
     async (ids: string[], status: OrderStatus) => {
       if (ids.length === 0) return
@@ -1202,6 +1262,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       deletePromotionalDeal,
       togglePromotionalDeal,
       autoCancelStaleOrders,
+      supportMessages,
+      sendSupportMessage,
+      resolveSupportTicket,
     }),
     [
       products,
@@ -1257,6 +1320,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       deletePromotionalDeal,
       togglePromotionalDeal,
       autoCancelStaleOrders,
+      supportMessages,
+      sendSupportMessage,
+      resolveSupportTicket,
     ],
   )
 
