@@ -916,8 +916,16 @@ export async function verifyUtrApi(id: string, verified: boolean): Promise<void>
     updated_at: new Date().toISOString(),
   }
   if (verified) patch.status = 'confirmed'
-  const { error } = await client.from('orders').update(patch).eq('id', id)
-  if (error) throw error
+
+  let { error } = await client.from('orders').update(patch).eq('id', id)
+  if (error) {
+    // Try Admin Security Definer RPC
+    try {
+      const { error: rpcErr } = await client.rpc('verify_utr_admin', { p_id: id, p_verified: verified })
+      if (!rpcErr) return
+    } catch {}
+    throw error
+  }
 }
 
 export async function deleteOrderApi(id: string): Promise<void> {
