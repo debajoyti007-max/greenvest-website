@@ -78,6 +78,7 @@ export interface Order {
   total: number
   advanceAmount: number
   paymentType?: 'full' | 'advance' | 'khata'
+  paymentMode?: 'online' | 'khata'
   isKhataOrder?: boolean
   utr: string
   utrVerified: boolean

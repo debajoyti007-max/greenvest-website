@@ -3,6 +3,7 @@ import type {
   AppNotification,
   ChatMessage,
   Coupon,
+  CustomerTier,
   DailyReport,
   DeliveryZone,
   DeliverySlot,
@@ -72,6 +73,9 @@ type OrderRow = {
   total: number
   advance_amount: number
   payment_type?: string | null
+  payment_mode?: string | null
+  rejection_reason?: string | null
+  assigned_rider_id?: string | null
   utr: string
   utr_verified: boolean
   status: OrderStatus
@@ -103,8 +107,12 @@ type ProfileRow = {
   email: string
   name: string
   role: Role
+  tier?: CustomerTier | null
+  khata_approved?: boolean | null
+  khata_credit_limit?: number | null
   phone?: string | null
   isBlocked?: boolean | null
+  is_blocked?: boolean | null
   pin?: string | null
   created_at: string
 }
@@ -246,6 +254,9 @@ function mapOrder(row: OrderRow): Order {
     total: Number(row.total),
     advanceAmount: Number(row.advance_amount),
     paymentType: row.payment_type === 'full' ? 'full' : 'advance',
+    paymentMode: (row.payment_mode as 'online' | 'khata' | undefined) || undefined,
+    isKhataOrder: row.payment_mode === 'khata' || row.payment_type === 'khata',
+    rejectionReason: row.rejection_reason || undefined,
     utr: row.utr,
     utrVerified: row.utr_verified,
     status: row.status,
@@ -273,8 +284,11 @@ function mapProfile(row: ProfileRow): User {
     password: '',
     name: row.name,
     role: row.role,
+    tier: row.tier || 'regular',
+    khataApproved: Boolean(row.khata_approved),
+    khataCreditLimit: row.khata_credit_limit != null ? Number(row.khata_credit_limit) : 2000,
     phone: derivedPhone || undefined,
-    isBlocked: row.isBlocked ?? false,
+    isBlocked: row.is_blocked ?? row.isBlocked ?? false,
     createdAt: row.created_at,
   }
 }
@@ -385,6 +399,14 @@ export async function updateProfileBlocked(userId: string, isBlocked: boolean, e
 
 export async function updateProfileDetails(userId: string, details: { name?: string; phone?: string }, email?: string, phone?: string): Promise<void> {
   return updateProfileField(userId, email, phone, details)
+}
+
+export async function updateProfileTier(userId: string, tier: CustomerTier, email?: string, phone?: string): Promise<void> {
+  return updateProfileField(userId, email, phone, { tier })
+}
+
+export async function updateProfileKhata(userId: string, khataApproved: boolean, khataCreditLimit: number, email?: string, phone?: string): Promise<void> {
+  return updateProfileField(userId, email, phone, { khata_approved: khataApproved, khata_credit_limit: khataCreditLimit })
 }
 
 // ── SWR Product In-Memory & LocalStorage Cache ─────────────────────────
@@ -747,6 +769,8 @@ export async function createOrder(order: Order): Promise<Order> {
     total: order.total,
     advance_amount: order.advanceAmount,
     payment_type: order.paymentType || 'advance',
+    payment_mode: order.paymentMode || (order.isKhataOrder ? 'khata' : 'online'),
+    rejection_reason: order.rejectionReason || null,
     utr: order.utr,
     utr_verified: order.utrVerified,
     status: order.status,
@@ -816,22 +840,28 @@ export async function createOrder(order: Order): Promise<Order> {
   return order
 }
 
-export async function updateOrderStatusApi(id: string, status: OrderStatus): Promise<void> {
+export async function updateOrderStatusApi(id: string, status: OrderStatus, rejectionReason?: string): Promise<void> {
   const client = requireClient()
-  const { error } = await client
-    .from('orders')
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq('id', id)
+  const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
+  if (rejectionReason !== undefined) patch.rejection_reason = rejectionReason
+  let { error } = await client.from('orders').update(patch).eq('id', id)
+  if (error && error.message && error.message.includes('rejection_reason')) {
+    delete patch.rejection_reason
+    ;({ error } = await client.from('orders').update(patch).eq('id', id))
+  }
   if (error) throw error
 }
 
-export async function bulkUpdateOrderStatusApi(ids: string[], status: OrderStatus): Promise<void> {
+export async function bulkUpdateOrderStatusApi(ids: string[], status: OrderStatus, rejectionReason?: string): Promise<void> {
   if (ids.length === 0) return
   const client = requireClient()
-  const { error } = await client
-    .from('orders')
-    .update({ status, updated_at: new Date().toISOString() })
-    .in('id', ids)
+  const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
+  if (rejectionReason !== undefined) patch.rejection_reason = rejectionReason
+  let { error } = await client.from('orders').update(patch).in('id', ids)
+  if (error && error.message && error.message.includes('rejection_reason')) {
+    delete patch.rejection_reason
+    ;({ error } = await client.from('orders').update(patch).in('id', ids))
+  }
   if (error) throw error
 }
 

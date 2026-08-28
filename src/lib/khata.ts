@@ -115,3 +115,55 @@ GreenVest Store`
   const msg = encodeURIComponent(lang === 'bn' ? textBn : textEn)
   return `https://wa.me/${digits}?text=${msg}`
 }
+
+/** Fetches Khata entries from Supabase with fallback to local storage */
+export async function fetchKhataEntriesApi(userId?: string): Promise<KhataEntry[]> {
+  const fallback = getStoredKhataEntries()
+  const { supabase } = await import('./supabase')
+  if (!supabase) return fallback
+
+  try {
+    let query = supabase.from('khata_ledger').select('*').order('created_at', { ascending: false })
+    if (userId) query = query.eq('user_id', userId)
+    const { data, error } = await query
+    if (error || !data) return fallback
+
+    const mapped: KhataEntry[] = data.map((r: any) => ({
+      id: String(r.id),
+      userId: r.user_id,
+      orderId: r.order_id || undefined,
+      type: (r.type === 'adjustment_credit' || r.type === 'adjustment_debit') ? 'adjustment' : r.type,
+      amount: Number(r.amount),
+      balanceAfter: 0,
+      notes: r.notes || undefined,
+      recordedBy: 'GreenVest Staff',
+      createdAt: r.created_at,
+    }))
+
+    saveKhataEntries(mapped)
+    return mapped
+  } catch {
+    return fallback
+  }
+}
+
+/** Saves Khata entry to Supabase */
+export async function saveKhataEntryApi(entry: KhataEntry): Promise<void> {
+  const { supabase } = await import('./supabase')
+  if (!supabase) return
+
+  try {
+    const dbType = entry.type === 'adjustment' ? 'adjustment_credit' : entry.type
+    await supabase.from('khata_ledger').insert({
+      user_id: entry.userId,
+      type: dbType,
+      amount: entry.amount,
+      notes: entry.notes || null,
+      order_id: entry.orderId || null,
+      payment_method: 'upi',
+      created_at: entry.createdAt,
+    })
+  } catch (err) {
+    console.warn('saveKhataEntryApi cloud failed:', err)
+  }
+}

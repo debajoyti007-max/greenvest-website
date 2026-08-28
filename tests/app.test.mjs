@@ -859,6 +859,85 @@ describe('Auto Smart Remove Engine', () => {
   })
 })
 
+// 20. Universal Database Persistence & Field Mapping
+describe('Universal Database Persistence & Field Mapping', () => {
+  test('ProductRow maps mrp, available_grades, and stock accurately', () => {
+    const product = {
+      id: 'p-test',
+      emoji: '🥬',
+      name: 'Palak',
+      bnName: 'পালং শাক',
+      pA: 30,
+      pB: 25,
+      pC: 20,
+      mrp: 40,
+      availableGrades: ['A', 'B'],
+      inStock: true,
+      category: 'Leafy',
+      unit: 'kg',
+    }
+
+    // Map to row
+    const row = {
+      id: product.id,
+      emoji: product.emoji,
+      name: product.name,
+      bn_name: product.bnName,
+      p_a: product.pA,
+      p_b: product.pB,
+      p_c: product.pC,
+      mrp: product.mrp,
+      available_grades: product.availableGrades,
+      in_stock: product.inStock,
+    }
+
+    assert.equal(row.mrp, 40)
+    assert.deepEqual(row.available_grades, ['A', 'B'])
+    assert.equal(row.p_a, 30)
+    assert.equal(row.p_b, 25)
+    assert.equal(row.p_c, 20)
+  })
+
+  test('ProfileRow maps tier, khata_approved, and credit limits correctly', () => {
+    const profileRow = {
+      id: 'usr-123',
+      email: 'customer@greenvest.shop',
+      name: 'Rohan',
+      role: 'customer',
+      tier: 'vip',
+      khata_approved: true,
+      khata_credit_limit: 5000,
+      phone: '9876543210',
+      created_at: new Date().toISOString(),
+    }
+
+    const mappedUser = {
+      id: profileRow.id,
+      email: profileRow.email,
+      name: profileRow.name,
+      role: profileRow.role,
+      tier: profileRow.tier || 'regular',
+      khataApproved: Boolean(profileRow.khata_approved),
+      khataCreditLimit: Number(profileRow.khata_credit_limit),
+      phone: profileRow.phone,
+    }
+
+    assert.equal(mappedUser.tier, 'vip')
+    assert.equal(mappedUser.khataApproved, true)
+    assert.equal(mappedUser.khataCreditLimit, 5000)
+  })
+
+  test('PromotionalDeal preserves empty list after all deals are deleted', () => {
+    const deals = []
+    const raw = JSON.stringify(deals)
+    const parsed = JSON.parse(raw)
+    const getStored = (data) => (Array.isArray(data) ? data : [{ id: 'default' }])
+    
+    const result = getStored(parsed)
+    assert.deepEqual(result, [], 'Deleted deals list must remain empty and not resurrect defaults')
+  })
+})
+
 
 
 

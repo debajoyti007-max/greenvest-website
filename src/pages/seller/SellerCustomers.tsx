@@ -5,6 +5,7 @@ import { useStore } from '../../context/StoreContext'
 import { formatWhatsAppPhone } from '../../lib/whatsapp'
 import { showToast } from '../../components/Toast'
 import CouponGeneratorModal from '../../components/seller/CouponGeneratorModal'
+import type { CustomerTier } from '../../types'
 
 type CustomerRow = {
   key: string
@@ -17,6 +18,9 @@ type CustomerRow = {
   lastOrderAt: string
   lastAddress: string
   role: string
+  tier?: CustomerTier
+  khataApproved?: boolean
+  khataCreditLimit?: number
   isBlocked?: boolean
 }
 
@@ -29,7 +33,7 @@ function waCustomer(phone: string, name: string) {
 }
 
 export default function SellerCustomers() {
-  const { user, users, adminResetUserPin, toggleBlockUser, refreshUsers } = useAuth()
+  const { user, users, adminResetUserPin, toggleBlockUser, refreshUsers, setUserTier, setUserKhataApproval } = useAuth()
   const { orders, lang, sendNotification, createCoupon, refresh } = useStore()
 
   useEffect(() => {
@@ -117,6 +121,9 @@ export default function SellerCustomers() {
         lastOrderAt: u.createdAt,
         lastAddress: 'No address saved yet',
         role: u.role,
+        tier: u.tier || 'regular',
+        khataApproved: u.khataApproved,
+        khataCreditLimit: u.khataCreditLimit,
         isBlocked: u.isBlocked,
       }
       userMap.set(u.id, row)
@@ -302,7 +309,7 @@ export default function SellerCustomers() {
               <tr>
                 <th>{lang === 'bn' ? 'নাম' : 'Name'}</th>
                 <th>{lang === 'bn' ? 'যোগাযোগ' : 'Contact'}</th>
-                <th>{lang === 'bn' ? 'রোল' : 'Role'}</th>
+                <th>{lang === 'bn' ? 'টায়ার / খাতা' : 'Tier & Khata'}</th>
                 <th>{lang === 'bn' ? 'অর্ডার' : 'Orders'}</th>
                 <th>{lang === 'bn' ? 'কিনেছে' : 'Spent'}</th>
                 <th>{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
@@ -325,7 +332,56 @@ export default function SellerCustomers() {
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{c.email}</div>
                   </td>
                   <td>
-                    <span className={`role-pill role-${c.role}`}>{c.role}</span>
+                    {c.userId ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <select
+                          value={c.tier || 'regular'}
+                          onChange={async (e) => {
+                            const newTier = e.target.value as CustomerTier
+                            await setUserTier(c.userId!, newTier)
+                            showToast(`Tier updated to ${newTier.toUpperCase()}`, '⭐')
+                          }}
+                          style={{
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            border: '1.5px solid',
+                            borderColor: c.tier === 'wholesale' ? '#7c3aed' : c.tier === 'vip' ? '#d97706' : '#cbd5e1',
+                            background: c.tier === 'wholesale' ? '#f5f3ff' : c.tier === 'vip' ? '#fffbeb' : '#f8fafc',
+                            color: c.tier === 'wholesale' ? '#6d28d9' : c.tier === 'vip' ? '#b45309' : '#475569',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <option value="regular">⭐ Regular (0%)</option>
+                          <option value="vip">🥈 VIP (5% OFF)</option>
+                          <option value="wholesale">👑 Wholesale (12% OFF)</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const nextState = !c.khataApproved
+                            await setUserKhataApproval(c.userId!, nextState, c.khataCreditLimit || 2000)
+                            showToast(nextState ? '📒 Khata Approved (₹2000 limit)' : '📒 Khata Disabled', '📒')
+                          }}
+                          style={{
+                            fontSize: '0.72rem',
+                            padding: '2px 5px',
+                            borderRadius: '4px',
+                            border: '1px solid',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            background: c.khataApproved ? '#dcfce7' : '#f1f5f9',
+                            color: c.khataApproved ? '#15803d' : '#64748b',
+                            borderColor: c.khataApproved ? '#86efac' : '#cbd5e1',
+                          }}
+                        >
+                          {c.khataApproved ? '📒 Khata: ON' : '📒 Khata: OFF'}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className={`role-pill role-${c.role}`}>{c.role}</span>
+                    )}
                   </td>
                   <td>{c.orders}</td>
                   <td>₹{c.spent}

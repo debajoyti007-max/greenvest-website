@@ -44,7 +44,7 @@ import {
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
-import { getStoredKhataEntries, recordKhataTransaction, calculateUserKhataBalance } from '../lib/khata'
+import { getStoredKhataEntries, recordKhataTransaction, calculateUserKhataBalance, fetchKhataEntriesApi, saveKhataEntryApi } from '../lib/khata'
 import { getStoredPromotionalDeals, saveStoredPromotionalDeals } from '../lib/deals'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { SEED_REVIEWS } from '../data/seedReviews'
@@ -186,6 +186,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     fetchPromotionalDealsApi().then((deals) => {
       if (deals && Array.isArray(deals) && deals.length > 0) {
         setPromotionalDeals(deals)
+      }
+    })
+
+    // Hydrate Khata entries from Supabase if connected
+    fetchKhataEntriesApi().then((entries) => {
+      if (entries && Array.isArray(entries) && entries.length > 0) {
+        setKhataEntries(entries)
       }
     })
   }, [cloud])
@@ -747,7 +754,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         try {
-          await updateOrderStatusApi(id, status)
+          await updateOrderStatusApi(id, status, rejectionReason)
         } catch (err: any) {
           console.error('updateOrderStatus failed, reverting UI:', err)
           setOrders(prevSnapshot)
@@ -781,10 +788,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       notes?: string,
       orderId?: string,
     ) => {
-      recordKhataTransaction(userId, type, amount, notes, orderId, user?.name || 'GreenVest Staff')
+      const res = recordKhataTransaction(userId, type, amount, notes, orderId, user?.name || 'GreenVest Staff')
       setKhataEntries(getStoredKhataEntries())
+      if (cloud && res?.entry) {
+        void saveKhataEntryApi(res.entry)
+      }
     },
-    [user?.name],
+    [cloud, user?.name],
   )
 
   const addPromotionalDeal = useCallback(
@@ -873,7 +883,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         try {
-          await bulkUpdateOrderStatusApi(staleIds, 'cancelled')
+          await bulkUpdateOrderStatusApi(staleIds, 'cancelled', reason)
         } catch (err) {
           console.error('Failed to cloud sync auto-cancelled stale orders', err)
         }

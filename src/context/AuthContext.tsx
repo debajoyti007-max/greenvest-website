@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails } from '../lib/api'
+import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, updateProfileKhata } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   ensureSeeded,
@@ -749,9 +749,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : u,
       )
       saveUsers(updatedStored)
+
+      if (cloud) {
+        try {
+          await updateProfileTier(actualId, tier, targetEmail, targetUser?.phone)
+        } catch (err) {
+          console.warn('Failed to sync tier to Supabase:', err)
+        }
+      }
+
       return { ok: true }
     },
-    [user, users],
+    [cloud, user, users],
   )
 
   const setUserKhataApproval = useCallback(
@@ -778,9 +787,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : u,
       )
       saveUsers(updatedStored)
+
+      if (cloud) {
+        try {
+          await updateProfileKhata(actualId, khataApproved, creditLimit, targetEmail, targetUser?.phone)
+        } catch (err) {
+          console.warn('Failed to sync khata approval to Supabase:', err)
+        }
+      }
+
       return { ok: true }
     },
-    [user, users],
+    [cloud, user, users],
   )
 
   const adminResetUserPin = useCallback(
