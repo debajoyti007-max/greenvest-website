@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, updateProfileKhata } from '../lib/api'
+import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, updateProfileKhata, mapProfile } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   ensureSeeded,
@@ -254,15 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .eq('id', localId)
             .maybeSingle()
           if (profileRow) {
-            const profile = ensureAdminRole({
-              id: profileRow.id,
-              email: profileRow.email,
-              name: profileRow.name,
-              role: profileRow.role,
-              phone: extractPhone(profileRow.phone, profileRow.email),
-              isBlocked: profileRow.isBlocked || false,
-              createdAt: profileRow.created_at,
-            })
+            const profile = ensureAdminRole(mapProfile(profileRow as any))
             if (profile) {
               setUser(profile)
               userRef.current = profile
@@ -313,17 +305,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
         (payload) => {
-          const row = payload.new as Record<string, unknown>
+          const row = payload.new as any
           if (!row) return
-          const updated = ensureAdminRole({
-            id: row.id as string,
-            email: row.email as string,
-            name: row.name as string,
-            role: row.role as Role,
-            phone: (row.phone as string) || undefined,
-            isBlocked: (row.isBlocked as boolean) || false,
-            createdAt: row.created_at as string,
-          })
+          const updated = ensureAdminRole(mapProfile(row))
           if (updated) {
             setUser(updated)
             userRef.current = updated
@@ -448,15 +432,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          const profile = ensureAdminRole({
-            id: profileRow.id as string,
-            email: profileRow.email as string,
-            name: profileRow.name as string,
-            role: profileRow.role as Role,
-            phone: extractPhone(profileRow.phone as string, profileRow.email as string),
-            isBlocked: (profileRow.isBlocked as boolean) || false,
-            createdAt: profileRow.created_at as string,
-          })
+          const profile = ensureAdminRole(mapProfile(profileRow as any))
 
           if (profile?.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Contact GreenVest Admin.' }
           if (!profile) return { ok: false, error: 'Profile error. Please contact support.' }

@@ -16,7 +16,7 @@ import {
 import type { Address } from '../types'
 
 export default function Checkout() {
-  const { user, updateUserProfile } = useAuth()
+  const { user, users, updateUserProfile, refresh } = useAuth()
   const {
     cart,
     cartTotal,
@@ -60,6 +60,22 @@ export default function Checkout() {
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [saveAddressToDb, setSaveAddressToDb] = useState(false)
   const [fulfillmentMode, setFulfillmentMode] = useState<'delivery' | 'pickup'>('delivery')
+
+  const isKhataPermitted = useMemo(() => {
+    if (user?.khataApproved) return true
+    if (!user) return false
+    const match = users.find(
+      (u) =>
+        u.id === user.id ||
+        (user.email && u.email?.toLowerCase() === user.email.toLowerCase()) ||
+        (user.phone && u.phone === user.phone),
+    )
+    return Boolean(match?.khataApproved)
+  }, [user, users])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
 
   const coords = useMemo(() => (geoLat && geoLng ? { lat: geoLat, lng: geoLng } : null), [geoLat, geoLng])
   const delivery = useMemo(() => calcDeliveryFee(pin, coords, fulfillmentMode), [pin, coords, fulfillmentMode])
@@ -413,7 +429,7 @@ export default function Checkout() {
             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: '0.45rem' }}>
               💳 {lang === 'bn' ? 'পেমেন্ট মোড বেছে নিন:' : 'Choose Payment Option:'}
             </span>
-            <div style={{ display: 'grid', gridTemplateColumns: user?.khataApproved ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isKhataPermitted ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0.5rem' }}>
               <button
                 type="button"
                 onClick={() => setPaymentMode('advance')}
@@ -456,7 +472,7 @@ export default function Checkout() {
                 </div>
               </button>
 
-              {user?.khataApproved && (
+              {isKhataPermitted && (
                 <button
                   type="button"
                   onClick={() => setPaymentMode('khata')}

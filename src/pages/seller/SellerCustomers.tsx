@@ -332,56 +332,57 @@ export default function SellerCustomers() {
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{c.email}</div>
                   </td>
                   <td>
-                    {c.userId ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <select
-                          value={c.tier || 'regular'}
-                          onChange={async (e) => {
-                            const newTier = e.target.value as CustomerTier
-                            await setUserTier(c.userId!, newTier)
-                            showToast(`Tier updated to ${newTier.toUpperCase()}`, '⭐')
-                          }}
-                          style={{
-                            fontSize: '0.78rem',
-                            fontWeight: 700,
-                            padding: '2px 6px',
-                            borderRadius: '6px',
-                            border: '1.5px solid',
-                            borderColor: c.tier === 'wholesale' ? '#7c3aed' : c.tier === 'vip' ? '#d97706' : '#cbd5e1',
-                            background: c.tier === 'wholesale' ? '#f5f3ff' : c.tier === 'vip' ? '#fffbeb' : '#f8fafc',
-                            color: c.tier === 'wholesale' ? '#6d28d9' : c.tier === 'vip' ? '#b45309' : '#475569',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <option value="regular">⭐ Regular (0%)</option>
-                          <option value="vip">🥈 VIP (5% OFF)</option>
-                          <option value="wholesale">👑 Wholesale (12% OFF)</option>
-                        </select>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const nextState = !c.khataApproved
-                            await setUserKhataApproval(c.userId!, nextState, c.khataCreditLimit || 2000)
-                            showToast(nextState ? '📒 Khata Approved (₹2000 limit)' : '📒 Khata Disabled', '📒')
-                          }}
-                          style={{
-                            fontSize: '0.72rem',
-                            padding: '2px 5px',
-                            borderRadius: '4px',
-                            border: '1px solid',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            background: c.khataApproved ? '#dcfce7' : '#f1f5f9',
-                            color: c.khataApproved ? '#15803d' : '#64748b',
-                            borderColor: c.khataApproved ? '#86efac' : '#cbd5e1',
-                          }}
-                        >
-                          {c.khataApproved ? '📒 Khata: ON' : '📒 Khata: OFF'}
-                        </button>
-                      </div>
-                    ) : (
-                      <span className={`role-pill role-${c.role}`}>{c.role}</span>
-                    )}
+                    {(() => {
+                      const identifier = c.userId || c.phone || c.email || c.key
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '130px' }}>
+                          <select
+                            value={c.tier || 'regular'}
+                            onChange={async (e) => {
+                              const newTier = e.target.value as CustomerTier
+                              await setUserTier(identifier, newTier)
+                              showToast(`Tier updated to ${newTier.toUpperCase()}`, '⭐')
+                            }}
+                            style={{
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '6px',
+                              border: '1.5px solid',
+                              borderColor: c.tier === 'wholesale' ? '#7c3aed' : c.tier === 'vip' ? '#d97706' : '#cbd5e1',
+                              background: c.tier === 'wholesale' ? '#f5f3ff' : c.tier === 'vip' ? '#fffbeb' : '#f8fafc',
+                              color: c.tier === 'wholesale' ? '#6d28d9' : c.tier === 'vip' ? '#b45309' : '#475569',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <option value="regular">⭐ Regular (0%)</option>
+                            <option value="vip">🥈 VIP (5% OFF)</option>
+                            <option value="wholesale">👑 Wholesale (12% OFF)</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const nextState = !c.khataApproved
+                              await setUserKhataApproval(identifier, nextState, c.khataCreditLimit || 2000)
+                              showToast(nextState ? '📒 Khata Approved (₹2000 limit)' : '📒 Khata Disabled', '📒')
+                            }}
+                            style={{
+                              fontSize: '0.72rem',
+                              padding: '2px 5px',
+                              borderRadius: '4px',
+                              border: '1px solid',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              background: c.khataApproved ? '#dcfce7' : '#f1f5f9',
+                              color: c.khataApproved ? '#15803d' : '#64748b',
+                              borderColor: c.khataApproved ? '#86efac' : '#cbd5e1',
+                            }}
+                          >
+                            {c.khataApproved ? '📒 Khata: ON' : '📒 Khata: OFF'}
+                          </button>
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td>{c.orders}</td>
                   <td>₹{c.spent}

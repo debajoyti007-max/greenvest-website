@@ -271,7 +271,7 @@ function mapOrder(row: OrderRow): Order {
   }
 }
 
-function mapProfile(row: ProfileRow): User {
+export function mapProfile(row: ProfileRow): User {
   // Derive phone from email if not explicitly stored (legacy accounts)
   const derivedPhone =
     row.phone ||
