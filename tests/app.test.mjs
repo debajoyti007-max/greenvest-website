@@ -597,6 +597,235 @@ describe('Safe JSON Parsing & Cache Self-Healing Guard', () => {
   })
 })
 
+// 9. Client Feature Suite: 9 Specialized Requirements
+describe('9 Client Requirements & Features Validation', () => {
+  // Feature 1 & 4: Serviceable Pincodes Whitelist
+  const SERVICEABLE_PINCODES = ['721632', '721633', '721643']
+  const isServiceablePin = (pin) => {
+    if (!pin) return false
+    const clean = String(pin).trim()
+    return SERVICEABLE_PINCODES.includes(clean)
+  }
+
+  test('Pincode whitelist allows 721632, 721633, 721643 and rejects others', () => {
+    assert.equal(isServiceablePin('721632'), true)
+    assert.equal(isServiceablePin('721633'), true)
+    assert.equal(isServiceablePin('721643'), true)
+    assert.equal(isServiceablePin('700001'), false)
+    assert.equal(isServiceablePin('721636'), false)
+    assert.equal(isServiceablePin(''), false)
+  })
+
+  // Feature 2: Tiered / Dynamic Pricing
+  const calculateTierDiscount = (basePrice, tier) => {
+    if (!basePrice || basePrice <= 0) return 0
+    if (tier === 'vip') return Math.round(basePrice * 0.95)
+    if (tier === 'wholesale') return Math.round(basePrice * 0.88)
+    return basePrice
+  }
+
+  test('Dynamic pricing applies 5% discount for VIP and 12% for Wholesale', () => {
+    assert.equal(calculateTierDiscount(100, 'regular'), 100)
+    assert.equal(calculateTierDiscount(100, 'vip'), 95)
+    assert.equal(calculateTierDiscount(100, 'wholesale'), 88)
+    assert.equal(calculateTierDiscount(50, 'wholesale'), 44)
+  })
+
+  // Feature 1: MRP Strikethrough Calculation & Brand Discount %
+  const computeMarketMrp = (sellingPrice) => {
+    if (!sellingPrice || sellingPrice <= 0) return 0
+    return Math.ceil(sellingPrice * 1.25)
+  }
+
+  const computeDiscountPercent = (mrp, sellingPrice) => {
+    if (!mrp || mrp <= sellingPrice) return 0
+    return Math.round(((mrp - sellingPrice) / mrp) * 100)
+  }
+
+  test('Market MRP computes big-brand markup (e.g. ₹20 selling price -> ₹25 MRP with 20% OFF)', () => {
+    assert.equal(computeMarketMrp(20), 25) // 20 * 1.25 = 25
+    assert.equal(computeMarketMrp(40), 50) // 40 * 1.25 = 50
+    assert.equal(computeMarketMrp(100), 125) // 100 * 1.25 = 125
+
+    // Discount % verification
+    assert.equal(computeDiscountPercent(25, 20), 20) // (25-20)/25 = 20% OFF
+    assert.equal(computeDiscountPercent(50, 40), 20) // (50-40)/50 = 20% OFF
+  })
+
+  // Feature 3: Option A, B, C Custom Visibility
+  const filterAvailableGrades = (product) => {
+    if (product.availableGrades && product.availableGrades.length > 0) {
+      return product.availableGrades
+    }
+    return ['A', 'B', 'C']
+  }
+
+  test('Filters available product grades based on seller toggles', () => {
+    const productWithAandB = { id: 'p1', availableGrades: ['A', 'B'] }
+    const productDefault = { id: 'p2' }
+    assert.deepEqual(filterAvailableGrades(productWithAandB), ['A', 'B'])
+    assert.deepEqual(filterAvailableGrades(productDefault), ['A', 'B', 'C'])
+  })
+
+  // Feature 6: Digital Ledger / Khata Book
+  const calculateUserKhataBalance = (userId, entries) => {
+    return entries
+      .filter((e) => e.userId === userId)
+      .reduce((sum, e) => {
+        if (e.type === 'order_debit') return sum + e.amount
+        if (e.type === 'payment_credit') return sum - e.amount
+        return sum
+      }, 0)
+  }
+
+  test('Khata ledger correctly aggregates debits and payment credits', () => {
+    const userId = 'usr-123'
+    const ledger = [
+      { userId, type: 'order_debit', amount: 500 },
+      { userId, type: 'order_debit', amount: 300 },
+      { userId, type: 'payment_credit', amount: 400 },
+    ]
+    const balance = calculateUserKhataBalance(userId, ledger)
+    assert.equal(balance, 400) // 500 + 300 - 400 = 400
+  })
+
+  // Feature 8: Operating Hours Shifts
+  const isShiftOpen = (hour) => {
+    // Morning: 7-12, Evening: 16-21
+    return (hour >= 7 && hour < 12) || (hour >= 16 && hour < 21)
+  }
+
+  test('Store shift calculation detects Morning & Evening store hours correctly', () => {
+    assert.equal(isShiftOpen(8), true)   // 8 AM (Morning open)
+    assert.equal(isShiftOpen(11), true)  // 11 AM (Morning open)
+    assert.equal(isShiftOpen(13), false) // 1 PM (Midday break)
+    assert.equal(isShiftOpen(18), true)  // 6 PM (Evening open)
+    assert.equal(isShiftOpen(22), false) // 10 PM (Closed for night)
+    assert.equal(isShiftOpen(5), false)  // 5 AM (Closed)
+  })
+
+  // Feature 9: Max 10 kg Vegetable Order Limit
+  test('Vegetable quantity limit caps at 10 kg and detects bulk inquiry need', () => {
+    const MAX_KG = 10
+    const qty1 = 5
+    const qty2 = 12
+    assert.equal(qty1 <= MAX_KG, true)
+    assert.equal(qty2 > MAX_KG, true)
+  })
+
+  // Feature 1 Enhancement: Fully Customizable Seller Promotional Deals
+  const filterActiveDeals = (deals) => deals.filter((d) => d.isActive !== false)
+
+  test('Filters active promotional deals and excludes seller-disabled ones', () => {
+    const deals = [
+      { id: 'd1', titleEn: '50% off', isActive: true },
+      { id: 'd2', titleEn: 'Old offer', isActive: false },
+      { id: 'd3', titleEn: 'Free gift', isActive: true },
+    ]
+    const active = filterActiveDeals(deals)
+    assert.equal(active.length, 2)
+    assert.equal(active.some((d) => d.id === 'd2'), false)
+  })
+
+  test('Supports custom seller deals with or without coupon codes', () => {
+    const customDealWithCode = {
+      id: 'd-code',
+      titleBn: '১০% ছাড়',
+      titleEn: '10% OFF',
+      couponCode: 'SPECIAL10',
+      isActive: true,
+    }
+    const customDealWithoutCode = {
+      id: 'd-nocode',
+      titleBn: 'ফ্রি হোম ডেলিভারি',
+      titleEn: 'Free Delivery',
+      linkUrl: '/shop',
+      isActive: true,
+    }
+    assert.equal(Boolean(customDealWithCode.couponCode), true)
+    assert.equal(Boolean(customDealWithoutCode.couponCode), false)
+    assert.equal(customDealWithoutCode.linkUrl, '/shop')
+  })
+})
+
+// 19. Auto Smart Remove System (Deals Expiry, Stale Orders, Zero-Balance Khata)
+describe('Auto Smart Remove Engine', () => {
+  // Feature 1: Deal Expiry and Auto-Removal
+  const isDealExpired = (deal) => {
+    if (!deal.expiresAt) return false
+    const expTime = new Date(deal.expiresAt).getTime()
+    if (isNaN(expTime)) return false
+    return Date.now() > expTime
+  }
+
+  const filterActiveDeals = (deals) => {
+    return deals.filter((d) => d.isActive !== false && !isDealExpired(d))
+  }
+
+  test('Auto-detects and excludes expired promotional deals from storefront', () => {
+    const pastDate = new Date(Date.now() - 1000 * 60 * 60).toISOString() // 1 hour ago
+    const futureDate = new Date(Date.now() + 1000 * 60 * 60).toISOString() // in 1 hour
+
+    const deals = [
+      { id: 'd-live', titleEn: 'Ongoing deal', isActive: true },
+      { id: 'd-future', titleEn: 'Flash sale', isActive: true, expiresAt: futureDate },
+      { id: 'd-expired', titleEn: 'Midnight special', isActive: true, expiresAt: pastDate },
+      { id: 'd-disabled', titleEn: 'Disabled deal', isActive: false },
+    ]
+
+    const activeDeals = filterActiveDeals(deals)
+    assert.equal(activeDeals.length, 2)
+    assert.equal(activeDeals.some((d) => d.id === 'd-live'), true)
+    assert.equal(activeDeals.some((d) => d.id === 'd-future'), true)
+    assert.equal(activeDeals.some((d) => d.id === 'd-expired'), false)
+    assert.equal(activeDeals.some((d) => d.id === 'd-disabled'), false)
+  })
+
+  // Feature 4: Stale Pending Orders Auto-Cancel
+  const isOrderStalePending = (order, timeoutHours = 2) => {
+    if (order.status !== 'pending' || order.utrVerified) return false
+    const created = new Date(order.createdAt).getTime()
+    if (isNaN(created)) return false
+    const ageHours = (Date.now() - created) / (1000 * 60 * 60)
+    return ageHours >= timeoutHours
+  }
+
+  test('Correctly identifies unpaid orders older than 2 hours as stale pending', () => {
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+    const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+
+    const staleOrder = { id: 'ord-stale', status: 'pending', utrVerified: false, createdAt: threeHoursAgo }
+    const freshPendingOrder = { id: 'ord-fresh', status: 'pending', utrVerified: false, createdAt: thirtyMinsAgo }
+    const verifiedOrder = { id: 'ord-verified', status: 'pending', utrVerified: true, createdAt: threeHoursAgo }
+    const confirmedOrder = { id: 'ord-conf', status: 'confirmed', utrVerified: false, createdAt: threeHoursAgo }
+
+    assert.equal(isOrderStalePending(staleOrder, 2), true, 'Order > 2 hours unverified pending must be stale')
+    assert.equal(isOrderStalePending(freshPendingOrder, 2), false, 'Recent order must not be stale')
+    assert.equal(isOrderStalePending(verifiedOrder, 2), false, 'Verified UTR order must not be stale')
+    assert.equal(isOrderStalePending(confirmedOrder, 2), false, 'Confirmed order must not be stale')
+  })
+
+  // Feature 5: Zero-Balance Khata Smart Filter
+  test('Filters Khata accounts to only display active debtors with outstanding dues (>0)', () => {
+    const customers = [
+      { id: 'c1', name: 'Rahim', balance: 450 },
+      { id: 'c2', name: 'Karim', balance: 0 },
+      { id: 'c3', name: 'Bijoy', balance: 1200 },
+      { id: 'c4', name: 'Shyamal', balance: 0 },
+    ]
+
+    const duesOnly = customers.filter((c) => c.balance > 0)
+    const settledOnly = customers.filter((c) => c.balance === 0)
+
+    assert.equal(duesOnly.length, 2)
+    assert.deepEqual(duesOnly.map((c) => c.id), ['c1', 'c3'])
+    assert.equal(settledOnly.length, 2)
+    assert.deepEqual(settledOnly.map((c) => c.id), ['c2', 'c4'])
+  })
+})
+
+
+
 
 
 

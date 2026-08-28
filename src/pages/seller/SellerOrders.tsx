@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
 import { formatWhatsAppPhone, orderStatusWhatsAppUrl, paymentVerifiedWhatsAppUrl, riderDispatchWhatsAppUrl } from '../../lib/whatsapp'
+import { isOrderStalePending } from '../../lib/business'
 import OrderChat from '../../components/OrderChat'
 import type { Order, OrderStatus } from '../../types'
 
@@ -208,7 +209,7 @@ const statusIcon: Record<OrderStatus, string> = {
 
 export default function SellerOrders() {
   const { user } = useAuth()
-  const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr, deleteOrder } = useStore()
+  const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr, deleteOrder, autoCancelStaleOrders } = useStore()
   const [filter, setFilter] = useState<Filter>('active')
   const [searchQuery, setSearchQuery] = useState('')
   const [customerFilter, setCustomerFilter] = useState<string | null>(null)
@@ -281,10 +282,18 @@ export default function SellerOrders() {
   }
 
   const handleCancel = async (o: Order) => {
-    if (!confirm(lang === 'bn' ? 'বাতিল করবেন?' : 'Cancel this order?')) return
+    const reason = prompt(
+      lang === 'bn'
+        ? 'অর্ডার বাতিলের কারণ লিখুন (যেমন: ডেলিভারি রুটের বাইরে / স্টক নেই):'
+        : 'Enter cancellation reason (e.g. Out of delivery area / stock unavailable):',
+      lang === 'bn' ? 'ডেলিভারি লোকেশন আমাদের সার্ভিস রুটের বাইরে' : 'Location out of delivery route'
+    )
+    if (reason === null) return // user cancelled prompt
+
     try {
-      await updateOrderStatus(o.id, 'cancelled')
-      window.open(orderStatusWhatsAppUrl(o, 'cancelled'), '_blank', 'noopener,noreferrer')
+      await updateOrderStatus(o.id, 'cancelled', reason)
+      window.open(orderStatusWhatsAppUrl(o, 'cancelled', reason), '_blank', 'noopener,noreferrer')
+      showToast(lang === 'bn' ? 'অর্ডার বাতিল ও কারণ WhatsApp-এ পাঠানো হয়েছে' : 'Order cancelled & reason sent via WhatsApp', 'ℹ️')
     } catch (err) {
       console.error('Cancel order error:', err)
     }
@@ -444,6 +453,51 @@ export default function SellerOrders() {
           <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{lang === 'bn' ? 'আয়' : 'Revenue'}</div>
         </div>
       </div>
+
+      {/* ⏱️ Auto Smart Remove: Stale Pending Orders Alert */}
+      {orders.filter(o => isOrderStalePending(o, 2)).length > 0 && (
+        <div
+          style={{
+            ...cs,
+            background: '#fffbeb',
+            border: '1.5px solid #fde68a',
+            padding: '0.75rem 1rem',
+            marginBottom: '0.75rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+          }}
+        >
+          <div>
+            <strong style={{ color: '#92400e', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              ⏱️ {orders.filter(o => isOrderStalePending(o, 2)).length}টি অর্ডার ২ ঘণ্টার বেশি সময় ধরে পেমেন্ট যাচাইহীন (Unverified Pending)
+            </strong>
+            <span style={{ fontSize: '0.75rem', color: '#78350f', display: 'block', marginTop: '2px' }}>
+              {lang === 'bn'
+                ? 'অটো-ক্লিন করলে এই অর্ডারগুলো বাতিল করে স্টক অন্য কাস্টমারদের জন্য মুক্ত করা হবে।'
+                : 'Auto-clean will cancel these unpaid orders and release inventory for waiting customers.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: '#d97706', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer' }}
+            onClick={async () => {
+              const count = await autoCancelStaleOrders(2)
+              showToast(
+                lang === 'bn'
+                  ? `🧹 ${count}টি মেয়াদোত্তীর্ণ অর্ডার স্বয়ংক্রিয়ভাবে বাতিল করা হয়েছে!`
+                  : `🧹 ${count} stale orders auto-cancelled!`,
+                '✅',
+              )
+            }}
+          >
+            🧹 {lang === 'bn' ? 'অটো-ক্লিন বাতিল করুন' : 'Auto-Cancel Stale'} ({orders.filter(o => isOrderStalePending(o, 2)).length})
+          </button>
+        </div>
+      )}
 
       {/* 🔍 Fast Search Bar */}
       <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
@@ -623,6 +677,57 @@ export default function SellerOrders() {
                   </div>
                   <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{expanded ? '▲' : '▼'}</span>
                 </div>
+
+                {/* 📍 Location Inspection Card (Before Acceptance) */}
+                {(o.status === 'pending' || o.status === 'advance_paid') && (
+                  <div style={{ margin: '0 1rem 0.6rem', padding: '0.65rem 0.85rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                      <strong style={{ fontSize: '0.84rem', color: '#166534' }}>
+                        📍 {lang === 'bn' ? 'ডেলিভারি লোকেশন যাচাই:' : 'Delivery Location Check:'}
+                      </strong>
+                      <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                        PIN: {o.pin}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#1f2937', marginBottom: '0.45rem', lineHeight: 1.4 }}>
+                      🏡 {o.address}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <a
+                        href={
+                          o.geoLat && o.geoLng
+                            ? `https://www.google.com/maps?q=${o.geoLat},${o.geoLng}`
+                            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address + ' ' + o.pin)}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: '#166534',
+                          color: '#ffffff',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          textDecoration: 'none',
+                        }}
+                      >
+                        🗺️ {lang === 'bn' ? 'Google Maps-এ অবস্থান দেখুন' : 'View on Google Maps'}
+                      </a>
+                      {o.geoLat && o.geoLng ? (
+                        <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 600 }}>
+                          ✓ GPS Verified ({o.geoLat.toFixed(4)}, {o.geoLng.toFixed(4)})
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+                          (Text Address)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Quick action buttons - available for all orders */}
                 <div style={{ padding: '0 1rem 0.6rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>

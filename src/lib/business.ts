@@ -1,3 +1,5 @@
+import type { CustomerTier, ShiftInfo } from '../types'
+
 /** Central business / contact / payment config for production. */
 const env = (key: string, fallback: string) => {
   const v = import.meta.env[key] as string | undefined
@@ -5,16 +7,113 @@ const env = (key: string, fallback: string) => {
 }
 
 export const MIN_ORDER_AMOUNT = 500
+export const MAX_VEGETABLE_QTY_KG = 10
 export const DELIVERY_WINDOW = '12–24 hours'
 export const DELIVERY_WINDOW_BN = '১২–২৪ ঘণ্টা'
 export const ADVANCE_PERCENT = 50
 /** Alert seller when stockQty is at or below this (and item is in stock). */
 export const LOW_STOCK_QTY = 5
 
+export const SERVICEABLE_PINCODES = ['721632', '721633', '721643'] as const
+
 export const DELIVERY_SLOTS = {
-  morning: { en: 'Morning (8 AM – 12 PM)', bn: 'সকাল (৮টা – ১২টা)' },
-  evening: { en: 'Evening (4 PM – 8 PM)', bn: 'সন্ধ্যা (৪টা – ৮টা)' },
+  morning: { en: 'Morning Shift (7:00 AM – 12:00 PM)', bn: 'সকালের শিফট (সকাল ৭:০০ – দুপুর ১২:০০)' },
+  evening: { en: 'Evening Shift (4:00 PM – 9:00 PM)', bn: 'সন্ধ্যার শিফট (বিকাল ৪:০০ – রাত ৯:০০)' },
 } as const
+
+export const SHIFT_HOURS = {
+  morningStart: 7,
+  morningEnd: 12,
+  eveningStart: 16,
+  eveningEnd: 21,
+}
+
+/**
+ * Automatically computes market MRP strikethrough (+25% markup, rounded nicely)
+ * Example: Selling price ₹20 -> MRP ₹25 (Displaying ~~₹25~~ ₹20 | 20% OFF like big brand ecommerce)
+ */
+export function computeMarketMrp(sellingPrice: number, overrideMrp?: number): number {
+  if (overrideMrp && overrideMrp > sellingPrice) return overrideMrp
+  if (!sellingPrice || sellingPrice <= 0) return 0
+  const rawMrp = sellingPrice * 1.25
+  // Round up to nearest integer
+  return Math.ceil(rawMrp)
+}
+
+/** Calculates discount percentage between MRP and selling price */
+export function computeDiscountPercent(mrp: number, sellingPrice: number): number {
+  if (!mrp || mrp <= sellingPrice) return 0
+  return Math.round(((mrp - sellingPrice) / mrp) * 100)
+}
+
+/** Calculates customer tier price discount */
+export function calculateTierDiscount(basePrice: number, tier?: CustomerTier): number {
+  if (!basePrice || !tier || tier === 'regular') return basePrice
+  if (tier === 'vip') {
+    // 5% discount for VIP / Prime members
+    return Math.max(1, Math.round(basePrice * 0.95))
+  }
+  if (tier === 'wholesale') {
+    // 12% discount for wholesale / hotel buyers
+    return Math.max(1, Math.round(basePrice * 0.88))
+  }
+  return basePrice
+}
+
+/** Get live shift status of the store based on current hour */
+export function getCurrentShiftStatus(): ShiftInfo {
+  const now = new Date()
+  const hour = now.getHours()
+  const minute = now.getMinutes()
+  const totalMinutes = hour * 60 + minute
+
+  const morningStartMin = 7 * 60
+  const morningEndMin = 12 * 60
+  const eveningStartMin = 16 * 60
+  const eveningEndMin = 21 * 60
+
+  if (totalMinutes >= morningStartMin && totalMinutes < morningEndMin) {
+    return {
+      currentShift: 'morning',
+      isOpen: true,
+      shiftNameEn: 'Morning Shift (7:00 AM – 12:00 PM)',
+      shiftNameBn: 'সকালের শিফট (সকাল ৭:০০ – দুপুর ১২:০০)',
+      nextShiftNoticeEn: 'Open now · Closes at 12:00 PM for afternoon procurement',
+      nextShiftNoticeBn: 'এখন খোলা · দুপুর ১২:০০ টায় বন্ধ হবে',
+    }
+  }
+
+  if (totalMinutes >= morningEndMin && totalMinutes < eveningStartMin) {
+    return {
+      currentShift: 'break',
+      isOpen: false,
+      shiftNameEn: 'Afternoon Break (Procurement)',
+      shiftNameBn: 'দুপুরের বিরতি (মন্ডি সংগ্রহ)',
+      nextShiftNoticeEn: 'Evening Shift starts at 4:00 PM (Accepting advance orders)',
+      nextShiftNoticeBn: 'সন্ধ্যার শিফট বিকাল ৪:০০ টায় শুরু হবে (অগ্রিম অর্ডার নেওয়া হচ্ছে)',
+    }
+  }
+
+  if (totalMinutes >= eveningStartMin && totalMinutes < eveningEndMin) {
+    return {
+      currentShift: 'evening',
+      isOpen: true,
+      shiftNameEn: 'Evening Shift (4:00 PM – 9:00 PM)',
+      shiftNameBn: 'সন্ধ্যার শিফট (বিকাল ৪:০০ – রাত ৯:০০)',
+      nextShiftNoticeEn: 'Open now · Closes at 9:00 PM',
+      nextShiftNoticeBn: 'এখন খোলা · রাত ৯:০০ টায় বন্ধ হবে',
+    }
+  }
+
+  return {
+    currentShift: 'closed',
+    isOpen: false,
+    shiftNameEn: 'Closed for Night',
+    shiftNameBn: 'রাতের জন্য বন্ধ',
+    nextShiftNoticeEn: 'Morning Shift opens tomorrow at 7:00 AM',
+    nextShiftNoticeBn: 'আগামীকাল সকাল ৭:০০ টায় সকালের শিফট খুলবে',
+  }
+}
 
 export const SEASON_LABELS = {
   all: { en: 'All season', bn: 'সব সিজন' },
@@ -70,4 +169,18 @@ export function generateShortOrderId(): string {
   const timeSlice = Date.now().toString().slice(-4)
   const rand = Math.floor(10 + Math.random() * 90)
   return `ORD-${timeSlice}${rand}`
+}
+
+export const STALE_PENDING_ORDER_TIMEOUT_HOURS = 2
+
+/** Checks if an unverified pending order is older than timeout hours */
+export function isOrderStalePending(
+  order: { createdAt: string; status: string; utrVerified?: boolean },
+  timeoutHours = STALE_PENDING_ORDER_TIMEOUT_HOURS,
+): boolean {
+  if (order.status !== 'pending' || order.utrVerified) return false
+  const created = new Date(order.createdAt).getTime()
+  if (isNaN(created)) return false
+  const ageHours = (Date.now() - created) / (1000 * 60 * 60)
+  return ageHours >= timeoutHours
 }

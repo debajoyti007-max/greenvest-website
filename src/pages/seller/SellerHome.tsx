@@ -200,6 +200,12 @@ export default function SellerHome() {
         <Link to="/seller/orders" className="btn btn-primary">
           {lang === 'bn' ? 'অর্ডার' : 'Orders'}
         </Link>
+        <Link to="/seller/deals" className="btn btn-secondary" style={{ background: '#f0fdf4', borderColor: '#86efac', color: '#166534', fontWeight: 700 }}>
+          {lang === 'bn' ? '🎟️ অফার ব্যানার' : '🎟️ Deals Banner'}
+        </Link>
+        <Link to="/seller/khata" className="btn btn-secondary" style={{ background: '#fef2f2', borderColor: '#fecaca', color: '#991b1b', fontWeight: 700 }}>
+          {lang === 'bn' ? '📒 খাতা বুক' : '📒 Khata Book'}
+        </Link>
         <Link to="/seller/products" className="btn btn-secondary">
           {lang === 'bn' ? 'প্রোডাক্ট / দাম' : 'Products & prices'}
         </Link>

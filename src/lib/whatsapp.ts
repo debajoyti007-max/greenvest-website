@@ -87,7 +87,7 @@ export function supportWhatsAppUrl(message?: string) {
   return `https://wa.me/${SUPPORT_WHATSAPP}?text=${text}`
 }
 
-export function orderStatusWhatsAppUrl(order: Order, status: import('../types').OrderStatus) {
+export function orderStatusWhatsAppUrl(order: Order, status: import('../types').OrderStatus, customReason?: string) {
   const phone = formatWhatsAppPhone(order.phone)
   const shortId = formatOrderId(order.id)
   const trackLink = `https://greenvest.shop/track?id=${shortId}`
@@ -98,7 +98,18 @@ export function orderStatusWhatsAppUrl(order: Order, status: import('../types').
     const bal = Math.max(0, order.total - order.advanceAmount)
     msg = `🚚 Order #${shortId} Delivered!\nHi ${order.userName}, your order has been delivered successfully. ${bal > 0 ? `Balance collected: ₹${bal}.` : ''}\n📲 Order Details: ${trackLink}\nThank you!`
   } else if (status === 'cancelled') {
-    msg = `❌ Order #${shortId} Cancelled.\nHi ${order.userName}, your order #${shortId} was cancelled. Refund of ₹${order.advanceAmount} will be processed.`
+    const reason = customReason || order.rejectionReason
+    const reasonText = reason ? `\nকারণ / Reason: ${reason}` : ''
+    msg = `❌ Order #${shortId} Cancelled / Rejected.${reasonText}\nHi ${order.userName}, your order #${shortId} could not be processed. If you paid an advance of ₹${order.advanceAmount}, it will be refunded promptly.\nWhatsApp Support: https://wa.me/${SUPPORT_WHATSAPP}`
   }
   return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
 }
+
+/** 1-Tap Bulk Vegetable Order WhatsApp Inquiry (>10 kg) */
+export function bulkOrderWhatsAppUrl(productName: string, lang: 'bn' | 'en' = 'bn'): string {
+  const textBn = `নমস্কার GreenVest,\nআমি *${productName}*-এর ১০ কেজির বেশি পাইকারি (Bulk) অর্ডার করতে চাই। অনুগ্রহ করে দর ও ডেলিভারি জানান।`
+  const textEn = `Hello GreenVest,\nI would like to place a bulk order (>10 kg) for *${productName}*. Please share wholesale rates and delivery details.`
+  const msg = encodeURIComponent(lang === 'bn' ? textBn : textEn)
+  return `https://wa.me/${SUPPORT_WHATSAPP}?text=${msg}`
+}
+

@@ -5,10 +5,13 @@ import WeeklyBasketModal from '../components/WeeklyBasketModal'
 import MyUsualBasketModal from '../components/MyUsualBasketModal'
 import CategoryBar from '../components/CategoryBar'
 import ProductReviewsModal from '../components/ProductReviewsModal'
+import DealsBanner from '../components/DealsBanner'
+import ShiftBadge from '../components/ShiftBadge'
+import PincodeCheckerModal from '../components/PincodeCheckerModal'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, computeMarketMrp, SERVICEABLE_PINCODES } from '../lib/business'
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'
 import {
@@ -22,6 +25,7 @@ import {
 } from '../lib/productImages'
 import { matchesProductQuery } from '../lib/searchUtils'
 import { STORE_LOCATION } from '../lib/delivery'
+import { bulkOrderWhatsAppUrl } from '../lib/whatsapp'
 import type { Grade, Lang, Product, CartItem } from '../types'
 
 const GRADES: Grade[] = ['A', 'B', 'C']
@@ -41,9 +45,28 @@ function ProductCard({
   onUpdateQty: (productId: string, grade: Grade, qty: number, weightMultiplier?: number) => void
   onOpenReviews: (p: Product) => void
 }) {
-  const { getProductRating } = useStore()
+  const { getProductRating, priceFor } = useStore()
   const ratingData = getProductRating(p.id)
-  const [cardGrade, setCardGrade] = useState<Grade>('B')
+
+  const activeGrades: Grade[] = useMemo(() => {
+    if (p.availableGrades && p.availableGrades.length > 0) {
+      return p.availableGrades
+    }
+    return GRADES
+  }, [p.availableGrades])
+
+  const [cardGrade, setCardGrade] = useState<Grade>(() => {
+    if (activeGrades.includes('B')) return 'B'
+    return activeGrades[0] || 'B'
+  })
+
+  // Ensure cardGrade stays valid if activeGrades changes
+  useEffect(() => {
+    if (!activeGrades.includes(cardGrade) && activeGrades.length > 0) {
+      setCardGrade(activeGrades[0])
+    }
+  }, [activeGrades, cardGrade])
+
   const [showGradeInfo, setShowGradeInfo] = useState(false)
   const [weightMultiplier, setWeightMultiplier] = useState<number>(1)
 
@@ -51,13 +74,23 @@ function ProductCard({
   const low =
     p.inStock && p.stockQty != null && p.stockQty > 0 && p.stockQty <= LOW_STOCK_QTY
 
-  const basePrice = (cardGrade === 'A' ? p.pA : cardGrade === 'C' ? p.pC : p.pB) || p.pB || p.pA
+  const basePrice = priceFor(p, cardGrade)
   const calculatedPrice = Math.round(basePrice * weightMultiplier)
+
+  // Strikethrough Market MRP calculation (approx 20% markup over selling price)
+  const mrpPerUnit = p.mrp || computeMarketMrp(basePrice)
+  const calculatedMrp = Math.round(mrpPerUnit * weightMultiplier)
+  const discountPercent =
+    calculatedMrp > calculatedPrice
+      ? Math.round(((calculatedMrp - calculatedPrice) / calculatedMrp) * 100)
+      : 0
 
   const cartItem = cart.find(
     (c) => c.productId === p.id && c.grade === cardGrade && (c.weightMultiplier || 1) === weightMultiplier,
   )
   const cartQty = cartItem ? cartItem.qty : 0
+  const currentTotalKg = cartQty * weightMultiplier
+  const isBulkCapReached = currentTotalKg >= MAX_VEGETABLE_QTY_KG
 
   const gradeLabels: Record<Grade, { en: string; bn: string }> = {
     A: { en: 'A (Premium)', bn: 'A (প্রিমিয়াম)' },
@@ -84,6 +117,29 @@ function ProductCard({
             if (!el.src.endsWith(fallback)) el.src = fallback
           }}
         />
+        {discountPercent > 0 && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '0.6rem',
+              left: '0.6rem',
+              background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
+              color: '#ffffff',
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              padding: '3px 8px',
+              borderRadius: '6px',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+              letterSpacing: '0.3px',
+              zIndex: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+            }}
+          >
+            ⚡ {discountPercent}% OFF
+          </span>
+        )}
         {!p.inStock && <span className="stock-badge">{t(lang, 'outOfStock')}</span>}
         {low && (
           <span className="stock-badge low-badge">
@@ -105,10 +161,20 @@ function ProductCard({
             <span className="product-en-name">{p.name}</span>
           </div>
           <div className="product-price-badge-top" aria-label={`Price: ₹${calculatedPrice}`}>
-            <span className="price-bold-val">₹{calculatedPrice}</span>
+            {calculatedMrp > calculatedPrice && (
+              <span className="price-strikethrough-val" style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: '0.85rem', marginRight: '4px', fontWeight: 600 }}>
+                ₹{calculatedMrp}
+              </span>
+            )}
+            <span className="price-bold-val" style={{ color: '#14532d', fontSize: '1.2rem', fontWeight: 800 }}>₹{calculatedPrice}</span>
             <span className="price-sub-unit">
               /{weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
             </span>
+            {discountPercent > 0 && (
+              <span className="discount-pill-tag" style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.72rem', fontWeight: 800, padding: '2px 7px', borderRadius: '6px', marginLeft: '6px', border: '1px solid #86efac' }}>
+                {discountPercent}% OFF
+              </span>
+            )}
           </div>
         </div>
 
@@ -130,33 +196,35 @@ function ProductCard({
           </button>
         </div>
 
-        {/* Grade selector chips with accessible group label */}
-        <div className="grade-selector-glass" role="radiogroup" aria-labelledby={`grade-lbl-${p.id}`}>
-          <span className="chip-group-label" id={`grade-lbl-${p.id}`}>
-            {lang === 'bn' ? 'গ্রেড:' : 'Grade:'}
-          </span>
-          {GRADES.map((g) => (
+        {/* Grade selector chips (Option A, B, C toggled on demand) */}
+        {activeGrades.length > 1 && (
+          <div className="grade-selector-glass" role="radiogroup" aria-labelledby={`grade-lbl-${p.id}`}>
+            <span className="chip-group-label" id={`grade-lbl-${p.id}`}>
+              {lang === 'bn' ? 'গ্রেড:' : 'Grade:'}
+            </span>
+            {activeGrades.map((g) => (
+              <button
+                key={g}
+                type="button"
+                className={`grade-chip-glass ${cardGrade === g ? 'active' : ''}`}
+                onClick={() => setCardGrade(g)}
+                aria-label={`Grade ${g}`}
+                aria-pressed={cardGrade === g}
+              >
+                Grade {g}
+              </button>
+            ))}
             <button
-              key={g}
               type="button"
-              className={`grade-chip-glass ${cardGrade === g ? 'active' : ''}`}
-              onClick={() => setCardGrade(g)}
-              aria-label={`Grade ${g}`}
-              aria-pressed={cardGrade === g}
+              className="info-btn-glass"
+              onClick={() => setShowGradeInfo(!showGradeInfo)}
+              title="Quality grade info"
+              aria-label="Quality grade information"
             >
-              Grade {g}
+              ℹ️
             </button>
-          ))}
-          <button
-            type="button"
-            className="info-btn-glass"
-            onClick={() => setShowGradeInfo(!showGradeInfo)}
-            title="Quality grade info"
-            aria-label="Quality grade information"
-          >
-            ℹ️
-          </button>
-        </div>
+          </div>
+        )}
 
         {showGradeInfo && (
           <p className="grade-desc-glass">
@@ -189,15 +257,40 @@ function ProductCard({
           </div>
         )}
 
-        {/* Price Row with Glass-Mono tag */}
-        <div className="price-row-glass">
-          <div className="price-mono-group">
-            <span className="price-mono-val">₹{calculatedPrice}</span>
+        {/* Price Row with Glass-Mono tag & Savings */}
+        <div className="price-row-glass" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="price-mono-group" style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+            {calculatedMrp > calculatedPrice && (
+              <span style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: '0.85rem' }}>
+                ₹{calculatedMrp}
+              </span>
+            )}
+            <span className="price-mono-val" style={{ fontSize: '1.15rem', fontWeight: 800, color: '#15803d' }}>₹{calculatedPrice}</span>
             <span className="price-mono-unit">
               / {weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
             </span>
           </div>
+          {calculatedMrp > calculatedPrice && (
+            <span style={{ fontSize: '0.76rem', color: '#15803d', fontWeight: 700, background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: '6px' }}>
+              {lang === 'bn' ? `সাশ্রয় ₹${calculatedMrp - calculatedPrice} (${discountPercent}%)` : `Save ₹${calculatedMrp - calculatedPrice} (${discountPercent}%)`}
+            </span>
+          )}
         </div>
+
+        {/* 10 kg Limit Warning & Bulk Order CTA */}
+        {isBulkCapReached && (
+          <div className="bulk-cap-alert" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '6px 10px', margin: '6px 0', fontSize: '0.75rem', color: '#92400e' }}>
+            <span>⚠️ {lang === 'bn' ? 'সর্বোচ্চ ১০ কেজি সীমা পৌঁছেছে।' : 'Max 10 kg limit reached.'}</span>
+            <a
+              href={bulkOrderWhatsAppUrl(p.name, lang)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'block', color: '#15803d', fontWeight: 700, marginTop: '3px', textDecoration: 'underline' }}
+            >
+              💬 {lang === 'bn' ? '১০ কেজির বেশি অর্ডারে দোকানদারে WhatsApp করুন' : 'For >10 kg, WhatsApp shop owner'}
+            </a>
+          </div>
+        )}
 
         {/* Action Controls */}
         {cartQty > 0 ? (
@@ -214,6 +307,7 @@ function ProductCard({
             <button
               type="button"
               className="qty-btn"
+              disabled={isBulkCapReached}
               onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1, weightMultiplier)}
               aria-label="Increase quantity"
             >
@@ -258,6 +352,7 @@ export default function Shop() {
   const [heroSlide, setHeroSlide] = useState(0)
   const [showBasketModal, setShowBasketModal] = useState(false)
   const [showUsualBasketModal, setShowUsualBasketModal] = useState(false)
+  const [showPinModal, setShowPinModal] = useState(false)
   const [reviewProduct, setReviewProduct] = useState<Product | null>(null)
 
   // Auto-slide hero banner every 5 seconds
@@ -518,6 +613,35 @@ export default function Shop() {
       </div>
 
       <div className="shop-body" id="veg-grid">
+        {/* ⏰ Live Shift Hours Badge */}
+        <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <ShiftBadge lang={lang} />
+          <button
+            type="button"
+            className="pincode-check-chip"
+            onClick={() => setShowPinModal(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              color: '#166534',
+              borderRadius: '20px',
+              padding: '5px 12px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <span>📍 {lang === 'bn' ? 'পিন কোড চেক' : 'Check PIN'}: <strong>{SERVICEABLE_PINCODES.join(', ')}</strong></span>
+            <span style={{ fontSize: '0.75rem', textDecoration: 'underline' }}>{lang === 'bn' ? 'পরিবর্তন' : 'Verify'}</span>
+          </button>
+        </div>
+
+        {/* 🎟️ Promotional Deals & Offers Hero Banner */}
+        <DealsBanner lang={lang} />
+
         {/* 🔍 Search Field with Banglish & Phonetic Support (Top Positioned for Quick Access) */}
         <div className="shop-search-toolbar">
           <div className="glass-search-field">
@@ -806,6 +930,13 @@ export default function Shop() {
           onClose={() => setReviewProduct(null)}
         />
       )}
+
+      {/* 📍 Pincode Checker Modal */}
+      <PincodeCheckerModal
+        isOpen={showPinModal}
+        onClose={() => setShowPinModal(false)}
+        lang={lang}
+      />
     </div>
   )
 }

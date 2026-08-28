@@ -37,6 +37,8 @@ interface AuthContextValue {
   resetPassword: (name: string, email: string, newPin: string) => Promise<AuthResult>
   updatePassword: (password: string) => Promise<AuthResult>
   setUserRole: (userId: string, role: Role) => Promise<AuthResult>
+  setUserTier: (userId: string, tier: import('../types').CustomerTier) => Promise<AuthResult>
+  setUserKhataApproval: (userId: string, approved: boolean, creditLimit?: number) => Promise<AuthResult>
   updateUserProfile: (data: { name?: string; phone?: string }) => Promise<void>
   adminResetUserPin: (userId: string, newPin: string) => Promise<AuthResult>
   toggleBlockUser: (userId: string, isBlocked: boolean) => Promise<AuthResult>
@@ -723,6 +725,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [cloud, user, users],
   )
 
+  const setUserTier = useCallback(
+    async (userId: string, tier: import('../types').CustomerTier): Promise<AuthResult> => {
+      const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
+      const targetEmail = targetUser?.email || ''
+      const actualId = targetUser?.id || userId
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
+            ? { ...u, tier }
+            : u,
+        ),
+      )
+      if (user && (user.id === actualId || user.id === userId || (targetEmail && user.email === targetEmail))) {
+        setUser({ ...user, tier })
+      }
+
+      const currentStored = getUsers()
+      const updatedStored = currentStored.map((u) =>
+        u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
+          ? { ...u, tier }
+          : u,
+      )
+      saveUsers(updatedStored)
+      return { ok: true }
+    },
+    [user, users],
+  )
+
+  const setUserKhataApproval = useCallback(
+    async (userId: string, khataApproved: boolean, creditLimit = 2000): Promise<AuthResult> => {
+      const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
+      const targetEmail = targetUser?.email || ''
+      const actualId = targetUser?.id || userId
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
+            ? { ...u, khataApproved, khataCreditLimit: creditLimit }
+            : u,
+        ),
+      )
+      if (user && (user.id === actualId || user.id === userId || (targetEmail && user.email === targetEmail))) {
+        setUser({ ...user, khataApproved, khataCreditLimit: creditLimit })
+      }
+
+      const currentStored = getUsers()
+      const updatedStored = currentStored.map((u) =>
+        u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
+          ? { ...u, khataApproved, khataCreditLimit: creditLimit }
+          : u,
+      )
+      saveUsers(updatedStored)
+      return { ok: true }
+    },
+    [user, users],
+  )
+
   const adminResetUserPin = useCallback(
     async (userId: string, newPin: string): Promise<AuthResult> => {
       const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
@@ -887,6 +947,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       updatePassword,
       setUserRole,
+      setUserTier,
+      setUserKhataApproval,
       updateUserProfile,
       adminResetUserPin,
       toggleBlockUser,
@@ -906,6 +968,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       updatePassword,
       setUserRole,
+      setUserTier,
+      setUserKhataApproval,
       updateUserProfile,
       adminResetUserPin,
       toggleBlockUser,

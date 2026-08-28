@@ -1,4 +1,5 @@
 export type Role = 'customer' | 'rider' | 'seller' | 'admin'
+export type CustomerTier = 'regular' | 'vip' | 'wholesale'
 export type Grade = 'A' | 'B' | 'C'
 export type OrderStatus = 'pending' | 'advance_paid' | 'confirmed' | 'delivered' | 'cancelled' | 'refunded'
 export type Season = 'all' | 'summer' | 'winter' | 'rainy'
@@ -10,8 +11,11 @@ export interface User {
   password?: string
   name: string
   role: Role
+  tier?: CustomerTier
   phone?: string
   isBlocked?: boolean
+  khataApproved?: boolean
+  khataCreditLimit?: number
   createdAt: string
 }
 
@@ -23,6 +27,10 @@ export interface Product {
   pA: number
   pB: number
   pC: number
+  /** Strikethrough Market MRP; computed automatically if omitted */
+  mrp?: number
+  /** Available grade options (A, B, C) enabled by Admin/Seller */
+  availableGrades?: Grade[]
   inStock: boolean
   /** Hidden from shop; kept for seller history / next season */
   archived?: boolean
@@ -69,7 +77,8 @@ export interface Order {
   discountAmount?: number
   total: number
   advanceAmount: number
-  paymentType?: 'full' | 'advance'
+  paymentType?: 'full' | 'advance' | 'khata'
+  isKhataOrder?: boolean
   utr: string
   utrVerified: boolean
   status: OrderStatus
@@ -81,8 +90,34 @@ export interface Order {
   /** GPS longitude from customer's device */
   geoLng?: number
   deliverySlot?: DeliverySlot
+  rejectionReason?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface KhataEntry {
+  id: string
+  userId: string
+  userName?: string
+  userPhone?: string
+  orderId?: string
+  type: 'order_debit' | 'payment_credit' | 'adjustment'
+  amount: number
+  balanceAfter?: number
+  notes?: string
+  paymentMethod?: 'upi' | 'cash'
+  recordedBy?: string
+  createdBy?: string
+  createdAt: string
+}
+
+export interface ShiftInfo {
+  currentShift: 'morning' | 'evening' | 'break' | 'closed'
+  isOpen: boolean
+  shiftNameEn: string
+  shiftNameBn: string
+  nextShiftNoticeEn: string
+  nextShiftNoticeBn: string
 }
 
 export type Lang = 'en' | 'bn'
@@ -122,5 +157,25 @@ export interface ProductReview {
   tag?: string
   isVerifiedBuyer?: boolean
   createdAt: string
+}
+
+export interface PromotionalDeal {
+  id: string
+  titleEn: string
+  titleBn: string
+  subtitleEn: string
+  subtitleBn: string
+  badgeEn: string
+  badgeBn: string
+  couponCode?: string
+  linkUrl?: string
+  buttonTextEn?: string
+  buttonTextBn?: string
+  bgGradient?: string
+  emoji?: string
+  isActive: boolean
+  expiresAt?: string
+  autoRemoveOnExpiry?: boolean
+  createdAt?: string
 }
 

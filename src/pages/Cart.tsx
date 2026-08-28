@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SUPPORT_WHATSAPP } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES, computeMarketMrp, MAX_VEGETABLE_QTY_KG, SUPPORT_WHATSAPP } from '../lib/business'
 import { t } from '../lib/i18n'
 
 export default function Cart() {
@@ -17,6 +17,16 @@ export default function Cart() {
   if (orphanedItems.length > 0) {
     orphanedItems.forEach(item => removeFromCart(item.productId, item.grade))
   }
+
+  const totalMrp = cart.reduce((sum, item) => {
+    const p = products.find((x) => x.id === item.productId)
+    if (!p) return sum
+    const weight = item.weightMultiplier || 1
+    const base = priceFor(p, item.grade)
+    const mrp = p.mrp || computeMarketMrp(base)
+    return sum + Math.round(mrp * weight) * item.qty
+  }, 0)
+  const totalSavings = Math.max(0, totalMrp - cartTotal)
 
   const canCheckout = cartTotal >= MIN_ORDER_AMOUNT
 
@@ -37,8 +47,8 @@ export default function Cart() {
       <h1>{t(lang, 'yourCart')}</h1>
       <p className="hint">
         {lang === 'bn'
-          ? `সর্বনিম্ন অর্ডার ₹${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
-          : `Minimum order ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW}`}
+          ? `সর্বনিম্ন অর্ডার ₹${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN} · সার্ভিস পিন: ${SERVICEABLE_PINCODES.join(', ')}`
+          : `Minimum order ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW} · PINs: ${SERVICEABLE_PINCODES.join(', ')}`}
       </p>
       <ul className="cart-list">
         {cart.map((item) => {
@@ -46,7 +56,11 @@ export default function Cart() {
           if (!p) return null
           const mult = item.weightMultiplier || 1
           const unitPrice = Math.round(priceFor(p, item.grade) * mult)
+          const baseMrp = p.mrp || computeMarketMrp(priceFor(p, item.grade))
+          const mrpPrice = Math.round(baseMrp * mult)
+          const itemDiscount = mrpPrice > unitPrice ? Math.round(((mrpPrice - unitPrice) / mrpPrice) * 100) : 0
           const line = unitPrice * item.qty
+          const isAtMaxKg = item.qty * mult >= MAX_VEGETABLE_QTY_KG
           const weightDisplay = item.weightLabel || (mult === 1 ? p.unit : mult === 0.25 ? '250g' : mult === 0.5 ? '500g' : `${mult}kg`)
           return (
             <li key={`${item.productId}-${item.grade}-${mult}`} className="cart-row">
@@ -57,9 +71,25 @@ export default function Cart() {
                   <span className="cart-en">{p.name}</span>
                 </div>
                 <span className="cart-meta-mono">
-                  {t(lang, 'grade')} {item.grade} {weightDisplay ? `· ${weightDisplay}` : ''} · ₹{unitPrice}
+                  {t(lang, 'grade')} {item.grade} {weightDisplay ? `· ${weightDisplay}` : ''} ·{' '}
+                  {mrpPrice > unitPrice && (
+                    <span style={{ textDecoration: 'line-through', color: '#9ca3af', marginRight: '4px' }}>
+                      ₹{mrpPrice}
+                    </span>
+                  )}
+                  <strong>₹{unitPrice}</strong>
                   {mult !== 1 ? ` (₹${priceFor(p, item.grade)}/${p.unit})` : `/${p.unit}`}
+                  {itemDiscount > 0 && (
+                    <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.7rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', marginLeft: '6px', border: '1px solid #86efac' }}>
+                      {itemDiscount}% OFF
+                    </span>
+                  )}
                 </span>
+                {isAtMaxKg && (
+                  <span style={{ display: 'block', fontSize: '0.75rem', color: '#b45309', fontWeight: 600 }}>
+                    ⚠️ {lang === 'bn' ? '১০ কেজি সর্বোচ্চ সীমা' : 'Max 10 kg limit reached'}
+                  </span>
+                )}
               </div>
               <div className="qty-controls">
                 <button
@@ -71,6 +101,7 @@ export default function Cart() {
                 <span>{item.qty}</span>
                 <button
                   type="button"
+                  disabled={isAtMaxKg}
                   onClick={() => updateCartQty(item.productId, item.grade, item.qty + 1, mult)}
                 >
                   +
@@ -102,6 +133,12 @@ export default function Cart() {
             </div>
           )}
         </div>
+        {totalSavings > 0 && (
+          <div style={{ color: '#15803d', fontWeight: 700, padding: '6px 0', borderBottom: '1px dashed #bbf7d0', marginBottom: '8px' }}>
+            <span>🎉 {lang === 'bn' ? 'মোট সাশ্রয়:' : 'Total Savings:'}</span>
+            <strong style={{ float: 'right' }}>₹{totalSavings}</strong>
+          </div>
+        )}
         <div>
           <span>{t(lang, 'total')}</span>
           <strong>₹{cartTotal}</strong>
@@ -112,8 +149,8 @@ export default function Cart() {
         </div>
         <p className="hint" style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, margin: '0.25rem 0' }}>
           {lang === 'bn'
-            ? '🚚 হোম ডেলিভারি (০-৫ কিমি: ₹৩০ · ৫-১৫ কিমি: ₹৫০) বা 🏪 ফ্রি দোকান থেকে সংগ্রহ (₹০)'
-            : '🚚 Home Delivery (0-5km: ₹30 · 5-15km: ₹50) or 🏪 Free Store Pickup (₹0)'}
+            ? `🚚 হোম ডেলিভারি (পিন: ${SERVICEABLE_PINCODES.join(', ')} · চার্জ: ₹৩০) বা 🏪 ফ্রি দোকান থেকে পিকআপ (₹০)`
+            : `🚚 Home Delivery (PINs: ${SERVICEABLE_PINCODES.join(', ')} · ₹30) or 🏪 Free Store Pickup (₹0)`}
         </p>
         {!canCheckout && (
           <p className="form-error">

@@ -1,4 +1,5 @@
 import type { DeliveryZone as DbDeliveryZone } from '../types'
+import { SERVICEABLE_PINCODES } from './business'
 
 export const STORE_LOCATION = {
   name: 'GreenVest Store',
@@ -10,8 +11,8 @@ export const STORE_LOCATION = {
   mapsUrl: 'https://maps.app.goo.gl/pdafSPpPPBymCDgDA',
   pin: '721648',
   phone: '8170859653',
-  hours: '7:00 AM – 9:00 PM',
-  hoursBn: 'সকাল ৭:০০ – রাত ৯:০০',
+  hours: '7:00 AM – 12:00 PM & 4:00 PM – 9:00 PM',
+  hoursBn: 'সকাল ৭:০০ – ১২:০০ ও বিকাল ৪:০০ – রাত ৯:০০',
   maxDeliveryRadiusKm: 15,
 }
 
@@ -33,21 +34,17 @@ export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lo
   return Math.round(R * c * 10) / 10 // 1 decimal place
 }
 
-/** Known PIN distances from Store Hub (22.1723, 87.8677) */
-const PIN_DISTANCE_MAP: Record<string, number> = {
-  '721648': 1.5,  // Byabattarhat / Mayachar / Store Hub (< 5km)
-  '721665': 2.5,  // Kalyanchak (< 5km)
-  '721632': 3.5,  // Nandakumar (< 5km)
-  '721635': 5.5,  // Sutahata (5-15km)
-  '721645': 6.0,  // Chaitanyapur (5-15km)
-  '721628': 6.5,  // Mahishadal (5-15km)
-  '721654': 9.0,  // Geonkhali (5-15km)
-  '721657': 11.0, // Kukrahati (5-15km)
-  '721607': 12.0, // Durgachak / Haldia (5-15km)
-  '721658': 13.0, // Barda / Bhabanipur (5-15km)
-  '721606': 16.5, // Haldia Township (> 15km)
-  '721636': 18.0, // Tamluk Town (> 15km)
-  '721656': 20.0, // Nandigram (> 15km)
+/** Known PIN distances and delivery fees from Store Hub */
+const PIN_DISTANCE_MAP: Record<string, { distanceKm: number; fee: number; name: string; nameBn: string }> = {
+  '721632': { distanceKm: 3.5, fee: 30, name: 'Nandakumar', nameBn: 'নন্দকুমার' },
+  '721633': { distanceKm: 4.2, fee: 30, name: 'Kumarchak / Narghat', nameBn: 'কুমারচক / নারঘাট' },
+  '721643': { distanceKm: 4.8, fee: 30, name: 'Mahishadal Bazar', nameBn: 'মহিষাদল বাজার' },
+}
+
+export function isServiceablePin(pin?: string): boolean {
+  if (!pin) return false
+  const cleanPin = pin.replace(/\D/g, '')
+  return (SERVICEABLE_PINCODES as readonly string[]).includes(cleanPin)
 }
 
 export interface DeliveryCalculationResult {
@@ -78,24 +75,46 @@ export function calcDeliveryFee(
     }
   }
 
+  const cleanPin = pin ? pin.replace(/\D/g, '') : ''
+
+  // Strict check: if a PIN is entered and it is NOT in the 3 whitelisted PINs, reject delivery
+  if (cleanPin.length === 6 && !isServiceablePin(cleanPin)) {
+    return {
+      fee: 0,
+      zone: 'Unserviceable Area',
+      distanceKm: 25,
+      isPickup: false,
+      isOutOfRange: true,
+      noticeEn: `Delivery is currently available only in PIN codes: ${SERVICEABLE_PINCODES.join(', ')}. Please select Store Pickup or contact WhatsApp.`,
+      noticeBn: `বর্তমানে হোম ডেলিভারি শুধুমাত্র ${SERVICEABLE_PINCODES.join(', ')} পিন কোডে চালু রয়েছে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন বা WhatsApp-এ যোগাযোগ করুন।`,
+    }
+  }
+
   // Calculate distance
   let distanceKm: number | undefined
   if (coordsOrZones && typeof coordsOrZones === 'object' && !Array.isArray(coordsOrZones) && 'lat' in coordsOrZones && 'lng' in coordsOrZones) {
     distanceKm = calculateDistanceKm(STORE_LOCATION.lat, STORE_LOCATION.lng, coordsOrZones.lat, coordsOrZones.lng)
-  } else if (pin) {
-    const cleanPin = pin.replace(/\D/g, '')
-    if (cleanPin in PIN_DISTANCE_MAP) {
-      distanceKm = PIN_DISTANCE_MAP[cleanPin]
-    } else if (cleanPin.startsWith('7216')) {
-      distanceKm = 4.0 // default local Purba Medinipur
-    } else {
-      distanceKm = 18.0 // outer region
-    }
+  } else if (cleanPin && cleanPin in PIN_DISTANCE_MAP) {
+    distanceKm = PIN_DISTANCE_MAP[cleanPin].distanceKm
   } else {
-    distanceKm = 3.0 // default local
+    distanceKm = 3.5 // default local
   }
 
-  // 1. Under 5 km -> ₹30
+  // Whitelisted PIN fee logic
+  if (cleanPin in PIN_DISTANCE_MAP) {
+    const pinInfo = PIN_DISTANCE_MAP[cleanPin]
+    return {
+      fee: pinInfo.fee,
+      zone: `${pinInfo.name} (${cleanPin})`,
+      distanceKm: pinInfo.distanceKm,
+      isPickup: false,
+      isOutOfRange: false,
+      noticeEn: `Delivery to ${pinInfo.name} (${cleanPin}): ₹${pinInfo.fee} (~${pinInfo.distanceKm} km)`,
+      noticeBn: `${pinInfo.nameBn} (${cleanPin})-এ ডেলিভারি চার্জ: ₹${pinInfo.fee} (~${pinInfo.distanceKm} কিমি)`,
+    }
+  }
+
+  // Under 5 km fallback for GPS
   if (distanceKm <= 5) {
     return {
       fee: 30,
@@ -108,28 +127,15 @@ export function calcDeliveryFee(
     }
   }
 
-  // 2. 5 km to 15 km -> ₹50
-  if (distanceKm <= 15) {
-    return {
-      fee: 50,
-      zone: 'Standard (5–15 km)',
-      distanceKm,
-      isPickup: false,
-      isOutOfRange: false,
-      noticeEn: `Delivery 5–15 km: ₹50 (~${distanceKm} km)`,
-      noticeBn: `৫ থেকে ১৫ কিমির মধ্যে ডেলিভারি চার্জ: ₹৫০ (~${distanceKm} কিমি)`,
-    }
-  }
-
-  // 3. Beyond 15 km -> Out of delivery range (Max 15 km limit)
+  // Beyond serviceable boundary
   return {
     fee: 50,
-    zone: 'Out of Range (>15 km)',
+    zone: 'Out of Delivery Area',
     distanceKm,
     isPickup: false,
     isOutOfRange: true,
-    noticeEn: `Distance is ${distanceKm} km. Maximum fresh home delivery limit is 15 km. Please select "Store Pickup" or contact on WhatsApp.`,
-    noticeBn: `দূরত্ব ${distanceKm} কিমি। সর্বোচ্চ ১৫ কিমির মধ্যে হোম ডেলিভারি প্রযোজ্য। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন বা WhatsApp-এ যোগাযোগ করুন।`,
+    noticeEn: `Distance is ${distanceKm} km. Home delivery is restricted to PIN codes ${SERVICEABLE_PINCODES.join(', ')}.`,
+    noticeBn: `দূরত্ব ${distanceKm} কিমি। হোম ডেলিভারি শুধুমাত্র ${SERVICEABLE_PINCODES.join(', ')} পিন কোডে সীমাবদ্ধ।`,
   }
 }
 

@@ -7,7 +7,7 @@ import { SEASON_LABELS } from '../../lib/business'
 import { t } from '../../lib/i18n'
 import { uploadProductImage } from '../../lib/imageUpload'
 import { resolveProductImage } from '../../lib/productImages'
-import type { Product, Season } from '../../types'
+import type { Grade, Product, Season } from '../../types'
 
 const emptyForm = {
   emoji: '🥬',
@@ -16,6 +16,8 @@ const emptyForm = {
   pA: 0,
   pB: 0,
   pC: 0,
+  mrp: 0,
+  availableGrades: ['A', 'B', 'C'] as Grade[],
   inStock: true,
   archived: false,
   stockQty: 20,
@@ -73,6 +75,8 @@ export default function SellerProducts() {
       pA: p.pA,
       pB: p.pB,
       pC: p.pC,
+      mrp: p.mrp || 0,
+      availableGrades: (p.availableGrades && p.availableGrades.length > 0) ? p.availableGrades : ['A', 'B', 'C'],
       inStock: p.inStock,
       archived: Boolean(p.archived),
       stockQty: p.stockQty ?? 0,
@@ -253,6 +257,37 @@ export default function SellerProducts() {
               ))}
             </select>
           </label>
+          <div className="span-2" style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '10px', border: '1.5px solid #cbd5e1', margin: '0.25rem 0' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.45rem', color: '#1e293b' }}>
+              🔘 {lang === 'bn' ? 'ক্রেতাদের কোন কোন অপশন/গ্রেড দেখাবেন? (Option A, B, C Toggle):' : 'Which Grades to show customers? (Option A, B, C Toggle):'}
+            </span>
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+              {(['A', 'B', 'C'] as Grade[]).map((g) => {
+                const isChecked = form.availableGrades?.includes(g) ?? true
+                return (
+                  <label key={g} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem', color: isChecked ? '#166534' : '#64748b' }}>
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        const cur = form.availableGrades || ['A', 'B', 'C']
+                        let next: Grade[]
+                        if (e.target.checked) {
+                          next = [...cur, g]
+                        } else {
+                          next = cur.filter((x) => x !== g)
+                          if (next.length === 0) next = [g] // Keep at least 1 grade active
+                        }
+                        setForm({ ...form, availableGrades: next })
+                      }}
+                    />
+                    Grade {g}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
           <label>
             Grade A ₹
             <input
@@ -275,6 +310,16 @@ export default function SellerProducts() {
               type="number"
               value={form.pC}
               onChange={(e) => setForm({ ...form, pC: Number(e.target.value) })}
+            />
+          </label>
+          <label>
+            {lang === 'bn' ? 'বাজারের MRP (কাটা দাম ₹)' : 'Market MRP (Strikethrough ₹)'}
+            <input
+              type="number"
+              min={0}
+              value={form.mrp || ''}
+              placeholder={lang === 'bn' ? 'অটো (+২০%)' : 'Auto (+20%)'}
+              onChange={(e) => setForm({ ...form, mrp: Number(e.target.value) || 0 })}
             />
           </label>
         </div>

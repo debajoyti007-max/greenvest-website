@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
-import { calcDeliveryFee, STORE_LOCATION } from '../lib/delivery'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES } from '../lib/business'
+import { calcDeliveryFee, isServiceablePin, STORE_LOCATION } from '../lib/delivery'
 import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC, generateDynamicUpiQr, buildUpiPayUri } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
@@ -64,10 +64,10 @@ export default function Checkout() {
   const coords = useMemo(() => (geoLat && geoLng ? { lat: geoLat, lng: geoLng } : null), [geoLat, geoLng])
   const delivery = useMemo(() => calcDeliveryFee(pin, coords, fulfillmentMode), [pin, coords, fulfillmentMode])
   const grandTotal = Math.max(0, cartTotal + delivery.fee - (couponApplied?.discount || 0))
-  const [paymentMode, setPaymentMode] = useState<'advance' | 'full'>('advance')
+  const [paymentMode, setPaymentMode] = useState<'advance' | 'full' | 'khata'>('advance')
   const advance = Math.ceil(grandTotal * 0.5)
-  const payableAmount = paymentMode === 'full' ? grandTotal : advance
-  const balanceDue = grandTotal - payableAmount
+  const payableAmount = paymentMode === 'khata' ? 0 : paymentMode === 'full' ? grandTotal : advance
+  const balanceDue = paymentMode === 'khata' ? grandTotal : grandTotal - payableAmount
   const [dynamicQr, setDynamicQr] = useState<string>('')
 
   // Generate in-memory Dynamic UPI QR Code whenever payable amount changes
@@ -210,7 +210,17 @@ export default function Checkout() {
     }
 
     if (!isPickup && (!pin.trim() || !/^\d{6}$/.test(pin.trim()))) {
-      setError(lang === 'bn' ? '৬ সংখ্যার পিন কোড দিন (যেমন: ৭২১৬৩২)' : 'Enter your 6-digit PIN code (e.g. 721632)')
+      setError(lang === 'bn' ? `৬ সংখ্যার পিন কোড দিন (${SERVICEABLE_PINCODES.join(', ')})` : `Enter your 6-digit PIN code (${SERVICEABLE_PINCODES.join(', ')})`)
+      submitLockRef.current = false
+      return
+    }
+
+    if (!isPickup && !isServiceablePin(pin.trim())) {
+      setError(
+        lang === 'bn'
+          ? `বর্তমানে হোম ডেলিভারি শুধুমাত্র ${SERVICEABLE_PINCODES.join(', ')} পিন কোডে চালু রয়েছে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন।`
+          : `Home delivery is currently available only in PIN codes: ${SERVICEABLE_PINCODES.join(', ')}. Please select Store Pickup.`,
+      )
       submitLockRef.current = false
       return
     }
@@ -218,19 +228,23 @@ export default function Checkout() {
     if (!isPickup && delivery.isOutOfRange) {
       setError(
         lang === 'bn'
-          ? `আপনার দূরত্ব (${delivery.distanceKm} কিমি) আমাদের সর্বোচ্চ ১৫ কিমি ডেলিভারি সীমার বাইরে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন বা WhatsApp-এ যোগাযোগ করুন।`
-          : `Distance (${delivery.distanceKm} km) is beyond our 15 km home delivery limit. Please select "Store Pickup" or contact us on WhatsApp.`,
+          ? `আপনার পিন কোড বা অবস্থান আমাদের ডেলিভারি সীমার বাইরে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন বা WhatsApp-এ যোগাযোগ করুন।`
+          : `Location is beyond our delivery service area. Please select "Store Pickup" or contact us on WhatsApp.`,
       )
       submitLockRef.current = false
       return
     }
 
-    // 2. Strict 12-digit UPI UTR Validation & Fake Blacklist Check
-    const utrVal = validateUtrStrict(utr)
-    if (!utrVal.isValid) {
-      setError(lang === 'bn' ? utrVal.errorBn : utrVal.errorEn)
-      submitLockRef.current = false
-      return
+    // 2. Strict 12-digit UPI UTR Validation (only if not Khata)
+    let cleanedUtr = 'KHATA-DEBIT'
+    if (paymentMode !== 'khata') {
+      const utrVal = validateUtrStrict(utr)
+      if (!utrVal.isValid) {
+        setError(lang === 'bn' ? utrVal.errorBn : utrVal.errorEn)
+        submitLockRef.current = false
+        return
+      }
+      cleanedUtr = utrVal.cleanedValue
     }
 
     if (cartTotal < MIN_ORDER_AMOUNT) {
@@ -250,19 +264,21 @@ export default function Checkout() {
     }, 2500)
 
     try {
-      // 3. Duplicate UTR check in database
-      const isDup = await checkDuplicateUtr(utrVal.cleanedValue)
-      if (isDup) {
-        setError(
-          lang === 'bn'
-            ? 'এই UTR নম্বরটি আগেই ব্যবহৃত হয়েছে। অনুগ্রহ করে আপনার নতুন পেমেন্টের আসল UTR নম্বর দিন।'
-            : 'This UTR number has already been used for another order. Please enter your new payment UTR.',
-        )
-        clearTimeout(slowTimer)
-        setSlowNetwork(false)
-        setSubmitting(false)
-        submitLockRef.current = false
-        return
+      // 3. Duplicate UTR check in database (only if not Khata)
+      if (paymentMode !== 'khata') {
+        const isDup = await checkDuplicateUtr(cleanedUtr)
+        if (isDup) {
+          setError(
+            lang === 'bn'
+              ? 'এই UTR নম্বরটি আগেই ব্যবহৃত হয়েছে। অনুগ্রহ করে আপনার নতুন পেমেন্টের আসল UTR নম্বর দিন।'
+              : 'This UTR number has already been used for another order. Please enter your new payment UTR.',
+          )
+          clearTimeout(slowTimer)
+          setSlowNetwork(false)
+          setSubmitting(false)
+          submitLockRef.current = false
+          return
+        }
       }
 
       // 4. Save address if opted
@@ -289,13 +305,14 @@ export default function Checkout() {
         address: fullAddress,
         phone: phoneVal.cleanedValue,
         pin: isPickup ? STORE_LOCATION.pin : pin.trim(),
-        utr: utrVal.cleanedValue,
+        utr: cleanedUtr,
         deliverySlot: 'morning',
         discountAmount: couponApplied?.discount || 0,
         geoLat,
         geoLng,
         paymentType: paymentMode,
         advanceAmount: payableAmount,
+        isKhataOrder: paymentMode === 'khata',
       })
 
       clearTimeout(slowTimer)
@@ -308,7 +325,7 @@ export default function Checkout() {
         navigate(`/orders/success/${order.id}`, { state: { order } })
       } else {
         // Fallback recovery check: did Supabase insert it despite network lag?
-        const recovered = await findRecentOrderByUtr(utrVal.cleanedValue)
+        const recovered = await findRecentOrderByUtr(cleanedUtr)
         if (recovered) {
           navigate(`/orders/success/${recovered.id}`, { state: { order: recovered } })
         } else {
@@ -323,7 +340,7 @@ export default function Checkout() {
       clearTimeout(slowTimer)
       // Check if order succeeded despite client-side network drop
       try {
-        const recovered = await findRecentOrderByUtr(utrVal.cleanedValue)
+        const recovered = await findRecentOrderByUtr(cleanedUtr)
         if (recovered) {
           clearCartIdempotencyKey(user.id)
           navigate(`/orders/success/${recovered.id}`, { state: { order: recovered } })
@@ -391,12 +408,12 @@ export default function Checkout() {
               : `Min order ₹${MIN_ORDER_AMOUNT} · ETA ${DELIVERY_WINDOW}`}
           </p>
 
-          {/* 💳 2-Way Dual Payment Switch */}
+          {/* 💳 Payment Mode Switch (Advance, Full, Khata) */}
           <div style={{ margin: '0.85rem 0', background: '#f8fafc', border: '1.5px solid #cbd5e1', borderRadius: '14px', padding: '0.75rem' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: '0.45rem' }}>
               💳 {lang === 'bn' ? 'পেমেন্ট মোড বেছে নিন:' : 'Choose Payment Option:'}
             </span>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: user?.khataApproved ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0.5rem' }}>
               <button
                 type="button"
                 onClick={() => setPaymentMode('advance')}
@@ -410,11 +427,11 @@ export default function Checkout() {
                   transition: 'all 0.2s ease',
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: paymentMode === 'advance' ? '#166534' : '#1e293b' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: paymentMode === 'advance' ? '#166534' : '#1e293b' }}>
                   ⚡ {lang === 'bn' ? '৫০% অগ্রিম' : '50% Advance'}
                 </div>
-                <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '0.15rem' }}>
-                  {lang === 'bn' ? `এখন ₹${advance} · বাকি ₹${balanceDue} ক্যাশ` : `Pay ₹${advance} now · ₹${balanceDue} due`}
+                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>
+                  {lang === 'bn' ? `এখন ₹${advance} · বাকি ক্যাশ` : `Pay ₹${advance} now`}
                 </div>
               </button>
 
@@ -431,80 +448,116 @@ export default function Checkout() {
                   transition: 'all 0.2s ease',
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: paymentMode === 'full' ? '#166534' : '#1e293b' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: paymentMode === 'full' ? '#166534' : '#1e293b' }}>
                   💎 {lang === 'bn' ? '১০০% ফুল পে' : '100% Full Pay'}
                 </div>
-                <div style={{ fontSize: '0.74rem', color: '#16a34a', fontWeight: 600, marginTop: '0.15rem' }}>
-                  {lang === 'bn' ? '✓ ক্যাশলেস ডেলিভারি' : '✓ Zero cash on delivery'}
+                <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, marginTop: '0.15rem' }}>
+                  {lang === 'bn' ? '✓ ক্যাশলেস' : '✓ Zero cash'}
                 </div>
               </button>
+
+              {user?.khataApproved && (
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode('khata')}
+                  style={{
+                    padding: '0.65rem 0.5rem',
+                    borderRadius: '10px',
+                    border: paymentMode === 'khata' ? '2px solid #7c3aed' : '1px solid #c4b5fd',
+                    background: paymentMode === 'khata' ? '#f5f3ff' : '#ffffff',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: paymentMode === 'khata' ? '#7c3aed' : '#5b21b6' }}>
+                    📒 {lang === 'bn' ? 'খাতা পে (বাকি)' : 'Khata Pay'}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#7c3aed', fontWeight: 600, marginTop: '0.15rem' }}>
+                    {lang === 'bn' ? '✓ পরে পেমেন্ট' : '✓ Pay Later'}
+                  </div>
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="upi-pay">
-            <div className="dynamic-qr-wrapper">
-              <img
-                src={dynamicQr || UPI_QR_SRC}
-                alt={`Dynamic UPI QR for ₹${payableAmount}`}
-                className="upi-qr"
-                width={220}
-                height={220}
-              />
-              <span className="dynamic-qr-badge">
-                🔒 {lang === 'bn' ? `₹${payableAmount} অটো-লক করা QR` : `₹${payableAmount} Auto-Locked QR`}
-              </span>
-            </div>
-
-            <div className="upi-details">
-              <p className="upi-label">UPI ID</p>
-              <code className="upi-id">{UPI_ID}</code>
-              <button type="button" className="btn btn-secondary" onClick={copyUpi}>
-                {copied ? t(lang, 'copied') : t(lang, 'copyUpi')}
-              </button>
-              <p className="muted upi-bank">{UPI_BANK}</p>
-              <p className="hint">
+          {paymentMode === 'khata' ? (
+            <div style={{ background: '#f5f3ff', border: '1.5px solid #c4b5fd', borderRadius: '12px', padding: '1rem', color: '#5b21b6', margin: '1rem 0' }}>
+              <strong style={{ display: 'block', fontSize: '1rem', marginBottom: '4px' }}>
+                📒 {lang === 'bn' ? 'খাতা বুক পে সক্রিয়' : 'Khata Book Credit Active'}
+              </strong>
+              <p style={{ margin: 0, fontSize: '0.86rem', lineHeight: 1.5 }}>
                 {lang === 'bn'
-                  ? 'PhonePe / GPay / Paytm দিয়ে স্ক্যান করলে স্বয়ংক্রিয়ভাবে ₹' + payableAmount + ' দেখাবে।'
-                  : 'Scanning with PhonePe/GPay auto-fills exact amount of ₹' + payableAmount + '.'}
+                  ? `আপনার এই অর্ডারের মোট ₹${grandTotal} আপনার ডিজিটাল খাতা বুকে যোগ করা হবে। এখনই কোনো UPI পেমেন্ট বা UTR দিতে হবে না।`
+                  : `Total ₹${grandTotal} for this order will be debited to your digital Khata ledger. No advance UPI payment required.`}
               </p>
-              {/* ⚡ 1-Tap UPI Intent Apps */}
-              <div style={{ marginTop: '0.6rem' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', display: 'block', marginBottom: '0.35rem' }}>
-                  {lang === 'bn' ? `⚡ ১-ট্যাপে ₹${payableAmount} সরাসরি পেমেন্ট করুন:` : `⚡ 1-Tap Quick Pay ₹${payableAmount}:`}
+            </div>
+          ) : (
+            <div className="upi-pay">
+              <div className="dynamic-qr-wrapper">
+                <img
+                  src={dynamicQr || UPI_QR_SRC}
+                  alt={`Dynamic UPI QR for ₹${payableAmount}`}
+                  className="upi-qr"
+                  width={220}
+                  height={220}
+                />
+                <span className="dynamic-qr-badge">
+                  🔒 {lang === 'bn' ? `₹${payableAmount} অটো-লক করা QR` : `₹${payableAmount} Auto-Locked QR`}
                 </span>
-                <div className="upi-app-grid">
-                  <a
-                    href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
-                    className="upi-app-btn"
-                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
-                  >
-                    <span style={{ color: '#0f9d58' }}>●</span> GPay
-                  </a>
-                  <a
-                    href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
-                    className="upi-app-btn"
-                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
-                  >
-                    <span style={{ color: '#5f259f' }}>●</span> PhonePe
-                  </a>
-                  <a
-                    href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
-                    className="upi-app-btn"
-                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
-                  >
-                    <span style={{ color: '#00baf2' }}>●</span> Paytm
-                  </a>
-                  <a
-                    href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
-                    className="upi-app-btn"
-                    style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
-                  >
-                    ⚡ Pay ₹{payableAmount}
-                  </a>
+              </div>
+
+              <div className="upi-details">
+                <p className="upi-label">UPI ID</p>
+                <code className="upi-id">{UPI_ID}</code>
+                <button type="button" className="btn btn-secondary" onClick={copyUpi}>
+                  {copied ? t(lang, 'copied') : t(lang, 'copyUpi')}
+                </button>
+                <p className="muted upi-bank">{UPI_BANK}</p>
+                <p className="hint">
+                  {lang === 'bn'
+                    ? 'PhonePe / GPay / Paytm দিয়ে স্ক্যান করলে স্বয়ংক্রিয়ভাবে ₹' + payableAmount + ' দেখাবে।'
+                    : 'Scanning with PhonePe/GPay auto-fills exact amount of ₹' + payableAmount + '.'}
+                </p>
+                {/* ⚡ 1-Tap UPI Intent Apps */}
+                <div style={{ marginTop: '0.6rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', display: 'block', marginBottom: '0.35rem' }}>
+                    {lang === 'bn' ? `⚡ ১-ট্যাপে ₹${payableAmount} সরাসরি পেমেন্ট করুন:` : `⚡ 1-Tap Quick Pay ₹${payableAmount}:`}
+                  </span>
+                  <div className="upi-app-grid">
+                    <a
+                      href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
+                      className="upi-app-btn"
+                      style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
+                    >
+                      <span style={{ color: '#0f9d58' }}>●</span> GPay
+                    </a>
+                    <a
+                      href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
+                      className="upi-app-btn"
+                      style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
+                    >
+                      <span style={{ color: '#5f259f' }}>●</span> PhonePe
+                    </a>
+                    <a
+                      href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
+                      className="upi-app-btn"
+                      style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
+                    >
+                      <span style={{ color: '#00baf2' }}>●</span> Paytm
+                    </a>
+                    <a
+                      href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
+                      className="upi-app-btn"
+                      style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
+                    >
+                      ⚡ Pay ₹{payableAmount}
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           <dl className="totals">
             <div>
@@ -840,54 +893,58 @@ export default function Checkout() {
               placeholder={lang === 'bn' ? '১০ সংখ্যার মোবাইল (যেমন 9876543210)' : '10-digit mobile (e.g. 9876543210)'}
             />
           </label>
-          <label>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span>{t(lang, 'utrLabel')}</span>
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  fontFamily: 'monospace',
-                  fontWeight: 700,
-                  color: utr.length === 12 ? '#16a34a' : '#6b7280',
-                }}
-              >
-                {utr.length === 12
-                  ? (lang === 'bn' ? '✅ ১২ সংখ্যা সম্পূর্ণ' : '✅ 12 digits valid')
-                  : `${utr.length}/12 ${lang === 'bn' ? 'সংখ্যা' : 'digits'}`}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input
-                value={utr}
-                onChange={(e) => {
-                  setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))
-                  setError('')
-                }}
-                placeholder={lang === 'bn' ? '১২ সংখ্যার UTR (যেমন 408123456789)' : '12-digit UTR (e.g. 408123456789)'}
-                required
-                maxLength={12}
-                inputMode="numeric"
-                style={{ flex: 1, letterSpacing: '0.05rem', fontFamily: 'monospace', fontWeight: 700 }}
-              />
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={async () => {
-                  try {
-                    const text = await navigator.clipboard.readText()
-                    const cleaned = text.replace(/\D/g, '').slice(0, 12)
-                    if (cleaned) {
-                      setUtr(cleaned)
-                      setUtrPasted(true)
-                    }
-                  } catch {}
-                }}
-              >
-                📋 {lang === 'bn' ? 'পেস্ট' : 'Paste'}
-              </button>
-            </div>
-          </label>
-          {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '-0.5rem' }}>UTR auto-filled from clipboard</p>}
+          {paymentMode !== 'khata' && (
+            <>
+              <label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span>{t(lang, 'utrLabel')}</span>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      color: utr.length === 12 ? '#16a34a' : '#6b7280',
+                    }}
+                  >
+                    {utr.length === 12
+                      ? (lang === 'bn' ? '✅ ১২ সংখ্যা সম্পূর্ণ' : '✅ 12 digits valid')
+                      : `${utr.length}/12 ${lang === 'bn' ? 'সংখ্যা' : 'digits'}`}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    value={utr}
+                    onChange={(e) => {
+                      setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))
+                      setError('')
+                    }}
+                    placeholder={lang === 'bn' ? '১২ সংখ্যার UTR (যেমন 408123456789)' : '12-digit UTR (e.g. 408123456789)'}
+                    required
+                    maxLength={12}
+                    inputMode="numeric"
+                    style={{ flex: 1, letterSpacing: '0.05rem', fontFamily: 'monospace', fontWeight: 700 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText()
+                        const cleaned = text.replace(/\D/g, '').slice(0, 12)
+                        if (cleaned) {
+                          setUtr(cleaned)
+                          setUtrPasted(true)
+                        }
+                      } catch {}
+                    }}
+                  >
+                    📋 {lang === 'bn' ? 'পেস্ট' : 'Paste'}
+                  </button>
+                </div>
+              </label>
+              {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '-0.5rem' }}>UTR auto-filled from clipboard</p>}
+            </>
+          )}
           {error && <p className="form-error">{error}</p>}
 
           {/* ⏳ Slow Network Status Box */}

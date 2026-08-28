@@ -39,8 +39,10 @@ import {
   fetchProductReviewsApi,
   saveProductReviewApi,
 } from '../lib/api'
-import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT } from '../lib/business'
+import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
+import { getStoredKhataEntries, recordKhataTransaction, calculateUserKhataBalance } from '../lib/khata'
+import { getStoredPromotionalDeals, saveStoredPromotionalDeals } from '../lib/deals'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { SEED_REVIEWS } from '../data/seedReviews'
 import {
@@ -59,7 +61,7 @@ import {
   STORE_EVENT,
   uid,
 } from '../lib/storage'
-import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview } from '../types'
+import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, KhataEntry, CustomerTier, ShiftInfo, PromotionalDeal } from '../types'
 import { showToast } from '../components/Toast'
 import { useAuth } from './AuthContext'
 
@@ -73,8 +75,9 @@ interface PlaceOrderOpts {
   zones?: DeliveryZone[]
   geoLat?: number
   geoLng?: number
-  paymentType?: 'full' | 'advance'
+  paymentType?: 'full' | 'advance' | 'khata'
   advanceAmount?: number
+  isKhataOrder?: boolean
 }
 
 interface StoreContextValue {
@@ -90,7 +93,7 @@ interface StoreContextValue {
   clearCart: () => void
   cartCount: number
   cartTotal: number
-  priceFor: (p: Product, grade: Grade) => number
+  priceFor: (p: Product, grade: Grade, tierOverride?: CustomerTier) => number
   placeOrder: (opts: PlaceOrderOpts) => Promise<Order | null>
   reorderFromOrder: (order: Order) => { added: number; skipped: number }
   updateProduct: (product: Product) => Promise<void>
@@ -98,7 +101,7 @@ interface StoreContextValue {
   deleteProduct: (id: string) => Promise<void>
   toggleStock: (id: string) => Promise<void>
   morningReset: () => Promise<void>
-  updateOrderStatus: (id: string, status: OrderStatus) => Promise<void>
+  updateOrderStatus: (id: string, status: OrderStatus, rejectionReason?: string) => Promise<void>
   bulkUpdateOrderStatus: (ids: string[], status: OrderStatus) => Promise<void>
   checkDuplicateUtr: (utr: string) => Promise<boolean>
   findRecentOrderByUtr: (utr: string) => Promise<Order | null>
@@ -120,6 +123,18 @@ interface StoreContextValue {
   addReview: (review: Omit<ProductReview, 'id' | 'createdAt'>) => Promise<ProductReview>
   getProductRating: (productId: string) => { avg: number; count: number }
   getReviewsForProduct: (productId: string) => ProductReview[]
+  khataEntries: KhataEntry[]
+  getUserKhataBalance: (userId?: string) => number
+  addKhataTransaction: (userId: string, type: 'order_debit' | 'payment_credit' | 'adjustment', amount: number, notes?: string, orderId?: string) => void
+  shiftStatus: ShiftInfo
+  extendedDeliveryNotice: string | null
+  setExtendedDeliveryNotice: (notice: string | null) => void
+  promotionalDeals: PromotionalDeal[]
+  addPromotionalDeal: (deal: Omit<PromotionalDeal, 'id' | 'createdAt'>) => Promise<void>
+  updatePromotionalDeal: (deal: PromotionalDeal) => Promise<void>
+  deletePromotionalDeal: (dealId: string) => Promise<void>
+  togglePromotionalDeal: (dealId: string, isActive: boolean) => Promise<void>
+  autoCancelStaleOrders: (timeoutHours?: number) => Promise<number>
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null)
@@ -136,6 +151,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => getLang())
   const [loading, setLoading] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => getAppNotifications())
+  const [khataEntries, setKhataEntries] = useState<KhataEntry[]>(() => getStoredKhataEntries())
+  const [promotionalDeals, setPromotionalDeals] = useState<PromotionalDeal[]>(() => getStoredPromotionalDeals())
+  const [extendedDeliveryNotice, setExtendedDeliveryNotice] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('gv_extended_delivery_notice')
+    } catch {
+      return null
+    }
+  })
+  const shiftStatus = useMemo(() => getCurrentShiftStatus(), [])
   const notifChannelRef = useRef<RealtimeChannel | null>(null)
   const [reviews, setReviews] = useState<ProductReview[]>(() => {
     try {
@@ -329,50 +354,96 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     document.body.classList.toggle('lang-bn', l === 'bn')
   }, [])
 
-  const priceFor = useCallback((p: Product, grade: Grade) => {
-    if (grade === 'A') return p.pA
-    if (grade === 'B') return p.pB
-    return p.pC
-  }, [])
+  const priceFor = useCallback(
+    (p: Product, grade: Grade, tierOverride?: CustomerTier) => {
+      let base = grade === 'A' ? p.pA : grade === 'C' ? p.pC : p.pB
+      base = base || p.pB || p.pA || 0
+      const activeTier = tierOverride || user?.tier || 'regular'
+      return calculateTierDiscount(base, activeTier)
+    },
+    [user?.tier],
+  )
 
   useEffect(() => {
     setCart(getCart(user?.id))
   }, [user?.id])
 
-  const addToCart = useCallback((productId: string, grade: Grade, qty = 1, weightMultiplier = 1, weightLabel?: string) => {
-    const p = products.find((x) => x.id === productId)
-    if (p && !p.inStock) return
+  const addToCart = useCallback(
+    (productId: string, grade: Grade, qty = 1, weightMultiplier = 1, weightLabel?: string) => {
+      const p = products.find((x) => x.id === productId)
+      if (p && !p.inStock) return
 
-    const current = getCart(user?.id)
-    const mult = weightMultiplier || 1
-    const label = weightLabel || (mult === 1 ? p?.unit || '1 kg' : mult === 0.25 ? '250g' : mult === 0.5 ? '500g' : `${mult}kg`)
-    const idx = current.findIndex((c) => c.productId === productId && c.grade === grade && (c.weightMultiplier || 1) === mult)
+      const current = getCart(user?.id)
+      const mult = weightMultiplier || 1
+      const label =
+        weightLabel || (mult === 1 ? p?.unit || '1 kg' : mult === 0.25 ? '250g' : mult === 0.5 ? '500g' : `${mult}kg`)
+      const idx = current.findIndex(
+        (c) => c.productId === productId && c.grade === grade && (c.weightMultiplier || 1) === mult,
+      )
 
-    let next: CartItem[]
-    if (idx >= 0) {
-      next = current.map((c, i) => (i === idx ? { ...c, qty: c.qty + qty } : c))
-    } else {
-      next = [...current, { productId, grade, qty, weightMultiplier: mult, weightLabel: label }]
-    }
-    saveCart(next, user?.id)
-    setCart(next)
-  }, [products, user?.id])
+      const existingQty = idx >= 0 ? current[idx].qty : 0
+      const targetQty = existingQty + qty
+      const totalKg = targetQty * mult
 
-  const updateCartQty = useCallback((productId: string, grade: Grade, qty: number, weightMultiplier = 1) => {
-    const mult = weightMultiplier || 1
-    const next = getCart(user?.id)
-      .map((c) => (c.productId === productId && c.grade === grade && (c.weightMultiplier || 1) === mult ? { ...c, qty } : c))
-      .filter((c) => c.qty > 0)
-    saveCart(next, user?.id)
-    setCart(next)
-  }, [user?.id])
+      if (totalKg > MAX_VEGETABLE_QTY_KG) {
+        showToast(
+          lang === 'bn'
+            ? 'যেকোনো সবজি সর্বোচ্চ ১০ কেজি পর্যন্ত অর্ডার করা যাবে। পাইকারি প্রয়োজনে যোগাযোগ করুন।'
+            : 'Maximum 10 kg per vegetable. For bulk orders, please contact shop owner.',
+          '⚠️',
+        )
+        return
+      }
 
-  const removeFromCart = useCallback((productId: string, grade: Grade, weightMultiplier = 1) => {
-    const mult = weightMultiplier || 1
-    const next = getCart(user?.id).filter((c) => !(c.productId === productId && c.grade === grade && (c.weightMultiplier || 1) === mult))
-    saveCart(next, user?.id)
-    setCart(next)
-  }, [user?.id])
+      let next: CartItem[]
+      if (idx >= 0) {
+        next = current.map((c, i) => (i === idx ? { ...c, qty: targetQty } : c))
+      } else {
+        next = [...current, { productId, grade, qty: targetQty, weightMultiplier: mult, weightLabel: label }]
+      }
+      saveCart(next, user?.id)
+      setCart(next)
+    },
+    [products, user?.id, lang],
+  )
+
+  const updateCartQty = useCallback(
+    (productId: string, grade: Grade, qty: number, weightMultiplier = 1) => {
+      const mult = weightMultiplier || 1
+      const totalKg = qty * mult
+
+      if (totalKg > MAX_VEGETABLE_QTY_KG) {
+        showToast(
+          lang === 'bn'
+            ? 'যেকোনো সবজি সর্বোচ্চ ১০ কেজি পর্যন্ত অর্ডার করা যাবে। পাইকারি প্রয়োজনে যোগাযোগ করুন।'
+            : 'Maximum 10 kg per vegetable. For bulk orders, please contact shop owner.',
+          '⚠️',
+        )
+        return
+      }
+
+      const next = getCart(user?.id)
+        .map((c) =>
+          c.productId === productId && c.grade === grade && (c.weightMultiplier || 1) === mult ? { ...c, qty } : c,
+        )
+        .filter((c) => c.qty > 0)
+      saveCart(next, user?.id)
+      setCart(next)
+    },
+    [user?.id, lang],
+  )
+
+  const removeFromCart = useCallback(
+    (productId: string, grade: Grade, weightMultiplier = 1) => {
+      const mult = weightMultiplier || 1
+      const next = getCart(user?.id).filter(
+        (c) => !(c.productId === productId && c.grade === grade && (c.weightMultiplier || 1) === mult),
+      )
+      saveCart(next, user?.id)
+      setCart(next)
+    },
+    [user?.id],
+  )
 
   const clearCart = useCallback(() => {
     saveCart([], user?.id)
@@ -404,7 +475,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!p) return null
           const weight = c.weightMultiplier || 1
           const unitPrice = Math.round(priceFor(p, c.grade) * weight)
-          const weightLabel = c.weightLabel || (weight === 1 ? p.unit : weight === 0.25 ? '250g' : weight === 0.5 ? '500g' : `${weight}kg`)
+          const weightLabel =
+            c.weightLabel || (weight === 1 ? p.unit : weight === 0.25 ? '250g' : weight === 0.5 ? '500g' : `${weight}kg`)
           return {
             productId: c.productId,
             name: weightLabel && weightLabel !== p.unit ? `${p.name} (${weightLabel})` : p.name,
@@ -424,12 +496,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (subtotal < MIN_ORDER_AMOUNT) return null
       const { fee: deliveryFee } = calcDeliveryFee(opts.pin, opts.zones)
       const total = Math.max(0, subtotal + deliveryFee - (opts.discountAmount || 0))
+      
+      const isKhata = opts.paymentType === 'khata'
       const isFull = opts.paymentType === 'full'
-      const advanceAmount = isFull ? total : (opts.advanceAmount != null ? opts.advanceAmount : Math.ceil(total * 0.5))
+      const advanceAmount = isKhata ? 0 : isFull ? total : opts.advanceAmount != null ? opts.advanceAmount : Math.ceil(total * 0.5)
 
       const now = new Date().toISOString()
       const order: Order = {
-        id: crypto.randomUUID(),   // UUID required by DB — uid('ord') was generating invalid IDs
+        id: crypto.randomUUID(),
         userId: user.id,
         userName: user.name,
         userEmail: user.email,
@@ -439,10 +513,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         discountAmount: opts.discountAmount || 0,
         total,
         advanceAmount,
-        paymentType: isFull ? 'full' : 'advance',
-        utr: opts.utr.trim().toUpperCase(),
-        utrVerified: false,
-        status: 'pending',
+        paymentType: opts.paymentType || (isFull ? 'full' : 'advance'),
+        isKhataOrder: isKhata,
+        utr: isKhata ? 'KHATA-DEBIT' : opts.utr.trim().toUpperCase(),
+        utrVerified: isKhata,
+        status: isKhata ? 'confirmed' : 'pending',
         address: opts.address.trim(),
         phone: opts.phone.trim(),
         pin: opts.pin.replace(/\D/g, ''),
@@ -451,6 +526,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         geoLng: opts.geoLng,
         createdAt: now,
         updatedAt: now,
+      }
+
+      if (isKhata) {
+        recordKhataTransaction(user.id, 'order_debit', total, `Order #${order.id.slice(-6)}`, order.id, 'Khata Checkout')
+        setKhataEntries(getStoredKhataEntries())
       }
 
       if (cloud) {
@@ -470,10 +550,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
         saveCart([], user.id)
         setCart([])
-        // Optimistically prepend the order so it shows immediately — don't wait for refresh
         setOrders((prev) => [order, ...prev])
-        // Best-effort background sync; failures are safe since we already set state above
-        refreshCloud().catch(() => { /* ignore */ })
+        refreshCloud().catch(() => {})
         return order
       }
 
@@ -490,7 +568,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCart([])
       return order
     },
-    [user, cloud, products, priceFor, refreshCloud],
+    [user, cloud, products, priceFor, refreshCloud, lang],
   )
 
   const reorderFromOrder = useCallback(
@@ -650,11 +728,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const updateOrderStatus = useCallback(
-    async (id: string, status: OrderStatus) => {
+    async (id: string, status: OrderStatus, rejectionReason?: string) => {
       let prevSnapshot: Order[] = []
       setOrders((prev) => {
         prevSnapshot = prev
-        return prev.map((o) => (o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o))
+        return prev.map((o) => (o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o))
       })
 
       if (cloud) {
@@ -668,12 +746,120 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       } else {
         const next = getOrders().map((o) =>
-          o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o,
+          o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o,
         )
         saveOrders(next)
       }
     },
     [cloud],
+  )
+
+  const getUserKhataBalance = useCallback(
+    (userId?: string) => {
+      const target = userId || user?.id
+      if (!target) return 0
+      return calculateUserKhataBalance(target, khataEntries)
+    },
+    [user?.id, khataEntries],
+  )
+
+  const addKhataTransaction = useCallback(
+    (
+      userId: string,
+      type: 'order_debit' | 'payment_credit' | 'adjustment',
+      amount: number,
+      notes?: string,
+      orderId?: string,
+    ) => {
+      recordKhataTransaction(userId, type, amount, notes, orderId, user?.name || 'GreenVest Staff')
+      setKhataEntries(getStoredKhataEntries())
+    },
+    [user?.name],
+  )
+
+  const addPromotionalDeal = useCallback(
+    async (deal: Omit<PromotionalDeal, 'id' | 'createdAt'>) => {
+      const newDeal: PromotionalDeal = {
+        ...deal,
+        id: `deal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        createdAt: new Date().toISOString(),
+      }
+      setPromotionalDeals((prev) => {
+        const next = [newDeal, ...prev]
+        saveStoredPromotionalDeals(next)
+        return next
+      })
+    },
+    [],
+  )
+
+  const updatePromotionalDeal = useCallback(
+    async (updatedDeal: PromotionalDeal) => {
+      setPromotionalDeals((prev) => {
+        const next = prev.map((d) => (d.id === updatedDeal.id ? updatedDeal : d))
+        saveStoredPromotionalDeals(next)
+        return next
+      })
+    },
+    [],
+  )
+
+  const deletePromotionalDeal = useCallback(
+    async (dealId: string) => {
+      setPromotionalDeals((prev) => {
+        const next = prev.filter((d) => d.id !== dealId)
+        saveStoredPromotionalDeals(next)
+        return next
+      })
+    },
+    [],
+  )
+
+  const togglePromotionalDeal = useCallback(
+    async (dealId: string, isActive: boolean) => {
+      setPromotionalDeals((prev) => {
+        const next = prev.map((d) => (d.id === dealId ? { ...d, isActive } : d))
+        saveStoredPromotionalDeals(next)
+        return next
+      })
+    },
+    [],
+  )
+
+  const autoCancelStaleOrders = useCallback(
+    async (timeoutHours = 2): Promise<number> => {
+      const staleOrders = orders.filter((o) => isOrderStalePending(o, timeoutHours))
+      if (staleOrders.length === 0) return 0
+
+      const staleIds = staleOrders.map((o) => o.id)
+      const reason = `Auto-cancelled: Payment unverified after ${timeoutHours} hours`
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          staleIds.includes(o.id)
+            ? { ...o, status: 'cancelled' as OrderStatus, rejectionReason: reason, updatedAt: new Date().toISOString() }
+            : o,
+        ),
+      )
+
+      if (cloud) {
+        try {
+          await bulkUpdateOrderStatusApi(staleIds, 'cancelled')
+        } catch (err) {
+          console.error('Failed to cloud sync auto-cancelled stale orders', err)
+        }
+      } else {
+        const next = getOrders().map((o) =>
+          staleIds.includes(o.id)
+            ? { ...o, status: 'cancelled' as OrderStatus, rejectionReason: reason, updatedAt: new Date().toISOString() }
+            : o,
+        )
+        saveOrders(next)
+      }
+
+      return staleOrders.length
+    },
+    [orders, cloud],
   )
 
   const bulkUpdateOrderStatus = useCallback(
@@ -953,6 +1139,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addReview,
       getProductRating,
       getReviewsForProduct,
+      khataEntries,
+      getUserKhataBalance,
+      addKhataTransaction,
+      shiftStatus,
+      extendedDeliveryNotice,
+      setExtendedDeliveryNotice: (notice: string | null) => {
+        setExtendedDeliveryNotice(notice)
+        try {
+          if (notice) localStorage.setItem('gv_extended_delivery_notice', notice)
+          else localStorage.removeItem('gv_extended_delivery_notice')
+        } catch {}
+      },
+      promotionalDeals,
+      addPromotionalDeal,
+      updatePromotionalDeal,
+      deletePromotionalDeal,
+      togglePromotionalDeal,
+      autoCancelStaleOrders,
     }),
     [
       products,
@@ -997,6 +1201,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addReview,
       getProductRating,
       getReviewsForProduct,
+      khataEntries,
+      getUserKhataBalance,
+      addKhataTransaction,
+      shiftStatus,
+      extendedDeliveryNotice,
+      promotionalDeals,
+      addPromotionalDeal,
+      updatePromotionalDeal,
+      deletePromotionalDeal,
+      togglePromotionalDeal,
+      autoCancelStaleOrders,
     ],
   )
 

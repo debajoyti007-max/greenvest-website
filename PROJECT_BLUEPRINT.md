@@ -39,9 +39,11 @@
 | `/auth` | Public | `src/pages/Auth.tsx` | 10-digit Phone / Email + 4-digit PIN login, signup, forgot PIN |
 | `/seller` | Seller, Admin | `src/pages/seller/SellerHome.tsx` | Daily mandi procurement sheet, revenue metrics, inventory |
 | `/seller/orders` | Seller, Admin | `src/pages/seller/SellerOrders.tsx` | Order verification, UTR confirmation, pack & dispatch |
-| `/seller/products`| Seller, Admin | `src/pages/seller/SellerProducts.tsx`| Daily mandi price updates (Grade A/B/C), out-of-stock toggles |
-| `/rider` | Rider, Admin | `src/pages/RiderView.tsx` | Daily delivery manifest, cash collection balance, mark delivered |
-| `/admin` | Admin | `src/pages/admin/AdminUsers.tsx` | Staff role assignments, customer blocklist, system cleaner |
+| `/seller/products`| Seller, Admin | `src/pages/seller/SellerProducts.tsx`| Daily mandi price updates (Grade A/B/C toggles), MRP override, out-of-stock toggles |
+| `/seller/deals`   | Seller, Admin | `src/pages/seller/SellerDeals.tsx`    | Promotional Offers & Banner Manager (Custom headlines, gradients, coupon codes, toggles) |
+| `/seller/khata`   | Seller, Admin | `src/pages/seller/SellerKhata.tsx`    | Digital Ledger / Khata Book management, dues tracker, 1-click WhatsApp payment reminders |
+| `/rider`          | Rider, Admin  | `src/pages/RiderView.tsx`            | Daily delivery manifest, cash collection balance, mark delivered |
+| `/admin`          | Admin         | `src/pages/admin/AdminUsers.tsx`     | Staff role assignments, customer blocklist, system cleaner |
 
 ---
 
@@ -101,6 +103,21 @@
 8. **Persistent Announcements & PWA (`CustomerNotificationBanner.tsx`, `PwaInstallPrompt.tsx`):**
    * Notifications hydrate from Supabase `notifications` table on app mount and show top banner.
    * PWA prompt detects Android/iOS standalone state and triggers native installation.
+9. **The 9 Client Custom Specifications:**
+   * **Feature 1: Offers & Strikethrough Pricing:** Promotional `DealsBanner` with coupon copy + automatic Market MRP calculation (`~~₹MRP~~ ₹SellingPrice` with `[X% OFF]`).
+   * **Feature 2: Dynamic / Tiered Pricing:** Customer tiers (`regular`, `vip` = 5% off, `wholesale` = 12% off) configured by seller.
+   * **Feature 3: Customizable Admin Options (A, B, C):** Seller toggles grade visibility per product on demand from `/seller/products`.
+   * **Feature 4: Serviceable Pincodes:** Home delivery strictly whitelisted to `721632`, `721633`, `721643`. All other areas directed to Store Pickup (₹0).
+   * **Feature 5: Estimated Delivery Window:** 12–24h standard delivery window with dynamic shift ETA notices.
+   * **Feature 6: Digital Ledger ("Khata Book"):** Customer credit ledger, dues tracking, balance ledger, 1-click WhatsApp payment reminders with UPI link, and customer passbook in `/profile`.
+   * **Feature 7: Location-Based Order Acceptance Workflow:** Seller inspects customer address, GPS Google Maps link, PIN, and distance before clicking "Accept & Confirm" or "Reject / Out of Route" (with reason).
+   * **Feature 8: Store Operating Hours:** Morning Shift (7:00 AM – 12:00 PM) & Evening Shift (4:00 PM – 9:00 PM) with live `ShiftBadge`.
+   * **Feature 9: Quantity Limits & Bulk Order Notice:** Max 10 kg limit per vegetable; $>10$ kg prompts notice with 1-tap WhatsApp bulk inquiry.
+
+10. **Auto Smart Remove Engine (`deals.ts`, `business.ts`, `SellerOrders.tsx`, `SellerKhata.tsx`):**
+    * **Feature 1 (Auto-Expiry for Promotional Deals):** Dynamic deals support smart expiry presets (`today_midnight`, `24h`, `3d`, `7d`, or custom datetime). Expired deals auto-remove from storefront carousel in real time, show live countdown timers, and move to an "Expired / Archived" tab in `/seller/deals` with 1-click renewal.
+    * **Feature 4 (Stale Pending Orders Auto-Cancel):** Identifies orders in `pending` unverified status $>2$ hours old. Alerts seller and provides 1-tap `autoCancelStaleOrders(2)` to release produce inventory.
+    * **Feature 5 (Zero-Balance Khata Smart Filter):** Auto-filters settled accounts (₹0 dues) out of the active debts dashboard with instant toggle tabs (`🔴 Active Dues Only`, `🟢 Settled (₹0)`, `👥 All`).
 
 ---
 
@@ -111,6 +128,8 @@
 | `gv_session_uid` | `string` (UUID / ID) | Active authenticated user session identifier |
 | `gv_cart_items` | `JSON Array<CartItem>` | Offline persistent cart items |
 | `gv_orders_cache` | `JSON Array<Order>` | Cached user orders (capped at 50 latest) |
+| `gv_promotional_deals_v1` | `JSON Array<PromotionalDeal>` | Dynamic seller promotional banners & expiry timestamps |
+| `gv_khata_ledger_v1` | `JSON Array<KhataEntry>` | Customer digital ledger transactions & balance history |
 | `gv_lang` | `'bn' | 'en'` | Active language selection |
 | `gv_last_order_ts`| `timestamp string` | Client-side 30s re-order debounce |
 
@@ -120,7 +139,7 @@
 
 Before completing any task or committing changes:
 ```bash
-# 1. Run full test suite (37 tests across 13 suites)
+# 1. Run full test suite (59 tests across 19 suites)
 npm test
 
 # 2. Run TypeScript check and Vite production build
@@ -135,10 +154,10 @@ git push origin master
 ---
 
 ## 🚀 8. Active Roadmap & Future Improvements
-* [ ] **PWA / Add to Home Screen** support with offline manifest & app icons.
-* [ ] **Prep / Cut Customizations** for fresh fish and vegetables (e.g. Curry Cut, Stem Removed).
-* [ ] **Thermal POS Bill Printing** (58mm/80mm format for delivery staff).
-* [ ] **Web Push / SMS Notifications** on order status changes.
+* [x] **PWA / Add to Home Screen** support with offline manifest & app icons.
+* [x] **Prep / Cut Customizations** for fresh fish and vegetables.
+* [x] **Thermal POS Bill Printing** (58mm/80mm format for delivery staff).
+* [x] **Auto Smart Remove System** for Deals, Stale Orders, and Settled Khata accounts.
 
 ---
-*Last Updated: 2026-08-25 by Antigravity Agent*
+*Last Updated: 2026-08-29 by Antigravity Agent*

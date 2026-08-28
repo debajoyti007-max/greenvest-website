@@ -100,6 +100,12 @@ export default function Layout() {
                     <NavLink to="/seller" onClick={closeMenu}>
                       {t(lang, 'seller')}
                     </NavLink>
+                    <NavLink to="/seller/deals" onClick={closeMenu}>
+                      {lang === 'bn' ? '🎟️ অফার' : '🎟️ Deals'}
+                    </NavLink>
+                    <NavLink to="/seller/khata" onClick={closeMenu}>
+                      {lang === 'bn' ? '📒 খাতা বুক' : '📒 Khata'}
+                    </NavLink>
                     <NavLink to="/seller/customers" onClick={closeMenu}>
                       {lang === 'bn' ? 'কাস্টমার' : 'Customers'}
                     </NavLink>
