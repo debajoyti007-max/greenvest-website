@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import CartBar from './CartBar'
 import ConfigBanner from './ConfigBanner'
 import NetworkStatus from './NetworkStatus'
@@ -19,6 +19,7 @@ export default function Layout() {
   const { user, logout } = useAuth()
   const { cartCount, lang, setLang } = useStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
 
   const handleLogout = () => {
@@ -65,7 +66,7 @@ export default function Layout() {
             {user?.role === 'rider' ? (
               <>
                 <NavLink to="/rider" onClick={closeMenu}>
-                  {lang === 'bn' ? 'রাইডার ভিউ' : 'Rider View'}
+                  {lang === 'bn' ? '🛵 রাইডার ভিউ' : '🛵 Rider View'}
                 </NavLink>
                 <NavLink to="/profile" onClick={closeMenu}>
                   {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
@@ -96,27 +97,22 @@ export default function Layout() {
                   </NavLink>
                 )}
                 {(user?.role === 'seller' || user?.role === 'admin') && (
-                  <>
-                    <NavLink to="/seller" onClick={closeMenu}>
-                      {t(lang, 'seller')}
-                    </NavLink>
-                    <NavLink to="/seller/deals" onClick={closeMenu}>
-                      {lang === 'bn' ? '🎟️ অফার' : '🎟️ Deals'}
-                    </NavLink>
-                    <NavLink to="/seller/khata" onClick={closeMenu}>
-                      {lang === 'bn' ? '📒 খাতা বুক' : '📒 Khata'}
-                    </NavLink>
-                    <NavLink to="/seller/customers" onClick={closeMenu}>
-                      {lang === 'bn' ? 'কাস্টমার' : 'Customers'}
-                    </NavLink>
-                    <NavLink to="/rider" onClick={closeMenu}>
-                      {lang === 'bn' ? 'রাইডার' : 'Rider'}
-                    </NavLink>
-                  </>
-                )}
-                {user?.role === 'admin' && (
-                  <NavLink to="/admin" onClick={closeMenu}>
-                    {t(lang, 'admin')}
+                  <NavLink
+                    to="/seller"
+                    onClick={closeMenu}
+                    style={{
+                      background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
+                      color: '#ffffff',
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
+                    }}
+                  >
+                    💼 {user.role === 'admin' ? (lang === 'bn' ? 'অ্যাডমিন হাব' : 'Admin Hub') : (lang === 'bn' ? 'সেলার হাব' : 'Seller Hub')}
                   </NavLink>
                 )}
               </>
@@ -155,6 +151,60 @@ export default function Layout() {
           </div>
         </div>
       </header>
+
+      {/* 💼 Dedicated Staff Navigation Strip (Shows on seller/admin routes) */}
+      {(user?.role === 'seller' || user?.role === 'admin') &&
+        (location.pathname.startsWith('/seller') ||
+          location.pathname.startsWith('/admin') ||
+          location.pathname.startsWith('/rider')) && (
+          <div
+            style={{
+              background: '#0f172a',
+              borderBottom: '1px solid #334155',
+              padding: '6px 1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              overflowX: 'auto',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {[
+              { path: '/seller', label: lang === 'bn' ? '📊 ড্যাশবোর্ড' : '📊 Dashboard', end: true },
+              { path: '/seller/orders', label: lang === 'bn' ? '📦 অর্ডার' : '📦 Orders' },
+              { path: '/seller/deals', label: lang === 'bn' ? '🎟️ অফার ব্যানার' : '🎟️ Deals Banner' },
+              { path: '/seller/khata', label: lang === 'bn' ? '📒 খাতা বুক' : '📒 Khata Book' },
+              { path: '/seller/products', label: lang === 'bn' ? '🥬 প্রোডাক্ট ও দাম' : '🥬 Products & Rates' },
+              { path: '/seller/customers', label: lang === 'bn' ? '👥 কাস্টমার' : '👥 Customers' },
+              { path: '/rider', label: lang === 'bn' ? '🛵 রাইডার' : '🛵 Rider' },
+              ...(user.role === 'admin' ? [{ path: '/admin', label: lang === 'bn' ? '⚙️ অ্যাডমিন' : '⚙️ Admin' }] : []),
+            ].map((tab) => {
+              const active = tab.end
+                ? location.pathname === tab.path
+                : location.pathname.startsWith(tab.path)
+              return (
+                <Link
+                  key={tab.path}
+                  to={tab.path}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    background: active ? '#16a34a' : 'rgba(255,255,255,0.08)',
+                    color: active ? '#ffffff' : '#cbd5e1',
+                    border: active ? '1px solid #86efac' : '1px solid transparent',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {tab.label}
+                </Link>
+              )
+            })}
+          </div>
+        )}
 
       <main className="main-content">
         <Outlet />

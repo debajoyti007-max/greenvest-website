@@ -140,6 +140,41 @@ function ProductCard({
             ⚡ {discountPercent}% OFF
           </span>
         )}
+
+        {/* Rating chip on photo corner */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenReviews(p)
+          }}
+          aria-label={`${ratingData.count} reviews, average rating ${ratingData.avg}`}
+          title={lang === 'bn' ? 'কাস্টমার রিভিউ ও রেটিং দেখুন' : 'View Customer Reviews & Ratings'}
+          style={{
+            position: 'absolute',
+            top: '0.6rem',
+            right: '0.6rem',
+            background: 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(4px)',
+            border: '1px solid rgba(0,0,0,0.08)',
+            padding: '2px 7px',
+            borderRadius: '12px',
+            fontSize: '0.72rem',
+            fontWeight: 700,
+            color: '#1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+            cursor: 'pointer',
+            zIndex: 2,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+          }}
+        >
+          <span style={{ color: '#eab308' }}>★</span>
+          <span>{ratingData.avg.toFixed(1)}</span>
+          <span style={{ color: '#64748b', fontSize: '0.68rem' }}>({ratingData.count})</span>
+        </button>
+
         {!p.inStock && <span className="stock-badge">{t(lang, 'outOfStock')}</span>}
         {low && (
           <span className="stock-badge low-badge">
@@ -153,53 +188,21 @@ function ProductCard({
         )}
       </div>
 
-      <div className="product-info">
-        {/* Dual Bengali + English Name & Prominent Price Badge */}
-        <div className="product-title-dual-row">
-          <div className="product-title-dual">
-            <h3 className="product-bn-name">{p.bnName}</h3>
-            <span className="product-en-name">{p.name}</span>
-          </div>
-          <div className="product-price-badge-top" aria-label={`Price: ₹${calculatedPrice}`}>
-            {calculatedMrp > calculatedPrice && (
-              <span className="price-strikethrough-val" style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: '0.85rem', marginRight: '4px', fontWeight: 600 }}>
-                ₹{calculatedMrp}
-              </span>
-            )}
-            <span className="price-bold-val" style={{ color: '#14532d', fontSize: '1.2rem', fontWeight: 800 }}>₹{calculatedPrice}</span>
-            <span className="price-sub-unit">
-              /{weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
-            </span>
-            {discountPercent > 0 && (
-              <span className="discount-pill-tag" style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.72rem', fontWeight: 800, padding: '2px 7px', borderRadius: '6px', marginLeft: '6px', border: '1px solid #86efac' }}>
-                {discountPercent}% OFF
-              </span>
-            )}
-          </div>
+      <div className="product-info" style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '0.85rem' }}>
+        {/* Product Title & Category */}
+        <div style={{ marginBottom: '0.4rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#14532d', lineHeight: 1.25 }}>
+            {p.bnName}
+          </h3>
+          <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>
+            {p.name} · {catLabel(lang, p.category)}
+          </span>
         </div>
 
-        <div className="product-cat-rating-row">
-          <span className="product-cat-subtle">{catLabel(lang, p.category)}</span>
-          <button
-            type="button"
-            className="product-rating-chip"
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpenReviews(p)
-            }}
-            aria-label={`${ratingData.count} reviews, average rating ${ratingData.avg}`}
-            title={lang === 'bn' ? 'কাস্টমার রিভিউ ও রেটিং দেখুন' : 'View Customer Reviews & Ratings'}
-          >
-            <span className="star-icon-gold">★</span>
-            <span className="rating-score-val">{ratingData.avg.toFixed(1)}</span>
-            <span className="rating-count-sub">({ratingData.count})</span>
-          </button>
-        </div>
-
-        {/* Grade selector chips (Option A, B, C toggled on demand) */}
+        {/* Grade selector chips (Option A, B, C toggled on demand by Seller) */}
         {activeGrades.length > 1 && (
-          <div className="grade-selector-glass" role="radiogroup" aria-labelledby={`grade-lbl-${p.id}`}>
-            <span className="chip-group-label" id={`grade-lbl-${p.id}`}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '2px 0 6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>
               {lang === 'bn' ? 'গ্রেড:' : 'Grade:'}
             </span>
             {activeGrades.map((g) => (
@@ -208,7 +211,7 @@ function ProductCard({
                 type="button"
                 className={`grade-chip-glass ${cardGrade === g ? 'active' : ''}`}
                 onClick={() => setCardGrade(g)}
-                aria-label={`Grade ${g}`}
+                style={{ padding: '2px 8px', fontSize: '0.72rem', borderRadius: '6px' }}
                 aria-pressed={cardGrade === g}
               >
                 Grade {g}
@@ -219,7 +222,7 @@ function ProductCard({
               className="info-btn-glass"
               onClick={() => setShowGradeInfo(!showGradeInfo)}
               title="Quality grade info"
-              aria-label="Quality grade information"
+              style={{ fontSize: '0.75rem', padding: '1px 4px' }}
             >
               ℹ️
             </button>
@@ -227,15 +230,15 @@ function ProductCard({
         )}
 
         {showGradeInfo && (
-          <p className="grade-desc-glass">
+          <p className="grade-desc-glass" style={{ margin: '0 0 6px', fontSize: '0.75rem' }}>
             {gradeLabels[cardGrade][lang]}
           </p>
         )}
 
-        {/* Quick Weight Chips (for kg items) with accessible group label */}
+        {/* Quick Weight Chips (for kg items) */}
         {isKg && (
-          <div className="weight-chips-row" role="radiogroup" aria-labelledby={`weight-lbl-${p.id}`}>
-            <span className="chip-group-label" id={`weight-lbl-${p.id}`}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '2px 0 8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>
               {lang === 'bn' ? 'ওজন:' : 'Size:'}
             </span>
             {[
@@ -249,6 +252,7 @@ function ProductCard({
                 type="button"
                 className={`weight-chip ${weightMultiplier === chip.val ? 'active' : ''}`}
                 onClick={() => setWeightMultiplier(chip.val)}
+                style={{ padding: '2px 8px', fontSize: '0.75rem', borderRadius: '6px' }}
                 aria-pressed={weightMultiplier === chip.val}
               >
                 {chip.label}
@@ -257,76 +261,97 @@ function ProductCard({
           </div>
         )}
 
-        {/* Price Row with Glass-Mono tag & Savings */}
-        <div className="price-row-glass" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="price-mono-group" style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            {calculatedMrp > calculatedPrice && (
-              <span style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: '0.85rem' }}>
-                ₹{calculatedMrp}
-              </span>
-            )}
-            <span className="price-mono-val" style={{ fontSize: '1.15rem', fontWeight: 800, color: '#15803d' }}>₹{calculatedPrice}</span>
-            <span className="price-mono-unit">
-              / {weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
-            </span>
-          </div>
-          {calculatedMrp > calculatedPrice && (
-            <span style={{ fontSize: '0.76rem', color: '#15803d', fontWeight: 700, background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: '6px' }}>
-              {lang === 'bn' ? `সাশ্রয় ₹${calculatedMrp - calculatedPrice} (${discountPercent}%)` : `Save ₹${calculatedMrp - calculatedPrice} (${discountPercent}%)`}
-            </span>
-          )}
-        </div>
-
         {/* 10 kg Limit Warning & Bulk Order CTA */}
         {isBulkCapReached && (
-          <div className="bulk-cap-alert" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '6px 10px', margin: '6px 0', fontSize: '0.75rem', color: '#92400e' }}>
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '4px 8px', margin: '4px 0 8px', fontSize: '0.72rem', color: '#92400e' }}>
             <span>⚠️ {lang === 'bn' ? 'সর্বোচ্চ ১০ কেজি সীমা পৌঁছেছে।' : 'Max 10 kg limit reached.'}</span>
             <a
               href={bulkOrderWhatsAppUrl(p.name, lang)}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ display: 'block', color: '#15803d', fontWeight: 700, marginTop: '3px', textDecoration: 'underline' }}
+              style={{ display: 'block', color: '#15803d', fontWeight: 700, marginTop: '2px', textDecoration: 'underline' }}
             >
-              💬 {lang === 'bn' ? '১০ কেজির বেশি অর্ডারে দোকানদারে WhatsApp করুন' : 'For >10 kg, WhatsApp shop owner'}
+              💬 {lang === 'bn' ? '১০ কেজির বেশি অর্ডারে WhatsApp করুন' : 'For >10 kg, WhatsApp shop owner'}
             </a>
           </div>
         )}
 
-        {/* Action Controls */}
-        {cartQty > 0 ? (
-          <div className="qty-controls-glass">
-            <button
-              type="button"
-              className="qty-btn"
-              onClick={() => onUpdateQty(p.id, cardGrade, cartQty - 1, weightMultiplier)}
-              aria-label="Decrease quantity"
-            >
-              −
-            </button>
-            <span className="qty-val-mono">{cartQty}</span>
-            <button
-              type="button"
-              className="qty-btn"
-              disabled={isBulkCapReached}
-              onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1, weightMultiplier)}
-              aria-label="Increase quantity"
-            >
-              +
-            </button>
+        {/* Unified Bottom Price & Action Footer (NO DUPLICATE PRICES!) */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px' }}>
+              <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#14532d' }}>
+                ₹{calculatedPrice}
+              </span>
+              {calculatedMrp > calculatedPrice && (
+                <span style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '0.82rem', fontWeight: 500 }}>
+                  ₹{calculatedMrp}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+              /{weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
+              {calculatedMrp > calculatedPrice && (
+                <span style={{ color: '#16a34a', marginLeft: '4px', fontWeight: 700 }}>
+                  · {lang === 'bn' ? `সাশ্রয় ₹${calculatedMrp - calculatedPrice}` : `Save ₹${calculatedMrp - calculatedPrice}`}
+                </span>
+              )}
+            </div>
           </div>
-        ) : (
-          <button
-            type="button"
-            className="btn-add-glass"
-            disabled={!p.inStock}
-            onClick={() => {
-              const label = weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`
-              onAdd(p, cardGrade, 1, weightMultiplier, label)
-            }}
-          >
-            + {t(lang, 'addToCart')}
-          </button>
-        )}
+
+          <div>
+            {cartQty > 0 ? (
+              <div style={{ display: 'inline-flex', alignItems: 'center', background: '#166534', color: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 6px rgba(22, 101, 52, 0.3)' }}>
+                <button
+                  type="button"
+                  onClick={() => onUpdateQty(p.id, cardGrade, cartQty - 1, weightMultiplier)}
+                  style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', padding: '4px 10px' }}
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <span style={{ fontWeight: 800, fontSize: '0.88rem', minWidth: '20px', textAlign: 'center' }}>
+                  {cartQty}
+                </span>
+                <button
+                  type="button"
+                  disabled={isBulkCapReached}
+                  onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1, weightMultiplier)}
+                  style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', padding: '4px 10px' }}
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={!p.inStock}
+                onClick={() => {
+                  const label = weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`
+                  onAdd(p, cardGrade, 1, weightMultiplier, label)
+                }}
+                style={{
+                  background: p.inStock ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : '#cbd5e1',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 16px',
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  cursor: p.inStock ? 'pointer' : 'not-allowed',
+                  boxShadow: p.inStock ? '0 2px 8px rgba(22, 163, 74, 0.3)' : 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {p.inStock ? (lang === 'bn' ? '+ যোগ করুন' : '+ ADD') : t(lang, 'outOfStock')}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </article>
   )
