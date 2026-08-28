@@ -430,12 +430,48 @@ export default function SellerProducts() {
                         <button type="button" className="btn btn-ghost" style={{padding: '2px 6px', fontSize: '12px'}} onClick={() => setQuickPriceId(null)}>X</button>
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span>₹{p.pA} / ₹{p.pB} / ₹{p.pC}</span>
-                        <button type="button" className="btn btn-ghost" style={{padding: '2px 6px', fontSize: '12px'}} onClick={() => {
-                          setQuickPriceId(p.id)
-                          setQuickPrices({ pA: p.pA, pB: p.pB, pC: p.pC })
-                        }}>Quick Price</button>
+                      <div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>₹{p.pA} / ₹{p.pB} / ₹{p.pC}</span>
+                          <button type="button" className="btn btn-ghost" style={{padding: '2px 6px', fontSize: '11px'}} onClick={() => {
+                            setQuickPriceId(p.id)
+                            setQuickPrices({ pA: p.pA, pB: p.pB, pC: p.pC })
+                          }}>✏️ Price</button>
+                        </div>
+                        {/* 1-Tap Grade Toggles */}
+                        <div style={{ display: 'flex', gap: '4px', marginTop: '4px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Grades:</span>
+                          {(['A', 'B', 'C'] as Grade[]).map((g) => {
+                            const available: Grade[] = (p.availableGrades && p.availableGrades.length > 0) ? p.availableGrades : ['A', 'B', 'C']
+                            const isEn = available.includes(g)
+                            return (
+                              <button
+                                key={g}
+                                type="button"
+                                onClick={async () => {
+                                  let next: Grade[] = isEn ? available.filter((x) => x !== g) : [...available, g]
+                                  if (next.length === 0) next = [g]
+                                  await updateProduct({ ...p, availableGrades: next })
+                                  showToast(isEn ? `Grade ${g} disabled for ${p.name}` : `Grade ${g} enabled for ${p.name}`, isEn ? '✕' : '✓')
+                                }}
+                                style={{
+                                  padding: '1px 5px',
+                                  fontSize: '0.7rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  background: isEn ? '#dcfce7' : '#f1f5f9',
+                                  color: isEn ? '#15803d' : '#94a3b8',
+                                  borderColor: isEn ? '#86efac' : '#cbd5e1',
+                                }}
+                                title={`Click to ${isEn ? 'disable' : 'enable'} Grade ${g} on store`}
+                              >
+                                {isEn ? `✓ ${g}` : `✕ ${g}`}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
                   </td>

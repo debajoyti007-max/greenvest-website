@@ -483,7 +483,41 @@ export async function upsertProduct(product: Product): Promise<Product> {
   const client = requireClient()
   const row = productToRow(product)
 
-  // 1. Try atomic SECURITY DEFINER RPC (bypasses all RLS restrictions)
+  // 1. Direct update for existing products (preserves all columns including available_grades & mrp)
+  if (product.id) {
+    let { data: updated, error: updateErr } = await client
+      .from('products')
+      .update(row)
+      .eq('id', product.id)
+      .select('*')
+      .maybeSingle()
+
+    if (updateErr && /(archived|stock_qty|season|sold_as|gram_options|mrp|available_grades)/i.test(updateErr.message)) {
+      const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
+      ;({ data: updated, error: updateErr } = await client
+        .from('products')
+        .update(rest)
+        .eq('id', product.id)
+        .select('*')
+        .maybeSingle())
+    }
+
+    if (!updateErr && updated) {
+      return mapProduct(updated as ProductRow)
+    }
+  }
+
+  // 2. Direct upsert
+  let { data, error } = await client.from('products').upsert(row).select('*').maybeSingle()
+  if (error && /(archived|stock_qty|season|sold_as|gram_options|mrp|available_grades)/i.test(error.message)) {
+    const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
+    ;({ data, error } = await client.from('products').upsert(rest).select('*').maybeSingle())
+  }
+  if (!error && data) {
+    return mapProduct(data as ProductRow)
+  }
+
+  // 3. Fallback to RPC if RLS blocks standard write
   try {
     const { data: rpcData, error: rpcErr } = await client.rpc('save_product_admin', {
       p_id: product.id,
@@ -500,42 +534,17 @@ export async function upsertProduct(product: Product): Promise<Product> {
       p_archived: Boolean(product.archived),
     })
     if (!rpcErr && rpcData) {
-      return mapProduct(rpcData as ProductRow)
+      const mapped = mapProduct(rpcData as ProductRow)
+      return {
+        ...mapped,
+        mrp: product.mrp ?? mapped.mrp,
+        availableGrades: product.availableGrades && product.availableGrades.length > 0 ? product.availableGrades : mapped.availableGrades,
+      }
     }
   } catch {}
 
-  // 2. Direct update for existing products
-  if (product.id) {
-    let { data: updated, error: updateErr } = await client
-      .from('products')
-      .update(row)
-      .eq('id', product.id)
-      .select('*')
-      .maybeSingle()
-
-    if (updateErr && /(archived|stock_qty|season|sold_as|gram_options)/i.test(updateErr.message)) {
-      const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
-      ;({ data: updated, error: updateErr } = await client
-        .from('products')
-        .update(rest)
-        .eq('id', product.id)
-        .select('*')
-        .maybeSingle())
-    }
-
-    if (!updateErr && updated) {
-      return mapProduct(updated as ProductRow)
-    }
-  }
-
-  // 3. Fallback to upsert
-  let { data, error } = await client.from('products').upsert(row).select('*').single()
-  if (error && /(archived|stock_qty|season|sold_as|gram_options)/i.test(error.message)) {
-    const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
-    ;({ data, error } = await client.from('products').upsert(rest).select('*').single())
-  }
   if (error) throw error
-  return mapProduct(data as ProductRow)
+  return product
 }
 
 export async function insertProduct(product: Omit<Product, 'id'>): Promise<Product> {

@@ -632,21 +632,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return prev.map((p) => (p.id === product.id ? product : p))
       })
 
+      const localNext = getProducts().map((p) => (p.id === product.id ? product : p))
+      saveProducts(localNext)
+
       if (cloud) {
         try {
           const saved = await upsertProduct(product)
-          setProducts((prev) => prev.map((p) => (p.id === saved.id ? saved : p)))
+          setProducts((prev) => {
+            const updated = prev.map((p) => (p.id === saved.id ? saved : p))
+            saveProducts(updated)
+            return updated
+          })
         } catch (err: any) {
           console.error('updateProduct failed, reverting UI:', err)
           setProducts(prevSnapshot)
+          saveProducts(prevSnapshot)
           showToast(`Failed to update product: ${err.message || err}`, 'error')
           throw err
         }
         return
       }
-      const next = getProducts().map((p) => (p.id === product.id ? product : p))
-      saveProducts(next)
-      setProducts(next)
+      setProducts(localNext)
     },
     [cloud],
   )
