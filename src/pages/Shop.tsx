@@ -77,8 +77,8 @@ function ProductCard({
   const basePrice = priceFor(p, cardGrade)
   const calculatedPrice = Math.round(basePrice * weightMultiplier)
 
-  // Strikethrough Market MRP calculation (approx 20% markup over selling price)
-  const mrpPerUnit = p.mrp || computeMarketMrp(basePrice)
+  // Strikethrough Market MRP calculation (varied dynamic markup per product)
+  const mrpPerUnit = p.mrp || computeMarketMrp(basePrice, undefined, p.id || p.name)
   const calculatedMrp = Math.round(mrpPerUnit * weightMultiplier)
   const discountPercent =
     calculatedMrp > calculatedPrice

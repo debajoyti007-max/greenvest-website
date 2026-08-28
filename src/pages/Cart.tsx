@@ -23,7 +23,7 @@ export default function Cart() {
     if (!p) return sum
     const weight = item.weightMultiplier || 1
     const base = priceFor(p, item.grade)
-    const mrp = p.mrp || computeMarketMrp(base)
+    const mrp = p.mrp || computeMarketMrp(base, undefined, p.id || p.name)
     return sum + Math.round(mrp * weight) * item.qty
   }, 0)
   const totalSavings = Math.max(0, totalMrp - cartTotal)
@@ -56,7 +56,7 @@ export default function Cart() {
           if (!p) return null
           const mult = item.weightMultiplier || 1
           const unitPrice = Math.round(priceFor(p, item.grade) * mult)
-          const baseMrp = p.mrp || computeMarketMrp(priceFor(p, item.grade))
+          const baseMrp = p.mrp || computeMarketMrp(priceFor(p, item.grade), undefined, p.id || p.name)
           const mrpPrice = Math.round(baseMrp * mult)
           const itemDiscount = mrpPrice > unitPrice ? Math.round(((mrpPrice - unitPrice) / mrpPrice) * 100) : 0
           const line = unitPrice * item.qty

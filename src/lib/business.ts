@@ -29,14 +29,31 @@ export const SHIFT_HOURS = {
 }
 
 /**
- * Automatically computes market MRP strikethrough (+25% markup, rounded nicely)
- * Example: Selling price ₹20 -> MRP ₹25 (Displaying ~~₹25~~ ₹20 | 20% OFF like big brand ecommerce)
+ * Automatically computes dynamic market MRP strikethrough:
+ * 1. If seller specifies an explicit overrideMrp > sellingPrice, it uses that exact value.
+ * 2. If no manual override is provided, computes a varied, organic product markup (+18% to +45%)
+ *    yielding varied, realistic discounts (15% OFF, 18% OFF, 22% OFF, 26% OFF, 30% OFF).
+ * 3. Whenever the seller edits the main selling price, MRP and discount percentage dynamically adjust in real time!
  */
-export function computeMarketMrp(sellingPrice: number, overrideMrp?: number): number {
+export function computeMarketMrp(sellingPrice: number, overrideMrp?: number, productKey?: string): number {
   if (overrideMrp && overrideMrp > sellingPrice) return overrideMrp
   if (!sellingPrice || sellingPrice <= 0) return 0
-  const rawMrp = sellingPrice * 1.25
-  // Round up to nearest integer
+
+  const variations = [18, 22, 25, 28, 30, 33, 35, 38, 42]
+  let markupPercent = 25
+
+  if (productKey) {
+    let hash = 0
+    for (let i = 0; i < productKey.length; i++) {
+      hash = (hash << 5) - hash + productKey.charCodeAt(i)
+      hash |= 0
+    }
+    markupPercent = variations[Math.abs(hash) % variations.length]
+  } else {
+    markupPercent = variations[Math.abs(Math.round(sellingPrice)) % variations.length]
+  }
+
+  const rawMrp = sellingPrice * (1 + markupPercent / 100)
   return Math.ceil(rawMrp)
 }
 

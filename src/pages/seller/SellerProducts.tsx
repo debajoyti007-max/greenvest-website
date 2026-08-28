@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { showToast } from '../../components/Toast'
-import { SEASON_LABELS } from '../../lib/business'
+import { SEASON_LABELS, computeMarketMrp, computeDiscountPercent } from '../../lib/business'
 import { t } from '../../lib/i18n'
 import { uploadProductImage } from '../../lib/imageUpload'
 import { resolveProductImage } from '../../lib/productImages'
@@ -318,9 +318,18 @@ export default function SellerProducts() {
               type="number"
               min={0}
               value={form.mrp || ''}
-              placeholder={lang === 'bn' ? 'অটো (+২০%)' : 'Auto (+20%)'}
+              placeholder={lang === 'bn' ? 'অটো হিসাব (স্বয়ংক্রিয়)' : 'Auto calculated'}
               onChange={(e) => setForm({ ...form, mrp: Number(e.target.value) || 0 })}
             />
+            {form.pA > 0 && (
+              <span style={{ display: 'block', marginTop: '4px', fontSize: '0.76rem', color: '#166534', fontWeight: 600 }}>
+                ✨ {lang === 'bn' ? 'ডিসকাউন্ট দেখাবে:' : 'Storefront preview:'}{' '}
+                <strong style={{ background: '#dcfce7', color: '#15803d', padding: '1px 5px', borderRadius: '4px', border: '1px solid #86efac' }}>
+                  {computeDiscountPercent(form.mrp || computeMarketMrp(form.pA, undefined, form.name || 'preview'), form.pA)}% OFF
+                </strong>{' '}
+                (MRP: ₹{form.mrp || computeMarketMrp(form.pA, undefined, form.name || 'preview')})
+              </span>
+            )}
           </label>
         </div>
         <div className="form-actions">

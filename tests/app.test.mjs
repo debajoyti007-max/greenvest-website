@@ -631,10 +631,23 @@ describe('9 Client Requirements & Features Validation', () => {
     assert.equal(calculateTierDiscount(50, 'wholesale'), 44)
   })
 
-  // Feature 1: MRP Strikethrough Calculation & Brand Discount %
-  const computeMarketMrp = (sellingPrice) => {
+  // Feature 1: MRP Strikethrough Calculation & Varied Dynamic Discount %
+  const computeMarketMrp = (sellingPrice, overrideMrp, productKey) => {
+    if (overrideMrp && overrideMrp > sellingPrice) return overrideMrp
     if (!sellingPrice || sellingPrice <= 0) return 0
-    return Math.ceil(sellingPrice * 1.25)
+    const variations = [18, 22, 25, 28, 30, 33, 35, 38, 42]
+    let markupPercent = 25
+    if (productKey) {
+      let hash = 0
+      for (let i = 0; i < productKey.length; i++) {
+        hash = (hash << 5) - hash + productKey.charCodeAt(i)
+        hash |= 0
+      }
+      markupPercent = variations[Math.abs(hash) % variations.length]
+    } else {
+      markupPercent = variations[Math.abs(Math.round(sellingPrice)) % variations.length]
+    }
+    return Math.ceil(sellingPrice * (1 + markupPercent / 100))
   }
 
   const computeDiscountPercent = (mrp, sellingPrice) => {
@@ -642,14 +655,36 @@ describe('9 Client Requirements & Features Validation', () => {
     return Math.round(((mrp - sellingPrice) / mrp) * 100)
   }
 
-  test('Market MRP computes big-brand markup (e.g. ₹20 selling price -> ₹25 MRP with 20% OFF)', () => {
-    assert.equal(computeMarketMrp(20), 25) // 20 * 1.25 = 25
-    assert.equal(computeMarketMrp(40), 50) // 40 * 1.25 = 50
-    assert.equal(computeMarketMrp(100), 125) // 100 * 1.25 = 125
+  test('Market MRP computes varied organic markups across different items', () => {
+    const mrp1 = computeMarketMrp(20, undefined, 'veg-potato')
+    const mrp2 = computeMarketMrp(40, undefined, 'veg-tomato')
+    const mrp3 = computeMarketMrp(70, undefined, 'veg-capsicum')
 
-    // Discount % verification
-    assert.equal(computeDiscountPercent(25, 20), 20) // (25-20)/25 = 20% OFF
-    assert.equal(computeDiscountPercent(50, 40), 20) // (50-40)/50 = 20% OFF
+    assert.ok(mrp1 > 20)
+    assert.ok(mrp2 > 40)
+    assert.ok(mrp3 > 70)
+
+    const disc1 = computeDiscountPercent(mrp1, 20)
+    const disc2 = computeDiscountPercent(mrp2, 40)
+    const disc3 = computeDiscountPercent(mrp3, 70)
+
+    // Ensure realistic varied discounts between 15% and 35%
+    assert.ok(disc1 >= 15 && disc1 <= 35)
+    assert.ok(disc2 >= 15 && disc2 <= 35)
+    assert.ok(disc3 >= 15 && disc3 <= 35)
+  })
+
+  test('Market MRP dynamically adjusts when seller changes the main price', () => {
+    // Seller sets price 20 -> MRP adjusts
+    const mrpAt20 = computeMarketMrp(20, undefined, 'veg-onion')
+    // Seller increases price to 30 -> MRP automatically scales up
+    const mrpAt30 = computeMarketMrp(30, undefined, 'veg-onion')
+    assert.ok(mrpAt30 > mrpAt20)
+
+    // Seller provides custom override MRP 45 for selling price 30
+    const customMrp = computeMarketMrp(30, 45, 'veg-onion')
+    assert.equal(customMrp, 45)
+    assert.equal(computeDiscountPercent(customMrp, 30), 33) // (45-30)/45 = 33% OFF
   })
 
   // Feature 3: Option A, B, C Custom Visibility
