@@ -105,12 +105,12 @@ export function filterActivePromotionalDeals(deals: PromotionalDeal[]): Promotio
 export function getStoredPromotionalDeals(): PromotionalDeal[] {
   try {
     const raw = localStorage.getItem(DEALS_STORAGE_KEY)
-    if (!raw) return DEFAULT_PROMOTIONAL_DEALS
-    const parsed = JSON.parse(raw) as PromotionalDeal[]
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return DEFAULT_PROMOTIONAL_DEALS
+    if (raw === null) return DEFAULT_PROMOTIONAL_DEALS
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      return parsed as PromotionalDeal[]
     }
-    return parsed
+    return DEFAULT_PROMOTIONAL_DEALS
   } catch (e) {
     console.error('Failed to load promotional deals from localStorage', e)
     return DEFAULT_PROMOTIONAL_DEALS

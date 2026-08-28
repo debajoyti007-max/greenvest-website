@@ -12,6 +12,7 @@ import type {
   OrderStatus,
   Product,
   ProductReview,
+  PromotionalDeal,
   Role,
   Season,
   User,
@@ -27,6 +28,8 @@ type ProductRow = {
   p_a: number
   p_b: number
   p_c: number
+  mrp?: number | null
+  available_grades?: string[] | null
   in_stock: boolean
   archived?: boolean | null
   stock_qty?: number | null
@@ -36,6 +39,26 @@ type ProductRow = {
   image_url: string | null
   sold_as?: string | null
   gram_options?: number[] | null
+}
+
+type PromotionalDealRow = {
+  id: string
+  badge_bn: string
+  badge_en: string
+  title_bn: string
+  title_en: string
+  subtitle_bn?: string | null
+  subtitle_en?: string | null
+  coupon_code?: string | null
+  link_url?: string | null
+  button_text_bn?: string | null
+  button_text_en?: string | null
+  bg_gradient?: string | null
+  emoji?: string | null
+  is_active: boolean
+  expires_at?: string | null
+  auto_remove_on_expiry?: boolean | null
+  created_at: string
 }
 
 type OrderRow = {
@@ -115,6 +138,8 @@ function mapProduct(row: ProductRow): Product {
     pA: Number(row.p_a),
     pB: Number(row.p_b),
     pC: Number(row.p_c),
+    mrp: row.mrp != null ? Number(row.mrp) : undefined,
+    availableGrades: Array.isArray(row.available_grades) && row.available_grades.length > 0 ? (row.available_grades as Grade[]) : ['A', 'B', 'C'],
     inStock: Boolean(row.in_stock),
     archived: row.archived ?? false,
     stockQty: row.stock_qty != null ? Number(row.stock_qty) : undefined,
@@ -136,6 +161,8 @@ function productToRow(p: Product | (Omit<Product, 'id'> & { id: string })) {
     p_a: p.pA,
     p_b: p.pB,
     p_c: p.pC,
+    mrp: p.mrp || null,
+    available_grades: p.availableGrades && p.availableGrades.length > 0 ? p.availableGrades : ['A', 'B', 'C'],
     in_stock: p.inStock,
     archived: Boolean(p.archived),
     stock_qty: p.stockQty ?? null,
@@ -145,6 +172,50 @@ function productToRow(p: Product | (Omit<Product, 'id'> & { id: string })) {
     image_url: p.imageUrl || null,
     sold_as: p.soldAs || null,
     gram_options: p.gramOptions || null,
+  }
+}
+
+function mapDeal(row: PromotionalDealRow): PromotionalDeal {
+  return {
+    id: row.id,
+    badgeBn: row.badge_bn || '',
+    badgeEn: row.badge_en || '',
+    titleBn: row.title_bn || '',
+    titleEn: row.title_en || '',
+    subtitleBn: row.subtitle_bn || '',
+    subtitleEn: row.subtitle_en || '',
+    couponCode: row.coupon_code || undefined,
+    linkUrl: row.link_url || undefined,
+    buttonTextBn: row.button_text_bn || undefined,
+    buttonTextEn: row.button_text_en || undefined,
+    bgGradient: row.bg_gradient || undefined,
+    emoji: row.emoji || undefined,
+    isActive: Boolean(row.is_active),
+    expiresAt: row.expires_at || undefined,
+    autoRemoveOnExpiry: row.auto_remove_on_expiry ?? true,
+    createdAt: row.created_at || new Date().toISOString(),
+  }
+}
+
+function dealToRow(d: PromotionalDeal): PromotionalDealRow {
+  return {
+    id: d.id,
+    badge_bn: d.badgeBn,
+    badge_en: d.badgeEn,
+    title_bn: d.titleBn,
+    title_en: d.titleEn,
+    subtitle_bn: d.subtitleBn || null,
+    subtitle_en: d.subtitleEn || null,
+    coupon_code: d.couponCode || null,
+    link_url: d.linkUrl || null,
+    button_text_bn: d.buttonTextBn || null,
+    button_text_en: d.buttonTextEn || null,
+    bg_gradient: d.bgGradient || null,
+    emoji: d.emoji || null,
+    is_active: d.isActive !== false,
+    expires_at: d.expiresAt || null,
+    auto_remove_on_expiry: d.autoRemoveOnExpiry !== false,
+    created_at: d.createdAt || new Date().toISOString(),
   }
 }
 
@@ -1229,4 +1300,66 @@ export async function saveProductReviewApi(review: Omit<ProductReview, 'id' | 'c
   }
 
   return newReview
+}
+
+// ── Promotional Deals API ───────────────────────────────────────────────────
+
+export async function fetchPromotionalDealsApi(): Promise<PromotionalDeal[]> {
+  const localKey = 'gv_promotional_deals_v1'
+  const fallback = JSON.parse(localStorage.getItem(localKey) || '[]')
+
+  if (!supabase) return fallback
+
+  try {
+    const { data, error } = await supabase
+      .from('promotional_deals')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error || !data) return fallback
+    const mapped = (data as PromotionalDealRow[]).map(mapDeal)
+    localStorage.setItem(localKey, JSON.stringify(mapped))
+    return mapped
+  } catch {
+    return fallback
+  }
+}
+
+export async function savePromotionalDealApi(deal: PromotionalDeal): Promise<PromotionalDeal> {
+  const localKey = 'gv_promotional_deals_v1'
+  try {
+    const existing: PromotionalDeal[] = JSON.parse(localStorage.getItem(localKey) || '[]')
+    const idx = existing.findIndex((d) => d.id === deal.id)
+    if (idx >= 0) existing[idx] = deal
+    else existing.unshift(deal)
+    localStorage.setItem(localKey, JSON.stringify(existing))
+  } catch {}
+
+  if (!supabase) return deal
+
+  try {
+    const row = dealToRow(deal)
+    await supabase.from('promotional_deals').upsert(row)
+  } catch (err) {
+    console.warn('savePromotionalDealApi error:', err)
+  }
+
+  return deal
+}
+
+export async function deletePromotionalDealApi(dealId: string): Promise<void> {
+  const localKey = 'gv_promotional_deals_v1'
+  try {
+    const existing: PromotionalDeal[] = JSON.parse(localStorage.getItem(localKey) || '[]')
+    const filtered = existing.filter((d) => d.id !== dealId)
+    localStorage.setItem(localKey, JSON.stringify(filtered))
+  } catch {}
+
+  if (!supabase) return
+
+  try {
+    await supabase.from('promotional_deals').delete().eq('id', dealId)
+  } catch (err) {
+    console.warn('deletePromotionalDealApi error:', err)
+  }
 }

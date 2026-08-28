@@ -38,6 +38,9 @@ import {
   saveNotificationApi,
   fetchProductReviewsApi,
   saveProductReviewApi,
+  fetchPromotionalDealsApi,
+  savePromotionalDealApi,
+  deletePromotionalDealApi,
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
@@ -176,6 +179,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     fetchProductReviewsApi().then((data) => {
       if (data && data.length > 0) {
         setReviews(data)
+      }
+    })
+
+    // Hydrate promotional deals from Supabase if connected
+    fetchPromotionalDealsApi().then((deals) => {
+      if (deals && Array.isArray(deals) && deals.length > 0) {
+        setPromotionalDeals(deals)
       }
     })
   }, [cloud])
@@ -789,8 +799,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveStoredPromotionalDeals(next)
         return next
       })
+      if (cloud) {
+        await savePromotionalDealApi(newDeal)
+      }
     },
-    [],
+    [cloud],
   )
 
   const updatePromotionalDeal = useCallback(
@@ -800,8 +813,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveStoredPromotionalDeals(next)
         return next
       })
+      if (cloud) {
+        await savePromotionalDealApi(updatedDeal)
+      }
     },
-    [],
+    [cloud],
   )
 
   const deletePromotionalDeal = useCallback(
@@ -811,19 +827,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveStoredPromotionalDeals(next)
         return next
       })
+      if (cloud) {
+        await deletePromotionalDealApi(dealId)
+      }
     },
-    [],
+    [cloud],
   )
 
   const togglePromotionalDeal = useCallback(
     async (dealId: string, isActive: boolean) => {
+      let targetDeal: PromotionalDeal | undefined
       setPromotionalDeals((prev) => {
-        const next = prev.map((d) => (d.id === dealId ? { ...d, isActive } : d))
+        const next = prev.map((d) => {
+          if (d.id === dealId) {
+            targetDeal = { ...d, isActive }
+            return targetDeal
+          }
+          return d
+        })
         saveStoredPromotionalDeals(next)
         return next
       })
+      if (cloud && targetDeal) {
+        await savePromotionalDealApi(targetDeal)
+      }
     },
-    [],
+    [cloud],
   )
 
   const autoCancelStaleOrders = useCallback(
