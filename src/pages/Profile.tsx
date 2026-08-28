@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { saveDelivery } from '../lib/storage'
 import { showToast } from '../components/Toast'
 import { validatePhoneStrict } from '../lib/validation'
+import { UPI_ID } from '../lib/business'
 import type { Address } from '../types'
 
 export default function Profile() {
@@ -289,6 +290,31 @@ export default function Profile() {
                 </strong>
               </div>
             </div>
+
+            {getUserKhataBalance(user.id) > 0 && (
+              <div style={{ marginTop: '0.85rem' }}>
+                <a
+                  href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${getUserKhataBalance(user.id)}&cu=INR&tn=${encodeURIComponent('Khata Dues ' + user.name)}`}
+                  className="btn btn-primary"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    width: '100%',
+                    padding: '0.55rem 1rem',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #166534 0%, #15803d 100%)',
+                    color: '#ffffff',
+                  }}
+                >
+                  ⚡ {lang === 'bn' ? `১-ক্লিকে বকেয়া পরিশোধ করুন (₹${getUserKhataBalance(user.id)})` : `Pay Dues Online (₹${getUserKhataBalance(user.id)})`}
+                </a>
+              </div>
+            )}
 
             {/* User transactions */}
             {khataEntries.filter((e) => e.userId === user.id).length > 0 && (

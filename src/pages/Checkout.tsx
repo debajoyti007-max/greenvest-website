@@ -75,6 +75,11 @@ export default function Checkout() {
 
   useEffect(() => {
     void refresh()
+    const pending = sessionStorage.getItem('gv_pending_coupon')
+    if (pending && !couponCode) {
+      setCouponCode(pending)
+      sessionStorage.removeItem('gv_pending_coupon')
+    }
   }, [refresh])
 
   const coords = useMemo(() => (geoLat && geoLng ? { lat: geoLat, lng: geoLng } : null), [geoLat, geoLng])

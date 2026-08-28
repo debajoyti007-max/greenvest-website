@@ -352,6 +352,13 @@ export default function AdminUsers() {
                                   if (res && !res.ok) {
                                     showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
                                   } else {
+                                    void sendNotification(
+                                      u.id,
+                                      lang === 'bn' ? '🏪 সেলার রোল সক্রিয়' : '🏪 Seller Access Granted',
+                                      lang === 'bn'
+                                        ? 'অভিনন্দন! আপনাকে GreenVest-এ সেলার অ্যাক্সেস প্রদান করা হয়েছে।'
+                                        : 'Congratulations! You have been granted Seller access on GreenVest.'
+                                    )
                                     showToast(
                                       lang === 'bn'
                                         ? `🏪 ${u.name} এখন সেলার!`

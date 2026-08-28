@@ -216,6 +216,7 @@ export default function SellerOrders() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [purging, setPurging] = useState(false)
+  const [soundEnabled, setSoundEnabled] = useState(true)
   const prevCount = useRef(orders.length)
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
@@ -225,11 +226,13 @@ export default function SellerOrders() {
   // S1: Sound alert on new order
   useEffect(() => {
     if (orders.length > prevCount.current) {
-      playAlert()
+      if (soundEnabled) {
+        playAlert()
+      }
       if ('vibrate' in navigator) navigator.vibrate([200, 100, 200])
     }
     prevCount.current = orders.length
-  }, [orders.length])
+  }, [orders.length, soundEnabled])
 
   const handleDeleteOrder = async (id: string) => {
     if (!confirm(lang === 'bn' ? 'অর্ডারটি ডাটাবেস থেকে স্থায়ীভাবে মুছে ফেলতে চান?' : 'Permanently delete this order from the database?')) return
@@ -259,13 +262,12 @@ export default function SellerOrders() {
     }
   }
 
-  // S3: One-tap accept (verify UTR + confirm + WhatsApp)
+  // S3: One-tap accept (verify UTR + confirm on website)
   const handleAcceptOrder = async (o: Order) => {
     try {
       await verifyUtr(o.id, true)
       await updateOrderStatus(o.id, 'confirmed')
-      window.open(orderStatusWhatsAppUrl(o, 'confirmed'), '_blank', 'noopener,noreferrer')
-      showToast(lang === 'bn' ? '✅ অর্ডার কনফার্ম হয়েছে!' : '✅ Order confirmed!', '🎉')
+      showToast(lang === 'bn' ? '✅ অর্ডার কনফার্ম হয়েছে ও কাস্টমারকে নোটিফিকেশন পাঠানো হয়েছে!' : '✅ Order confirmed! Customer notified.', '🎉')
     } catch (err) {
       console.error('Accept order error:', err)
       showToast(lang === 'bn' ? 'অর্ডার গ্রহণ ব্যর্থ হয়েছে' : 'Failed to accept order', '❌', 'error')
@@ -275,7 +277,7 @@ export default function SellerOrders() {
   const handleMarkDelivered = async (o: Order) => {
     try {
       await updateOrderStatus(o.id, 'delivered')
-      window.open(orderStatusWhatsAppUrl(o, 'delivered'), '_blank', 'noopener,noreferrer')
+      showToast(lang === 'bn' ? '🚚 অর্ডার সফলভাবে ডেলিভারি সম্পন্ন হয়েছে!' : '🚚 Order marked as delivered!', '✅')
     } catch (err) {
       console.error('Mark delivered error:', err)
     }
@@ -408,6 +410,32 @@ export default function SellerOrders() {
       <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: '1.2rem', margin: 0 }}>{lang === 'bn' ? '📋 অর্ডার ম্যানেজমেন্ট' : '📋 Order Management'}</h1>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !soundEnabled
+              setSoundEnabled(next)
+              if (next) playAlert()
+              showToast(next ? (lang === 'bn' ? '🔊 সাউন্ড অ্যালার্ট সক্রিয়' : '🔊 Sound alerts ON') : (lang === 'bn' ? '🔕 সাউন্ড বন্ধ' : '🔕 Sound alerts MUTED'), '🔔')
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              background: soundEnabled ? '#eff6ff' : '#f1f5f9',
+              border: '1.5px solid',
+              borderColor: soundEnabled ? '#93c5fd' : '#cbd5e1',
+              color: soundEnabled ? '#1e40af' : '#64748b',
+              padding: '0.35rem 0.65rem',
+              borderRadius: '8px',
+              cursor: 'pointer',
+            }}
+            title="Toggle sound alerts on new orders"
+          >
+            {soundEnabled ? '🔔 Sound: ON' : '🔕 Sound: OFF'}
+          </button>
           <button
             type="button"
             onClick={() => exportOrdersToCSV(filtered, lang)}

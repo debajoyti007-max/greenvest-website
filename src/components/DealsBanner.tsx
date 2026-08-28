@@ -40,11 +40,12 @@ export default function DealsBanner({ lang }: { lang: Lang }) {
 
   const copyCode = (code: string) => {
     if (!code) return
+    sessionStorage.setItem('gv_pending_coupon', code)
     navigator.clipboard?.writeText(code).catch(() => {})
     showToast(
       lang === 'bn'
-        ? `🎟️ কুপন কোড "${code}" কপি করা হয়েছে! চেকআউটে ব্যবহার করুন।`
-        : `🎟️ Coupon code "${code}" copied! Paste at checkout.`,
+        ? `🎟️ কুপন কোড "${code}" কপি ও চেকআউটে স্বয়ংক্রিয়ভাবে যুক্ত হয়েছে!`
+        : `🎟️ Coupon code "${code}" copied & ready at checkout!`,
       '🎉',
     )
   }
