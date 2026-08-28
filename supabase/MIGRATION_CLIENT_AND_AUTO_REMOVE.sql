@@ -1,5 +1,6 @@
 -- ==============================================================================
 -- 🥬 GreenVest - Master SQL Migration for Client Features & Auto Smart Remove
+-- FIXED: Explicit type casting for text = uuid (auth.uid()::text)
 -- Run this script in: Supabase Dashboard → SQL Editor → New Query → Run
 -- ==============================================================================
 
@@ -10,6 +11,7 @@ alter table public.profiles add column if not exists khata_credit_limit numeric 
 alter table public.profiles add column if not exists phone text;
 alter table public.profiles add column if not exists pin text;
 alter table public.profiles add column if not exists is_blocked boolean not null default false;
+alter table public.profiles add column if not exists "isBlocked" boolean not null default false;
 
 -- 2. Ensure columns exist on public.products for MRP strikethrough & Grade Options A, B, C
 alter table public.products add column if not exists mrp numeric;
@@ -57,7 +59,7 @@ create policy "Allow staff manage promotional deals" on public.promotional_deals
   for all using (
     exists (
       select 1 from public.profiles
-      where profiles.id = auth.uid()
+      where profiles.id::text = auth.uid()::text
       and profiles.role in ('seller', 'admin')
     )
   );
@@ -65,7 +67,7 @@ create policy "Allow staff manage promotional deals" on public.promotional_deals
 -- 5. Create public.khata_ledger table (Digital Passbook & Credit History)
 create table if not exists public.khata_ledger (
   id bigserial primary key,
-  user_id uuid not null references public.profiles (id) on delete cascade,
+  user_id text not null,
   type text not null check (type in ('order_debit', 'payment_credit', 'adjustment_credit', 'adjustment_debit')),
   amount numeric not null check (amount > 0),
   notes text,
@@ -80,28 +82,28 @@ create index if not exists khata_ledger_created_at_idx on public.khata_ledger (c
 -- Enable RLS on khata_ledger
 alter table public.khata_ledger enable row level security;
 
--- Customer can read their own ledger entries
+-- Customer can read their own ledger entries, staff can read all
 drop policy if exists "Allow customer read own khata ledger" on public.khata_ledger;
 create policy "Allow customer read own khata ledger" on public.khata_ledger
   for select using (
-    auth.uid() = user_id or
+    auth.uid()::text = user_id::text or
     exists (
       select 1 from public.profiles
-      where profiles.id = auth.uid()
+      where profiles.id::text = auth.uid()::text
       and profiles.role in ('seller', 'admin')
     )
   );
 
--- Staff (seller/admin) can insert/update ledger transactions
+-- Staff (seller/admin) can insert ledger transactions, or customer for their own
 drop policy if exists "Allow staff insert khata ledger" on public.khata_ledger;
 create policy "Allow staff insert khata ledger" on public.khata_ledger
   for insert with check (
     exists (
       select 1 from public.profiles
-      where profiles.id = auth.uid()
+      where profiles.id::text = auth.uid()::text
       and profiles.role in ('seller', 'admin')
     )
-    or auth.uid() = user_id
+    or auth.uid()::text = user_id::text
   );
 
 -- 6. Insert Default Promotional Deals if empty
@@ -147,7 +149,3 @@ values
     true
   )
 on conflict (id) do nothing;
-
--- ==============================================================================
--- Migration complete! All tables, columns, indexes, and RLS policies are live.
--- ==============================================================================
