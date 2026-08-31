@@ -1496,3 +1496,68 @@ export async function resolveSupportTicketApi(userId: string): Promise<void> {
     console.warn('resolveSupportTicketApi error:', err)
   }
 }
+
+export async function reopenSupportTicketApi(userId: string): Promise<void> {
+  const localKey = 'gv_support_messages'
+  try {
+    const existing: import('../types').SupportMessage[] = JSON.parse(localStorage.getItem(localKey) || '[]')
+    const updated = existing.map(m => m.userId === userId ? { ...m, status: 'open' as const } : m)
+    localStorage.setItem(localKey, JSON.stringify(updated))
+  } catch {}
+
+  if (!supabase) return
+
+  try {
+    await supabase.from('support_messages').update({ status: 'open' }).eq('user_id', userId)
+  } catch (err) {
+    console.warn('reopenSupportTicketApi error:', err)
+  }
+}
+
+export async function deleteSupportThreadApi(userId: string): Promise<void> {
+  const localKey = 'gv_support_messages'
+  try {
+    const existing: import('../types').SupportMessage[] = JSON.parse(localStorage.getItem(localKey) || '[]')
+    const filtered = existing.filter(m => m.userId !== userId)
+    localStorage.setItem(localKey, JSON.stringify(filtered))
+  } catch {}
+
+  if (!supabase) return
+
+  try {
+    await supabase.from('support_messages').delete().eq('user_id', userId)
+  } catch (err) {
+    console.warn('deleteSupportThreadApi error:', err)
+  }
+}
+
+export async function cleanupOldSupportMessagesApi(daysOld = 7): Promise<number> {
+  const localKey = 'gv_support_messages'
+  const cutoffTime = Date.now() - daysOld * 24 * 60 * 60 * 1000
+  const cutoffIso = new Date(cutoffTime).toISOString()
+
+  let purgedCount = 0
+  try {
+    const existing: import('../types').SupportMessage[] = JSON.parse(localStorage.getItem(localKey) || '[]')
+    const active = existing.filter(m => {
+      const isOldResolved = m.status === 'resolved' && new Date(m.createdAt).getTime() < cutoffTime
+      return !isOldResolved
+    })
+    purgedCount = existing.length - active.length
+    localStorage.setItem(localKey, JSON.stringify(active))
+  } catch {}
+
+  if (!supabase) return purgedCount
+
+  try {
+    await supabase
+      .from('support_messages')
+      .delete()
+      .eq('status', 'resolved')
+      .lt('created_at', cutoffIso)
+  } catch (err) {
+    console.warn('cleanupOldSupportMessagesApi error:', err)
+  }
+
+  return purgedCount
+}

@@ -6,7 +6,7 @@ import { formatOrderId } from '../lib/business'
 import { showToast } from '../components/Toast'
 
 export default function Support() {
-  const { lang, orders, supportMessages, sendSupportMessage, getUserKhataBalance, shiftStatus } = useStore()
+  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, shiftStatus } = useStore()
   const { user } = useAuth()
   const [inputMsg, setInputMsg] = useState('')
   const [sending, setSending] = useState(false)
@@ -166,9 +166,24 @@ export default function Support() {
               </div>
             </div>
           </div>
-          <span style={{ fontSize: '0.75rem', background: '#22c55e', color: '#ffffff', padding: '2px 8px', borderRadius: '10px', fontWeight: 700 }}>
-            ONLINE
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {user && userThread.length > 0 && userThread.some((m) => m.status === 'open') && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await resolveSupportTicket(user.id)
+                  showToast(lang === 'bn' ? 'টিকিট সম্পন্ন হিসেবে চিহ্নিত করা হয়েছে!' : 'Ticket marked as resolved!', '✅')
+                }}
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '0.75rem', padding: '3px 10px', background: '#ffffff', color: '#166534', fontWeight: 700 }}
+              >
+                ✓ {lang === 'bn' ? 'সমস্যার সমাধান হয়েছে' : 'My Issue is Solved'}
+              </button>
+            )}
+            <span style={{ fontSize: '0.75rem', background: '#22c55e', color: '#ffffff', padding: '2px 8px', borderRadius: '10px', fontWeight: 700 }}>
+              ONLINE
+            </span>
+          </div>
         </div>
 
         {/* Message Log */}

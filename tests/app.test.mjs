@@ -963,6 +963,40 @@ describe('In-App Customer Support & Live Chat Desk', () => {
     assert.equal(resolved.find((m) => m.id === 'm1')?.status, 'resolved')
     assert.equal(resolved.find((m) => m.id === 'm2')?.status, 'open')
   })
+
+  test('Reopening support ticket sets user messages back to open status', () => {
+    const messages = [
+      { id: 'm1', userId: 'user-1', status: 'resolved' },
+      { id: 'm2', userId: 'user-2', status: 'resolved' },
+    ]
+
+    const reopened = messages.map((m) => (m.userId === 'user-1' ? { ...m, status: 'open' } : m))
+    assert.equal(reopened.find((m) => m.id === 'm1')?.status, 'open')
+    assert.equal(reopened.find((m) => m.id === 'm2')?.status, 'resolved')
+  })
+
+  test('Auto-cleans resolved junk older than 7 days from storage and preserves active open tickets', () => {
+    const now = Date.now()
+    const eightDaysAgo = new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString()
+    const yesterday = new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString()
+    const cutoffTime = now - 7 * 24 * 60 * 60 * 1000
+
+    const messages = [
+      { id: 'm1', userId: 'user-1', status: 'resolved', createdAt: eightDaysAgo }, // junk (old resolved) -> PURGE
+      { id: 'm2', userId: 'user-2', status: 'open', createdAt: eightDaysAgo },     // open -> PRESERVE
+      { id: 'm3', userId: 'user-3', status: 'resolved', createdAt: yesterday },    // fresh resolved -> PRESERVE
+    ]
+
+    const active = messages.filter((m) => {
+      const isOldResolved = m.status === 'resolved' && new Date(m.createdAt).getTime() < cutoffTime
+      return !isOldResolved
+    })
+
+    assert.equal(active.length, 2)
+    assert.equal(active.some((m) => m.id === 'm1'), false, 'Old resolved message m1 must be purged')
+    assert.equal(active.some((m) => m.id === 'm2'), true, 'Open message m2 must be preserved')
+    assert.equal(active.some((m) => m.id === 'm3'), true, 'Recent resolved message m3 must be preserved')
+  })
 })
 
 

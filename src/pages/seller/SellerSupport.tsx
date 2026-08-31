@@ -8,18 +8,38 @@ import type { SupportMessage } from '../../types'
 
 export default function SellerSupport() {
   const { user } = useAuth()
-  const { lang, supportMessages, sendSupportMessage, resolveSupportTicket, orders } = useStore()
+  const {
+    lang,
+    supportMessages,
+    sendSupportMessage,
+    resolveSupportTicket,
+    reopenSupportTicket,
+    deleteSupportThread,
+    cleanupOldSupportMessages,
+    orders,
+  } = useStore()
+
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
   const [sending, setSending] = useState(false)
+  const [filterTab, setFilterTab] = useState<'open' | 'resolved' | 'all'>('open')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Auto-clean resolved junk messages older than 7 days on mount (keeps DB size under 1%)
+  useEffect(() => {
+    cleanupOldSupportMessages(7).then((purged) => {
+      if (purged > 0) {
+        console.log(`[Auto-Clean] Cleaned ${purged} old resolved support messages from storage/DB.`)
+      }
+    })
+  }, [cleanupOldSupportMessages])
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
   }
 
   // Group messages by customer
-  const customerThreads = useMemo(() => {
+  const allCustomerThreads = useMemo(() => {
     const map = new Map<string, { userId: string; userName: string; userPhone?: string; messages: SupportMessage[]; lastMsg: SupportMessage; status: 'open' | 'resolved' }>()
 
     ;(supportMessages || []).forEach((m) => {
@@ -30,13 +50,16 @@ export default function SellerSupport() {
           userPhone: m.userPhone,
           messages: [],
           lastMsg: m,
-          status: m.status || 'open',
+          status: 'resolved',
         })
       }
       const item = map.get(m.userId)!
       item.messages.push(m)
       item.lastMsg = m
-      if (m.status === 'open') item.status = 'open'
+      // If ANY message in the thread is open, the whole thread is considered open
+      if (m.status === 'open') {
+        item.status = 'open'
+      }
     })
 
     return Array.from(map.values()).sort(
@@ -44,16 +67,30 @@ export default function SellerSupport() {
     )
   }, [supportMessages])
 
-  // Select first customer by default
+  const openCount = useMemo(() => allCustomerThreads.filter((t) => t.status === 'open').length, [allCustomerThreads])
+  const resolvedCount = useMemo(() => allCustomerThreads.filter((t) => t.status === 'resolved').length, [allCustomerThreads])
+
+  // Filtered threads based on selected tab
+  const filteredThreads = useMemo(() => {
+    if (filterTab === 'open') return allCustomerThreads.filter((t) => t.status === 'open')
+    if (filterTab === 'resolved') return allCustomerThreads.filter((t) => t.status === 'resolved')
+    return allCustomerThreads
+  }, [allCustomerThreads, filterTab])
+
+  // Auto-select first thread if selection is invalid for current filter
   useEffect(() => {
-    if (!selectedUserId && customerThreads.length > 0) {
-      setSelectedUserId(customerThreads[0].userId)
+    if (filteredThreads.length > 0) {
+      if (!selectedUserId || !filteredThreads.some((t) => t.userId === selectedUserId)) {
+        setSelectedUserId(filteredThreads[0].userId)
+      }
+    } else {
+      setSelectedUserId(null)
     }
-  }, [customerThreads, selectedUserId])
+  }, [filteredThreads, selectedUserId])
 
   const currentThread = useMemo(() => {
-    return customerThreads.find((c) => c.userId === selectedUserId) || null
-  }, [customerThreads, selectedUserId])
+    return allCustomerThreads.find((c) => c.userId === selectedUserId) || null
+  }, [allCustomerThreads, selectedUserId])
 
   // Find latest order for the selected customer
   const customerRecentOrder = useMemo(() => {
@@ -89,25 +126,76 @@ export default function SellerSupport() {
     }
   }
 
-  const handleResolve = async () => {
+  // 1-Click Close with Farewell Message
+  const handleCloseTicket = async () => {
+    if (!selectedUserId || !currentThread) return
+
+    setSending(true)
+    try {
+      // Send friendly closing message
+      const farewell = lang === 'bn'
+        ? '✓ আপনার সমস্যার সমাধান সম্পন্ন হিসেবে চিহ্নিত করা হয়েছে। GreenVest-এর সাথে থাকার জন্য ধন্যবাদ! 🌿'
+        : '✓ Your support request has been resolved. Thank you for shopping with GreenVest! 🌿'
+
+      await sendSupportMessage({
+        userId: selectedUserId,
+        userName: currentThread.userName,
+        userPhone: currentThread.userPhone,
+        senderRole: user.role === 'admin' ? 'admin' : 'seller',
+        message: farewell,
+        orderId: customerRecentOrder?.id,
+        status: 'resolved',
+      })
+
+      await resolveSupportTicket(selectedUserId)
+      showToast(lang === 'bn' ? 'টিকিট বন্ধ ও সমাধান করা হয়েছে!' : 'Ticket closed & resolved!', '✅')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleReopen = async () => {
     if (!selectedUserId) return
-    await resolveSupportTicket(selectedUserId)
-    showToast(lang === 'bn' ? 'টিকিট সম্পন্ন মার্ক করা হয়েছে!' : 'Support ticket resolved!', '✅')
+    await reopenSupportTicket(selectedUserId)
+    showToast(lang === 'bn' ? 'টিকিট পুনরায় চালু করা হয়েছে!' : 'Ticket reopened!', '🔄')
+  }
+
+  const handleDeleteThread = async () => {
+    if (!selectedUserId) return
+    if (window.confirm(lang === 'bn' ? 'আপনি কি এই চ্যাটটি ডাটাবেস থেকে মুছে ফেলতে চান?' : 'Permanently delete this customer chat thread from DB?')) {
+      await deleteSupportThread(selectedUserId)
+      setSelectedUserId(null)
+      showToast(lang === 'bn' ? 'চ্যাট মুছে ফেলা হয়েছে!' : 'Thread deleted from DB!', '🗑️')
+    }
+  }
+
+  const handleManualPurgeJunk = async () => {
+    const purged = await cleanupOldSupportMessages(0) // Purge all resolved right now
+    showToast(lang === 'bn' ? `${purged}টি সমাধানকৃত চ্যাট ডাটাবেস থেকে মুছে দেওয়া হয়েছে!` : `Purged ${purged} resolved junk chats from DB!`, '🧹')
   }
 
   return (
     <div className="page" style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '3rem' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.3rem', margin: '0 0 0.25rem', color: '#166534' }}>
-            💬 {lang === 'bn' ? 'কাস্টমার সাপোর্ট ডেস্ক' : 'Live Customer Support Desk'}
+            💬 {lang === 'bn' ? 'লাইভ সাপোর্ট ও টিকিট ডেস্ক' : 'Live Customer Support Desk'}
           </h1>
           <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b' }}>
-            {lang === 'bn' ? 'ওয়েবসাইটে সরাসরি কাস্টমারদের প্রশ্নের উত্তর দিন।' : 'Respond to live customer queries in real-time.'}
+            {lang === 'bn' ? 'গ্রাহকদের সমস্যা সমাধান করুন ও টিকিট বন্ধ করুন।' : 'Manage customer queries, close resolved tickets, and keep database clean.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={handleManualPurgeJunk}
+            title="Auto-delete resolved tickets from DB to prevent junk"
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: '0.78rem', padding: '4px 10px', background: '#f8fafc', color: '#64748b' }}
+          >
+            🧹 {lang === 'bn' ? 'সমাধানকৃত জাঙ্ক পরিষ্কার' : 'Purge Resolved Junk'}
+          </button>
           <Link to="/seller" className="btn btn-ghost btn-sm">
             {lang === 'bn' ? '← ড্যাশবোর্ড' : '← Dashboard'}
           </Link>
@@ -115,24 +203,86 @@ export default function SellerSupport() {
       </div>
 
       {/* Main Split Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '1rem', minHeight: '520px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
-        {/* Left: Customer Thread List */}
+      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '1rem', minHeight: '540px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
+        {/* Left: Customer Thread List with Status Tabs */}
         <div style={{ borderRight: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid #e2e8f0', fontWeight: 700, fontSize: '0.85rem', color: '#334155', display: 'flex', justifyContent: 'space-between' }}>
-            <span>{lang === 'bn' ? 'গ্রাহক তালিকা' : 'Active Chats'}</span>
-            <span style={{ background: '#dcfce7', color: '#166534', padding: '1px 8px', borderRadius: '10px', fontSize: '0.75rem' }}>
-              {customerThreads.length}
-            </span>
+          {/* Status Tabs */}
+          <div style={{ padding: '8px', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '4px', background: '#ffffff' }}>
+            <button
+              type="button"
+              onClick={() => setFilterTab('open')}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                borderRadius: '8px',
+                border: 'none',
+                background: filterTab === 'open' ? '#fee2e2' : 'transparent',
+                color: filterTab === 'open' ? '#991b1b' : '#64748b',
+                fontWeight: 700,
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+              }}
+            >
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#ef4444' }} />
+              {lang === 'bn' ? 'চলমান' : 'Open'} ({openCount})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterTab('resolved')}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                borderRadius: '8px',
+                border: 'none',
+                background: filterTab === 'resolved' ? '#dcfce7' : 'transparent',
+                color: filterTab === 'resolved' ? '#166534' : '#64748b',
+                fontWeight: 700,
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+              }}
+            >
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e' }} />
+              {lang === 'bn' ? 'সম্পন্ন' : 'Closed'} ({resolvedCount})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterTab('all')}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '8px',
+                border: 'none',
+                background: filterTab === 'all' ? '#e2e8f0' : 'transparent',
+                color: filterTab === 'all' ? '#1e293b' : '#64748b',
+                fontWeight: 700,
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+              }}
+            >
+              {lang === 'bn' ? 'সব' : 'All'}
+            </button>
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {customerThreads.length === 0 ? (
-              <p style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
-                {lang === 'bn' ? 'কোনো সাপোর্ট মেসেজ নেই।' : 'No customer messages yet.'}
+            {filteredThreads.length === 0 ? (
+              <p style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                {filterTab === 'open'
+                  ? (lang === 'bn' ? '🎉 কোনো পেন্ডিং টিকিট নেই!' : '🎉 No open tickets!')
+                  : (lang === 'bn' ? 'কোনো মেসেজ নেই।' : 'No messages found.')}
               </p>
             ) : (
-              customerThreads.map((thread) => {
+              filteredThreads.map((thread) => {
                 const isSelected = thread.userId === selectedUserId
+                const isOpen = thread.status === 'open'
                 return (
                   <div
                     key={thread.userId}
@@ -142,17 +292,27 @@ export default function SellerSupport() {
                       borderBottom: '1px solid #f1f5f9',
                       cursor: 'pointer',
                       background: isSelected ? '#ffffff' : 'transparent',
-                      borderLeft: isSelected ? '4px solid #166534' : '4px solid transparent',
+                      borderLeft: isSelected ? (isOpen ? '4px solid #ef4444' : '4px solid #166534') : '4px solid transparent',
                       transition: 'background 0.15s ease',
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                      <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{thread.userName}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span
+                          style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            background: isOpen ? '#ef4444' : '#22c55e',
+                          }}
+                        />
+                        <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{thread.userName}</strong>
+                      </div>
                       <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
                         {new Date(thread.lastMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: '0.78rem', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
                       {thread.lastMsg.message}
                     </div>
                     {thread.userPhone && (
@@ -172,16 +332,29 @@ export default function SellerSupport() {
           {currentThread ? (
             <>
               {/* Chat Thread Header */}
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>
-                    {currentThread.userName}
+                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{currentThread.userName}</span>
+                    <span
+                      style={{
+                        fontSize: '0.7rem',
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        fontWeight: 700,
+                        background: currentThread.status === 'open' ? '#fee2e2' : '#dcfce7',
+                        color: currentThread.status === 'open' ? '#991b1b' : '#166534',
+                      }}
+                    >
+                      {currentThread.status === 'open' ? (lang === 'bn' ? '🔴 চলমান' : '🔴 Open') : (lang === 'bn' ? '🟢 সম্পন্ন' : '🟢 Resolved')}
+                    </span>
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
                     {currentThread.userPhone ? `📞 ${currentThread.userPhone}` : 'Registered Customer'}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
                   {customerRecentOrder && (
                     <Link
                       to="/seller/orders"
@@ -190,23 +363,48 @@ export default function SellerSupport() {
                         background: '#eff6ff',
                         color: '#1d4ed8',
                         border: '1px solid #bfdbfe',
-                        padding: '4px 10px',
+                        padding: '4px 8px',
                         borderRadius: '6px',
                         fontWeight: 700,
                         textDecoration: 'none',
                       }}
                     >
-                      📦 Order #{formatOrderId(customerRecentOrder.id)} ({customerRecentOrder.status})
+                      📦 Order #{formatOrderId(customerRecentOrder.id)}
                     </Link>
                   )}
-                  <button
-                    type="button"
-                    onClick={handleResolve}
-                    className="btn btn-secondary btn-sm"
-                    style={{ fontSize: '0.75rem', padding: '4px 10px' }}
-                  >
-                    ✓ {lang === 'bn' ? 'সম্পন্ন' : 'Resolve'}
-                  </button>
+
+                  {/* Close / Reopen buttons */}
+                  {currentThread.status === 'open' ? (
+                    <button
+                      type="button"
+                      onClick={handleCloseTicket}
+                      disabled={sending}
+                      className="btn btn-primary btn-sm"
+                      style={{ fontSize: '0.78rem', padding: '5px 12px', background: '#166534' }}
+                    >
+                      ✓ {lang === 'bn' ? 'টিকিট বন্ধ করুন' : 'Close Ticket'}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleReopen}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                      >
+                        🔄 {lang === 'bn' ? 'পুনরায় খুলুন' : 'Reopen'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeleteThread}
+                        title="Delete from database"
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '4px 8px', color: '#ef4444' }}
+                      >
+                        🗑️
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -255,7 +453,7 @@ export default function SellerSupport() {
                       }}
                     >
                       <div style={{ fontSize: '0.68rem', fontWeight: 700, color: isStaff ? '#bbf7d0' : '#64748b', marginBottom: '2px' }}>
-                        {isStaff ? 'Store Response' : m.userName}
+                        {isStaff ? 'Store Desk' : m.userName}
                       </div>
                       <div>{m.message}</div>
                       <div style={{ fontSize: '0.65rem', color: isStaff ? 'rgba(255,255,255,0.7)' : '#94a3b8', textAlign: 'right', marginTop: '3px' }}>

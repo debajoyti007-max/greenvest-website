@@ -6,7 +6,7 @@ import { formatOrderId } from '../lib/business'
 import { showToast } from './Toast'
 
 export default function SupportChatWidget() {
-  const { lang, orders, supportMessages, sendSupportMessage, getUserKhataBalance } = useStore()
+  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance } = useStore()
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [inputMsg, setInputMsg] = useState('')
@@ -145,25 +145,49 @@ export default function SupportChatWidget() {
                 {lang === 'bn' ? 'সরাসরি অনলাইন সাপোর্ট' : 'Live Store Support'}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              style={{
-                background: 'rgba(255, 255, 255, 0.15)',
-                border: 'none',
-                color: '#ffffff',
-                width: '28px',
-                height: '28px',
-                borderRadius: '50%',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              ✕
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {user && userThread.length > 0 && userThread.some((m) => m.status === 'open') && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await resolveSupportTicket(user.id)
+                    showToast(lang === 'bn' ? 'টিকিট সম্পন্ন হিসেবে চিহ্নিত করা হয়েছে!' : 'Ticket marked as resolved!', '✅')
+                  }}
+                  title="Mark issue as solved"
+                  style={{
+                    background: '#22c55e',
+                    border: 'none',
+                    color: '#ffffff',
+                    padding: '3px 8px',
+                    borderRadius: '12px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✓ {lang === 'bn' ? 'সমাধান হয়েছে' : 'Solved'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: 'none',
+                  color: '#ffffff',
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* Quick FAQ / Instant Helper Pills (Zero Supabase API usage) */}

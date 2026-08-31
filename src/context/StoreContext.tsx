@@ -44,6 +44,9 @@ import {
   fetchSupportMessagesApi,
   sendSupportMessageApi,
   resolveSupportTicketApi,
+  reopenSupportTicketApi,
+  deleteSupportThreadApi,
+  cleanupOldSupportMessagesApi,
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
 import { calcDeliveryFee } from '../lib/delivery'
@@ -146,6 +149,9 @@ interface StoreContextValue {
   supportMessages: SupportMessage[]
   sendSupportMessage: (msg: Omit<SupportMessage, 'id' | 'createdAt'>) => Promise<SupportMessage>
   resolveSupportTicket: (userId: string) => Promise<void>
+  reopenSupportTicket: (userId: string) => Promise<void>
+  deleteSupportThread: (userId: string) => Promise<void>
+  cleanupOldSupportMessages: (daysOld?: number) => Promise<number>
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null)
@@ -967,6 +973,70 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud],
   )
 
+  const reopenSupportTicket = useCallback(
+    async (userId: string) => {
+      setSupportMessages((prev) => {
+        const next = prev.map((m) => (m.userId === userId ? { ...m, status: 'open' as const } : m))
+        saveStoredSupportMessages(next)
+        return next
+      })
+
+      if (cloud) {
+        try {
+          await reopenSupportTicketApi(userId)
+        } catch (err) {
+          console.warn('Failed to cloud sync reopen support ticket', err)
+        }
+      }
+    },
+    [cloud],
+  )
+
+  const deleteSupportThread = useCallback(
+    async (userId: string) => {
+      setSupportMessages((prev) => {
+        const next = prev.filter((m) => m.userId !== userId)
+        saveStoredSupportMessages(next)
+        return next
+      })
+
+      if (cloud) {
+        try {
+          await deleteSupportThreadApi(userId)
+        } catch (err) {
+          console.warn('Failed to cloud sync delete support thread', err)
+        }
+      }
+    },
+    [cloud],
+  )
+
+  const cleanupOldSupportMessages = useCallback(
+    async (daysOld = 7): Promise<number> => {
+      const cutoffTime = Date.now() - daysOld * 24 * 60 * 60 * 1000
+      let purged = 0
+      setSupportMessages((prev) => {
+        const next = prev.filter((m) => {
+          const isOld = m.status === 'resolved' && new Date(m.createdAt).getTime() < cutoffTime
+          return !isOld
+        })
+        purged = prev.length - next.length
+        saveStoredSupportMessages(next)
+        return next
+      })
+
+      if (cloud) {
+        try {
+          await cleanupOldSupportMessagesApi(daysOld)
+        } catch (err) {
+          console.warn('Failed to cloud cleanup old support messages', err)
+        }
+      }
+      return purged
+    },
+    [cloud],
+  )
+
   const bulkUpdateOrderStatus = useCallback(
     async (ids: string[], status: OrderStatus) => {
       if (ids.length === 0) return
@@ -1265,6 +1335,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       supportMessages,
       sendSupportMessage,
       resolveSupportTicket,
+      reopenSupportTicket,
+      deleteSupportThread,
+      cleanupOldSupportMessages,
     }),
     [
       products,
@@ -1323,6 +1396,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       supportMessages,
       sendSupportMessage,
       resolveSupportTicket,
+      reopenSupportTicket,
+      deleteSupportThread,
+      cleanupOldSupportMessages,
     ],
   )
 
