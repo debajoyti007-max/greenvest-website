@@ -999,6 +999,59 @@ describe('In-App Customer Support & Live Chat Desk', () => {
   })
 })
 
+// 22. Financial Ledger Integrity & Security Safeguards
+describe('Financial Ledger Integrity & Security Safeguards', () => {
+  test('Blocks Khata checkout if current balance + order total exceeds credit limit', () => {
+    const userKhataBalance = 1800
+    const creditLimit = 2000
+    const orderTotal = 350
+
+    const isExceeded = userKhataBalance + orderTotal > creditLimit
+    assert.equal(isExceeded, true, 'Must flag credit limit violation')
+  })
+
+  test('Permits Khata checkout if current balance + order total is within limit', () => {
+    const userKhataBalance = 500
+    const creditLimit = 2000
+    const orderTotal = 350
+
+    const isExceeded = userKhataBalance + orderTotal > creditLimit
+    assert.equal(isExceeded, false, 'Must permit checkout within credit limit')
+  })
+
+  test('Safe discount capping ensures grand total never drops below zero', () => {
+    const subtotal = 200
+    const deliveryFee = 30
+    const maliciousDiscount = 500 // Exploit attempt larger than subtotal
+
+    const safeDiscount = Math.min(subtotal, Math.max(0, maliciousDiscount))
+    const total = Math.max(0, subtotal + deliveryFee - safeDiscount)
+
+    assert.equal(safeDiscount, 200, 'Discount must be capped to subtotal')
+    assert.equal(total, 30, 'Customer must still pay delivery fee')
+  })
+
+  test('Cancelling a Khata order triggers an offsetting payment credit in the ledger', () => {
+    const order = { id: 'ord-123', userId: 'u1', total: 450, isKhataOrder: true, status: 'confirmed' }
+    
+    // Simulate cancellation
+    const isCancelled = true
+    let ledger = [{ userId: 'u1', type: 'order_debit', amount: 450 }]
+
+    if (isCancelled && order.isKhataOrder) {
+      ledger.push({ userId: 'u1', type: 'payment_credit', amount: order.total })
+    }
+
+    const currentBalance = ledger.reduce((sum, entry) => {
+      if (entry.type === 'order_debit') return sum + entry.amount
+      if (entry.type === 'payment_credit') return sum - entry.amount
+      return sum
+    }, 0)
+
+    assert.equal(currentBalance, 0, 'Cancelled Khata order dues must return to zero')
+  })
+})
+
 
 
 

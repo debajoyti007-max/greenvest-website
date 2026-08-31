@@ -28,6 +28,7 @@ export default function Checkout() {
     fetchAddresses,
     saveAddress,
     validateCoupon,
+    getUserKhataBalance,
   } = useStore()
   const navigate = useNavigate()
 
@@ -276,6 +277,21 @@ export default function Checkout() {
       )
       submitLockRef.current = false
       return
+    }
+
+    // 2.5 Khata Credit Limit Safety Check
+    if (paymentMode === 'khata' && user) {
+      const currentKhataBal = getUserKhataBalance(user.id)
+      const creditLimit = user.khataCreditLimit || 2000
+      if (currentKhataBal + grandTotal > creditLimit) {
+        setError(
+          lang === 'bn'
+            ? `আপনার খাতার বকেয়া সীমা (₹${creditLimit}) অতিক্রম করছে। বর্তমান বকেয়া: ₹${currentKhataBal}। অনুগ্রহ করে বকেয়া পরিশোধ করুন বা ৫০% অগ্রিম পেমেন্ট বেছে নিন।`
+            : `Order exceeds your approved Khata credit limit of ₹${creditLimit}. Current dues: ₹${currentKhataBal}. Please clear dues or select UPI Advance.`,
+        )
+        submitLockRef.current = false
+        return
+      }
     }
 
     setSubmitting(true)

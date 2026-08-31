@@ -49,7 +49,7 @@ import {
   cleanupOldSupportMessagesApi,
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
-import { calcDeliveryFee } from '../lib/delivery'
+import { calcDeliveryFee, STORE_LOCATION } from '../lib/delivery'
 import { getStoredKhataEntries, recordKhataTransaction, calculateUserKhataBalance, fetchKhataEntriesApi, saveKhataEntryApi } from '../lib/khata'
 import { getStoredPromotionalDeals, saveStoredPromotionalDeals } from '../lib/deals'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
@@ -533,8 +533,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       const subtotal = items.reduce((s, i) => s + i.unitPrice * i.qty, 0)
       if (subtotal < MIN_ORDER_AMOUNT) return null
-      const { fee: deliveryFee } = calcDeliveryFee(opts.pin, opts.zones)
-      const total = Math.max(0, subtotal + deliveryFee - (opts.discountAmount || 0))
+
+      const isPickup = opts.pin === STORE_LOCATION.pin || opts.address.toLowerCase().includes('pickup')
+      const coords = opts.geoLat && opts.geoLng ? { lat: opts.geoLat, lng: opts.geoLng } : null
+      const { fee: deliveryFee } = calcDeliveryFee(opts.pin, coords || opts.zones, isPickup ? 'pickup' : 'delivery')
+      const safeDiscount = Math.min(subtotal, Math.max(0, opts.discountAmount || 0))
+      const total = Math.max(0, subtotal + deliveryFee - safeDiscount)
       
       const isKhata = opts.paymentType === 'khata'
       const isFull = opts.paymentType === 'full'
@@ -780,6 +784,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return prev.map((o) => (o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o))
       })
 
+      // 🛡️ Financial Ledger Integrity: Auto-revert Khata debit if a Khata order is cancelled
+      if (status === 'cancelled') {
+        const targetOrder = orders.find((o) => o.id === id)
+        if (targetOrder?.isKhataOrder && targetOrder.status !== 'cancelled') {
+          recordKhataTransaction(
+            targetOrder.userId,
+            'payment_credit',
+            targetOrder.total,
+            `Khata Reversal: Order #${targetOrder.id.slice(-6)} Cancelled`,
+            targetOrder.id,
+            user?.name || 'System Reversal',
+          )
+          setKhataEntries(getStoredKhataEntries())
+        }
+      }
+
       if (cloud) {
         try {
           await updateOrderStatusApi(id, status, rejectionReason)
@@ -900,6 +920,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       const staleIds = staleOrders.map((o) => o.id)
       const reason = `Auto-cancelled: Payment unverified after ${timeoutHours} hours`
+
+      // 🛡️ Financial Ledger Integrity: Auto-revert Khata debits for stale orders
+      staleOrders.forEach((o) => {
+        if (o.isKhataOrder && o.status !== 'cancelled') {
+          recordKhataTransaction(
+            o.userId,
+            'payment_credit',
+            o.total,
+            `Auto-Reversal: Order #${o.id.slice(-6)} Stale Cancelled`,
+            o.id,
+            'System Auto-Cancel',
+          )
+        }
+      })
+      setKhataEntries(getStoredKhataEntries())
 
       setOrders((prev) =>
         prev.map((o) =>
