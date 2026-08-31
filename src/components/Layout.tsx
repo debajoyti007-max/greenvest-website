@@ -270,8 +270,9 @@ export default function Layout() {
 
             {/* Legal column */}
             <div className="footer-col">
-              <h4 className="footer-col-title">{lang === 'bn' ? 'সহায়তা' : 'Support'}</h4>
+              <h4 className="footer-col-title">{lang === 'bn' ? 'সহায়তা ও আইনি' : 'Support & Legal'}</h4>
               <nav className="footer-links" aria-label="Legal">
+                <Link to="/support">{lang === 'bn' ? '💬 সাপোর্ট ডেস্ক' : '💬 Support Desk'}</Link>
                 <Link to="/contact">{t(lang, 'contact')}</Link>
                 <Link to="/privacy">{t(lang, 'privacy')}</Link>
                 <Link to="/terms">{t(lang, 'terms')}</Link>
@@ -285,10 +286,12 @@ export default function Layout() {
           <div className="footer-bottom">
             <span>
               {lang === 'bn'
-                ? `ডেলিভারি ${DELIVERY_WINDOW_BN} · মিনিমাম ₹${MIN_ORDER_AMOUNT}`
-                : `Delivery ${DELIVERY_WINDOW} · Min ₹${MIN_ORDER_AMOUNT}`}
+                ? `ডেলিভারি ${DELIVERY_WINDOW_BN} · মিনিমাম ₹${MIN_ORDER_AMOUNT} · 🇮🇳 কান্ট্রি অফ অরিজিন: ভারত`
+                : `Delivery ${DELIVERY_WINDOW} · Min ₹${MIN_ORDER_AMOUNT} · 🇮🇳 Country of Origin: India`}
             </span>
-            <span className="footer-copy">© {new Date().getFullYear()} GreenVest. All rights reserved.</span>
+            <span className="footer-copy">
+              © {new Date().getFullYear()} GreenVest · FSSAI Hygiene Compliant · Purba Medinipur, West Bengal
+            </span>
           </div>
         </div>
       </footer>

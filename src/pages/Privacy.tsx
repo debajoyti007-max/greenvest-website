@@ -1,64 +1,142 @@
 import { Link } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { SUPPORT_PHONE } from '../lib/business'
+import { STORE_LOCATION } from '../lib/delivery'
 
 export default function Privacy() {
   const { lang } = useStore()
 
   return (
-    <div className="page narrow legal-page">
-      <h1>{lang === 'bn' ? 'গোপনীয়তা ও নীতিমালা' : 'Privacy & Policy'}</h1>
+    <div className="page narrow legal-page" style={{ maxWidth: '800px', margin: '0 auto', paddingBottom: '3rem' }}>
+      <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
+        <h1 style={{ fontSize: '1.6rem', color: '#166534', margin: '0 0 0.4rem' }}>
+          {lang === 'bn' ? 'গোপনীয়তা ও ডেটা সুরক্ষা নীতি' : 'Privacy & Data Protection Policy'}
+        </h1>
+        <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b' }}>
+          {lang === 'bn'
+            ? 'সর্বশেষ আপডেট: আগস্ট ২০২৬ · তথ্য প্রযুক্তি আইন, ২০০০ ও উপভোক্তা সুরক্ষা (ই-কমার্স) বিধিমালা, ২০২০ অনুযায়ী প্রণীত'
+            : 'Last Updated: August 2026 · Formulated under Information Technology Act, 2000 & Consumer Protection (E-Commerce) Rules, 2020'}
+        </p>
+      </div>
 
-      {/* ── Privacy Policy ── */}
-      <section className="legal-section">
-        <h2>{lang === 'bn' ? '🔒 গোপনীয়তা নীতি' : '🔒 Privacy Policy'}</h2>
-        <p>
+      {/* Section 1: Overview */}
+      <section className="legal-section" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.15rem', color: '#0f172a', marginBottom: '0.5rem' }}>
+          {lang === 'bn' ? '১. ভূমিকা ও পরিচিতি' : '1. Introduction & Overview'}
+        </h2>
+        <p style={{ fontSize: '0.88rem', lineHeight: '1.6', color: '#334155' }}>
           {lang === 'bn'
-            ? 'GreenVest আপনার নাম, ইমেইল, ফোন ও ডেলিভারি ঠিকানা শুধুমাত্র অর্ডার পূরণ ও কাস্টমার সাপোর্টের জন্য সংগ্রহ করে। আপনার তথ্য তৃতীয় পক্ষের কাছে বিক্রি করা হয় না।'
-            : 'GreenVest collects your name, email, phone and delivery address solely to fulfill orders and provide customer support. Your data is never sold to third parties.'}
-        </p>
-        <p>
-          {lang === 'bn'
-            ? 'অর্ডার ডেটা একটি সুরক্ষিত ক্লাউড ডাটাবেসে (Supabase) সংরক্ষিত হয়। কার্ট ও ভাষা পছন্দ আপনার ডিভাইসে সংরক্ষিত থাকতে পারে।'
-            : 'Order data is stored in a secured cloud database (Supabase). Your cart and language preference may be stored locally on your device.'}
-        </p>
-        <p>
-          {lang === 'bn'
-            ? 'আপনার UPI/UTR তথ্য কখনো স্বয়ংক্রিয়ভাবে প্রক্রিয়া করা হয় না — সেলার ম্যানুয়ালি যাচাই করেন।'
-            : 'Your UPI/UTR details are never processed automatically — the seller verifies them manually.'}
+            ? 'GreenVest ("আমরা", "আমাদের", "ওয়েবসাইট") আমাদের গ্রাহকদের ব্যক্তিগত তথ্যের গোপনীয়তা ও সুরক্ষায় প্রতিশ্রুতিবদ্ধ। এই গোপনীয়তা নীতি ব্যাখ্যা করে কিভাবে greenvest.shop ব্যবহার করার সময় আপনার তথ্য সংগৃহীত, ব্যবহৃত ও সুরক্ষিত রাখা হয়।'
+            : 'GreenVest ("we", "our", "platform") is firmly committed to protecting your personal data and privacy. This Privacy Policy outlines how your personal information is collected, processed, and safeguarded when using greenvest.shop.'}
         </p>
       </section>
 
-      {/* ── Refund Policy ── */}
-      <section className="legal-section">
-        <h2>{lang === 'bn' ? '💸 রিফান্ড নীতি' : '💸 Refund Policy'}</h2>
-        <ul className="legal-list">
+      {/* Section 2: Data Collected */}
+      <section className="legal-section" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.15rem', color: '#0f172a', marginBottom: '0.5rem' }}>
+          {lang === 'bn' ? '২. আমরা যেসকল তথ্য সংগ্রহ করি' : '2. Information We Collect'}
+        </h2>
+        <ul style={{ fontSize: '0.88rem', lineHeight: '1.6', color: '#334155', paddingLeft: '1.2rem' }}>
           <li>
+            <strong>{lang === 'bn' ? 'অ্যাকাউন্ট ও যোগাযোগের তথ্য:' : 'Account & Contact Details:'}</strong>{' '}
             {lang === 'bn'
-              ? 'UTR যাচাইয়ের আগে অর্ডার বাতিল হলে অগ্রিম পেমেন্ট ফেরত পাওয়া যাবে।'
-              : 'If an order is cancelled before UTR verification, the advance payment can be refunded.'}
+              ? 'নাম, মোবাইল নম্বর, ইমেইল ঠিকানা ও ৪-সংখ্যার লগইন সিকিউরিটি পিন।'
+              : 'Full name, mobile phone number, email address, and 4-digit authentication security PIN.'}
           </li>
           <li>
+            <strong>{lang === 'bn' ? 'ডেলিভারি ঠিকানা ও অবস্থান:' : 'Delivery Address & Geo-Coordinates:'}</strong>{' '}
             {lang === 'bn'
-              ? 'যাচাইয়ের পরে রিফান্ডের জন্য সেলারের অনুমোদন প্রয়োজন।'
-              : 'After verification, refunds require seller approval.'}
+              ? 'বাড়ি/রাস্তা/ল্যান্ডমার্কের ঠিকানা, পিনকোড (৭২১৬৩২, ৭২১৬৩৩, ৭২১৬৪৩) এবং সঠিক গন্তব্যে পৌঁছানোর জন্য গ্রাহকের অনুমতি সাপেক্ষে জিপিএস লোকেশন।'
+              : 'Street address, postal PIN codes (721632, 721633, 721643), and optional GPS coordinates for door-to-door delivery.'}
           </li>
           <li>
+            <strong>{lang === 'bn' ? 'পেমেন্ট ও লেনদেন ডেটা:' : 'Payment & Transaction Records:'}</strong>{' '}
             {lang === 'bn'
-              ? `নষ্ট বা ভুল পণ্যের ক্ষেত্রে একই দিনে ${SUPPORT_PHONE}-তে যোগাযোগ করুন।`
-              : `For spoiled or wrong items, contact us the same day at ${SUPPORT_PHONE}.`}
-          </li>
-          <li>
-            {lang === 'bn'
-              ? 'UPI/UTR পেমেন্ট ম্যানুয়াল — কোনো স্বয়ংক্রিয় রিফান্ড গেটওয়ে নেই।'
-              : 'UPI/UTR payment is manual — there is no automatic refund gateway.'}
+              ? 'অর্ডার ট্রানজ্যাকশন আইডি, ব্যাংকের ১২-সংখ্যার UPI UTR রেফারেন্স নম্বর ও খাতা ব্যালেন্স। আমরা কোনো ডেবিট/ক্রেডিট কার্ড বা নেট ব্যাংকিং পাসওয়ার্ড সংগ্রহ বা সংরক্ষণ করি না।'
+              : 'Order IDs, bank UPI 12-digit UTR reference numbers, and Khata credit records. We DO NOT collect, process, or store credit/debit card numbers or bank passwords.'}
           </li>
         </ul>
       </section>
 
-      <Link to="/" className="btn btn-secondary">
-        {lang === 'bn' ? '← দোকানে ফিরুন' : '← Back to shop'}
-      </Link>
+      {/* Section 3: Purpose & Usage */}
+      <section className="legal-section" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.15rem', color: '#0f172a', marginBottom: '0.5rem' }}>
+          {lang === 'bn' ? '৩. তথ্যের ব্যবহার ও উদ্দেশ্য' : '3. How We Use Your Information'}
+        </h2>
+        <ul style={{ fontSize: '0.88rem', lineHeight: '1.6', color: '#334155', paddingLeft: '1.2rem' }}>
+          <li>{lang === 'bn' ? 'আপনার তাজা শাকসবজি ও মাছের অর্ডার নির্ভুলভাবে প্যাক ও হোম ডেলিভারি নিশ্চিত করতে।' : 'To process, prepare, pack, and fulfill doorstep delivery of fresh groceries and fish.'}</li>
+          <li>{lang === 'bn' ? 'অর্ডার স্ট্যাটাস, কনফার্মেশন ও ডেলিভারি আপডেট প্রদান করতে (ওয়েবসাইট নোটিফিকেশন ও ঐচ্ছিক WhatsApp মেসেজ)।' : 'To send order confirmations, live delivery tracking updates, and invoices.'}</li>
+          <li>{lang === 'bn' ? 'ডিজিটাল খাতা পাসবুক পরিচালনা ও কাস্টমার সাপোর্ট সরবরাহ করতে।' : 'To maintain accurate digital Khata credit passbooks and provide responsive customer support.'}</li>
+          <li>{lang === 'bn' ? 'আমরা কখনোই আপনার ব্যক্তিগত তথ্য কোনো বিজ্ঞাপনদাতা বা তৃতীয় পক্ষের কাছে বিক্রি, লিজ বা হস্তান্তর করি না।' : 'We NEVER sell, trade, or rent your personal information to third-party marketing companies.'}</li>
+        </ul>
+      </section>
+
+      {/* Section 4: Data Security */}
+      <section className="legal-section" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.15rem', color: '#0f172a', marginBottom: '0.5rem' }}>
+          {lang === 'bn' ? '৪. ডেটা সুরক্ষা ও স্টোরেজ' : '4. Data Storage & Security Standards'}
+        </h2>
+        <p style={{ fontSize: '0.88rem', lineHeight: '1.6', color: '#334155' }}>
+          {lang === 'bn'
+            ? 'আপনার ডেটা একটি এনক্রিপ্টেড ক্লাউড ডাটাবেস (Supabase Enterprise Infrastructure) ও রো-লেভেল সিকিউরিটি (RLS) প্রোটোকলের মাধ্যমে সুরক্ষিত রাখা হয়। গ্রাহকদের পিন ক্রিপ্টোগ্রাফিকভাবে সুরক্ষিত থাকে।'
+            : 'Your data is secured in cloud database infrastructure with Row-Level Security (RLS) policies and HTTPS / SSL encryption. Access to customer records is restricted strictly to authorized store personnel.'}
+        </p>
+      </section>
+
+      {/* Section 5: Statutory Grievance Redressal (Mandatory under Rule 4(4)) */}
+      <section
+        className="legal-section"
+        style={{
+          background: '#f0fdf4',
+          border: '1.5px solid #86efac',
+          borderRadius: '12px',
+          padding: '1.25rem',
+          marginBottom: '1.5rem',
+        }}
+      >
+        <h2 style={{ fontSize: '1.15rem', color: '#166534', margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span>⚖️</span>
+          {lang === 'bn' ? '৫. সংবিধিবদ্ধ অভিযোগ কর্মকর্তা (Grievance Redressal Officer)' : '5. Statutory Grievance Redressal Officer'}
+        </h2>
+        <p style={{ fontSize: '0.82rem', color: '#15803d', margin: '0 0 0.75rem', fontWeight: 600 }}>
+          {lang === 'bn'
+            ? 'উপভোক্তা সুরক্ষা (ই-কমার্স) বিধিমালা, ২০২০-এর বিধি ৪(৪) অনুযায়ী নিয়োগকৃত:'
+            : 'Appointed pursuant to Rule 4(4) of the Consumer Protection (E-Commerce) Rules, 2020:'}
+        </p>
+
+        <div style={{ background: '#ffffff', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '0.85rem 1rem', fontSize: '0.85rem', lineHeight: '1.6', color: '#1e293b' }}>
+          <div><strong>{lang === 'bn' ? 'কর্মকর্তার নাম:' : 'Officer Name:'}</strong> Debajoyti Barman</div>
+          <div><strong>{lang === 'bn' ? 'পদবী:' : 'Designation:'}</strong> Store Administrator & Grievance Officer</div>
+          <div><strong>{lang === 'bn' ? 'কোম্পানি / শপ:' : 'Entity Name:'}</strong> GreenVest Fresh Groceries</div>
+          <div><strong>{lang === 'bn' ? 'ঠিকানা:' : 'Physical Address:'}</strong> {STORE_LOCATION.address}, West Bengal, PIN 721632</div>
+          <div><strong>{lang === 'bn' ? 'ইমেইল:' : 'Official Email:'}</strong> support@greenvest.shop / debajoyti007@gmail.com</div>
+          <div><strong>{lang === 'bn' ? 'হেল্পলাইন:' : 'Helpline:'}</strong> {SUPPORT_PHONE}</div>
+          <div style={{ marginTop: '0.4rem', color: '#166534', fontWeight: 600 }}>
+            ⏱️ {lang === 'bn' ? 'অভিযোগ গ্রহণের স্বীকৃতি: ৪৮ ঘণ্টার মধ্যে · চূড়ান্ত নিষ্পত্তি: ৩০ দিনের মধ্যে।' : 'Acknowledgment: Within 48 hours · Final Resolution: Within 30 days.'}
+          </div>
+        </div>
+      </section>
+
+      {/* Section 6: Jurisdiction */}
+      <section className="legal-section" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.15rem', color: '#0f172a', marginBottom: '0.5rem' }}>
+          {lang === 'bn' ? '৬. আইনি এখতিয়ার' : '6. Governing Law & Jurisdiction'}
+        </h2>
+        <p style={{ fontSize: '0.88rem', lineHeight: '1.6', color: '#334155' }}>
+          {lang === 'bn'
+            ? 'এই নীতি ভারতীয় আইন এবং পশ্চিমবঙ্গ রাজ্যের প্রযোজ্য বিধি দ্বারা নিয়ন্ত্রিত হবে। যেকোনো আইনি বিরোধ তমলুক / পূর্ব মেদিনীপুর আদালতের বিচারিক এখতিয়ারভুক্ত হবে।'
+            : 'This Privacy Policy is governed by the laws of India. Any disputes arising out of or in connection with the platform shall be subject to the exclusive jurisdiction of the competent courts in Tamluk / Purba Medinipur, West Bengal.'}
+        </p>
+      </section>
+
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <Link to="/" className="btn btn-primary">
+          {lang === 'bn' ? '← দোকানে ফিরুন' : '← Back to shop'}
+        </Link>
+        <Link to="/terms" className="btn btn-secondary">
+          {lang === 'bn' ? 'শর্তাবলী দেখুন →' : 'View Terms of Service →'}
+        </Link>
+      </div>
     </div>
   )
 }

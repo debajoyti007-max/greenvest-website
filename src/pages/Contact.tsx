@@ -129,6 +129,47 @@ export default function Contact() {
           </div>
         </div>
       </div>
+
+      {/* ⚖️ Statutory Grievance Redressal & Legal Compliance Card */}
+      <div style={{
+        marginTop: '1.5rem',
+        background: '#ffffff',
+        border: '1.5px solid #cbd5e1',
+        borderRadius: '16px',
+        padding: '1.25rem',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <span style={{ fontSize: '1.3rem' }}>⚖️</span>
+          <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>
+            {lang === 'bn' ? 'সংবিধিবদ্ধ অভিযোগ প্রতিকার ও আইনি তথ্য' : 'Statutory Grievance Redressal & Compliance'}
+          </h3>
+        </div>
+        <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 0.75rem', lineHeight: 1.5 }}>
+          {lang === 'bn'
+            ? 'উপভোক্তা সুরক্ষা (ই-কমার্স) বিধিমালা, ২০২০ এবং ভারতীয় খাদ্য সুরক্ষা মানদণ্ড (FSSAI) অনুসারে প্রকাশ্য তথ্য:'
+            : 'Statutory disclosures under Consumer Protection (E-Commerce) Rules, 2020 and FSSAI standards:'}
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', fontSize: '0.82rem', color: '#334155', background: '#f8fafc', padding: '0.85rem', borderRadius: '10px' }}>
+          <div>
+            <strong>{lang === 'bn' ? 'অভিযোগ কর্মকর্তা:' : 'Grievance Officer:'}</strong> Debajoyti Barman
+            <div style={{ color: '#64748b', fontSize: '0.75rem' }}>support@greenvest.shop</div>
+          </div>
+          <div>
+            <strong>{lang === 'bn' ? 'খাদ্য মানক ও সুরক্ষা:' : 'Food Safety Standard:'}</strong> FSSAI Hygiene Compliant
+            <div style={{ color: '#64748b', fontSize: '0.75rem' }}>100% Unadulterated & Fresh</div>
+          </div>
+          <div>
+            <strong>{lang === 'bn' ? 'পণ্যের উৎস:' : 'Country of Origin:'}</strong> India 🇮🇳 (West Bengal)
+            <div style={{ color: '#64748b', fontSize: '0.75rem' }}>Local Farm & Mandi Sourced</div>
+          </div>
+          <div>
+            <strong>{lang === 'bn' ? 'আইনি এখতিয়ার:' : 'Jurisdiction:'}</strong> Tamluk, Purba Medinipur
+            <div style={{ color: '#64748b', fontSize: '0.75rem' }}>Response within 48 Hours</div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
