@@ -42,6 +42,21 @@ export function initCacheGuard(): void {
       })
       localStorage.setItem(CACHE_VERSION_KEY, CURRENT_CACHE_VERSION)
     }
+
+    // 🧹 Routine Auto-Maintenance (Prune old notification logs older than 30 days)
+    try {
+      const notifsRaw = localStorage.getItem('gv_app_notifications')
+      if (notifsRaw) {
+        const notifs = JSON.parse(notifsRaw)
+        if (Array.isArray(notifs)) {
+          const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+          const fresh = notifs.filter((n: any) => !n.createdAt || new Date(n.createdAt).getTime() > thirtyDaysAgo)
+          if (fresh.length !== notifs.length) {
+            localStorage.setItem('gv_app_notifications', JSON.stringify(fresh))
+          }
+        }
+      }
+    } catch {}
   } catch (e) {
     console.warn('initCacheGuard failed silently:', e)
   }
