@@ -24,6 +24,7 @@ export default function Auth() {
   const [emailOrPhone, setEmailOrPhone] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [botTrap, setBotTrap] = useState('')
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
@@ -58,6 +59,32 @@ export default function Auth() {
     e.preventDefault()
     setError('')
     setInfo('')
+
+    // 🛡️ 1. Anti-Bot Honeypot Trap (Instantly catches automated spam scripts)
+    if (botTrap) {
+      console.warn('Bot detected via honeypot trap')
+      setBusy(true)
+      await new Promise((r) => setTimeout(r, 1200))
+      setBusy(false)
+      setError(lang === 'bn' ? 'অনুরোধ প্রত্যাখ্যান করা হয়েছে' : 'Request blocked.')
+      return
+    }
+
+    // 🛡️ 2. Rapid Submission Rate Limiter
+    const now = Date.now()
+    const attemptsKey = 'gv_auth_attempt_log'
+    let history: number[] = []
+    try {
+      history = JSON.parse(sessionStorage.getItem(attemptsKey) || '[]').filter((t: number) => now - t < 15000)
+    } catch {}
+    if (history.length >= 5) {
+      setError(lang === 'bn' ? 'অতিরিক্ত চেষ্টার কারণে ১৫ সেকেন্ড অপেক্ষা করুন' : 'Too many attempts. Please wait 15 seconds.')
+      return
+    }
+    history.push(now)
+    try {
+      sessionStorage.setItem(attemptsKey, JSON.stringify(history))
+    } catch {}
 
     const cleanName = name.trim().replace(/\s+/g, ' ')
     const cleanId = emailOrPhone.trim()
@@ -202,6 +229,18 @@ export default function Auth() {
       </div>
 
       <form className="form" onSubmit={onSubmit}>
+        {/* Invisible Honeypot anti-bot shield (Zero impact on real humans) */}
+        <input
+          type="text"
+          name="website_profile_url_verification"
+          value={botTrap}
+          onChange={(e) => setBotTrap(e.target.value)}
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          style={{ display: 'none', position: 'absolute', opacity: 0, height: 0, width: 0, zIndex: -1 }}
+        />
+
         {(mode === 'signup' || mode === 'forgot') && (
           <label>
             {lang === 'bn' ? 'আপনার নাম (ইউজারনেম)' : 'Registered Name / Username'}
