@@ -579,11 +579,6 @@ export default function Shop() {
           ›
         </button>
 
-        {/* 🌿 Fresh Badge — Dynamic Island style pill */}
-        <div className="hero-fresh-badge" aria-hidden="true">
-          🌿 {lang === 'bn' ? 'আজকের তাজা সবজি' : 'Fresh Today'}
-        </div>
-
         <div className="hero-full-copy hero-animated" key={heroSlide}>
           <p className="hero-kicker hero-anim-1">{slides[heroSlide].kicker}</p>
           <h1 className="brand-hero light hero-anim-2">{slides[heroSlide].title}</h1>
@@ -595,13 +590,6 @@ export default function Shop() {
           >
             🛒 {slides[heroSlide].buttonText}
           </button>
-        </div>
-
-        {/* ⚡ Glassmorphism Trust Chips */}
-        <div className="hero-trust-chips" aria-hidden="true">
-          <span className="hero-trust-chip">⚡ {lang === 'bn' ? '২ ঘন্টায় ডেলিভারি' : '2hr Delivery'}</span>
-          <span className="hero-trust-chip">🌱 {lang === 'bn' ? 'সরাসরি ফার্ম' : 'Farm Direct'}</span>
-          <span className="hero-trust-chip">✅ FSSAI</span>
         </div>
 
         <div className="hero-dots">
@@ -620,17 +608,17 @@ export default function Shop() {
       {/* Trust strips */}
       <div className="trust-strips">
         <div className="trust-item">
-          <span className="trust-icon">🚜</span>
+          <span className="trust-icon">🥬</span>
           <div>
-            <strong>{lang === 'bn' ? 'সরাসরি ফার্ম থেকে' : 'Farm Fresh'}</strong>
-            <span>{lang === 'bn' ? 'প্রতিদিন তাজা সবজি' : 'Sourced daily'}</span>
+            <strong>{lang === 'bn' ? 'দৈনিক তাজা বাজার' : 'Daily Mandi Fresh'}</strong>
+            <span>{lang === 'bn' ? 'তাজা সবজি ও মাছ' : 'Fresh produce & fish'}</span>
           </div>
         </div>
         <div className="trust-item">
           <span className="trust-icon">⚡</span>
           <div>
             <strong>{lang === 'bn' ? `${DELIVERY_WINDOW_BN} ডেলিভারি` : `${DELIVERY_WINDOW} Delivery`}</strong>
-            <span>{lang === 'bn' ? 'দ্রুত ডোরস্টেপ' : 'Fast doorstep'}</span>
+            <span>{lang === 'bn' ? 'স্লট ও লোকেশন অনুযায়ী' : 'Slot & location based'}</span>
           </div>
         </div>
         <div className="trust-item">

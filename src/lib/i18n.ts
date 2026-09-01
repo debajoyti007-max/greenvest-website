@@ -79,7 +79,7 @@ const dict = {
   terms: { en: 'Terms', bn: 'শর্তাবলী' },
   freshTag: { en: 'Fresh groceries', bn: 'তাজা সবজি' },
   footerLine: {
-    en: 'Farm-fresh vegetables & fish, delivered to your door',
+    en: 'Fresh daily vegetables & fish, delivered to your door',
     bn: 'তাজা সবজি ও মাছ, সরাসরি আপনার দরজায়',
   },
   local: { en: 'Local', bn: 'লোকাল' },

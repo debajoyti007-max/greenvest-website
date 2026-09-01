@@ -5377,65 +5377,6 @@ button.linkish {
 
 
 /* ── Hero — Fresh Badge + Trust Chips ───────────────────────────── */
-.hero-fresh-badge {
-  position: absolute;
-  top: 1.1rem;
-  left: 1.25rem;
-  z-index: 6;
-  background: rgba(34, 197, 94, 0.18);
-  border: 1px solid rgba(34, 197, 94, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 0.28rem 0.75rem;
-  border-radius: 999px;
-  font-size: 0.76rem;
-  color: #86efac;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  animation: fresh-bounce 2.5s ease-in-out infinite;
-}
-
-@keyframes fresh-bounce {
-  0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-5px); }
-}
-
-.hero-trust-chips {
-  position: absolute;
-  bottom: 4rem;
-  left: 1.25rem;
-  display: flex;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-  z-index: 6;
-}
-
-.hero-trust-chip {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(14px) saturate(160%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 999px;
-  padding: 0.35rem 0.80rem;
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.01em;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  opacity: 0;
-  animation: chip-rise 0.5s var(--spring) both;
-}
-
-.hero-trust-chip:nth-child(1) { animation-delay: 0.5s; }
-.hero-trust-chip:nth-child(2) { animation-delay: 0.7s; }
-.hero-trust-chip:nth-child(3) { animation-delay: 0.9s; }
-
-@keyframes chip-rise {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-
 /* ── Button Ripple + Shimmer ────────────────────────────────────── */
 .btn {
   position: relative;
