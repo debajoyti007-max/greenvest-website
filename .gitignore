@@ -33,3 +33,15 @@ scripts/*inject*
 scripts/cdp-payload.json
 scripts/continue-schema.sql
 .cursor/
+
+# Internal blueprints & docs (keep local only)
+PROJECT_BLUEPRINT.md
+*blueprint*.md
+*BLUEPRINT*.md
+
+# Security & Private Keys
+*.pem
+*.key
+*.cert
+*.pfx
+*.p12
