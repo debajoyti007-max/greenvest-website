@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import CartBar from './CartBar'
 import ConfigBanner from './ConfigBanner'
@@ -15,6 +15,7 @@ import NotificationBell from './NotificationBell'
 import CustomerNotificationBanner from './CustomerNotificationBanner'
 import PwaInstallPrompt from './PwaInstallPrompt'
 import SupportChatWidget from './SupportChatWidget'
+import BottomNav from './BottomNav'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -22,6 +23,20 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [islandCompact, setIslandCompact] = useState(false)
+  const headerRef = useRef<HTMLElement>(null)
+
+  // Dynamic Island — compact on scroll down, expand on scroll up
+  useEffect(() => {
+    let lastY = window.scrollY
+    const onScroll = () => {
+      const y = window.scrollY
+      setIslandCompact(y > 60 && y > lastY)
+      lastY = y
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   const handleLogout = () => {
     void logout().then(() => {
@@ -39,7 +54,7 @@ export default function Layout() {
       <NetworkStatus />
       <ConfigBanner />
       <MandiTicker />
-      <header className="site-header">
+      <header ref={headerRef} className={`site-header${islandCompact ? ' island-compact' : ''}`}>
         <div className="header-inner">
           <Link to={user?.role === 'rider' ? '/rider' : '/'} className="brand" onClick={closeMenu}>
             <span className="brand-mark" aria-hidden>
@@ -296,32 +311,8 @@ export default function Layout() {
         </div>
       </footer>
 
-      {/* 📱 Mobile Bottom Navigation Bar (Smart mobile navigation) */}
-      <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">
-        <NavLink to="/" end className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
-          <span className="bottom-bar-icon">🏠</span>
-          <span className="bottom-bar-label">{lang === 'bn' ? 'শপ' : 'Shop'}</span>
-        </NavLink>
-        <NavLink to="/track" className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
-          <span className="bottom-bar-icon">📍</span>
-          <span className="bottom-bar-label">{lang === 'bn' ? 'ট্র্যাক' : 'Track'}</span>
-        </NavLink>
-        <NavLink to="/orders" className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
-          <span className="bottom-bar-icon">📦</span>
-          <span className="bottom-bar-label">{lang === 'bn' ? 'অর্ডার' : 'Orders'}</span>
-        </NavLink>
-        <NavLink to="/cart" className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
-          <div className="bottom-bar-icon-wrap">
-            <span className="bottom-bar-icon">🛒</span>
-            {cartCount > 0 && <span className="bottom-bar-badge">{cartCount}</span>}
-          </div>
-          <span className="bottom-bar-label">{lang === 'bn' ? 'কার্ট' : 'Cart'}</span>
-        </NavLink>
-        <NavLink to={user ? '/profile' : '/auth'} className={({ isActive }) => `bottom-bar-item ${isActive ? 'active' : ''}`}>
-          <span className="bottom-bar-icon">👤</span>
-          <span className="bottom-bar-label">{user ? (lang === 'bn' ? 'প্রোফাইল' : 'Profile') : (lang === 'bn' ? 'লগইন' : 'Login')}</span>
-        </NavLink>
-      </nav>
+      {/* 📱 Mobile Bottom Navigation Bar — Dynamic Island Style */}
+      <BottomNav />
     </div>
   )
 }

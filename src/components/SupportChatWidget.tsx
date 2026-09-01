@@ -68,20 +68,20 @@ export default function SupportChatWidget() {
         <button
           type="button"
           onClick={() => setOpen(true)}
+          className={`support-bubble${userThread.some((m) => m.status === 'open' && m.senderRole === 'seller') ? ' has-unread' : ''}`}
           style={{
             position: 'fixed',
-            bottom: '20px',
-            right: '20px',
+            bottom: 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 12px)',
+            right: '16px',
             zIndex: 9999,
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
             padding: '10px 18px',
-            borderRadius: '30px',
             background: 'linear-gradient(135deg, #166534 0%, #15803d 100%)',
             color: '#ffffff',
             border: '2px solid rgba(255,255,255,0.2)',
-            boxShadow: '0 8px 24px rgba(22, 101, 52, 0.4)',
+            boxShadow: '0 8px 28px rgba(22, 101, 52, 0.45)',
             fontSize: '0.88rem',
             fontWeight: 700,
             cursor: 'pointer',
@@ -92,13 +92,8 @@ export default function SupportChatWidget() {
           <span style={{ fontSize: '1.1rem' }}>💬</span>
           <span>{lang === 'bn' ? 'সাহায্য ও সাপোর্ট' : 'Help & Support'}</span>
           <span
-            style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: '#4ade80',
-              boxShadow: '0 0 6px #4ade80',
-            }}
+            className="support-status-line"
+            style={{ marginLeft: '2px' }}
           />
         </button>
       )}
@@ -108,16 +103,16 @@ export default function SupportChatWidget() {
         <div
           style={{
             position: 'fixed',
-            bottom: '20px',
-            right: '20px',
+            bottom: 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 8px)',
+            right: '16px',
             zIndex: 10000,
             width: '360px',
-            maxWidth: 'calc(100vw - 30px)',
+            maxWidth: 'calc(100vw - 24px)',
             height: '520px',
-            maxHeight: 'calc(100vh - 40px)',
+            maxHeight: 'calc(100vh - 140px)',
             background: '#ffffff',
-            borderRadius: '16px',
-            boxShadow: '0 12px 40px rgba(0, 0, 0, 0.25)',
+            borderRadius: '20px',
+            boxShadow: '0 16px 48px rgba(0, 0, 0, 0.28)',
             border: '1px solid #e2e8f0',
             display: 'flex',
             flexDirection: 'column',
@@ -140,9 +135,8 @@ export default function SupportChatWidget() {
               <div style={{ fontWeight: 800, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>🌱</span> {lang === 'bn' ? 'GreenVest কাস্টমার কেয়ার' : 'GreenVest Support Desk'}
               </div>
-              <div style={{ fontSize: '0.72rem', color: '#86efac', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4ade80' }} />
-                {lang === 'bn' ? 'সরাসরি অনলাইন সাপোর্ট' : 'Live Store Support'}
+              <div className="support-status-line" style={{ marginTop: '4px' }}>
+                {lang === 'bn' ? '< ১ ঘন্টায় উত্তর দেওয়া হয়' : 'Typically replies in < 1 hr'}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

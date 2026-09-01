@@ -579,6 +579,11 @@ export default function Shop() {
           ›
         </button>
 
+        {/* 🌿 Fresh Badge — Dynamic Island style pill */}
+        <div className="hero-fresh-badge" aria-hidden="true">
+          🌿 {lang === 'bn' ? 'আজকের তাজা সবজি' : 'Fresh Today'}
+        </div>
+
         <div className="hero-full-copy hero-animated" key={heroSlide}>
           <p className="hero-kicker hero-anim-1">{slides[heroSlide].kicker}</p>
           <h1 className="brand-hero light hero-anim-2">{slides[heroSlide].title}</h1>
@@ -588,8 +593,15 @@ export default function Shop() {
             className="btn btn-primary hero-cta hero-anim-4"
             onClick={slides[heroSlide].onClick}
           >
-            {slides[heroSlide].buttonText}
+            🛒 {slides[heroSlide].buttonText}
           </button>
+        </div>
+
+        {/* ⚡ Glassmorphism Trust Chips */}
+        <div className="hero-trust-chips" aria-hidden="true">
+          <span className="hero-trust-chip">⚡ {lang === 'bn' ? '২ ঘন্টায় ডেলিভারি' : '2hr Delivery'}</span>
+          <span className="hero-trust-chip">🌱 {lang === 'bn' ? 'সরাসরি ফার্ম' : 'Farm Direct'}</span>
+          <span className="hero-trust-chip">✅ FSSAI</span>
         </div>
 
         <div className="hero-dots">

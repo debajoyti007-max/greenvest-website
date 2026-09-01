@@ -18,6 +18,18 @@
   --ok: #15803d;
   --shadow: 0 10px 30px rgba(20, 83, 45, 0.08);
 
+  /* ── Premium 3D / Glass / Motion Tokens ── */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-blur: blur(20px) saturate(180%);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --shadow-3d: 0 24px 64px rgba(15, 42, 26, 0.18), 0 6px 16px rgba(15, 42, 26, 0.10);
+  --shadow-card: 0 2px 8px rgba(15, 42, 26, 0.06), 0 12px 32px rgba(15, 42, 26, 0.09);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --island-h: 48px;
+  --island-r: 26px;
+  --bottom-nav-h: 68px;
+
   /* Unified Typographic Scale (7 tokens) */
   --text-xs: 0.75rem;   /* 12px - Badges, sub-captions */
   --text-sm: 0.875rem;  /* 14px - Body secondary, chips, trust items */
@@ -5079,3 +5091,678 @@ button.linkish {
 }
 
 
+/* ══════════════════════════════════════════════════════════════════
+   GREENVEST PREMIUM MOBILE-FIRST UI — v2.0
+   Dynamic Island · 3D Cards · Bottom Nav · Ripple · Glass · Motion
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Page Transition System ──────────────────────────────────────── */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateX(22px) scale(0.99); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes page-exit {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-14px); }
+}
+.page-animate {
+  animation: page-enter 0.30s var(--ease-out) both;
+}
+/* Apply to all main pages */
+.page, .shop-page { animation: page-enter 0.30s var(--ease-out) both; }
+
+
+/* ── Dynamic Island Header (Mobile) ─────────────────────────────── */
+@media (max-width: 800px) {
+  .site-header {
+    background: transparent !important;
+    border-bottom: none !important;
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 24px);
+    max-width: 430px;
+    z-index: 100;
+    transition: top 0.3s var(--ease-out);
+  }
+
+  .header-inner {
+    background: rgba(8, 20, 12, 0.88);
+    backdrop-filter: blur(28px) saturate(200%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: var(--island-r);
+    padding: 0.55rem 1rem;
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.36),
+      0 2px 8px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition: border-radius 0.38s var(--spring), padding 0.3s var(--ease-out);
+  }
+
+  /* Compact island on scroll */
+  .site-header.island-compact .header-inner {
+    border-radius: 40px;
+    padding: 0.4rem 0.85rem;
+  }
+
+  .brand-text strong { color: #e8f5e9; font-size: 1.05rem; }
+  .brand-text em { display: none; }
+  .brand-mark {
+    background: linear-gradient(145deg, #22c55e, #15803d);
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.5);
+  }
+
+  .nav-links a { color: rgba(255, 255, 255, 0.70); font-size: 0.88rem; }
+  .nav-links a:hover { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+  .nav-links a.active { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+
+  .badge {
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+  }
+
+  /* Push main content below the floating header + bottom nav */
+  .main-content {
+    padding-top: calc(var(--island-h) + 20px) !important;
+    padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 16px) !important;
+  }
+
+  /* Hide hamburger on mobile — bottom nav replaces it */
+  .nav-toggle { display: none !important; }
+  .nav-links { display: none !important; }
+  .header-actions { margin-left: auto; }
+}
+
+
+/* ── Bottom Navigation Bar (Mobile Only) ────────────────────────── */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 90;
+    background: rgba(8, 20, 12, 0.92);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0.5rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom));
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.32);
+  }
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.18rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.60rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.9rem;
+  border-radius: 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.22s var(--ease-out), transform 0.28s var(--spring), background 0.22s ease;
+  position: relative;
+}
+
+.bottom-nav-item.active {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.12);
+  transform: translateY(-4px);
+}
+
+.bottom-nav-icon {
+  font-size: 1.45rem;
+  line-height: 1;
+  transition: transform 0.28s var(--spring);
+}
+
+.bottom-nav-item.active .bottom-nav-icon {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.8));
+}
+
+.bottom-nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  min-width: 16px;
+  height: 16px;
+  background: #22c55e;
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+  animation: badge-pop 0.4s var(--spring) both;
+}
+
+@keyframes badge-pop {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+
+
+/* ── 3D Product Cards ────────────────────────────────────────────── */
+.product-tile {
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: transform 0.28s var(--ease-out), box-shadow 0.28s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 3D tilt + lift on desktop hover */
+@media (hover: hover) {
+  .product-tile:hover:not(.out) {
+    transform: perspective(900px) rotateX(2.5deg) rotateY(-2.5deg) translateY(-7px);
+    box-shadow: var(--shadow-3d);
+  }
+}
+
+/* Slide-up "Add to Cart" CTA from card bottom */
+.card-slide-cta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, var(--green-700), var(--green-600));
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.65rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 0 0 var(--radius) var(--radius);
+  transform: translateY(100%);
+  transition: transform 0.32s var(--spring);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .product-tile:hover:not(.out) .card-slide-cta {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+}
+
+/* Mobile: show CTA always (no hover) — use smaller fixed height */
+@media (max-width: 800px) {
+  .card-slide-cta {
+    position: static;
+    transform: none;
+    pointer-events: auto;
+    border-radius: var(--radius-md);
+    margin-top: 0.4rem;
+    font-size: 0.80rem;
+    padding: 0.55rem 0.75rem;
+    background: linear-gradient(135deg, var(--green-700), var(--green-600));
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35);
+  }
+}
+
+/* Out-of-stock diagonal ribbon */
+.product-tile.out {
+  opacity: 0.72;
+}
+
+.product-tile.out::after {
+  content: 'Out of Stock';
+  position: absolute;
+  top: 18px;
+  right: -30px;
+  background: #b91c1c;
+  color: #fff;
+  font-size: 0.60rem;
+  font-weight: 800;
+  padding: 0.22rem 2.5rem;
+  transform: rotate(38deg);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Grade buttons with inline price */
+.card-grade-btn {
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+/* Card shimmer on hover */
+.product-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+@media (hover: hover) {
+  .product-tile:hover::before {
+    transform: translateX(100%);
+  }
+}
+
+
+/* ── Hero — Fresh Badge + Trust Chips ───────────────────────────── */
+.hero-fresh-badge {
+  position: absolute;
+  top: 1.1rem;
+  left: 1.25rem;
+  z-index: 6;
+  background: rgba(34, 197, 94, 0.18);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 0.28rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  color: #86efac;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  animation: fresh-bounce 2.5s ease-in-out infinite;
+}
+
+@keyframes fresh-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
+}
+
+.hero-trust-chips {
+  position: absolute;
+  bottom: 4rem;
+  left: 1.25rem;
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  z-index: 6;
+}
+
+.hero-trust-chip {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 0.35rem 0.80rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  animation: chip-rise 0.5s var(--spring) both;
+}
+
+.hero-trust-chip:nth-child(1) { animation-delay: 0.5s; }
+.hero-trust-chip:nth-child(2) { animation-delay: 0.7s; }
+.hero-trust-chip:nth-child(3) { animation-delay: 0.9s; }
+
+@keyframes chip-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ── Button Ripple + Shimmer ────────────────────────────────────── */
+.btn {
+  position: relative;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ripple wave on tap */
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.38) 0%, transparent 65%);
+  opacity: 0;
+  transform: scale(0);
+  transition: transform 0.45s ease, opacity 0.45s ease;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.btn:active::after {
+  opacity: 1;
+  transform: scale(2.8);
+  transition-duration: 0s;
+}
+
+/* Shimmer sweep on primary button */
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  animation: shimmer-sweep 2.8s infinite 2s;
+  pointer-events: none;
+}
+
+@keyframes shimmer-sweep {
+  0%   { left: -100%; }
+  100% { left: 200%; }
+}
+
+/* Tactile press for all buttons */
+.btn:active:not(:disabled) {
+  transform: scale(0.96) !important;
+  transition-duration: 0.08s !important;
+}
+
+
+/* ── Order Status Animated Pills ────────────────────────────────── */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.status-pill::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+.status-pill.pending  { background: #fef3c7; color: #92400e; }
+.status-pill.pending::before  { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+
+.status-pill.confirmed { background: #dbeafe; color: #1e40af; }
+.status-pill.confirmed::before { background: #3b82f6; box-shadow: 0 0 6px #3b82f6; }
+
+.status-pill.out_for_delivery { background: #ede9fe; color: #5b21b6; }
+.status-pill.out_for_delivery::before { background: #8b5cf6; box-shadow: 0 0 6px #8b5cf6; }
+
+.status-pill.delivered { background: #dcfce7; color: #166534; }
+.status-pill.delivered::before { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+
+.status-pill.advance_paid { background: #e0f2fe; color: #0c4a6e; }
+.status-pill.advance_paid::before { background: #0ea5e9; box-shadow: 0 0 6px #0ea5e9; }
+
+.status-pill.cancelled { background: #fee2e2; color: #991b1b; }
+.status-pill.cancelled::before { background: #ef4444; animation: none; }
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.55); opacity: 0.55; }
+}
+
+/* Delivered order card — subtle glow background */
+.order-card.delivered {
+  background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+  border-color: #bbf7d0;
+}
+
+
+/* ── Cart — Swipe to Delete (CSS Only, Touch Handled in JS) ─────── */
+.cart-row-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+
+.cart-delete-zone {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 72px;
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.35rem;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  opacity: 0;
+  transform: translateX(72px);
+  transition: opacity 0.22s ease, transform 0.22s var(--ease-out);
+  pointer-events: none;
+}
+
+.cart-row-wrap.swiped .cart-delete-zone {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.cart-row-wrap .cart-row {
+  transition: transform 0.28s var(--ease-out);
+}
+
+.cart-row-wrap.swiped .cart-row {
+  transform: translateX(-72px);
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+/* Cart total counter flip animation */
+@keyframes count-flip {
+  0%   { opacity: 0; transform: translateY(-10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.total-animated {
+  animation: count-flip 0.28s var(--spring) both;
+}
+
+/* "Free Delivery Unlocked" toast */
+.delivery-unlocked-toast {
+  background: linear-gradient(135deg, #15803d, #16a34a);
+  color: #fff;
+  padding: 0.75rem 1.1rem;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 0.88rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: toast-rise 0.4s var(--spring) both;
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.4);
+}
+
+@keyframes toast-rise {
+  from { opacity: 0; transform: translateY(20px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+
+/* ── Support Chat Bubble Glow ───────────────────────────────────── */
+.support-bubble {
+  border-radius: 999px !important;
+  transition:
+    border-radius 0.4s var(--spring),
+    width 0.4s var(--spring),
+    box-shadow 0.3s ease,
+    transform 0.3s var(--spring) !important;
+}
+
+.support-bubble.has-unread {
+  animation: bubble-glow 2.2s ease-in-out infinite;
+}
+
+.support-bubble:hover {
+  transform: scale(1.08) !important;
+}
+
+@keyframes bubble-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.65); }
+  55%       { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); }
+}
+
+.support-bubble-badge {
+  animation: badge-pop 0.4s var(--spring) both;
+}
+
+.support-status-line {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.65);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.support-status-line::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse-dot 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+
+/* ── Dashboard Stat Cards — 3D Glass ────────────────────────────── */
+.stat {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.22s var(--ease-out), box-shadow 0.22s ease;
+}
+
+@media (hover: hover) {
+  .stat:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-3d);
+  }
+}
+
+/* ── Form Inputs — Focus Glow ───────────────────────────────────── */
+.form input:focus,
+.form select:focus,
+.form textarea:focus {
+  border-color: var(--green-500);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.20), 0 2px 8px rgba(22, 163, 74, 0.12);
+  background: var(--white);
+  outline: none;
+}
+
+/* ── Skeleton Loader — Improved Shimmer ─────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, #e8f5e9 0px, #c8e6c9 40px, #e8f5e9 80px);
+  background-size: 600px 100%;
+  animation: skeletonShimmer 1.4s infinite ease-in-out;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Mandi Ticker — Premium Green Gradient ──────────────────────── */
+.mandi-ticker {
+  background: linear-gradient(90deg, #0f2a1a, #15803d, #0f2a1a) !important;
+  background-size: 200% 100% !important;
+  animation: ticker-gradient 4s ease infinite !important;
+}
+
+@keyframes ticker-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+/* ── Wave Footer Divider ────────────────────────────────────────── */
+.footer-wave {
+  width: 100%;
+  overflow: hidden;
+  line-height: 0;
+  display: block;
+}
+
+.footer-wave svg {
+  display: block;
+  width: 100%;
+  height: 48px;
+}
+
+/* ── General Mobile Refinements ─────────────────────────────────── */
+@media (max-width: 520px) {
+  .product-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+
+  .product-tile {
+    padding: 0.75rem 0.7rem 0.8rem;
+  }
+
+  .product-emoji {
+    font-size: 2.6rem;
+  }
+
+  .hero-full {
+    min-height: min(80svh, 520px);
+  }
+
+  .auth-page { padding-top: 0.5rem; }
+
+  /* Larger tap targets on mobile */
+  .btn {
+    min-height: 44px;
+    border-radius: var(--radius-md);
+  }
+
+  .qty-controls button {
+    width: 2.2rem;
+    height: 2.2rem;
+    font-size: 1.1rem;
+  }
+
+  .cart-emoji { font-size: 2.2rem; }
+
+  /* Order card — more breathing room */
+  .order-card { padding: 0.95rem 1rem; }
+}
+
+/* ── Accessibility: Respect Reduced Motion ──────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -194,22 +194,24 @@ export default function Orders() {
       ) : (
         <div className="order-list">
           {displayOrders.map((o: Order) => (
-            <article key={o.id} className="order-card">
+            <article key={o.id} className={`order-card${o.status === 'delivered' ? ' delivered' : ''}`}>
               <header>
                 <div>
                   <strong>{o.id}</strong>
                   <span className="muted">{new Date(o.createdAt).toLocaleString()}</span>
                 </div>
-                <span className={`status status-${o.status}`}>
+                <span className={`status-pill ${o.status}`}>
                   {o.status === 'pending'
-                    ? (lang === 'bn' ? '⏳ পেন্ডিং (যাচাই বাকি)' : '⏳ Pending Approval')
+                    ? (lang === 'bn' ? 'পেন্ডিং' : 'Pending')
                     : o.status === 'advance_paid'
-                    ? (lang === 'bn' ? '💵 অগ্রিম দেয়া হয়েছে' : '💵 Advance Paid')
+                    ? (lang === 'bn' ? 'অগ্রিম পেইড' : 'Advance Paid')
                     : o.status === 'confirmed'
-                    ? (lang === 'bn' ? '✅ কনফার্মড' : '✅ Confirmed')
+                    ? (lang === 'bn' ? 'কনফার্মড' : 'Confirmed')
                     : o.status === 'delivered'
-                    ? (lang === 'bn' ? '🚚 ডেলিভারড' : '🚚 Delivered')
-                    : (lang === 'bn' ? '❌ বাতিল' : '❌ Cancelled')}
+                    ? (lang === 'bn' ? 'ডেলিভারড' : 'Delivered')
+                    : o.status === 'refunded'
+                    ? (lang === 'bn' ? 'রিফান্ড' : 'Refunded')
+                    : (lang === 'bn' ? 'বাতিল' : 'Cancelled')}
                 </span>
               </header>
               <OrderTimeline 
