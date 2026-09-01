@@ -1,0 +1,1 @@
+function e(e){return e.replace(/\D/g,``)}function t(t){let n=e(t);return n.startsWith(`91`)&&n.length===12?n=n.slice(2):n.startsWith(`0`)&&n.length===11&&(n=n.slice(1)),n.length===10&&/^[6-9]\d{9}$/.test(n)}export{t as n,e as t};

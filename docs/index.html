@@ -2,7 +2,7 @@
 <html lang="bn">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
@@ -12,14 +12,65 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- DNS prefetch for external services — faster first connections -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+    <link rel="dns-prefetch" href="https://zvjqpigduyvczidzafus.supabase.co" />
+
+    <!-- Preconnect for fonts (higher priority than dns-prefetch) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- ⚡ Instant LCP: Responsive mobile and desktop hero image preloads -->
+    <link
+      rel="preload"
+      as="image"
+      href="/veg/hero_veggies_mobile.webp"
+      type="image/webp"
+      media="(max-width: 640px)"
+      fetchpriority="high"
+    />
+    <link
+      rel="preload"
+      as="image"
+      href="/veg/hero_veggies.webp"
+      type="image/webp"
+      media="(min-width: 641px)"
+      fetchpriority="high"
+    />
+
+    <!-- Google Fonts: Streamlined Hind Siliguri + DM Sans (load async to never block render) -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=DM+Sans:wght@400;500;700&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=DM+Sans:wght@400;500;700&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <!-- Fallback for no-JS -->
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=DM+Sans:wght@400;500;700&display=swap"
+      />
+    </noscript>
+
     <title>GreenVest – তাজা সবজি</title>
-    <script type="module" crossorigin src="./assets/index-Duas90FY.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BSDgk3pL.css">
+    <script type="module" crossorigin src="/assets/index-DLHIyS5_.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-hePW80VL.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-DHQQvKuQ.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-router-ClW3fGK5.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-supabase-sBnMVu4i.js">
+    <link rel="modulepreload" crossorigin href="/assets/supabase-ro-A88Gn.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-Dq4ngbcn.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
   </body>
 </html>
