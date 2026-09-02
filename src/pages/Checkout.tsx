@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES } from '../lib/business'
+import { DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES } from '../lib/business'
 import { calcDeliveryFee, isServiceablePin, STORE_LOCATION } from '../lib/delivery'
 import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC, generateDynamicUpiQr, buildUpiPayUri } from '../lib/payment'
@@ -703,11 +703,6 @@ export default function Checkout() {
                   {copied ? t(lang, 'copied') : t(lang, 'copyUpi')}
                 </button>
                 <p className="muted upi-bank">{UPI_BANK}</p>
-                <p className="hint">
-                  {lang === 'bn'
-                    ? 'PhonePe / GPay / Paytm দিয়ে স্ক্যান করলে স্বয়ংক্রিয়ভাবে ₹' + payableAmount + ' দেখাবে।'
-                    : 'Scanning with PhonePe/GPay auto-fills exact amount of ₹' + payableAmount + '.'}
-                </p>
                 {/* ⚡ 1-Tap UPI Intent Apps */}
                 <div style={{ marginTop: '0.6rem' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', display: 'block', marginBottom: '0.35rem' }}>
@@ -977,38 +972,38 @@ export default function Checkout() {
                 {geoCoords && <p className="hint" style={{ color: '#166534', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>✓ {lang === 'bn' ? 'GPS অবস্থান সফলভাবে পিন করা হয়েছে!' : 'GPS coordinates linked for delivery rider!'}</p>}
               </div>
 
-              {/* Option 1: Guided 3-Field Address Box */}
+              {/* Address Form Inputs */}
               <label>
-                🏡 {lang === 'bn' ? 'বাড়ি / শপ / পারা নাম' : 'House / Shop / Para Name'}
+                🏡 {lang === 'bn' ? 'বাড়ি / এলাকা' : 'House / Street / Area'}
                 <input
                   value={house}
                   onChange={(e) => { setHouse(e.target.value); userEditedAddress.current = true }}
                   required={fulfillmentMode === 'delivery'}
-                  placeholder={lang === 'bn' ? 'যেমন: কয়েল বাগান, বিশ্বাস বাড়ি / House #12' : 'e.g. Biswas House, House #12'}
+                  placeholder={lang === 'bn' ? 'যেমন: কয়েল বাগান, বিশ্বাস বাড়ি' : 'e.g. Biswas House, Street #12'}
                 />
               </label>
 
               <label>
-                🏛️ {lang === 'bn' ? 'কাছের পরিচিত চিহ্নিত স্থান (ল্যান্ডমার্ক)' : 'Nearby Famous Landmark'}
+                🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক (ঐচ্ছিক)' : 'Landmark (Optional)'}
                 <input
                   value={landmark}
                   onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
-                  placeholder={lang === 'bn' ? 'যেমন: প্রাইমারি স্কুলের পাশে / হাসপাতাল মোড়' : 'e.g. Near Primary School / Hospital More'}
+                  placeholder={lang === 'bn' ? 'যেমন: প্রাইমারি স্কুলের পাশে / হাসপাতাল মোড়' : 'e.g. Near School / Hospital More'}
                 />
               </label>
 
               <label>
-                📍 {lang === 'bn' ? 'গ্রাম / শহর / এলাকা' : 'Village / Town / Area Name'}
+                📍 {lang === 'bn' ? 'গ্রাম / শহর' : 'Town / Village'}
                 <input
                   value={area}
                   onChange={(e) => { setArea(e.target.value); userEditedAddress.current = true }}
                   required={fulfillmentMode === 'delivery'}
-                  placeholder={lang === 'bn' ? 'যেমন: সুতাহাটা বাজার / মহিষাদল' : 'e.g. Sutahata Bazar / Mahishadal'}
+                  placeholder={lang === 'bn' ? 'যেমন: সুতাহাটা / মহিষাদল' : 'e.g. Sutahata / Mahishadal'}
                 />
               </label>
 
               <label>
-                📮 {lang === 'bn' ? '৬ সংখ্যার পিন কোড' : '6-Digit PIN Code'}
+                📮 {lang === 'bn' ? 'পিন কোড (PIN)' : 'PIN Code'}
                 <input
                   type="text"
                   maxLength={6}
@@ -1018,23 +1013,16 @@ export default function Checkout() {
                     userEditedAddress.current = true
                   }}
                   required={fulfillmentMode === 'delivery'}
-                  placeholder={lang === 'bn' ? 'যেমন: ৭২১৬৩২' : 'e.g. 721632'}
+                  placeholder={lang === 'bn' ? '৭২১৬৩২' : '721632'}
                 />
               </label>
 
               <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '-0.25rem' }}>
                 <input type="checkbox" checked={saveAddressToDb} onChange={e => setSaveAddressToDb(e.target.checked)} />
-                {lang === 'bn' ? 'ভবিষ্যতের জন্য এই ঠিকানা সংরক্ষণ করুন' : 'Save this address for future'}
+                {lang === 'bn' ? 'ভবিষ্যতের জন্য এই ঠিকানা সেভ রাখুন' : 'Save this address for future'}
               </label>
             </>
           )}
-
-          {/* 12-24 Hour Guaranteed Delivery Timeframe Banner */}
-          <div className="delivery-timeframe-box" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.85rem 1rem', borderRadius: '12px', fontSize: '0.9rem', color: '#166534' }}>
-            ⚡ <strong>{lang === 'bn' ? 'অর্ডার সময়সীমা:' : 'Order Timeframe:'}</strong> {fulfillmentMode === 'pickup'
-              ? (lang === 'bn' ? 'অর্ডার কনফার্ম হওয়ার পর দোকানে এসে সংগ্রহ করুন।' : 'Ready for pickup at our store after order confirmation.')
-              : (lang === 'bn' ? `অর্ডার করার ${DELIVERY_WINDOW_BN}-এর মধ্যে সরাসরি ডোরস্টেপ ডেলিভারি।` : `Guaranteed doorstep delivery within ${DELIVERY_WINDOW}.`)}
-          </div>
 
           {/* 📶 Network Offline Alert */}
           {!isOnline && (
@@ -1089,20 +1077,17 @@ export default function Checkout() {
             />
           </label>
           {paymentMode !== 'khata' && (
-            <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '14px', padding: '1rem', marginTop: '0.5rem' }}>
+            <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem', marginTop: '0.5rem' }}>
               <label style={{ margin: 0 }}>
-                <span style={{ fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  👤 {lang === 'bn' ? 'আপনার PhonePe / GPay নাম (অপশনাল)' : 'Your PhonePe / UPI Name (Optional)'}
+                <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  👤 {lang === 'bn' ? 'PhonePe / GPay প্রেরকের নাম (ঐচ্ছিক)' : 'UPI Payer Name (Optional)'}
                 </span>
                 <input
                   value={payerUpiName}
                   onChange={(e) => setPayerUpiName(e.target.value)}
-                  placeholder={lang === 'bn' ? `যেমন: ${user?.name || 'Rahul / Sourav'}` : `e.g. ${user?.name || 'Rahul / Joy'}`}
+                  placeholder={lang === 'bn' ? `যেমন: ${user?.name || 'Rahul'}` : `e.g. ${user?.name || 'Rahul'}`}
                   style={{ marginTop: '0.35rem', background: '#ffffff' }}
                 />
-                <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginTop: '0.25rem' }}>
-                  {lang === 'bn' ? '💡 পেমেন্ট সহজে ও দ্রুত ভেরিফাই করার জন্য দিন।' : '💡 Helps seller verify your payment instantly.'}
-                </span>
               </label>
             </div>
           )}

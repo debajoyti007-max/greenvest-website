@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES, computeMarketMrp, MAX_VEGETABLE_QTY_KG, SUPPORT_WHATSAPP } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, computeMarketMrp, MAX_VEGETABLE_QTY_KG, SUPPORT_WHATSAPP } from '../lib/business'
 import { t } from '../lib/i18n'
 
 export default function Cart() {
@@ -47,8 +47,8 @@ export default function Cart() {
       <h1>{t(lang, 'yourCart')}</h1>
       <p className="hint">
         {lang === 'bn'
-          ? `সর্বনিম্ন অর্ডার ₹${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN} · সার্ভিস পিন: ${SERVICEABLE_PINCODES.join(', ')}`
-          : `Minimum order ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW} · PINs: ${SERVICEABLE_PINCODES.join(', ')}`}
+          ? `মিনিমাম অর্ডার ₹${MIN_ORDER_AMOUNT} · দ্রুত ডেলিভারি ${DELIVERY_WINDOW_BN} · হোম ডেলিভারি ও পিকআপ উপলব্ধ`
+          : `Min order ₹${MIN_ORDER_AMOUNT} · Fast Delivery ${DELIVERY_WINDOW} · Home Delivery & Store Pickup`}
       </p>
       <ul className="cart-list">
         {cart.map((item) => {
@@ -149,8 +149,8 @@ export default function Cart() {
         </div>
         <p className="hint" style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, margin: '0.25rem 0' }}>
           {lang === 'bn'
-            ? `🚚 হোম ডেলিভারি (পিন: ${SERVICEABLE_PINCODES.join(', ')} · চার্জ: ₹৩০) বা 🏪 ফ্রি দোকান থেকে পিকআপ (₹০)`
-            : `🚚 Home Delivery (PINs: ${SERVICEABLE_PINCODES.join(', ')} · ₹30) or 🏪 Free Store Pickup (₹0)`}
+            ? '🚚 ডোরস্টেপ ডেলিভারি (₹৩০) বা 🏪 ফ্রি দোকান থেকে পিকআপ (₹০)'
+            : '🚚 Doorstep Delivery (₹30) or 🏪 Free Store Pickup (₹0)'}
         </p>
         {!canCheckout && (
           <p className="form-error">

@@ -610,29 +610,29 @@ export default function Shop() {
         <div className="trust-item">
           <span className="trust-icon">🥬</span>
           <div>
-            <strong>{lang === 'bn' ? 'দৈনিক তাজা বাজার' : 'Daily Mandi Fresh'}</strong>
-            <span>{lang === 'bn' ? 'তাজা সবজি ও মাছ' : 'Fresh produce & fish'}</span>
+            <strong>{lang === 'bn' ? 'মন্ডি তাজা' : 'Mandi Fresh'}</strong>
+            <span>{lang === 'bn' ? 'প্রতিদিন খামার থেকে' : 'Daily Harvest'}</span>
           </div>
         </div>
         <div className="trust-item">
           <span className="trust-icon">⚡</span>
           <div>
-            <strong>{lang === 'bn' ? `${DELIVERY_WINDOW_BN} ডেলিভারি` : `${DELIVERY_WINDOW} Delivery`}</strong>
-            <span>{lang === 'bn' ? 'স্লট ও লোকেশন অনুযায়ী' : 'Slot & location based'}</span>
+            <strong>{lang === 'bn' ? '১২–২৪h ডেলিভারি' : '12–24h Delivery'}</strong>
+            <span>{lang === 'bn' ? 'দ্রুত ডোরস্টেপ' : 'Fast Doorstep'}</span>
           </div>
         </div>
         <div className="trust-item">
           <span className="trust-icon">💯</span>
           <div>
             <strong>{lang === 'bn' ? 'গ্রেড গ্যারান্টি' : 'Grade Guarantee'}</strong>
-            <span>{lang === 'bn' ? 'A/B/C মান নিশ্চিত' : 'A/B/C quality assured'}</span>
+            <span>{lang === 'bn' ? 'A/B/C মান নিশ্চিত' : 'Quality Assured'}</span>
           </div>
         </div>
         <div className="trust-item">
           <span className="trust-icon">🔒</span>
           <div>
-            <strong>{lang === 'bn' ? 'নিরাপদ UPI পেমেন্ট' : 'Safe UPI Payment'}</strong>
-            <span>{lang === 'bn' ? 'GPay · PhonePe · BHIM' : 'GPay · PhonePe · BHIM'}</span>
+            <strong>{lang === 'bn' ? 'নিরাপদ UPI' : 'Secure UPI'}</strong>
+            <span>{lang === 'bn' ? '১০০% বিশ্বস্ত' : 'Safe & Encrypted'}</span>
           </div>
         </div>
       </div>

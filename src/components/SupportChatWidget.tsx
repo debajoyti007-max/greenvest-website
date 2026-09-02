@@ -6,7 +6,7 @@ import { formatOrderId } from '../lib/business'
 import { showToast } from './Toast'
 
 export default function SupportChatWidget() {
-  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance } = useStore()
+  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, cartCount } = useStore()
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [inputMsg, setInputMsg] = useState('')
@@ -71,26 +71,29 @@ export default function SupportChatWidget() {
           className={`support-bubble${userThread.some((m) => m.status === 'open' && m.senderRole === 'seller') ? ' has-unread' : ''}`}
           style={{
             position: 'fixed',
-            bottom: 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 12px)',
+            bottom: cartCount > 0
+              ? 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 68px)'
+              : 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 12px)',
             right: '16px',
             zIndex: 9999,
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            padding: '10px 18px',
+            gap: '6px',
+            padding: '8px 14px',
             background: 'linear-gradient(135deg, #166534 0%, #15803d 100%)',
             color: '#ffffff',
             border: '2px solid rgba(255,255,255,0.2)',
-            boxShadow: '0 8px 28px rgba(22, 101, 52, 0.45)',
-            fontSize: '0.88rem',
+            boxShadow: '0 8px 24px rgba(22, 101, 52, 0.4)',
+            fontSize: '0.84rem',
             fontWeight: 700,
+            borderRadius: '24px',
             cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            transition: 'all 0.25s ease',
           }}
           aria-label="Customer Support"
         >
-          <span style={{ fontSize: '1.1rem' }}>💬</span>
-          <span>{lang === 'bn' ? 'সাহায্য ও সাপোর্ট' : 'Help & Support'}</span>
+          <span style={{ fontSize: '1.05rem' }}>💬</span>
+          <span>{lang === 'bn' ? 'সাপোর্ট' : 'Support'}</span>
           <span
             className="support-status-line"
             style={{ marginLeft: '2px' }}

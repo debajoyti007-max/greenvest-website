@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import CartBar from './CartBar'
-import ConfigBanner from './ConfigBanner'
 import NetworkStatus from './NetworkStatus'
 import Toast from './Toast'
 import { useAuth } from '../context/AuthContext'
@@ -52,7 +51,6 @@ export default function Layout() {
       <CustomerNotificationBanner />
       <PwaInstallPrompt />
       <NetworkStatus />
-      <ConfigBanner />
       <MandiTicker />
       <header ref={headerRef} className={`site-header${islandCompact ? ' island-compact' : ''}`}>
         <div className="header-inner">
