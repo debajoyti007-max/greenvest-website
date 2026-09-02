@@ -42,7 +42,7 @@ const dict = {
   deliveryAddress: { en: 'Delivery address', bn: 'ডেলিভারি ঠিকানা' },
   phone: { en: 'Phone number', bn: 'ফোন নম্বর' },
   pinCode: { en: 'PIN code', bn: 'পিন কোড' },
-  utrLabel: { en: 'UTR / Transaction ID', bn: 'UTR / ট্রানজেকশন আইডি' },
+  utrLabel: { en: 'PhonePe / UPI Name', bn: 'PhonePe / UPI নাম' },
   placeOrder: { en: 'Place order', bn: 'অর্ডার নিশ্চিত করুন' },
   copyUpi: { en: 'Copy UPI ID', bn: 'UPI কপি করুন' },
   copied: { en: 'Copied', bn: 'কপি হয়েছে' },
@@ -54,8 +54,8 @@ const dict = {
   verified: { en: 'verified', bn: 'যাচাইকৃত' },
   pending: { en: 'pending', bn: 'অপেক্ষমাণ' },
   howToPay: {
-    en: '1) Scan QR or pay UPI → 2) Copy UTR → 3) Paste below → 4) Place order',
-    bn: '১) QR স্ক্যান বা UPI-তে পাঠান → ২) UTR কপি করুন → ৩) নিচে দিন → ৪) অর্ডার করুন',
+    en: '1) Tap PhonePe / GPay or scan QR → 2) Send payment → 3) Tap "I Have Paid"',
+    bn: '১) PhonePe / GPay ট্যাপ করুন বা QR স্ক্যান করুন → ২) টাকা পাঠান → ৩) "পেমেন্ট করেছি" বাটনে চাপুন',
   },
   tipMin: {
     en: 'Tip: Add items until cart reaches ₹500 minimum.',

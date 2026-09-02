@@ -188,7 +188,7 @@ export default function TrackOrder() {
               {t(lang, 'total')}: <strong style={{ fontSize: '1.1rem', color: '#166534' }}>₹{matched.total}</strong>
             </span>
             <span style={{ fontSize: '0.85rem' }}>
-              UTR: {matched.utr}{' '}
+              {lang === 'bn' ? 'পেমেন্ট:' : 'Payment:'}{' '}
               {matched.utrVerified ? (
                 <em className="ok"> ({t(lang, 'verified')})</em>
               ) : (

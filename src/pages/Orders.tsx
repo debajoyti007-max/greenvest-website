@@ -10,29 +10,9 @@ import type { Order, OrderItem } from '../types'
 
 export default function Orders() {
   const { user } = useAuth()
-  const { orders, lang, reorderFromOrder, updateOrderStatus, updateOrderUtr } = useStore()
+  const { orders, lang, reorderFromOrder, updateOrderStatus } = useStore()
   const navigate = useNavigate()
   const [msg, setMsg] = useState('')
-
-  const onEditUtr = async (orderId: string, currentUtr: string) => {
-    const entered = prompt(
-      lang === 'bn' ? 'সঠিক ১২ সংখ্যার UTR নম্বর লিখুন:' : 'Enter correct 12-digit UTR number:',
-      currentUtr,
-    )
-    if (!entered || entered.trim() === currentUtr.trim()) return
-    const clean = entered.trim().replace(/\D/g, '')
-    if (clean.length !== 12) {
-      alert(
-        lang === 'bn'
-          ? 'UTR নম্বর অবশ্যই ১২ সংখ্যার হতে হবে।'
-          : 'UTR must be exactly 12 numeric digits.',
-      )
-      return
-    }
-    try {
-      await updateOrderUtr(orderId, clean)
-    } catch {}
-  }
 
   const onShareReceipt = (o: Order) => {
     const itemsText = o.items
@@ -250,7 +230,7 @@ export default function Orders() {
                   {t(lang, 'advance')}: ₹{o.advanceAmount}
                 </span>
                 <span>
-                  UTR: {o.utr}{' '}
+                  {lang === 'bn' ? 'পেমেন্ট:' : 'Payment:'}{' '}
                   {o.utrVerified ? (
                     <em className="ok">{t(lang, 'verified')}</em>
                   ) : (
@@ -273,15 +253,6 @@ export default function Orders() {
                   {o.status !== 'cancelled' && (
                     <button type="button" className="btn btn-secondary" onClick={() => onReorder(o)}>
                       {lang === 'bn' ? 'আবার অর্ডার' : 'Reorder'}
-                    </button>
-                  )}
-                  {o.status !== 'cancelled' && !o.utrVerified && o.status === 'pending' && (Date.now() - new Date(o.createdAt).getTime() < 30 * 60 * 1000) && (
-                    <button 
-                      type="button" 
-                      className="btn btn-secondary" 
-                      onClick={() => onEditUtr(o.id, o.utr)}
-                    >
-                      ✏️ {lang === 'bn' ? 'UTR সংশোধন' : 'Edit UTR'}
                     </button>
                   )}
                   <button 

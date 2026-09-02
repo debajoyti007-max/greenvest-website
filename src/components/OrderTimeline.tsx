@@ -66,8 +66,8 @@ export default function OrderTimeline({
           const label =
             i === 0 && !utrDone
               ? lang === 'bn'
-                ? 'পেমেন্ট জমা (UTR যাচাই বাকি)'
-                : 'Payment submitted (UTR pending)'
+                ? 'পেমেন্ট জমা (যাচাই প্রক্রিয়াধীন)'
+                : 'Payment submitted (Verifying)'
               : lang === 'bn'
                 ? step.bn
                 : step.en

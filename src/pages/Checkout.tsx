@@ -8,7 +8,6 @@ import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC, generateDynamicUpiQr, buildUpiPayUri } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
 import {
-  validatePayerNameOrUtr,
   validatePhoneStrict,
   getOrCreateCartIdempotencyKey,
   clearCartIdempotencyKey,
@@ -24,7 +23,6 @@ export default function Checkout() {
     lang,
     placeOrder,
     orders,
-    checkDuplicateUtr,
     findRecentOrderByUtr,
     fetchAddresses,
     saveAddress,
@@ -45,10 +43,7 @@ export default function Checkout() {
   const [detectingGps, setDetectingGps] = useState(false)
 
   const [phone, setPhone] = useState(user?.phone || '')
-  const [utr, setUtr] = useState('')
   const [payerUpiName, setPayerUpiName] = useState('')
-  const [showUtrInput, setShowUtrInput] = useState(false)
-  const [utrPasted, setUtrPasted] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [prefilled, setPrefilled] = useState(false)
@@ -260,21 +255,9 @@ export default function Checkout() {
       return
     }
 
-    // 2. UPI Payer Name & Optional UTR Handling
-    let cleanedUtr = 'PENDING-VERIFY'
+    // 2. UPI Payer Name Handling
     const finalPayerName = payerUpiName.trim() || user?.name || ''
-
-    if (paymentMode === 'khata') {
-      cleanedUtr = 'KHATA-DEBIT'
-    } else if (utr.trim()) {
-      const utrVal = validatePayerNameOrUtr(utr)
-      if (!utrVal.isValid) {
-        setError(lang === 'bn' ? utrVal.errorBn : utrVal.errorEn)
-        submitLockRef.current = false
-        return
-      }
-      cleanedUtr = utrVal.cleanedValue
-    }
+    const cleanedUtr = paymentMode === 'khata' ? 'KHATA-DEBIT' : 'ONLINE-PAY'
 
     if (cartTotal < MIN_ORDER_AMOUNT) {
       setError(
@@ -308,24 +291,7 @@ export default function Checkout() {
     }, 2500)
 
     try {
-      // 3. Duplicate UTR check in database (only if user provided a specific 12-digit UTR)
-      if (paymentMode !== 'khata' && cleanedUtr !== 'PENDING-VERIFY' && /^\d{12}$/.test(cleanedUtr)) {
-        const isDup = await checkDuplicateUtr(cleanedUtr)
-        if (isDup) {
-          setError(
-            lang === 'bn'
-              ? 'এই UTR নম্বরটি আগেই ব্যবহৃত হয়েছে। অনুগ্রহ করে আপনার নতুন পেমেন্টের আসল UTR নম্বর দিন।'
-              : 'This UTR number has already been used for another order. Please enter your new payment UTR.',
-          )
-          clearTimeout(slowTimer)
-          setSlowNetwork(false)
-          setSubmitting(false)
-          submitLockRef.current = false
-          return
-        }
-      }
-
-      // 4. Save address if opted
+      // 3. Save address if opted
       if (saveAddressToDb) {
         try {
           await saveAddress({
@@ -341,10 +307,10 @@ export default function Checkout() {
         }
       }
 
-      // 5. Track idempotency session
+      // 4. Track idempotency session
       getOrCreateCartIdempotencyKey(user.id, grandTotal)
 
-      // 6. Execute order placement
+      // 5. Execute order placement
       const order = await placeOrder({
         address: fullAddress,
         phone: phoneVal.cleanedValue,
@@ -971,66 +937,6 @@ export default function Checkout() {
                   {lang === 'bn' ? '💡 পেমেন্ট সহজে ও দ্রুত ভেরিফাই করার জন্য দিন।' : '💡 Helps seller verify your payment instantly.'}
                 </span>
               </label>
-
-              {/* Optional 12-digit UTR Accordion */}
-              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #cbd5e1' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowUtrInput((prev) => !prev)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    color: '#2563eb',
-                    fontSize: '0.82rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                  }}
-                >
-                  <span>{showUtrInput ? '▲' : '▼'}</span>
-                  <span>
-                    {lang === 'bn' ? '১২ সংখ্যার UTR / Reference No. দিতে চান? (ঐচ্ছিক)' : 'Have a 12-digit UTR No.? (Optional)'}
-                  </span>
-                </button>
-
-                {showUtrInput && (
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input
-                        value={utr}
-                        onChange={(e) => {
-                          setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))
-                          setError('')
-                        }}
-                        placeholder={lang === 'bn' ? '১২ সংখ্যার UTR (যেমন 408123456789)' : '12-digit UTR (e.g. 408123456789)'}
-                        maxLength={12}
-                        inputMode="numeric"
-                        style={{ flex: 1, letterSpacing: '0.05rem', fontFamily: 'monospace', fontWeight: 700, background: '#ffffff' }}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={async () => {
-                          try {
-                            const text = await navigator.clipboard.readText()
-                            const cleaned = text.replace(/\D/g, '').slice(0, 12)
-                            if (cleaned) {
-                              setUtr(cleaned)
-                              setUtrPasted(true)
-                            }
-                          } catch {}
-                        }}
-                      >
-                        📋 {lang === 'bn' ? 'পেস্ট' : 'Paste'}
-                      </button>
-                    </div>
-                    {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '0.25rem' }}>UTR auto-filled from clipboard</p>}
-                  </div>
-                )}
-              </div>
             </div>
           )}
           {error && <p className="form-error">{error}</p>}

@@ -307,22 +307,6 @@ export default function SellerOrders() {
     }
   }
 
-  const handleRejectUtr = async (o: Order) => {
-    if (!confirm(lang === 'bn' ? 'ভুল UTR হলে অর্ডার বাতিল করবেন?' : 'Reject invalid UTR and cancel order?')) return
-    try {
-      await updateOrderStatus(o.id, 'cancelled')
-      const phone = formatWhatsAppPhone(o.phone)
-      const msg = encodeURIComponent(
-        lang === 'bn'
-          ? `❌ আপনার অর্ডার ${o.id}-এর UTR (${o.utr}) ব্যাংক স্টেটমেন্টে পাওয়া যায়নি। অনুগ্রহ করে সঠিক UTR পাঠান।`
-          : `❌ Your UTR (${o.utr}) for Order #${o.id} could not be verified in bank records. Please send your correct 12-digit UTR.`
-      )
-      window.open(`https://wa.me/${phone}?text=${msg}`, '_blank', 'noopener,noreferrer')
-    } catch (err) {
-      console.error('Reject UTR error:', err)
-    }
-  }
-
   // Today's summary
   const todayOrders = useMemo(() => orders.filter(o => isToday(o.createdAt)), [orders])
   const todayStats = useMemo(() => {
@@ -816,6 +800,22 @@ export default function SellerOrders() {
                 {/* Expanded details */}
                 {expanded && (
                   <div style={{ borderTop: '1px solid var(--line, #e5e7eb)', padding: '0.75rem 1rem' }}>
+                    {/* Payment Verification Info */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.85rem' }}>
+                        {lang === 'bn' ? 'পেমেন্ট স্ট্যাটাস:' : 'Payment Status:'}{' '}
+                        <b style={{ color: o.utrVerified ? '#16a34a' : '#d97706' }}>
+                          {o.utrVerified ? (lang === 'bn' ? '✅ যাচাইকৃত' : '✅ Verified') : (lang === 'bn' ? '⏳ যাচাই বাকি' : '⏳ Pending Check')}
+                        </b>
+                      </span>
+                      <button type="button" onClick={() => void handleVerifyUtr(o)}
+                        style={{
+                          padding: '0.25rem 0.6rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
+                          background: o.utrVerified ? '#dcfce7' : '#fef9c3', color: o.utrVerified ? '#166534' : '#854d0e'
+                        }}>
+                        {o.utrVerified ? '✅ Verified' : '⏳ Verify Payment'}
+                      </button>
+                    </div>
                     {/* Items */}
                     <div style={{ marginBottom: '0.75rem' }}>
                       {o.items.map(it => (
@@ -839,36 +839,6 @@ export default function SellerOrders() {
                       <span style={{ color: balance > 0 ? '#dc2626' : '#22c55e', fontWeight: 600 }}>
                         {lang === 'bn' ? 'বাকি' : 'Balance'}: ₹{balance}
                       </span>
-                    </div>
-
-                    {/* UTR */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.85rem' }}>UTR: <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{o.utr}</code></span>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(o.utr)
-                            showToast(lang === 'bn' ? 'UTR কপি হয়েছে' : 'UTR copied!')
-                          } catch {}
-                        }}
-                        style={{ padding: '0.2rem 0.6rem', borderRadius: '6px', border: '1px solid var(--line, #e5e7eb)', background: '#fff', fontSize: '0.75rem', cursor: 'pointer' }}
-                      >
-                        📋 {lang === 'bn' ? 'কপি' : 'Copy'}
-                      </button>
-                      <button type="button" onClick={() => void handleVerifyUtr(o)}
-                        style={{
-                          padding: '0.25rem 0.6rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                          background: o.utrVerified ? '#dcfce7' : '#fef9c3', color: o.utrVerified ? '#166534' : '#854d0e'
-                        }}>
-                        {o.utrVerified ? '✅ Verified' : '⏳ Verify UTR'}
-                      </button>
-                      {!o.utrVerified && o.status !== 'cancelled' && (
-                        <button type="button" onClick={() => void handleRejectUtr(o)}
-                          style={{ padding: '0.25rem 0.6rem', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', color: '#dc2626', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}>
-                          ❌ {lang === 'bn' ? 'ভুল UTR' : 'Reject UTR'}
-                        </button>
-                      )}
                     </div>
 
                     {/* Action buttons */}
@@ -916,8 +886,8 @@ function openWhatsApp(order: Order, lang: 'en' | 'bn') {
   const phone = formatWhatsAppPhone(order.phone)
   const text = encodeURIComponent(
     lang === 'bn'
-      ? `GreenVest অর্ডার ${order.id}\nনমস্কার ${order.userName}, মোট ₹${order.total}। UTR: ${order.utr}। স্ট্যাটাস: ${order.status}।`
-      : `GreenVest order ${order.id}\nHi ${order.userName}, total ₹${order.total}. UTR: ${order.utr}. Status: ${order.status}.`,
+      ? `GreenVest অর্ডার #${order.id.slice(-6)}\nনমস্কার ${order.userName}, মোট ₹${order.total}। স্ট্যাটাস: ${order.status}।`
+      : `GreenVest order #${order.id.slice(-6)}\nHi ${order.userName}, total ₹${order.total}. Status: ${order.status}.`,
   )
   window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer')
 }
