@@ -332,13 +332,21 @@ async function updateProfileField(
 
   // 1. Try atomic SECURITY DEFINER RPC (bypasses all RLS restrictions)
   if (normalizedFields.role && typeof normalizedFields.role === 'string') {
-    try {
-      const { data: rpcData, error: rpcErr } = await client.rpc('update_user_role_admin', {
-        p_user_id: userId,
-        p_role: normalizedFields.role,
-      })
-      if (!rpcErr && rpcData) return
-    } catch {}
+    const lookupId = userId || email || phone || ''
+    if (lookupId) {
+      try {
+        const { data: rpcData, error: rpcErr } = await client.rpc('update_user_role_admin', {
+          p_user_id: lookupId,
+          p_role: normalizedFields.role,
+        })
+        if (!rpcErr && rpcData) return
+        if (rpcErr) {
+          console.warn('update_user_role_admin RPC failed, falling back to table update:', rpcErr)
+        }
+      } catch (err) {
+        console.warn('update_user_role_admin RPC exception:', err)
+      }
+    }
   }
 
   // 2. Try by exact ID

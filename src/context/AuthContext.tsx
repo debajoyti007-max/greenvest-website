@@ -678,18 +678,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await updateProfileRole(actualId, role, targetEmail, targetPhone)
           const cloudUsers = await fetchProfiles()
           if (cloudUsers && cloudUsers.length > 0) {
-            const merged = cloudUsers.map((cu) => {
-              if (cu.id === actualId || cu.id === userId || (targetEmail && cu.email === targetEmail)) {
-                return { ...cu, role }
+            // Verify if cloud actually accepted the new role
+            const updatedCloudUser = cloudUsers.find(
+              (cu) => cu.id === actualId || cu.id === userId || (targetEmail && cu.email === targetEmail),
+            )
+            if (updatedCloudUser && updatedCloudUser.role !== role) {
+              console.error('Role update was rejected by Supabase database. Reverting local state.')
+              setUsers(cloudUsers)
+              saveUsers(cloudUsers)
+              return {
+                ok: false,
+                error: 'Database rejected role update. Please run FIX_USER_ROLES_PERMISSIONS.sql in Supabase SQL Editor.',
               }
-              return cu
-            })
-            setUsers(merged)
-            saveUsers(merged)
+            }
+            setUsers(cloudUsers)
+            saveUsers(cloudUsers)
           }
           return { ok: true }
         } catch (err: any) {
           console.error('setUserRole cloud error:', err)
+          const currentReal = getUsers()
+          setUsers(currentReal)
           return {
             ok: false,
             error: err.message || 'Failed to save role update in Supabase database. Please ensure SQL script is run in Supabase.',

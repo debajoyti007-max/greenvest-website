@@ -296,13 +296,17 @@ export default function AdminUsers() {
                                       : `Make ${u.name} an Admin?`
                                   )
                                 ) {
-                                  await setUserRole(u.id, 'admin' as Role)
-                                  showToast(
-                                    lang === 'bn'
-                                      ? `👑 ${u.name} এখন অ্যাডমিন!`
-                                      : `👑 ${u.name} is now an Admin!`,
-                                    '👑'
-                                  )
+                                  const res = await setUserRole(u.id, 'admin' as Role)
+                                  if (res && !res.ok) {
+                                    showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
+                                  } else {
+                                    showToast(
+                                      lang === 'bn'
+                                        ? `👑 ${u.name} এখন অ্যাডমিন!`
+                                        : `👑 ${u.name} is now an Admin!`,
+                                      '👑',
+                                    )
+                                  }
                                 }
                               }}
                             >
@@ -318,16 +322,20 @@ export default function AdminUsers() {
                                   window.confirm(
                                     lang === 'bn'
                                       ? `${u.name}-এর অ্যাডমিন রোল বাতিল করবেন?`
-                                      : `Revoke Admin from ${u.name}?`
+                                      : `Revoke Admin from ${u.name}?`,
                                   )
                                 ) {
-                                  await setUserRole(u.id, 'customer' as Role)
-                                  showToast(
-                                    lang === 'bn'
-                                      ? `${u.name}-এর অ্যাডমিন বাতিল হয়েছে`
-                                      : `Revoked Admin from ${u.name}`,
-                                    'ℹ️'
-                                  )
+                                  const res = await setUserRole(u.id, 'customer' as Role)
+                                  if (res && !res.ok) {
+                                    showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
+                                  } else {
+                                    showToast(
+                                      lang === 'bn'
+                                        ? `${u.name}-এর অ্যাডমিন বাতিল হয়েছে`
+                                        : `Revoked Admin from ${u.name}`,
+                                      'ℹ️',
+                                    )
+                                  }
                                 }
                               }}
                             >
