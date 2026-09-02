@@ -161,21 +161,29 @@ export default function Profile() {
   const phone = user.phone || (user.email.endsWith('@greenvest.shop') ? user.email.replace('@greenvest.shop', '') : '')
   const memberDays = Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24))
 
-  const cardStyle: React.CSSProperties = { background: 'var(--white, #fff)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--line, #e5e7eb)' }
-  const statStyle: React.CSSProperties = { ...cardStyle, textAlign: 'center' as const }
-  const labelStyle: React.CSSProperties = { fontSize: '0.8rem', color: 'var(--text-light, #6b7280)', marginTop: '0.25rem' }
-  const valueStyle: React.CSSProperties = { fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--primary, #166534)' }
+  const cardStyle: React.CSSProperties = {
+    background: '#ffffff',
+    padding: '1.25rem',
+    borderRadius: '16px',
+    border: '1px solid #f1f5f9',
+    boxShadow: '0 2px 12px rgba(0, 0, 0, 0.04)',
+  }
+  const statStyle: React.CSSProperties = { ...cardStyle, textAlign: 'center' as const, padding: '1rem 0.75rem' }
+  const labelStyle: React.CSSProperties = { fontSize: '0.76rem', fontWeight: 600, color: '#64748b', marginTop: '0.25rem' }
+  const valueStyle: React.CSSProperties = { fontSize: '1.4rem', fontWeight: 800, color: '#166534' }
 
   return (
-    <div className="page narrow" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="page narrow" style={{ padding: '0.75rem 1rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
       {/* Header */}
-      <section style={{ ...cardStyle, display: 'flex', gap: '1rem', alignItems: 'center', padding: '1.5rem' }}>
+      <section style={{ ...cardStyle, display: 'flex', gap: '1.25rem', alignItems: 'center', padding: '1.25rem 1.5rem' }}>
         <div style={{
-          width: '72px', height: '72px', borderRadius: '50%',
+          width: '68px', height: '68px', borderRadius: '50%',
           background: 'linear-gradient(135deg, #166534, #22c55e)', color: 'white',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '2rem', fontWeight: 'bold', textTransform: 'uppercase', flexShrink: 0
+          fontSize: '1.8rem', fontWeight: 800, textTransform: 'uppercase', flexShrink: 0,
+          boxShadow: '0 4px 14px rgba(22, 101, 52, 0.3)',
+          border: '2px solid #ffffff',
         }}>
           {user.name.charAt(0)}
         </div>

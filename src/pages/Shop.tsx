@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import WeeklyBasketModal from '../components/WeeklyBasketModal'
@@ -388,6 +388,20 @@ export default function Shop() {
     return () => clearInterval(timer)
   }, [])
 
+  // Touch swipe support for mobile
+  const touchStartX = useRef<number>(0)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+  }
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const diff = touchStartX.current - e.changedTouches[0].clientX
+    if (diff > 45) {
+      setHeroSlide((prev) => (prev + 1) % 3)
+    } else if (diff < -45) {
+      setHeroSlide((prev) => (prev === 0 ? 2 : prev - 1))
+    }
+  }
+
   const lastOrder = useMemo(() => {
     if (!user) return null
     return (
@@ -541,7 +555,11 @@ export default function Shop() {
   return (
     <div className="page shop-page">
       {/* 🚀 Hero Banner */}
-      <section className="hero-full hero-slider-wrapper">
+      <section
+        className="hero-full hero-slider-wrapper"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <picture>
           <source
             media="(max-width: 640px)"
