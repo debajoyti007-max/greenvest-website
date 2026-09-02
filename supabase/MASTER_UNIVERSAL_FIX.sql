@@ -221,9 +221,24 @@ CREATE TABLE IF NOT EXISTS public.orders (
   shipping_address jsonb NOT NULL DEFAULT '{}'::jsonb,
   delivery_slot text,
   notes text,
+  payer_upi_name text,
+  payment_type text DEFAULT 'advance',
+  payment_mode text DEFAULT 'online',
+  rejection_reason text,
+  assigned_rider_id text,
+  geo_lat numeric,
+  geo_lng numeric,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payer_upi_name text;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_type text DEFAULT 'advance';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_mode text DEFAULT 'online';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS rejection_reason text;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS assigned_rider_id text;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS geo_lat numeric;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS geo_lng numeric;
 
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "orders_all_access" ON public.orders;
