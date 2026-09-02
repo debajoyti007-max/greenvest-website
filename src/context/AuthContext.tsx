@@ -586,7 +586,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .maybeSingle()
 
         if (profileRow) {
-          // Bug 1 fix: update PIN in DB so it works on all devices
+          const dbName = normalizeText((profileRow.name as string) || '')
+          const givenName = normalizeText(nameInput || '')
+          // Security Check: Verify registered name matches to prevent unauthorized PIN hijacking
+          if (dbName && givenName && !dbName.includes(givenName) && !givenName.includes(dbName)) {
+            return {
+              ok: false,
+              error: '❌ Security Check Failed: Account holder name does not match our records. Please enter your registered name or contact Admin.',
+            }
+          }
+
+          // update PIN in DB so it works on all devices
           await supabase.from('profiles').update({ pin: newPin }).eq('id', profileRow.id)
           // Also update localStorage cache
           storePin(profileRow.email, newPin)
