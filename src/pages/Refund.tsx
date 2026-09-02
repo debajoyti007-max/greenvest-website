@@ -9,13 +9,13 @@ export default function Refund() {
       <h1>{lang === 'bn' ? 'রিফান্ড নীতি' : 'Refund policy'}</h1>
       <p>
         {lang === 'bn'
-          ? 'সেলার UTR যাচাই করার আগে অর্ডার বাতিল হলে অগ্রিম ফেরত দেওয়া যায়। যাচাইয়ের পর রিফান্ড সেলারের অনুমোদনে।'
-          : 'If an order is cancelled before UTR verification, the advance can be refunded. After verification, refunds require seller approval.'}
+          ? 'সেলার পেমেন্ট যাচাই করার আগে অর্ডার বাতিল হলে অগ্রিম ফেরত দেওয়া যায়। প্যাকেজিং ও রওনা হওয়ার পর রিফান্ড সেলারের অনুমোদনে প্রযোজ্য।'
+          : 'If an order is cancelled before payment verification, the advance can be refunded. After verification and packing, refunds require seller approval.'}
       </p>
       <p>
         {lang === 'bn'
-          ? `নষ্ট বা ভুল আইটেম পেলে ডেলিভারির দিনে ${SUPPORT_PHONE}-এ যোগাযোগ করুন। UPI/UTR পেমেন্ট ম্যানুয়াল — অটো রিফান্ড গেটওয়ে নেই।`
-          : `Contact us the same day at ${SUPPORT_PHONE} for spoiled or wrong items. UPI/UTR payment is manual — there is no automatic refund gateway.`}
+          ? `নষ্ট বা ভুল আইটেম পেলে ডেলিভারির দিনে ${SUPPORT_PHONE}-এ যোগাযোগ করুন। যেকোনো রিফান্ড সরাসরি আপনার UPI অ্যাকাউন্টে ফেরত পাঠানো হয়।`
+          : `Contact us the same day at ${SUPPORT_PHONE} for spoiled or wrong items. Refunds are sent directly to your UPI account.`}
       </p>
       <Link to="/contact" className="btn btn-primary">
         {lang === 'bn' ? 'যোগাযোগ' : 'Contact us'}

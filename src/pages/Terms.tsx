@@ -69,10 +69,10 @@ export default function Terms() {
             {lang === 'bn' ? `হোম ডেলিভারির জন্য সর্বনিম্ন অর্ডারের পরিমাণ ₹${MIN_ORDER_AMOUNT}।` : `Minimum order value for home delivery is ₹${MIN_ORDER_AMOUNT}.`}
           </li>
           <li>
-            <strong>{lang === 'bn' ? 'অগ্রিম পেমেন্ট ও UTR:' : '50% Advance & Bank UTR:'}</strong>{' '}
+            <strong>{lang === 'bn' ? 'অগ্রিম পেমেন্ট যাচাই:' : '50% Advance UPI Payment:'}</strong>{' '}
             {lang === 'bn'
-              ? 'অনলাইন অর্ডারে ৫০% অগ্রিম UPI পেমেন্ট এবং ব্যাংকের ১২-সংখ্যার UTR নম্বর জমা দিতে হয়। সেলার UTR যাচাই করার পর অর্ডার চূড়ান্তভাবে কনফার্ম হয়।'
-              : 'Orders require 50% advance UPI payment with valid 12-digit bank UTR reference. Orders are confirmed upon seller verification.'}
+              ? 'অনলাইন অর্ডারে ৫০% অগ্রিম UPI পেমেন্ট সম্পন্ন করতে হয়। সেলার পেমেন্ট প্রাপ্তি যাচাই করার পর অর্ডার প্যাকেজিং শুরু হয়।'
+              : 'Orders require 50% advance UPI payment. Orders are confirmed and packed upon seller payment verification.'}
           </li>
           <li>
             <strong>{lang === 'bn' ? 'খাতা পে (Khata Pay):' : 'Khata Credit Facility:'}</strong>{' '}
@@ -119,8 +119,8 @@ export default function Terms() {
           <li>
             <strong>{lang === 'bn' ? 'অর্ডার বাতিল:' : 'Pre-Confirmation Cancellation:'}</strong>{' '}
             {lang === 'bn'
-              ? 'সেলার কর্তৃক UTR যাচাই করার আগে যেকোনো সময় অর্ডার বাতিল করা যায় এবং প্রদত্ত অগ্রিম অর্থ সম্পূর্ণরূপে ফেরতযোগ্য।'
-              : 'Orders may be cancelled prior to UTR verification with 100% refund of any advance paid.'}
+              ? 'সেলার কর্তৃক পেমেন্ট যাচাই ও প্যাকেজিং শুরু করার আগে যেকোনো সময় অর্ডার বাতিল করা যায় এবং প্রদত্ত অগ্রিম অর্থ সম্পূর্ণরূপে ফেরতযোগ্য।'
+              : 'Orders may be cancelled prior to packing with 100% refund of any advance paid.'}
           </li>
           <li>
             <strong>{lang === 'bn' ? 'ত্রুটিপূর্ণ পণ্য রিপ্লেসমেন্ট:' : 'Same-Day Quality Replacement:'}</strong>{' '}

@@ -374,7 +374,7 @@ export default function SellerOrders() {
 
   const filters: { id: Filter; en: string; bn: string; count?: number }[] = [
     { id: 'active', en: 'Active 🛵', bn: 'চলমান 🛵', count: orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length },
-    { id: 'utr', en: 'Pending UTR ⏳', bn: 'UTR বাকি ⏳', count: orders.filter(o => !o.utrVerified && o.status !== 'cancelled').length },
+    { id: 'utr', en: 'Pending Pay ⏳', bn: 'পেমেন্ট বাকি ⏳', count: orders.filter(o => !o.utrVerified && o.status !== 'cancelled').length },
     { id: 'to_pack', en: 'To Pack 📦', bn: 'প্যাকিং বাকি 📦', count: orders.filter(o => (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))).length },
     { id: 'today', en: 'Today 📅', bn: 'আজ 📅', count: todayOrders.length },
     { id: 'done', en: 'Done ✅', bn: 'ডেলিভারড ✅', count: orders.filter(o => o.status === 'delivered' && !isArchivedOld(o)).length },
@@ -517,7 +517,7 @@ export default function SellerOrders() {
           type="text"
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          placeholder={lang === 'bn' ? '🔍 ফোন নম্বর, নাম, UTR বা অর্ডার ID খুঁজুন...' : '🔍 Search by Phone, Name, UTR, or Order ID...'}
+          placeholder={lang === 'bn' ? '🔍 ফোন নম্বর, নাম বা অর্ডার ID খুঁজুন...' : '🔍 Search by Phone, Name, or Order ID...'}
           style={{
             width: '100%',
             padding: '0.65rem 2.2rem 0.65rem 0.85rem',
@@ -705,11 +705,6 @@ export default function SellerOrders() {
                     </div>
                     <div style={{ fontSize: '0.82rem', color: '#1e293b' }}>
                       👤 <b>{lang === 'bn' ? 'প্রেরকের নাম:' : 'Payer Name:'}</b> {o.payerUpiName || o.userName}
-                      {o.utr && o.utr !== 'PENDING-VERIFY' && (
-                        <span style={{ marginLeft: '6px', color: '#64748b' }}>
-                          · UTR: <code style={{ background: '#dbeafe', padding: '1px 5px', borderRadius: '4px' }}>{o.utr}</code>
-                        </span>
-                      )}
                     </div>
                   </div>
                 )}

@@ -52,8 +52,8 @@ export default function Privacy() {
           <li>
             <strong>{lang === 'bn' ? 'পেমেন্ট ও লেনদেন ডেটা:' : 'Payment & Transaction Records:'}</strong>{' '}
             {lang === 'bn'
-              ? 'অর্ডার ট্রানজ্যাকশন আইডি, ব্যাংকের ১২-সংখ্যার UPI UTR রেফারেন্স নম্বর ও খাতা ব্যালেন্স। আমরা কোনো ডেবিট/ক্রেডিট কার্ড বা নেট ব্যাংকিং পাসওয়ার্ড সংগ্রহ বা সংরক্ষণ করি না।'
-              : 'Order IDs, bank UPI 12-digit UTR reference numbers, and Khata credit records. We DO NOT collect, process, or store credit/debit card numbers or bank passwords.'}
+              ? 'অর্ডার ট্রানজ্যাকশন আইডি, পেমেন্ট রেফারেন্স ও ডিজিটাল খাতা ব্যালেন্স। আমরা কোনো ডেবিট/ক্রেডিট কার্ড বা নেট ব্যাংকিং পাসওয়ার্ড সংগ্রহ বা সংরক্ষণ করি না।'
+              : 'Order IDs, payment reference details, and digital Khata ledger records. We DO NOT collect, process, or store credit/debit card numbers or bank passwords.'}
           </li>
         </ul>
       </section>

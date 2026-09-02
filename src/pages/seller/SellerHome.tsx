@@ -122,8 +122,8 @@ export default function SellerHome() {
           </h1>
           <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.9rem' }}>
             {lang === 'bn'
-              ? 'দৈনিক কর্মপ্রবাহ: সকালের স্টক → মন্ডি শিট → UTR যাচাই → ডেলিভারি ও খাতা বুক।'
-              : 'Daily workflow: morning stock → mandi sheet → verify UTR → deliver & khata.'}
+              ? 'দৈনিক কর্মপ্রবাহ: সকালের স্টক → মন্ডি শিট → পেমেন্ট যাচাই → ডেলিভারি ও খাতা বুক।'
+              : 'Daily workflow: morning stock → mandi sheet → verify payment → deliver & khata.'}
           </p>
         </div>
         <Link
@@ -143,19 +143,19 @@ export default function SellerHome() {
             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
           }}
         >
-          🛒 {lang === 'bn' ? 'স্টোরফ্রন্ট দেখুন' : 'View Storefront'}
+          🏪 {lang === 'bn' ? 'দোকানের সম্মুখভাগ' : 'View Storefront'}
         </Link>
       </div>
 
-      {/* Action Alerts */}
+      {/* Action required alerts */}
       {pending > 0 && (
         <div
           style={{
             background: '#fffbeb',
-            border: '1px solid #fde68a',
+            border: '1.5px solid #fde68a',
             borderRadius: '12px',
             padding: '12px 16px',
-            marginBottom: '1rem',
+            marginBottom: '1.2rem',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -170,7 +170,7 @@ export default function SellerHome() {
                 {lang === 'bn' ? 'আজকের কাজ বাকি:' : 'Action Required:'}
               </strong>
               <span style={{ color: '#b45309', fontSize: '0.85rem' }}>
-                {pending} {lang === 'bn' ? 'টি অর্ডারের UTR পেমেন্ট যাচাই বাকি আছে।' : 'order(s) waiting for UTR payment verification.'}
+                {pending} {lang === 'bn' ? 'টি অর্ডারের পেমেন্ট যাচাই বাকি আছে।' : 'order(s) waiting for payment verification.'}
               </span>
             </div>
           </div>
@@ -287,7 +287,7 @@ export default function SellerHome() {
           }}
         >
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            ⏳ {lang === 'bn' ? 'UTR যাচাই বাকি' : 'UTR Pending'}
+            ⏳ {lang === 'bn' ? 'পেমেন্ট যাচাই বাকি' : 'Payment Pending'}
           </span>
           <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#9a3412', margin: '4px 0' }}>
             {pending}
@@ -421,7 +421,7 @@ export default function SellerHome() {
           <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 1rem', flex: 1 }}>
             {lang === 'bn'
               ? 'নতুন অর্ডার যাচাই, স্ট্যাটাস পরিবর্তন এবং ডেলিভারি শিট প্রিন্ট করুন।'
-              : 'Process customer orders, verify UTR payments, and generate delivery manifests.'}
+              : 'Process customer orders, verify payments, and generate delivery manifests.'}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <Link

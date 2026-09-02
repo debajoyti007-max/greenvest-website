@@ -32,8 +32,8 @@ export default function OrderSuccess() {
     notified.current = true
     showToast(
       lang === 'bn'
-        ? `🎉 অর্ডার সফলভাবে সম্পন্ন হয়েছে! UTR যাচাইয়ের পর ডেলিভারি হবে।`
-        : `🎉 Order placed! Delivery after seller confirms your UTR.`,
+        ? `🎉 অর্ডার সফলভাবে সম্পন্ন হয়েছে! দ্রুত ডেলিভারি প্রক্রিয়া শুরু হবে।`
+        : `🎉 Order placed successfully! Delivery processing will begin shortly.`,
       '🔔'
     )
   }, [order, lang])
@@ -50,7 +50,7 @@ export default function OrderSuccess() {
 
   const copySummary = async () => {
     if (!order) return
-    const text = `GreenVest Order: ${order.id}\nCustomer: ${order.userName} (${order.phone})\nTotal: ₹${order.total} (Advance ₹${order.advanceAmount})\nUTR: ${order.utr}\nAddress: ${order.address} (PIN ${order.pin})`
+    const text = `GreenVest Order: ${order.id}\nCustomer: ${order.userName} (${order.phone})\nTotal: ₹${order.total} (Advance ₹${order.advanceAmount})\nAddress: ${order.address} (PIN ${order.pin})`
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -148,8 +148,8 @@ export default function OrderSuccess() {
       <h1>{t(lang, 'orderPlaced')}</h1>
       <p className="lede">
         {lang === 'bn'
-          ? `সেলার UTR যাচাই করার পর ডেলিভারি ${DELIVERY_WINDOW_BN}-এর মধ্যে।`
-          : `After UTR verification, delivery arrives within ${DELIVERY_WINDOW}.`}
+          ? `পেমেন্ট যাচাইয়ের পর দ্রুত ডেলিভারি ${DELIVERY_WINDOW_BN}-এর মধ্যে।`
+          : `Fast delivery arrives within ${DELIVERY_WINDOW}.`}
       </p>
 
       {/* Live Notification Indicator Badge */}
@@ -174,7 +174,7 @@ export default function OrderSuccess() {
           {order.advanceAmount})
         </p>
         <p>
-          UTR: <code>{order.utr}</code> · <em className="wait">{t(lang, 'utrPending')}</em>
+          {lang === 'bn' ? 'পেমেন্ট স্ট্যাটাস:' : 'Payment:'} <em className={order.utrVerified ? 'ok' : 'wait'}>{order.utrVerified ? (lang === 'bn' ? 'যাচাইকৃত' : 'Verified') : (lang === 'bn' ? 'যাচাই প্রক্রিয়াধীন' : 'Processing verification')}</em>
         </p>
       </div>
 
@@ -183,7 +183,7 @@ export default function OrderSuccess() {
           📄 {lang === 'bn' ? 'অফিসিয়াল PDF রসিদ ডাউনলোড / প্রিন্ট' : 'Download / Print PDF Invoice'}
         </button>
         <button type="button" className="btn btn-secondary" onClick={() => openSellerOrderWhatsApp(order)}>
-          💬 {lang === 'bn' ? 'WhatsApp এ রসিদ ও UTR পাঠান' : 'Send Receipt to WhatsApp'}
+          💬 {lang === 'bn' ? 'WhatsApp এ রসিদ পাঠান' : 'Send Receipt to WhatsApp'}
         </button>
         <button type="button" className="btn btn-secondary" onClick={shareWhatsAppCustomer}>
           📲 Share on WhatsApp

@@ -365,8 +365,8 @@ export default function Checkout() {
       if (/already been used|duplicate/i.test(raw)) {
         setError(
           lang === 'bn'
-            ? 'এই UTR নম্বরটি দিয়ে ইতিমধ্যে একটি অর্ডার করা হয়েছে। নতুন পেমেন্টের সঠিক UTR দিন।'
-            : 'This UTR number has already been used for another active order. Please provide a new UTR.',
+            ? 'অর্ডারটি ইতিমধ্যে প্রক্রিয়াধীন রয়েছে।'
+            : 'This order is already being processed.',
         )
       } else if (/row-level security|policy/i.test(raw)) {
         setError(
@@ -427,8 +427,8 @@ export default function Checkout() {
           <h2>{lang === 'bn' ? 'পেমেন্ট ও অর্ডার বিবরণ' : 'Payment & Order Details'}</h2>
           <p>
             {lang === 'bn'
-              ? `নিচের QR স্ক্যান করে বা UPI অ্যাপ দিয়ে পেমেন্ট করুন, তারপর ১২ সংখ্যার UTR দিন। ডেলিভারি ${DELIVERY_WINDOW_BN}।`
-              : `Scan QR or pay via UPI app, then enter your 12-digit UTR. Delivery within ${DELIVERY_WINDOW}.`}
+              ? `নিচের QR স্ক্যান করে বা UPI অ্যাপ দিয়ে পেমেন্ট করুন এবং অর্ডার নিশ্চিত করুন। ডেলিভারি ${DELIVERY_WINDOW_BN}।`
+              : `Scan QR or pay via UPI app, then confirm order. Delivery within ${DELIVERY_WINDOW}.`}
           </p>
           <p className="hint pay-eta">
             {lang === 'bn'
@@ -516,8 +516,8 @@ export default function Checkout() {
               </strong>
               <p style={{ margin: 0, fontSize: '0.86rem', lineHeight: 1.5 }}>
                 {lang === 'bn'
-                  ? `আপনার এই অর্ডারের মোট ₹${grandTotal} আপনার ডিজিটাল খাতা বুকে যোগ করা হবে। এখনই কোনো UPI পেমেন্ট বা UTR দিতে হবে না।`
-                  : `Total ₹${grandTotal} for this order will be debited to your digital Khata ledger. No advance UPI payment required.`}
+                  ? `আপনার এই অর্ডারের মোট ₹${grandTotal} আপনার ডিজিটাল খাতা বুকে যোগ করা হবে। এখনই কোনো অগ্রিম পেমেন্ট দিতে হবে না।`
+                  : `Total ₹${grandTotal} for this order will be debited to your digital Khata ledger. No advance payment required right now.`}
               </p>
             </div>
           ) : (

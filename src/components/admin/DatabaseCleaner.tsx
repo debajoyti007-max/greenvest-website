@@ -95,8 +95,8 @@ export default function DatabaseCleaner({
         title: lang === 'bn' ? 'পরিত্যক্ত পেন্ডিং অর্ডার বাতিল ও ক্লিন' : 'Cancel Abandoned Pending Orders',
         description:
           lang === 'bn'
-            ? `৪৮ ঘণ্টার বেশি পুরনো কোনো UTR ছাড়া ${abandonedPendingOrders.length}টি পেন্ডিং অর্ডার বাতিল করা হবে।`
-            : `Will cancel ${abandonedPendingOrders.length} orders that have been pending for >48h without UTR.`,
+            ? `৪৮ ঘণ্টার বেশি পুরনো কোনো পেমেন্ট ছাড়া ${abandonedPendingOrders.length}টি পেন্ডিং অর্ডার বাতিল করা হবে।`
+            : `Will cancel ${abandonedPendingOrders.length} orders that have been pending for >48h without payment.`,
         count: abandonedPendingOrders.length,
         targetIds: abandonedPendingOrders.map((o) => o.id),
       })
@@ -334,8 +334,8 @@ export default function DatabaseCleaner({
                 </h4>
                 <p className="db-card-desc">
                   {lang === 'bn'
-                    ? 'যেসব অর্ডার ৪৮ ঘণ্টার বেশি সময় ধরে কোনো UTR ছাড়া ঝুলছে সেগুলোকে অটো বাতিল করুন।'
-                    : 'Auto-cancel orders pending for >48h with no payment or UTR.'}
+                    ? 'যেসব অর্ডার ৪৮ ঘণ্টার বেশি সময় ধরে পেমেন্টহীন অবস্থায় ঝুলছে সেগুলোকে অটো বাতিল করুন।'
+                    : 'Auto-cancel orders pending for >48h with no verified payment.'}
                 </p>
                 <div className="db-card-pill-row">
                   <span className="db-count-chip">
