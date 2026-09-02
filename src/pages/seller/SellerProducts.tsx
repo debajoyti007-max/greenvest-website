@@ -43,10 +43,6 @@ export default function SellerProducts() {
   const [quickPriceId, setQuickPriceId] = useState<string | null>(null)
   const [quickPrices, setQuickPrices] = useState({ pA: 0, pB: 0, pC: 0 })
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
-    return <Navigate to="/" replace />
-  }
-
   const searched = useMemo(() => {
     const q = query.trim().toLowerCase()
     return products.filter((p) => {
@@ -94,7 +90,7 @@ export default function SellerProducts() {
     setPhotoError('')
     setPhotoBusy(true)
     try {
-      const key = editing?.id || `tmp-${user.id}`
+      const key = editing?.id || (user ? `tmp-${user.id}` : `tmp-${Date.now()}`)
       const url = await uploadProductImage(file, key)
       setForm((f) => ({ ...f, imageUrl: url }))
     } catch (err) {
@@ -142,6 +138,10 @@ export default function SellerProducts() {
     { id: 'restock', en: 'Out of stock', bn: 'স্টক নেই', count: restock.length },
     { id: 'archived', en: 'Old / archived', bn: 'পুরনো / আর্কাইভ', count: archived.length },
   ]
+
+  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+    return <Navigate to="/" replace />
+  }
 
   return (
     <div className="page">

@@ -34,10 +34,6 @@ export default function SellerSupport() {
     })
   }, [cleanupOldSupportMessages])
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
-    return <Navigate to="/" replace />
-  }
-
   // Group messages by customer
   const allCustomerThreads = useMemo(() => {
     const map = new Map<string, { userId: string; userName: string; userPhone?: string; messages: SupportMessage[]; lastMsg: SupportMessage; status: 'open' | 'resolved' }>()
@@ -106,7 +102,7 @@ export default function SellerSupport() {
 
   const handleSendReply = async (customMessage?: string) => {
     const text = (customMessage || replyText).trim()
-    if (!text || !selectedUserId || !currentThread) return
+    if (!text || !selectedUserId || !currentThread || !user) return
 
     setSending(true)
     try {
@@ -128,7 +124,7 @@ export default function SellerSupport() {
 
   // 1-Click Close with Farewell Message
   const handleCloseTicket = async () => {
-    if (!selectedUserId || !currentThread) return
+    if (!selectedUserId || !currentThread || !user) return
 
     setSending(true)
     try {
@@ -172,6 +168,10 @@ export default function SellerSupport() {
   const handleManualPurgeJunk = async () => {
     const purged = await cleanupOldSupportMessages(0) // Purge all resolved right now
     showToast(lang === 'bn' ? `${purged}টি সমাধানকৃত চ্যাট ডাটাবেস থেকে মুছে দেওয়া হয়েছে!` : `Purged ${purged} resolved junk chats from DB!`, '🧹')
+  }
+
+  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+    return <Navigate to="/" replace />
   }
 
   return (

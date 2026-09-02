@@ -28,10 +28,6 @@ export default function SellerHome() {
     return () => { active = false }
   }, [fetchDailyReport])
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
-    return <Navigate to="/" replace />
-  }
-
   const todayKey = dayKey(new Date())
   const y = new Date()
   y.setDate(y.getDate() - 1)
@@ -110,6 +106,10 @@ export default function SellerHome() {
     } catch {
       /* ignore */
     }
+  }
+
+  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+    return <Navigate to="/" replace />
   }
 
   return (

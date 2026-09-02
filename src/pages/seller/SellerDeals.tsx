@@ -67,10 +67,6 @@ export default function SellerDeals() {
   const [formCustomDate, setFormCustomDate] = useState('')
   const [formAutoRemove, setFormAutoRemove] = useState(true)
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
-    return <Navigate to="/" replace />
-  }
-
   const openAddModal = () => {
     setEditingDeal(null)
     setFormBadgeBn('স্পেশাল অফার')
@@ -216,6 +212,10 @@ export default function SellerDeals() {
 
   const activeCount = promotionalDeals.filter((d) => d.isActive !== false && !isDealExpired(d)).length
   const expiredCount = promotionalDeals.length - activeCount
+
+  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+    return <Navigate to="/" replace />
+  }
 
   return (
     <div className="page" style={{ maxWidth: '1000px', margin: '0 auto', padding: '1rem' }}>

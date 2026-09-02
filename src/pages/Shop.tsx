@@ -388,11 +388,6 @@ export default function Shop() {
     return () => clearInterval(timer)
   }, [])
 
-  // Auto-redirect rider away from Shop to Rider Live Delivery View
-  if (user?.role === 'rider') {
-    return <Navigate to="/rider" replace />
-  }
-
   const lastOrder = useMemo(() => {
     if (!user) return null
     return (
@@ -537,6 +532,11 @@ export default function Shop() {
     ],
     [lang]
   )
+
+  // Auto-redirect rider away from Shop to Rider Live Delivery View
+  if (user?.role === 'rider') {
+    return <Navigate to="/rider" replace />
+  }
 
   return (
     <div className="page shop-page">

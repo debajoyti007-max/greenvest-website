@@ -31,10 +31,6 @@ export default function SellerKhata() {
     void refreshUsers()
   }, [refreshUsers])
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
-    return <Navigate to="/" replace />
-  }
-
   // Filtered customer list with smart zero-balance handling
   const customerList = useMemo(() => {
     return users.filter((u) => {
@@ -121,6 +117,10 @@ export default function SellerKhata() {
     } catch {
       showToast(lang === 'bn' ? 'আপডেট করা যায়নি' : 'Update failed', '❌', 'error')
     }
+  }
+
+  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+    return <Navigate to="/" replace />
   }
 
   return (

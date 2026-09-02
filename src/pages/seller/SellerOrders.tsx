@@ -219,10 +219,6 @@ export default function SellerOrders() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const prevCount = useRef(orders.length)
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
-    return <Navigate to="/" replace />
-  }
-
   // S1: Sound alert on new order
   useEffect(() => {
     if (orders.length > prevCount.current) {
@@ -404,6 +400,10 @@ export default function SellerOrders() {
   ]
 
   const cs: React.CSSProperties = { background: 'var(--white, #fff)', borderRadius: '12px', border: '1px solid var(--line, #e5e7eb)' }
+
+  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+    return <Navigate to="/" replace />
+  }
 
   return (
     <div className="page" style={{ maxWidth: '800px', margin: '0 auto', paddingBottom: '3rem' }}>
