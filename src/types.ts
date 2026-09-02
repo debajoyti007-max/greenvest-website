@@ -81,6 +81,7 @@ export interface Order {
   paymentMode?: 'online' | 'khata'
   isKhataOrder?: boolean
   utr: string
+  payerUpiName?: string
   utrVerified: boolean
   status: OrderStatus
   address: string

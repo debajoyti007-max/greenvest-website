@@ -81,6 +81,7 @@ interface PlaceOrderOpts {
   phone: string
   pin: string
   utr: string
+  payerUpiName?: string
   deliverySlot: import('../types').DeliverySlot
   discountAmount?: number
   zones?: DeliveryZone[]
@@ -559,6 +560,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         paymentType: opts.paymentType || (isFull ? 'full' : 'advance'),
         isKhataOrder: isKhata,
         utr: isKhata ? 'KHATA-DEBIT' : opts.utr.trim().toUpperCase(),
+        payerUpiName: opts.payerUpiName?.trim() || undefined,
         utrVerified: isKhata,
         status: isKhata ? 'confirmed' : 'pending',
         address: opts.address.trim(),

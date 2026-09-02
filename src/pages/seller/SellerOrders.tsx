@@ -699,12 +699,36 @@ export default function SellerOrders() {
                     }}>
                       {statusIcon[o.status]} {lang === 'bn' ? statusBn[o.status] : o.status.replace('_', ' ')}
                     </span>
-                    {!o.utrVerified && o.status !== 'cancelled' && (
-                      <span style={{ fontSize: '0.65rem', color: '#dc2626' }}>UTR ⏳</span>
+                    {!o.utrVerified && !o.isKhataOrder && o.status !== 'cancelled' && (
+                      <span style={{ fontSize: '0.68rem', background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '6px', fontWeight: 700 }}>
+                        {lang === 'bn' ? 'পেমেন্ট চেক ⏳' : 'Check Pay ⏳'}
+                      </span>
                     )}
                   </div>
                   <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{expanded ? '▲' : '▼'}</span>
                 </div>
+
+                {/* 💰 PhonePe / UPI Payment Matcher Box */}
+                {!o.isKhataOrder && !o.utrVerified && o.status !== 'cancelled' && (
+                  <div style={{ margin: '0 1rem 0.6rem', padding: '0.65rem 0.85rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#1e40af' }}>
+                        💰 {lang === 'bn' ? 'PhonePe / ব্যাংকে চেক করুন:' : 'Check in PhonePe / Bank:'}
+                      </strong>
+                      <span style={{ fontSize: '1rem', fontWeight: 800, color: '#1e40af' }}>
+                        ₹{o.advanceAmount}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#1e293b' }}>
+                      👤 <b>{lang === 'bn' ? 'প্রেরকের নাম:' : 'Payer Name:'}</b> {o.payerUpiName || o.userName}
+                      {o.utr && o.utr !== 'PENDING-VERIFY' && (
+                        <span style={{ marginLeft: '6px', color: '#64748b' }}>
+                          · UTR: <code style={{ background: '#dbeafe', padding: '1px 5px', borderRadius: '4px' }}>{o.utr}</code>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* 📍 Location Inspection Card (Before Acceptance) */}
                 {(o.status === 'pending' || o.status === 'advance_paid') && (

@@ -8,7 +8,7 @@ import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC, generateDynamicUpiQr, buildUpiPayUri } from '../lib/payment'
 import { getSavedDelivery } from '../lib/storage'
 import {
-  validateUtrStrict,
+  validatePayerNameOrUtr,
   validatePhoneStrict,
   getOrCreateCartIdempotencyKey,
   clearCartIdempotencyKey,
@@ -38,14 +38,16 @@ export default function Checkout() {
   const [house, setHouse] = useState('')
   const [landmark, setLandmark] = useState('')
   const [area, setArea] = useState('')
+  const [pin, setPin] = useState('')
   const [geoCoords, setGeoCoords] = useState('')
   const [geoLat, setGeoLat] = useState<number | undefined>(undefined)
   const [geoLng, setGeoLng] = useState<number | undefined>(undefined)
   const [detectingGps, setDetectingGps] = useState(false)
 
-  const [phone, setPhone] = useState('')
-  const [pin, setPin] = useState('')
+  const [phone, setPhone] = useState(user?.phone || '')
   const [utr, setUtr] = useState('')
+  const [payerUpiName, setPayerUpiName] = useState('')
+  const [showUtrInput, setShowUtrInput] = useState(false)
   const [utrPasted, setUtrPasted] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
@@ -258,10 +260,14 @@ export default function Checkout() {
       return
     }
 
-    // 2. Strict 12-digit UPI UTR Validation (only if not Khata)
-    let cleanedUtr = 'KHATA-DEBIT'
-    if (paymentMode !== 'khata') {
-      const utrVal = validateUtrStrict(utr)
+    // 2. UPI Payer Name & Optional UTR Handling
+    let cleanedUtr = 'PENDING-VERIFY'
+    const finalPayerName = payerUpiName.trim() || user?.name || ''
+
+    if (paymentMode === 'khata') {
+      cleanedUtr = 'KHATA-DEBIT'
+    } else if (utr.trim()) {
+      const utrVal = validatePayerNameOrUtr(utr)
       if (!utrVal.isValid) {
         setError(lang === 'bn' ? utrVal.errorBn : utrVal.errorEn)
         submitLockRef.current = false
@@ -302,8 +308,8 @@ export default function Checkout() {
     }, 2500)
 
     try {
-      // 3. Duplicate UTR check in database (only if not Khata)
-      if (paymentMode !== 'khata') {
+      // 3. Duplicate UTR check in database (only if user provided a specific 12-digit UTR)
+      if (paymentMode !== 'khata' && cleanedUtr !== 'PENDING-VERIFY' && /^\d{12}$/.test(cleanedUtr)) {
         const isDup = await checkDuplicateUtr(cleanedUtr)
         if (isDup) {
           setError(
@@ -344,6 +350,7 @@ export default function Checkout() {
         phone: phoneVal.cleanedValue,
         pin: isPickup ? STORE_LOCATION.pin : pin.trim(),
         utr: cleanedUtr,
+        payerUpiName: finalPayerName,
         deliverySlot: 'morning',
         discountAmount: couponApplied?.discount || 0,
         geoLat,
@@ -949,56 +956,82 @@ export default function Checkout() {
             />
           </label>
           {paymentMode !== 'khata' && (
-            <>
-              <label>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span>{t(lang, 'utrLabel')}</span>
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      fontFamily: 'monospace',
-                      fontWeight: 700,
-                      color: utr.length === 12 ? '#16a34a' : '#6b7280',
-                    }}
-                  >
-                    {utr.length === 12
-                      ? (lang === 'bn' ? '✅ ১২ সংখ্যা সম্পূর্ণ' : '✅ 12 digits valid')
-                      : `${utr.length}/12 ${lang === 'bn' ? 'সংখ্যা' : 'digits'}`}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input
-                    value={utr}
-                    onChange={(e) => {
-                      setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))
-                      setError('')
-                    }}
-                    placeholder={lang === 'bn' ? '১২ সংখ্যার UTR (যেমন 408123456789)' : '12-digit UTR (e.g. 408123456789)'}
-                    required
-                    maxLength={12}
-                    inputMode="numeric"
-                    style={{ flex: 1, letterSpacing: '0.05rem', fontFamily: 'monospace', fontWeight: 700 }}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={async () => {
-                      try {
-                        const text = await navigator.clipboard.readText()
-                        const cleaned = text.replace(/\D/g, '').slice(0, 12)
-                        if (cleaned) {
-                          setUtr(cleaned)
-                          setUtrPasted(true)
-                        }
-                      } catch {}
-                    }}
-                  >
-                    📋 {lang === 'bn' ? 'পেস্ট' : 'Paste'}
-                  </button>
-                </div>
+            <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '14px', padding: '1rem', marginTop: '0.5rem' }}>
+              <label style={{ margin: 0 }}>
+                <span style={{ fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  👤 {lang === 'bn' ? 'আপনার PhonePe / GPay নাম (অপশনাল)' : 'Your PhonePe / UPI Name (Optional)'}
+                </span>
+                <input
+                  value={payerUpiName}
+                  onChange={(e) => setPayerUpiName(e.target.value)}
+                  placeholder={lang === 'bn' ? `যেমন: ${user?.name || 'Rahul / Sourav'}` : `e.g. ${user?.name || 'Rahul / Joy'}`}
+                  style={{ marginTop: '0.35rem', background: '#ffffff' }}
+                />
+                <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginTop: '0.25rem' }}>
+                  {lang === 'bn' ? '💡 পেমেন্ট সহজে ও দ্রুত ভেরিফাই করার জন্য দিন।' : '💡 Helps seller verify your payment instantly.'}
+                </span>
               </label>
-              {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '-0.5rem' }}>UTR auto-filled from clipboard</p>}
-            </>
+
+              {/* Optional 12-digit UTR Accordion */}
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #cbd5e1' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowUtrInput((prev) => !prev)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: '#2563eb',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <span>{showUtrInput ? '▲' : '▼'}</span>
+                  <span>
+                    {lang === 'bn' ? '১২ সংখ্যার UTR / Reference No. দিতে চান? (ঐচ্ছিক)' : 'Have a 12-digit UTR No.? (Optional)'}
+                  </span>
+                </button>
+
+                {showUtrInput && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input
+                        value={utr}
+                        onChange={(e) => {
+                          setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))
+                          setError('')
+                        }}
+                        placeholder={lang === 'bn' ? '১২ সংখ্যার UTR (যেমন 408123456789)' : '12-digit UTR (e.g. 408123456789)'}
+                        maxLength={12}
+                        inputMode="numeric"
+                        style={{ flex: 1, letterSpacing: '0.05rem', fontFamily: 'monospace', fontWeight: 700, background: '#ffffff' }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={async () => {
+                          try {
+                            const text = await navigator.clipboard.readText()
+                            const cleaned = text.replace(/\D/g, '').slice(0, 12)
+                            if (cleaned) {
+                              setUtr(cleaned)
+                              setUtrPasted(true)
+                            }
+                          } catch {}
+                        }}
+                      >
+                        📋 {lang === 'bn' ? 'পেস্ট' : 'Paste'}
+                      </button>
+                    </div>
+                    {utrPasted && <p className="hint" style={{ color: '#16a34a', marginTop: '0.25rem' }}>UTR auto-filled from clipboard</p>}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
           {error && <p className="form-error">{error}</p>}
 
@@ -1033,8 +1066,12 @@ export default function Checkout() {
             </div>
           )}
 
-          <button type="submit" className="btn btn-primary" disabled={submitting || !isOnline}>
-            {submitting ? (lang === 'bn' ? '⏳ অর্ডার হচ্ছে...' : '⏳ Placing order...') : t(lang, 'placeOrder')}
+          <button type="submit" className="btn btn-primary" disabled={submitting || !isOnline} style={{ fontSize: '1.05rem', padding: '0.9rem', fontWeight: 800 }}>
+            {submitting
+              ? (lang === 'bn' ? '⏳ অর্ডার হচ্ছে...' : '⏳ Placing order...')
+              : paymentMode === 'khata'
+                ? (lang === 'bn' ? '📒 খাতা অর্ডারে কনফার্ম করুন' : '📒 Confirm Khata Order')
+                : (lang === 'bn' ? '✅ পেমেন্ট সম্পন্ন করেছি · অর্ডার জমা দিন' : '✅ I Have Paid · Place Order')}
           </button>
         </form>
       </div>

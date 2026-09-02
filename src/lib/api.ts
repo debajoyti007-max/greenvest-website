@@ -258,6 +258,7 @@ function mapOrder(row: OrderRow): Order {
     isKhataOrder: row.payment_mode === 'khata' || row.payment_type === 'khata',
     rejectionReason: row.rejection_reason || undefined,
     utr: row.utr,
+    payerUpiName: (row as any).payer_upi_name || undefined,
     utrVerified: row.utr_verified,
     status: row.status,
     address: row.address,
@@ -793,6 +794,7 @@ export async function createOrder(order: Order): Promise<Order> {
 
   if (order.geoLat != null) payload.geo_lat = order.geoLat
   if (order.geoLng != null) payload.geo_lng = order.geoLng
+  if (order.payerUpiName) (payload as any).payer_upi_name = order.payerUpiName
 
   let { error: orderError } = await client.from('orders').insert(payload)
   if (orderError) {

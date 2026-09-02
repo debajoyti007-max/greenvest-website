@@ -95,6 +95,35 @@ export function validateUtrStrict(input: string): ValidationResult {
 }
 
 /**
+ * Validates either an optional 12-digit UTR or a PhonePe/UPI Payer Name.
+ */
+export function validatePayerNameOrUtr(input: string): ValidationResult {
+  const raw = (input || '').trim()
+  if (!raw) {
+    return {
+      isValid: true,
+      errorBn: '',
+      errorEn: '',
+      cleanedValue: '',
+    }
+  }
+
+  // If user entered numeric digits and length is 12, run strict UTR checks
+  if (/^\d{12}$/.test(raw)) {
+    return validateUtrStrict(raw)
+  }
+
+  // Clean string for payer name
+  const sanitized = raw.replace(/[<>{}[\]\\]/g, '').slice(0, 50)
+  return {
+    isValid: true,
+    errorBn: '',
+    errorEn: '',
+    cleanedValue: sanitized,
+  }
+}
+
+/**
  * Validates real 10-digit Indian Mobile numbers (starting with 6, 7, 8, or 9).
  */
 export function validatePhoneStrict(input: string): ValidationResult {

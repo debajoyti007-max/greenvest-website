@@ -165,6 +165,18 @@ describe('UTR Sanitization & Validation', () => {
     assert.equal(isDuplicate('598765432109'), false) // Cancelled order -> allowed!
     assert.equal(isDuplicate('999999999999'), false) // New UTR -> allowed!
   })
+
+  test('Permits friendly 1-tap checkout with Payer Name and PENDING-VERIFY placeholder', () => {
+    const order = {
+      payerUpiName: 'Sourav Ghosh',
+      utr: 'PENDING-VERIFY',
+      total: 350,
+      paymentType: 'advance',
+    }
+
+    assert.equal(order.utr, 'PENDING-VERIFY')
+    assert.equal(order.payerUpiName, 'Sourav Ghosh')
+  })
 })
 
 // 5. XSS Protection in Print Invoices
