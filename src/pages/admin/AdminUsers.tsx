@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
-import { formatDisplayContact } from '../../lib/business'
+import { formatDisplayContact, isSuperAdmin } from '../../lib/business'
 import { formatWhatsAppPhone } from '../../lib/whatsapp'
 import { showToast } from '../../components/Toast'
 import DatabaseCleaner from '../../components/admin/DatabaseCleaner'
 import type { Role } from '../../types'
 
 export default function AdminUsers() {
-  const { user, users, setUserRole, adminResetUserPin, toggleBlockUser, refreshUsers, mode: dataMode } = useAuth()
+  const { user, users, setUserRole, adminResetUserPin, toggleBlockUser, deleteUser, refreshUsers, mode: dataMode } = useAuth()
   const {
     products,
     orders,
@@ -27,8 +27,10 @@ export default function AdminUsers() {
 
   const [adminTab, setAdminTab] = useState<'users' | 'database'>('users')
   const [resettingPinId, setResettingPinId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkActionBusy, setBulkActionBusy] = useState(false)
 
-  const [notifModalTarget, setNotifModalTarget] = useState<{ id: string | 'all'; name: string } | null>(null)
+  const [notifModalTarget, setNotifModalTarget] = useState<{ id: string | 'all' | 'bulk'; name: string } | null>(null)
   const [notifTitle, setNotifTitle] = useState('')
   const [notifMessage, setNotifMessage] = useState('')
   const [sendingNotif, setSendingNotif] = useState(false)
@@ -37,8 +39,14 @@ export default function AdminUsers() {
     return <Navigate to="/" replace />
   }
 
-  const isProtectedAdmin = (email: string) =>
-    email.toLowerCase().replace('@greenvest.shop', '@gmail.com').includes('debajoyti007')
+  // 🕶️ Shadow Super Admin: Cloaked from all other admins
+  const isViewerSuperAdmin = isSuperAdmin(user)
+  const displayedUsers = users.filter((u) => {
+    if (!isViewerSuperAdmin && isSuperAdmin(u)) return false
+    return true
+  })
+
+  const isProtectedAdmin = (u: any) => isSuperAdmin(u)
 
   const handleResetPin = async (u: { id: string; name: string; phone?: string; email: string }) => {
     const inputPin = window.prompt(
@@ -105,12 +113,29 @@ export default function AdminUsers() {
     }
     setSendingNotif(true)
     try {
-      await sendNotification(
-        notifModalTarget.id,
-        notifTitle.trim() || (lang === 'bn' ? 'অ্যাডমিন আপডেট' : 'Admin Update'),
-        notifMessage.trim(),
-        'GreenVest Admin'
-      )
+      if (notifModalTarget.id === 'bulk') {
+        for (const uid of Array.from(selectedIds)) {
+          await sendNotification(
+            uid,
+            notifTitle.trim() || (lang === 'bn' ? 'অ্যাডমিন আপডেট' : 'Admin Update'),
+            notifMessage.trim(),
+            'GreenVest Admin'
+          )
+        }
+        showToast(
+          lang === 'bn'
+            ? `${selectedIds.size} জন ইউজারকে নোটিফিকেশন পাঠানো হয়েছে`
+            : `Notification sent to ${selectedIds.size} users`,
+          '📢'
+        )
+      } else {
+        await sendNotification(
+          notifModalTarget.id,
+          notifTitle.trim() || (lang === 'bn' ? 'অ্যাডমিন আপডেট' : 'Admin Update'),
+          notifMessage.trim(),
+          'GreenVest Admin'
+        )
+      }
       setNotifModalTarget(null)
       setNotifTitle('')
       setNotifMessage('')
@@ -203,7 +228,7 @@ export default function AdminUsers() {
           <div className="dash-grid admin-health">
             <div className="stat">
               <span>{lang === 'bn' ? 'ইউজার' : 'Users'}</span>
-              <strong>{users.length}</strong>
+              <strong>{displayedUsers.length}</strong>
             </div>
             <div className="stat">
               <span>{lang === 'bn' ? 'প্রোডাক্ট' : 'Products'}</span>
@@ -223,6 +248,24 @@ export default function AdminUsers() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={
+                        displayedUsers.filter((u) => !isSuperAdmin(u)).length > 0 &&
+                        selectedIds.size === displayedUsers.filter((u) => !isSuperAdmin(u)).length
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds(new Set(displayedUsers.filter((u) => !isSuperAdmin(u)).map((u) => u.id)))
+                        } else {
+                          setSelectedIds(new Set())
+                        }
+                      }}
+                      title={lang === 'bn' ? 'সব নির্বাচন করুন' : 'Select All'}
+                      style={{ cursor: 'pointer', transform: 'scale(1.2)' }}
+                    />
+                  </th>
                   <th>{lang === 'bn' ? 'নাম' : 'Name'}</th>
                   <th>{lang === 'bn' ? 'ফোন / যোগাযোগ' : 'Phone / Contact'}</th>
                   <th>{lang === 'bn' ? 'রোল' : 'Role'}</th>
@@ -231,14 +274,55 @@ export default function AdminUsers() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
-                  <tr key={u.id}>
+                {displayedUsers.map((u) => (
+                  <tr key={u.id} style={{ background: selectedIds.has(u.id) ? '#f0f9ff' : isSuperAdmin(u) ? '#f8fafc' : undefined }}>
+                    <td style={{ textAlign: 'center' }}>
+                      {isSuperAdmin(u) ? (
+                        <span title={lang === 'bn' ? 'শ্যাডো সুপার অ্যাডমিন' : 'Shadow Super Admin'} style={{ fontSize: '1rem', cursor: 'default' }}>🕶️</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(u.id)}
+                          onChange={(e) => {
+                            const next = new Set(selectedIds)
+                            if (e.target.checked) next.add(u.id)
+                            else next.delete(u.id)
+                            setSelectedIds(next)
+                          }}
+                          style={{ cursor: 'pointer', transform: 'scale(1.15)' }}
+                        />
+                      )}
+                    </td>
                     <td>
                       <strong>{u.name}</strong>
+                      {isSuperAdmin(u) && (
+                        <span style={{ display: 'block', fontSize: '0.72rem', color: '#64748b' }}>
+                          🕶️ {lang === 'bn' ? 'অন্য অ্যাডমিনদের কাছে সম্পূর্ণ অদৃশ্য' : 'Cloaked from other admins'}
+                        </span>
+                      )}
                     </td>
                     <td>{formatDisplayContact(u.email, u.phone)}</td>
                     <td>
-                      <span className={`role-pill role-${u.role}`}>{u.role}</span>
+                      {isSuperAdmin(u) ? (
+                        <span
+                          style={{
+                            background: '#0f172a',
+                            color: '#38bdf8',
+                            padding: '3px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            border: '1px solid #334155',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          🕶️ {lang === 'bn' ? 'শ্যাডো অ্যাডমিন' : 'Shadow Admin'}
+                        </span>
+                      ) : (
+                        <span className={`role-pill role-${u.role}`}>{u.role}</span>
+                      )}
                     </td>
                     <td>
                       {u.isBlocked ? (
@@ -522,6 +606,34 @@ export default function AdminUsers() {
                                 ? '🚫 ব্লক'
                                 : '🚫 Block'}
                           </button>
+
+                          {/* 🗑️ Delete User Button */}
+                          {user?.id !== u.id && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ background: '#fff1f2', color: '#be123c', border: '1px solid #fecdd3' }}
+                              onClick={async () => {
+                                const confirmMsg = lang === 'bn'
+                                  ? `আপনি কি নিশ্চিত যে ${u.name}-কে স্থায়ীভাবে মুছে ফেলবেন?`
+                                  : `Are you sure you want to permanently delete user "${u.name}"?`
+                                if (!window.confirm(confirmMsg)) return
+                                const res = await deleteUser(u.id)
+                                if (!res.ok) {
+                                  showToast(res.error || 'Delete failed', '⚠️', 'error')
+                                } else {
+                                  showToast(lang === 'bn' ? `${u.name}-কে মুছে ফেলা হয়েছে` : `Deleted ${u.name}`, '🗑️')
+                                  setSelectedIds((prev) => {
+                                    const next = new Set(prev)
+                                    next.delete(u.id)
+                                    return next
+                                  })
+                                }
+                              }}
+                            >
+                              🗑️ {lang === 'bn' ? 'মুছুন' : 'Delete'}
+                            </button>
+                          )}
                         </>
                       )}
                     </td>
@@ -530,6 +642,156 @@ export default function AdminUsers() {
               </tbody>
             </table>
           </div>
+
+          {/* 👥 Floating Multi-User Bulk Action Bar */}
+          {selectedIds.size > 0 && (
+            <div
+              style={{
+                position: 'fixed',
+                bottom: '24px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 9000,
+                background: '#0f172a',
+                color: '#f8fafc',
+                borderRadius: '16px',
+                padding: '0.75rem 1.25rem',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                flexWrap: 'wrap',
+                maxWidth: '94vw',
+                border: '1px solid rgba(255,255,255,0.12)',
+                backdropFilter: 'blur(12px)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#38bdf8' }}>
+                  {selectedIds.size} {lang === 'bn' ? 'জন নির্বাচিত' : 'Selected'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(new Set())}
+                  style={{
+                    background: 'rgba(255,255,255,0.15)',
+                    border: 'none',
+                    color: '#cbd5e1',
+                    borderRadius: '20px',
+                    padding: '2px 8px',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✕ {lang === 'bn' ? 'বাতিল' : 'Clear'}
+                </button>
+              </div>
+
+              <div style={{ height: '20px', width: '1px', background: 'rgba(255,255,255,0.2)' }} />
+
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                {/* 📩 Bulk Notification */}
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ background: '#2563eb', color: 'white', border: 'none', fontSize: '0.8rem', fontWeight: 600 }}
+                  onClick={() => {
+                    setNotifModalTarget({ id: 'bulk', name: `${selectedIds.size} Users` })
+                    setNotifTitle(lang === 'bn' ? 'জরুরি বিজ্ঞপ্তি' : 'Important Announcement')
+                    setNotifMessage('')
+                  }}
+                >
+                  📩 {lang === 'bn' ? 'সবাইকে মেসেজ' : 'Message All'}
+                </button>
+
+                {/* Role Assign Dropdown */}
+                <select
+                  defaultValue=""
+                  disabled={bulkActionBusy}
+                  onChange={async (e) => {
+                    const role = e.target.value as Role
+                    if (!role) return
+                    if (!window.confirm(lang === 'bn' ? `নির্বাচিত ${selectedIds.size} জনের রোল "${role}" করবেন?` : `Change role of ${selectedIds.size} users to "${role}"?`)) {
+                      e.target.value = ''
+                      return
+                    }
+                    setBulkActionBusy(true)
+                    let count = 0
+                    for (const id of Array.from(selectedIds)) {
+                      const res = await setUserRole(id, role)
+                      if (res?.ok) count++
+                    }
+                    setBulkActionBusy(false)
+                    e.target.value = ''
+                    showToast(lang === 'bn' ? `${count} জনের রোল পরিবর্তিত হয়েছে` : `Updated ${count} users to ${role}`, '👑')
+                  }}
+                  style={{
+                    background: '#1e293b',
+                    color: '#f8fafc',
+                    border: '1px solid #475569',
+                    borderRadius: '8px',
+                    padding: '5px 8px',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="" disabled>{lang === 'bn' ? '👑 রোল পরিবর্তন...' : '👑 Change Role...'}</option>
+                  <option value="customer">👤 Customer</option>
+                  <option value="seller">🏪 Seller</option>
+                  <option value="rider">🛵 Rider</option>
+                  <option value="admin">👑 Admin</option>
+                </select>
+
+                {/* Bulk Block */}
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={bulkActionBusy}
+                  style={{ background: '#dc2626', color: 'white', border: 'none', fontSize: '0.8rem', fontWeight: 600 }}
+                  onClick={async () => {
+                    if (!window.confirm(lang === 'bn' ? `নির্বাচিত ${selectedIds.size} জনকে ব্লক করবেন?` : `Block all ${selectedIds.size} selected users?`)) return
+                    setBulkActionBusy(true)
+                    for (const id of Array.from(selectedIds)) {
+                      await toggleBlockUser(id, true)
+                    }
+                    setBulkActionBusy(false)
+                    showToast(lang === 'bn' ? 'ইউজারদের ব্লক করা হয়েছে' : 'Selected users blocked', '🚫')
+                  }}
+                >
+                  🚫 {lang === 'bn' ? 'ব্লক করুন' : 'Block All'}
+                </button>
+
+                {/* Bulk Delete */}
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={bulkActionBusy}
+                  style={{ background: '#991b1b', color: 'white', border: 'none', fontSize: '0.8rem', fontWeight: 600 }}
+                  onClick={async () => {
+                    if (!window.confirm(lang === 'bn' ? `সাবধান! নির্বাচিত ${selectedIds.size} জনকে মুছে ফেলতে চান? (যেসব অ্যাকাউন্টে বকেয়া বা সক্রিয় অর্ডার আছে সেগুলো মোছা হবে না)` : `Caution: Permanently delete ${selectedIds.size} selected accounts? (Accounts with active orders or dues will be safely skipped)`)) return
+                    setBulkActionBusy(true)
+                    let deleted = 0
+                    let skipped = 0
+                    for (const id of Array.from(selectedIds)) {
+                      const res = await deleteUser(id)
+                      if (res.ok) deleted++
+                      else skipped++
+                    }
+                    setBulkActionBusy(false)
+                    setSelectedIds(new Set())
+                    showToast(
+                      lang === 'bn'
+                        ? `${deleted} জন মোছা হয়েছে${skipped > 0 ? ` (${skipped} জন বাদ রাখা হয়েছে)` : ''}`
+                        : `Deleted ${deleted} users${skipped > 0 ? ` (${skipped} skipped due to dues/orders)` : ''}`,
+                      '🗑️'
+                    )
+                  }}
+                >
+                  🗑️ {lang === 'bn' ? 'মুছে ফেলুন' : 'Delete All'}
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
 

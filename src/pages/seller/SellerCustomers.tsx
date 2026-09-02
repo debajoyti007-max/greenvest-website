@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { formatWhatsAppPhone } from '../../lib/whatsapp'
+import { isSuperAdmin } from '../../lib/business'
 import { showToast } from '../../components/Toast'
 import CouponGeneratorModal from '../../components/seller/CouponGeneratorModal'
 import type { CustomerTier } from '../../types'
@@ -43,6 +44,9 @@ export default function SellerCustomers() {
 
   const [resetModalUser, setResetModalUser] = useState<{ id: string; name: string; phone: string } | null>(null)
   const [newPin, setNewPin] = useState('1234')
+
+  const [selectedCustomerKeys, setSelectedCustomerKeys] = useState<Set<string>>(new Set())
+  const [bulkActionBusy, setBulkActionBusy] = useState(false)
 
   const [notifModalTarget, setNotifModalTarget] = useState<{ id: string | 'all'; name: string } | null>(null)
   const [notifTitle, setNotifTitle] = useState('')
@@ -176,7 +180,9 @@ export default function SellerCustomers() {
       }
     })
 
-    return Array.from(userMap.values()).sort((a, b) => b.spent - a.spent || b.lastOrderAt.localeCompare(a.lastOrderAt))
+    return Array.from(userMap.values())
+      .filter((c) => !isSuperAdmin(c))
+      .sort((a, b) => b.spent - a.spent || b.lastOrderAt.localeCompare(a.lastOrderAt))
   }, [users, orders, filterMonth, filterYear, spendMode])
 
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
@@ -209,12 +215,33 @@ export default function SellerCustomers() {
     }
     setSendingNotif(true)
     try {
-      await sendNotification(
-        notifModalTarget.id,
-        notifTitle.trim() || (lang === 'bn' ? 'স্টোর মেসেজ' : 'Store Update'),
-        notifMessage.trim(),
-        user.name || 'GreenVest Seller'
-      )
+      if (notifModalTarget.id === 'bulk') {
+        for (const key of Array.from(selectedCustomerKeys)) {
+          const row = customerList.find((c) => c.key === key)
+          const targetId = row?.userId || row?.phone || row?.email
+          if (targetId) {
+            await sendNotification(
+              targetId,
+              notifTitle.trim() || (lang === 'bn' ? 'স্টোর মেসেজ' : 'Store Update'),
+              notifMessage.trim(),
+              user.name || 'GreenVest Seller'
+            )
+          }
+        }
+        showToast(
+          lang === 'bn'
+            ? `${selectedCustomerKeys.size} জন কাস্টমারকে নোটিফিকেশন পাঠানো হয়েছে`
+            : `Notification sent to ${selectedCustomerKeys.size} customers`,
+          '📢'
+        )
+      } else {
+        await sendNotification(
+          notifModalTarget.id,
+          notifTitle.trim() || (lang === 'bn' ? 'স্টোর মেসেজ' : 'Store Update'),
+          notifMessage.trim(),
+          user.name || 'GreenVest Seller'
+        )
+      }
       setNotifModalTarget(null)
       setNotifTitle('')
       setNotifMessage('')
@@ -307,6 +334,21 @@ export default function SellerCustomers() {
           <table className="data-table">
             <thead>
               <tr>
+                <th style={{ width: '40px', textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={customerList.length > 0 && selectedCustomerKeys.size === customerList.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedCustomerKeys(new Set(customerList.map((c) => c.key)))
+                      } else {
+                        setSelectedCustomerKeys(new Set())
+                      }
+                    }}
+                    title={lang === 'bn' ? 'সব নির্বাচন করুন' : 'Select All'}
+                    style={{ cursor: 'pointer', transform: 'scale(1.2)' }}
+                  />
+                </th>
                 <th>{lang === 'bn' ? 'নাম' : 'Name'}</th>
                 <th>{lang === 'bn' ? 'যোগাযোগ' : 'Contact'}</th>
                 <th>{lang === 'bn' ? 'টায়ার / খাতা' : 'Tier & Khata'}</th>
@@ -318,7 +360,20 @@ export default function SellerCustomers() {
             </thead>
             <tbody>
               {customerList.map((c, idx) => (
-                <tr key={c.key} style={idx < 3 ? { background: idx === 0 ? '#fffbeb' : idx === 1 ? '#f8fafc' : '#fff7ed' } : {}}>
+                <tr key={c.key} style={selectedCustomerKeys.has(c.key) ? { background: '#f0f9ff' } : idx < 3 ? { background: idx === 0 ? '#fffbeb' : idx === 1 ? '#f8fafc' : '#fff7ed' } : {}}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedCustomerKeys.has(c.key)}
+                      onChange={(e) => {
+                        const next = new Set(selectedCustomerKeys)
+                        if (e.target.checked) next.add(c.key)
+                        else next.delete(c.key)
+                        setSelectedCustomerKeys(next)
+                      }}
+                      style={{ cursor: 'pointer', transform: 'scale(1.15)' }}
+                    />
+                  </td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ fontWeight: 800, fontSize: '1rem', color: idx === 0 ? '#d97706' : idx === 1 ? '#6b7280' : idx === 2 ? '#92400e' : '#888', minWidth: '1.5rem' }}>
@@ -458,6 +513,156 @@ export default function SellerCustomers() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* 👥 Floating Multi-Customer Bulk Action Bar */}
+      {selectedCustomerKeys.size > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9000,
+            background: '#0f172a',
+            color: '#f8fafc',
+            borderRadius: '16px',
+            padding: '0.75rem 1.25rem',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            flexWrap: 'wrap',
+            maxWidth: '94vw',
+            border: '1px solid rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(12px)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#38bdf8' }}>
+              {selectedCustomerKeys.size} {lang === 'bn' ? 'জন নির্বাচিত' : 'Selected'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedCustomerKeys(new Set())}
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                border: 'none',
+                color: '#cbd5e1',
+                borderRadius: '20px',
+                padding: '2px 8px',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+              }}
+            >
+              ✕ {lang === 'bn' ? 'বাতিল' : 'Clear'}
+            </button>
+          </div>
+
+          <div style={{ height: '20px', width: '1px', background: 'rgba(255,255,255,0.2)' }} />
+
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* 📩 Message All */}
+            <button
+              type="button"
+              className="btn btn-sm"
+              style={{ background: '#2563eb', color: 'white', border: 'none', fontSize: '0.8rem', fontWeight: 600 }}
+              onClick={() => {
+                setNotifModalTarget({ id: 'bulk', name: `${selectedCustomerKeys.size} Customers` })
+                setNotifTitle(lang === 'bn' ? 'বিশেষ অফার ও আপডেট' : 'Special Offer & Update')
+                setNotifMessage('')
+              }}
+            >
+              📩 {lang === 'bn' ? 'সবাইকে মেসেজ' : 'Message All'}
+            </button>
+
+            {/* 🏷️ Bulk Tier Dropdown */}
+            <select
+              defaultValue=""
+              disabled={bulkActionBusy}
+              onChange={async (e) => {
+                const tier = e.target.value as CustomerTier
+                if (!tier) return
+                if (!window.confirm(lang === 'bn' ? `নির্বাচিত ${selectedCustomerKeys.size} জনের টায়ার "${tier}" করবেন?` : `Change tier of ${selectedCustomerKeys.size} customers to "${tier}"?`)) {
+                  e.target.value = ''
+                  return
+                }
+                setBulkActionBusy(true)
+                let count = 0
+                for (const key of Array.from(selectedCustomerKeys)) {
+                  const row = customerList.find(c => c.key === key)
+                  const targetId = row?.userId || row?.phone || row?.email
+                  if (targetId) {
+                    await setUserTier(targetId, tier)
+                    count++
+                  }
+                }
+                setBulkActionBusy(false)
+                e.target.value = ''
+                showToast(lang === 'bn' ? `${count} জনের টায়ার আপডেট হয়েছে` : `Updated ${count} customers to ${tier}`, '🏷️')
+              }}
+              style={{
+                background: '#1e293b',
+                color: '#f8fafc',
+                border: '1px solid #475569',
+                borderRadius: '8px',
+                padding: '5px 8px',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="" disabled>{lang === 'bn' ? '🏷️ টায়ার পরিবর্তন...' : '🏷️ Change Tier...'}</option>
+              <option value="regular">⭐ Regular (0%)</option>
+              <option value="vip">🥈 VIP (5% OFF)</option>
+              <option value="wholesale">👑 Wholesale (12% OFF)</option>
+            </select>
+
+            {/* 📒 Bulk Khata Toggle */}
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={bulkActionBusy}
+              style={{ background: '#15803d', color: 'white', border: 'none', fontSize: '0.8rem', fontWeight: 600 }}
+              onClick={async () => {
+                if (!window.confirm(lang === 'bn' ? `নির্বাচিত ${selectedCustomerKeys.size} জনের জন্য খাতা চালু করবেন?` : `Enable Khata credit for all ${selectedCustomerKeys.size} selected customers?`)) return
+                setBulkActionBusy(true)
+                for (const key of Array.from(selectedCustomerKeys)) {
+                  const row = customerList.find(c => c.key === key)
+                  const targetId = row?.userId || row?.phone || row?.email
+                  if (targetId) {
+                    await setUserKhataApproval(targetId, true, 2000)
+                  }
+                }
+                setBulkActionBusy(false)
+                showToast(lang === 'bn' ? 'খাতা চালু করা হয়েছে' : 'Khata approved for selected customers', '📒')
+              }}
+            >
+              📒 {lang === 'bn' ? 'খাতা অন' : 'Khata ON'}
+            </button>
+
+            {/* 🚫 Bulk Block */}
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={bulkActionBusy}
+              style={{ background: '#dc2626', color: 'white', border: 'none', fontSize: '0.8rem', fontWeight: 600 }}
+              onClick={async () => {
+                if (!window.confirm(lang === 'bn' ? `নির্বাচিত ${selectedCustomerKeys.size} জনকে ব্লক করবেন?` : `Block all ${selectedCustomerKeys.size} selected customers?`)) return
+                setBulkActionBusy(true)
+                for (const key of Array.from(selectedCustomerKeys)) {
+                  const row = customerList.find(c => c.key === key)
+                  if (row?.userId) {
+                    await toggleBlockUser(row.userId, true)
+                  }
+                }
+                setBulkActionBusy(false)
+                showToast(lang === 'bn' ? 'কাস্টমারদের ব্লক করা হয়েছে' : 'Selected customers blocked', '🚫')
+              }}
+            >
+              🚫 {lang === 'bn' ? 'ব্লক করুন' : 'Block All'}
+            </button>
+          </div>
         </div>
       )}
 

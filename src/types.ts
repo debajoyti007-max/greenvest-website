@@ -1,7 +1,7 @@
 export type Role = 'customer' | 'rider' | 'seller' | 'admin'
 export type CustomerTier = 'regular' | 'vip' | 'wholesale'
 export type Grade = 'A' | 'B' | 'C'
-export type OrderStatus = 'pending' | 'advance_paid' | 'confirmed' | 'delivered' | 'cancelled' | 'refunded'
+export type OrderStatus = 'pending' | 'advance_paid' | 'confirmed' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'refunded'
 export type Season = 'all' | 'summer' | 'winter' | 'rainy'
 export type DeliverySlot = 'morning' | 'evening'
 

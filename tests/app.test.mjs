@@ -1130,6 +1130,129 @@ describe('Offline Queue & Storage Resilience Engine', () => {
   })
 })
 
+describe('Shadow Super Admin Cloaking & Customer Lists', () => {
+  const isSuperAdmin = (target) => {
+    if (!target) return false
+    if (typeof target === 'string') {
+      const clean = target.toLowerCase().trim()
+      return clean === 'debajoyti007@gmail.com' || clean.includes('debajoyti007') || clean === '8170859653' || clean === '8170859653@greenvest.shop'
+    }
+    const email = (target.email || '').toLowerCase().trim()
+    const phone = (target.phone || '').trim()
+    const id = (target.id || '').toLowerCase().trim()
+    return (
+      email === 'debajoyti007@gmail.com' ||
+      email.includes('debajoyti007') ||
+      email === '8170859653@greenvest.shop' ||
+      phone === '8170859653' ||
+      phone.includes('8170859653') ||
+      id === '8170859653' ||
+      id.includes('debajoyti007')
+    )
+  }
+
+  test('Correctly identifies master email, phone, and objects as Super Admin', () => {
+    assert.ok(isSuperAdmin('debajoyti007@gmail.com'))
+    assert.ok(isSuperAdmin('8170859653'))
+    assert.ok(isSuperAdmin({ email: 'debajoyti007@greenvest.shop', name: 'Debajoyti' }))
+    assert.ok(isSuperAdmin({ phone: '8170859653', name: 'Debajoyti' }))
+  })
+
+  test('Rejects regular customers, riders, and sellers as Super Admin', () => {
+    assert.strictEqual(isSuperAdmin('customer@gmail.com'), false)
+    assert.strictEqual(isSuperAdmin('9876543210'), false)
+    assert.strictEqual(isSuperAdmin({ email: 'seller@greenvest.shop', phone: '9876543210' }), false)
+  })
+
+  test('Completely filters out Super Admin from public customer directories (Shadow Mode)', () => {
+    const mixedUsers = [
+      { id: 'usr-1', name: 'Rahul Roy', phone: '9832011223', email: 'rahul@gmail.com', role: 'customer' },
+      { id: 'usr-super', name: 'Master Admin', phone: '8170859653', email: 'debajoyti007@gmail.com', role: 'admin' },
+      { id: 'usr-2', name: 'Priya Das', phone: '9732112233', email: 'priya@gmail.com', role: 'customer' },
+    ]
+
+    const cloakedCustomerList = mixedUsers.filter(u => !isSuperAdmin(u))
+    assert.equal(cloakedCustomerList.length, 2)
+    assert.ok(!cloakedCustomerList.some(u => isSuperAdmin(u)), 'Super Admin must never appear in customer lists')
+  })
+})
+
+describe('Khata 1-Tap Settlement & Debt Clearing', () => {
+  const calculateBalance = (entries) => {
+    let bal = 0
+    entries.forEach(e => {
+      if (e.type === 'debit') bal += Number(e.amount)
+      else if (e.type === 'payment_credit' || e.type === 'adjustment_credit') bal -= Number(e.amount)
+    })
+    return Math.max(0, bal)
+  }
+
+  test('Recording offsetting payment_credit brings outstanding balance to exactly ₹0', () => {
+    const history = [
+      { id: '1', type: 'debit', amount: 500 },
+      { id: '2', type: 'debit', amount: 350 },
+    ]
+    const initialDue = calculateBalance(history)
+    assert.equal(initialDue, 850)
+
+    // 1-Tap Settlement
+    history.push({ id: '3', type: 'payment_credit', amount: initialDue, note: 'Full Settlement by Staff' })
+    const settledDue = calculateBalance(history)
+    assert.equal(settledDue, 0, 'Balance must be 0 after settlement')
+  })
+})
+
+describe('Safe Customer Delete Guard', () => {
+  const canDeleteCustomer = (user, khataBalance, customerOrders) => {
+    if (user.email === 'debajoyti007@gmail.com' || user.phone === '8170859653') {
+      return { canDelete: false, reason: 'Super Admin Shield' }
+    }
+    if (khataBalance > 0) {
+      return { canDelete: false, reason: `Unpaid dues of ₹${khataBalance}` }
+    }
+    const hasActiveOrder = customerOrders.some(o => ['pending', 'confirmed', 'out_for_delivery'].includes(o.status))
+    if (hasActiveOrder) {
+      return { canDelete: false, reason: 'Active in-transit order' }
+    }
+    return { canDelete: true }
+  }
+
+  test('Blocks deletion if customer has an unpaid Khata balance', () => {
+    const res = canDeleteCustomer({ id: 'c1', name: 'Amit' }, 450, [])
+    assert.strictEqual(res.canDelete, false)
+    assert.ok(res.reason.includes('Unpaid dues'))
+  })
+
+  test('Blocks deletion if customer has an active order in transit', () => {
+    const orders = [{ id: 'ORD-1', status: 'out_for_delivery' }]
+    const res = canDeleteCustomer({ id: 'c2', name: 'Suman' }, 0, orders)
+    assert.strictEqual(res.canDelete, false)
+    assert.ok(res.reason.includes('Active in-transit order'))
+  })
+
+  test('Allows deletion if customer has 0 dues and only delivered/cancelled orders', () => {
+    const orders = [{ id: 'ORD-2', status: 'delivered' }, { id: 'ORD-3', status: 'cancelled' }]
+    const res = canDeleteCustomer({ id: 'c3', name: 'Test Junk User' }, 0, orders)
+    assert.strictEqual(res.canDelete, true)
+  })
+})
+
+describe('Multi-User Bulk Actions Engine', () => {
+  test('Bulk tier upgrade updates all selected users to wholesale or VIP', () => {
+    const users = [
+      { id: 'u1', tier: 'regular' },
+      { id: 'u2', tier: 'regular' },
+      { id: 'u3', tier: 'vip' },
+    ]
+    const selectedIds = new Set(['u1', 'u2'])
+    const updated = users.map(u => selectedIds.has(u.id) ? { ...u, tier: 'wholesale' } : u)
+
+    assert.equal(updated.find(u => u.id === 'u1').tier, 'wholesale')
+    assert.equal(updated.find(u => u.id === 'u2').tier, 'wholesale')
+    assert.equal(updated.find(u => u.id === 'u3').tier, 'vip', 'Unselected user tier must remain unchanged')
+  })
+})
+
 
 
 

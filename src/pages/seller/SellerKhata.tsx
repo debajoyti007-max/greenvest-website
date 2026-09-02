@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { buildKhataReminderWhatsAppUrl } from '../../lib/khata'
+import { isSuperAdmin } from '../../lib/business'
 import { showToast } from '../../components/Toast'
 import type { CustomerTier, User } from '../../types'
 
@@ -34,6 +35,9 @@ export default function SellerKhata() {
   // Filtered customer list with smart zero-balance handling
   const customerList = useMemo(() => {
     return users.filter((u) => {
+      // 🕶️ Shadow Super Admin: completely cloaked from Khata ledger
+      if (isSuperAdmin(u)) return false
+
       const q = search.trim().toLowerCase()
       const matchSearch =
         !q ||
@@ -62,6 +66,7 @@ export default function SellerKhata() {
     let settledCustomersCount = 0
 
     users.forEach((u) => {
+      if (isSuperAdmin(u)) return
       const bal = getUserKhataBalance(u.id)
       if (bal > 0) {
         totalOutstanding += bal
@@ -99,6 +104,37 @@ export default function SellerKhata() {
       setTxNotes('')
     } catch (err) {
       showToast(lang === 'bn' ? 'লেনদেন যোগ করা যায়নি' : 'Failed to record transaction', '❌', 'error')
+    }
+  }
+
+  const handleSettleCustomerKhata = async (targetUser: User, balance: number) => {
+    if (balance <= 0) {
+      showToast(lang === 'bn' ? 'এই গ্রাহকের কোনো বকেয়া নেই (ব্যালেন্স ₹০)' : 'Customer has no outstanding balance (₹0)', 'ℹ️')
+      return
+    }
+
+    const confirmMsg = lang === 'bn'
+      ? `${targetUser.name}-এর সকল বকেয়া ₹${balance} নিষ্পত্তি (Settle) করবেন?\nএটি ডিজিটাল খাতায় অফিসিয়াল পেমেন্ট হিসেবে জমা হবে এবং বকেয়া ₹০ হয়ে যাবে।`
+      : `Are you sure you want to settle all dues of ₹${balance} for ${targetUser.name}?\nThis will record an official payment settlement in the passbook and reset the balance to ₹0.`
+
+    if (!window.confirm(confirmMsg)) return
+
+    try {
+      addKhataTransaction(
+        targetUser.id,
+        'payment_credit',
+        balance,
+        lang === 'bn' ? 'সম্পূর্ণ বকেয়া নিষ্পত্তি (ব্যালেন্স শূন্য করা হয়েছে)' : 'Full Dues Settled / Balance Reset to ₹0 by Staff',
+      )
+
+      showToast(
+        lang === 'bn'
+          ? `✅ ${targetUser.name}-এর বকেয়া ₹${balance} নিষ্পত্তি সফল! বর্তমান ব্যালেন্স ₹০।`
+          : `✅ Settled ₹${balance} for ${targetUser.name}! Current balance is ₹0.`,
+        '⚖️'
+      )
+    } catch {
+      showToast(lang === 'bn' ? 'নিষ্পত্তি সম্পন্ন করা যায়নি' : 'Failed to settle Khata balance', '❌', 'error')
     }
   }
 
@@ -333,6 +369,22 @@ export default function SellerKhata() {
                           >
                             💬 WhatsApp
                           </a>
+                        )}
+                        {balance > 0 && (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{
+                              background: '#ecfdf5',
+                              color: '#065f46',
+                              border: '1px solid #a7f3d0',
+                              fontWeight: 700,
+                              fontSize: '0.75rem',
+                            }}
+                            onClick={() => handleSettleCustomerKhata(c, balance)}
+                          >
+                            ⚖️ {lang === 'bn' ? 'নিষ্পত্তি (₹০)' : 'Settle to ₹0'}
+                          </button>
                         )}
 
                         <button

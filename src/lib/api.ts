@@ -1587,3 +1587,30 @@ export async function cleanupOldSupportMessagesApi(daysOld = 7): Promise<number>
 
   return purgedCount
 }
+
+export async function deleteUserProfileApi(userId: string, email?: string, phone?: string): Promise<void> {
+  const client = requireClient()
+  const cleanPhone = phone ? phone.replace(/\D/g, '').slice(-10) : ''
+
+  // 1. Delete from profiles
+  if (userId) {
+    await client.from('profiles').delete().eq('id', userId)
+  }
+  if (email && email.trim()) {
+    await client.from('profiles').delete().eq('email', email.trim().toLowerCase())
+  }
+  if (cleanPhone) {
+    await client.from('profiles').delete().eq('phone', cleanPhone)
+    await client.from('profiles').delete().eq('email', `${cleanPhone}@greenvest.shop`)
+  }
+
+  // 2. Clean associated addresses and notifications
+  try {
+    if (userId) {
+      await client.from('addresses').delete().eq('user_id', userId)
+      await client.from('notifications').delete().eq('user_id', userId)
+    }
+  } catch (cleanErr) {
+    console.warn('cleanup on user delete warning:', cleanErr)
+  }
+}

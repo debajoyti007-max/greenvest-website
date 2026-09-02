@@ -201,3 +201,34 @@ export function isOrderStalePending(
   const ageHours = (Date.now() - created) / (1000 * 60 * 60)
   return ageHours >= timeoutHours
 }
+
+/**
+ * Detects whether an identifier, user object, or email belongs to the Master Super Admin.
+ * Used for Shadow Admin mode to cloak the owner from customer lists and subordinate admins.
+ */
+export function isSuperAdmin(
+  target?: { email?: string; phone?: string; id?: string } | string | null
+): boolean {
+  if (!target) return false
+  if (typeof target === 'string') {
+    const clean = target.toLowerCase().trim()
+    return (
+      clean === 'debajoyti007@gmail.com' ||
+      clean.includes('debajoyti007') ||
+      clean === '8170859653' ||
+      clean === '8170859653@greenvest.shop'
+    )
+  }
+  const email = (target.email || '').toLowerCase().trim()
+  const phone = (target.phone || '').trim()
+  const id = (target.id || '').toLowerCase().trim()
+  return (
+    email === 'debajoyti007@gmail.com' ||
+    email.includes('debajoyti007') ||
+    email === '8170859653@greenvest.shop' ||
+    phone === '8170859653' ||
+    phone.includes('8170859653') ||
+    id === '8170859653' ||
+    id.includes('debajoyti007')
+  )
+}

@@ -9,10 +9,12 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, updateProfileKhata, mapProfile } from '../lib/api'
+import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, updateProfileKhata, deleteUserProfileApi, mapProfile } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { calculateUserKhataBalance, getStoredKhataEntries } from '../lib/khata'
 import {
   ensureSeeded,
+  getOrders,
   getSessionUserId,
   getStoredPin,
   getUsers,
@@ -42,6 +44,7 @@ interface AuthContextValue {
   updateUserProfile: (data: { name?: string; phone?: string }) => Promise<void>
   adminResetUserPin: (userId: string, newPin: string) => Promise<AuthResult>
   toggleBlockUser: (userId: string, isBlocked: boolean) => Promise<AuthResult>
+  deleteUser: (userId: string) => Promise<AuthResult>
   refresh: () => Promise<void>
   refreshUsers: () => Promise<void>
   checkAccountExists: (email: string) => Promise<boolean>
@@ -875,6 +878,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [cloud, users],
   )
 
+  const deleteUser = useCallback(
+    async (userId: string): Promise<AuthResult> => {
+      const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
+      const targetEmail = targetUser?.email || ''
+      const targetPhone = targetUser?.phone || ''
+      const actualId = targetUser?.id || userId
+
+      // 🛡️ Super Admin Shield: Master accounts cannot be deleted
+      if (isSuperAdminIdentifier(targetEmail) || isSuperAdminIdentifier(targetPhone) || isSuperAdminIdentifier(actualId)) {
+        return {
+          ok: false,
+          error: '🛡️ Super Admin Shield: Master Administrator account cannot be deleted.',
+        }
+      }
+
+      // Check self-deletion
+      if (user && (user.id === actualId || (targetEmail && user.email.toLowerCase() === targetEmail.toLowerCase()))) {
+        return {
+          ok: false,
+          error: 'You cannot delete your own logged-in administrator account.',
+        }
+      }
+
+      // Safety Check 1: Unpaid Khata balance
+      try {
+        const balance = calculateUserKhataBalance(actualId, getStoredKhataEntries())
+        if (balance > 0) {
+          return {
+            ok: false,
+            error: `⚠️ Cannot delete: Customer has an unpaid Khata balance of ₹${balance}. Settle all dues to ₹0 before deleting or block the account instead.`,
+          }
+        }
+      } catch (err) {
+        console.warn('Khata check error during user delete:', err)
+      }
+
+      // Safety Check 2: Active orders in transit
+      try {
+        const allOrders = getOrders()
+        const activeOrder = allOrders.find(
+          (o) =>
+            (o.userId === actualId || (targetEmail && o.userEmail.toLowerCase() === targetEmail.toLowerCase()) || (targetPhone && o.phone === targetPhone)) &&
+            (o.status === 'pending' || o.status === 'advance_paid' || o.status === 'confirmed' || o.status === 'out_for_delivery')
+        )
+        if (activeOrder) {
+          return {
+            ok: false,
+            error: `⚠️ Cannot delete: Customer has an active order #${activeOrder.id.slice(-6)} in '${activeOrder.status}' status. Complete or cancel the order first.`,
+          }
+        }
+      } catch (err) {
+        console.warn('Order check error during user delete:', err)
+      }
+
+      // 1. Delete from Supabase
+      if (cloud && supabase) {
+        try {
+          await deleteUserProfileApi(actualId, targetEmail, targetPhone)
+        } catch (err: any) {
+          console.error('deleteUser cloud error:', err)
+          return { ok: false, error: err.message || 'Failed to delete customer from database.' }
+        }
+      }
+
+      // 2. Remove from React state and localStorage
+      setUsers((prev) => prev.filter((u) => u.id !== actualId && u.id !== userId && (!targetEmail || u.email !== targetEmail)))
+      const currentStored = getUsers().filter((u) => u.id !== actualId && u.id !== userId && (!targetEmail || u.email !== targetEmail))
+      saveUsers(currentStored)
+
+      return { ok: true }
+    },
+    [cloud, user, users],
+  )
+
   const updateUserProfile = useCallback(
     async (data: { name?: string; phone?: string }) => {
       if (!user) return
@@ -965,6 +1042,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateUserProfile,
       adminResetUserPin,
       toggleBlockUser,
+      deleteUser,
       refresh,
       refreshUsers,
       checkAccountExists,
@@ -986,6 +1064,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateUserProfile,
       adminResetUserPin,
       toggleBlockUser,
+      deleteUser,
       refresh,
       refreshUsers,
       checkAccountExists,
