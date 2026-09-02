@@ -79,7 +79,7 @@ export default function NotificationBell() {
 
   useEffect(() => {
     setUnreadCount(activeNotifications.length > 0 ? activeNotifications.length : 0)
-  }, [orders.length, notifications?.length])
+  }, [activeNotifications.length])
 
   return (
     <div className="notification-bell-wrapper" style={{ position: 'relative' }}>

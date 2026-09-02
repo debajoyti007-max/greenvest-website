@@ -300,13 +300,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh])
 
   // ── Realtime: auto-update role/status when admin changes this user's profile ──
+  const currentUserId = user?.id
   useEffect(() => {
-    if (!cloud || !supabase || !user) return
+    if (!cloud || !supabase || !currentUserId) return
     const channel = supabase
-      .channel(`profile-${user.id}`)
+      .channel(`profile-${currentUserId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${currentUserId}` },
         (payload) => {
           const row = payload.new as any
           if (!row) return
@@ -321,7 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       if (supabase) void supabase.removeChannel(channel)
     }
-  }, [cloud, user?.id])
+  }, [cloud, currentUserId])
 
   // ── Staff Realtime: auto-sync newly registered customers and live profile edits ──
   useEffect(() => {

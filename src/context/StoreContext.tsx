@@ -237,6 +237,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // ── Supabase Realtime: live notification broadcast ─────────────────────────
+  const currentUserId = user?.id
   useEffect(() => {
     if (!cloud || !supabase) return
     const ch = supabase
@@ -244,9 +245,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .on('broadcast', { event: 'notif' }, ({ payload }: { payload: unknown }) => {
         const n = payload as AppNotification
         // Bug 2 fix: never show notification with a falsy userId; only exact 'all' or own ID
-        const isMe = n.userId === 'all' || (!!user && n.userId === user.id)
+        const isMe = n.userId === 'all' || (!!currentUserId && n.userId === currentUserId)
         if (!isMe) return
-        setNotifications(prev => {
+        setNotifications((prev) => {
           const next = [n, ...prev].slice(0, 30)
           saveAppNotifications(next)
           return next
@@ -259,7 +260,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (supabase) supabase.removeChannel(ch)
       notifChannelRef.current = null
     }
-  }, [cloud, user?.id])
+  }, [cloud, currentUserId])
 
   const refreshCloud = useCallback(async () => {
     try {
@@ -792,7 +793,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       // 🛡️ Financial Ledger Integrity: Auto-revert Khata debit if a Khata order is cancelled
       if (status === 'cancelled') {
-        const targetOrder = orders.find((o) => o.id === id)
+        const targetOrder = prevSnapshot.find((o) => o.id === id) || orders.find((o) => o.id === id)
         if (targetOrder?.isKhataOrder && targetOrder.status !== 'cancelled') {
           recordKhataTransaction(
             targetOrder.userId,
@@ -822,7 +823,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveOrders(next)
       }
     },
-    [cloud],
+    [cloud, user?.name, orders],
   )
 
   const updateOrderDeliveryDate = useCallback(

@@ -118,8 +118,8 @@ export default function Checkout() {
   useEffect(() => {
     void refresh()
     const pending = sessionStorage.getItem('gv_pending_coupon')
-    if (pending && !couponCode) {
-      setCouponCode(pending)
+    if (pending) {
+      setCouponCode((curr) => curr || pending)
       sessionStorage.removeItem('gv_pending_coupon')
     }
   }, [refresh])
