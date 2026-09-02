@@ -57,9 +57,22 @@ export type SavedDelivery = {
   deliverySlot?: DeliverySlot
 }
 
+import { idbSet, idbGet } from './indexedDb'
+
 function read<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)
+    if (!raw && typeof window !== 'undefined') {
+      // Trigger background auto-restore from IndexedDB if localStorage was cleared
+      void idbGet<T | null>(key, null).then((idbVal) => {
+        if (idbVal !== null && idbVal !== undefined) {
+          try {
+            localStorage.setItem(key, JSON.stringify(idbVal))
+            window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key } }))
+          } catch {}
+        }
+      })
+    }
     return safeJsonParse<T>(raw, fallback)
   } catch {
     return fallback
@@ -73,6 +86,8 @@ function write<T>(key: string, value: T) {
   } catch (e) {
     console.warn(`localStorage write failed for key ${key}:`, e)
   }
+  // Resilient dual-write to IndexedDB deep storage
+  void idbSet(key, value)
 }
 
 // ⚠️ Only the admin seed entry is kept here.

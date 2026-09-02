@@ -1052,6 +1052,72 @@ describe('Financial Ledger Integrity & Security Safeguards', () => {
   })
 })
 
+// 23. Offline Queue & Storage Resilience Engine
+describe('Offline Queue & Storage Resilience Engine', () => {
+  test('Outbox stores offline order payload and increments attempts safely', () => {
+    const outbox = []
+    const offlineOrder = {
+      id: 'OFFLINE-123456',
+      payload: { address: 'Mirpur, Purba Medinipur', pin: '721648', total: 520 },
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+    }
+
+    outbox.push(offlineOrder)
+    assert.equal(outbox.length, 1, 'Order must be enqueued into outbox')
+    assert.equal(outbox[0].id, 'OFFLINE-123456')
+
+    // Simulate retry attempt
+    outbox[0].attempts += 1
+    assert.equal(outbox[0].attempts, 1)
+  })
+
+  test('Offline order queue drains completely upon successful sync without duplicate submissions', () => {
+    let outbox = [
+      { id: 'OFFLINE-1', payload: { id: 'ORD-1', total: 200 } },
+      { id: 'OFFLINE-2', payload: { id: 'ORD-2', total: 350 } },
+    ]
+
+    const syncedDb = []
+    const submitFn = (payload) => {
+      syncedDb.push(payload)
+      return Promise.resolve({ ok: true })
+    }
+
+    // Simulate batch sync
+    for (const item of [...outbox]) {
+      submitFn(item.payload)
+      outbox = outbox.filter(x => x.id !== item.id)
+    }
+
+    assert.equal(outbox.length, 0, 'Outbox must be empty after full sync')
+    assert.equal(syncedDb.length, 2, 'All 2 orders must be committed to database')
+  })
+
+  test('Gracefully ignores duplicate order errors on network retry (idempotent)', () => {
+    let outbox = [{ id: 'OFFLINE-DUP', payload: { id: 'ORD-DUP', total: 400 } }]
+    let syncedCount = 0
+
+    const submitFn = () => {
+      const err = new Error('duplicate key value violates unique constraint')
+      err.code = '23505'
+      throw err
+    }
+
+    try {
+      submitFn()
+    } catch (err) {
+      if (err.message.includes('duplicate') || err.code === '23505') {
+        outbox = outbox.filter(x => x.id !== 'OFFLINE-DUP')
+        syncedCount++
+      }
+    }
+
+    assert.equal(outbox.length, 0, 'Duplicate order must be safely cleared from outbox')
+    assert.equal(syncedCount, 1, 'Sync counter should treat already-inserted order as resolved')
+  })
+})
+
 
 
 

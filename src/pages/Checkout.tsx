@@ -13,6 +13,7 @@ import {
   getOrCreateCartIdempotencyKey,
   clearCartIdempotencyKey,
 } from '../lib/validation'
+import { queueOfflineOrder } from '../lib/offlineQueue'
 import type { Address } from '../types'
 
 export default function Checkout() {
@@ -400,11 +401,28 @@ export default function Checkout() {
             ? 'অর্ডার করার অনুমতি নেই। অনুগ্রহ করে একবার লগআউট করে আবার লগইন করুন।'
             : 'Permission denied. Please log out and log in again.',
         )
-      } else if (/network|fetch|timeout/i.test(raw)) {
+      } else if (/network|fetch|timeout|offline/i.test(raw) || !navigator.onLine) {
+        // 🚀 Offline Resilience Engine: Queue order payload in IndexedDB outbox
+        const offlineId = `OFFLINE-${Date.now().toString().slice(-6)}`
+        const orderPayload = {
+          address: fullAddress,
+          phone: phoneVal.cleanedValue,
+          pin: isPickup ? STORE_LOCATION.pin : pin.trim(),
+          utr: cleanedUtr,
+          deliverySlot: 'morning',
+          discountAmount: couponApplied?.discount || 0,
+          geoLat,
+          geoLng,
+          paymentType: paymentMode,
+          advanceAmount: payableAmount,
+          isKhataOrder: paymentMode === 'khata',
+        }
+        await queueOfflineOrder(offlineId, orderPayload)
+        clearCartIdempotencyKey(user.id)
         setError(
           lang === 'bn'
-            ? 'ইন্টারনেট সমস্যা বা সংযোগ বিচ্ছিন্ন হয়েছে। আবার চেষ্টা করুন।'
-            : 'Network timeout. Check your internet connection and try again.',
+            ? '💾 ইন্টারনেট না থাকায় অর্ডারটি ডিভাইসে সেভ করা হয়েছে। সংযোগ পেলেই স্বয়ংক্রিয়ভাবে জমা হবে।'
+            : '💾 Weak connection. Order saved offline and will automatically submit once online.',
         )
       } else {
         setError(
