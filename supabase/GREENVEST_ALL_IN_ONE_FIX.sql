@@ -133,7 +133,7 @@ DROP TRIGGER IF EXISTS validate_order_total_trigger ON public.orders;
 DROP FUNCTION IF EXISTS public.validate_order_total();
 
 -- ----------------------------------------------------------------------------
--- 4. ORDER ITEMS TABLE
+-- 4. ORDER ITEMS
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.order_items (
   id bigserial PRIMARY KEY,
@@ -153,7 +153,7 @@ ALTER TABLE public.order_items ADD COLUMN IF NOT EXISTS weight_multiplier numeri
 ALTER TABLE public.order_items ADD COLUMN IF NOT EXISTS weight_label text DEFAULT '1 kg';
 
 -- ----------------------------------------------------------------------------
--- 5. ADDRESSES TABLE
+-- 5. ADDRESSES
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.addresses (
   id bigserial PRIMARY KEY,
@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS public.addresses (
 );
 
 -- ----------------------------------------------------------------------------
--- 6. COUPONS TABLE
+-- 6. COUPONS
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.coupons (
   id bigserial PRIMARY KEY,
@@ -187,7 +187,7 @@ CREATE TABLE IF NOT EXISTS public.coupons (
 );
 
 -- ----------------------------------------------------------------------------
--- 7. NOTIFICATIONS TABLE
+-- 7. NOTIFICATIONS
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.notifications (
   id bigserial PRIMARY KEY,
@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 );
 
 -- ----------------------------------------------------------------------------
--- 8. ORDER MESSAGES TABLE
+-- 8. ORDER MESSAGES
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.order_messages (
   id bigserial PRIMARY KEY,
@@ -212,7 +212,7 @@ CREATE TABLE IF NOT EXISTS public.order_messages (
 );
 
 -- ----------------------------------------------------------------------------
--- 9. PRODUCT REVIEWS TABLE
+-- 9. PRODUCT REVIEWS
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.product_reviews (
   id bigserial PRIMARY KEY,
@@ -225,7 +225,7 @@ CREATE TABLE IF NOT EXISTS public.product_reviews (
 );
 
 -- ----------------------------------------------------------------------------
--- 10. KHATA LEDGER TABLE (Digital Passbook & Credit History)
+-- 10. KHATA LEDGER (Digital Passbook & Credit History)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.khata_ledger (
   id bigserial PRIMARY KEY,
@@ -242,7 +242,7 @@ CREATE INDEX IF NOT EXISTS khata_ledger_user_id_idx ON public.khata_ledger (user
 CREATE INDEX IF NOT EXISTS khata_ledger_created_at_idx ON public.khata_ledger (created_at DESC);
 
 -- ----------------------------------------------------------------------------
--- 11. PROMOTIONAL DEALS TABLE
+-- 11. PROMOTIONAL DEALS
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.promotional_deals (
   id text PRIMARY KEY,
@@ -265,7 +265,7 @@ CREATE TABLE IF NOT EXISTS public.promotional_deals (
 );
 
 -- ----------------------------------------------------------------------------
--- 12. SUPPORT MESSAGES TABLE (Live In-App Support Chat)
+-- 12. SUPPORT MESSAGES (Live In-App Support Chat)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.support_messages (
   id text PRIMARY KEY,
@@ -284,7 +284,6 @@ CREATE INDEX IF NOT EXISTS support_messages_created_at_idx ON public.support_mes
 
 -- ----------------------------------------------------------------------------
 -- 13. UNIVERSAL ROW LEVEL SECURITY (RLS) POLICIES
--- Enables RLS and grants clean read/write access to avoid silent front-end blocks
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
@@ -319,7 +318,10 @@ END $$;
 -- 14. BULLETPROOF RPC FUNCTIONS (SECURITY DEFINER)
 -- ----------------------------------------------------------------------------
 
--- Role Update RPC (Pure PL/pgSQL, guaranteed syntax compliance)
+-- Role Update RPC (Explicit drop to eliminate signature conflicts)
+DROP FUNCTION IF EXISTS public.update_user_role_admin(text, text) CASCADE;
+DROP FUNCTION IF EXISTS public.update_user_role_admin CASCADE;
+
 CREATE OR REPLACE FUNCTION public.update_user_role_admin(
   p_user_id text,
   p_role text
@@ -378,7 +380,10 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.update_user_role_admin(text, text) TO anon, authenticated, service_role;
 
--- Save Product RPC
+-- Save Product RPC (Explicit drop to eliminate signature/parameter defaults conflict)
+DROP FUNCTION IF EXISTS public.save_product_admin(text,text,text,numeric,numeric,numeric,boolean,text,text,text,text,boolean) CASCADE;
+DROP FUNCTION IF EXISTS public.save_product_admin CASCADE;
+
 CREATE OR REPLACE FUNCTION public.save_product_admin(
   p_id text,
   p_name text,
@@ -425,7 +430,10 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.save_product_admin TO anon, authenticated, service_role;
 
--- Save Coupon RPC
+-- Save Coupon RPC (Explicit drop to eliminate signature conflict)
+DROP FUNCTION IF EXISTS public.save_coupon_admin(text, text, numeric, numeric, boolean, timestamptz) CASCADE;
+DROP FUNCTION IF EXISTS public.save_coupon_admin CASCADE;
+
 CREATE OR REPLACE FUNCTION public.save_coupon_admin(
   p_code text,
   p_discount_type text,
@@ -457,7 +465,10 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.save_coupon_admin TO anon, authenticated, service_role;
 
--- Validate Coupon RPC
+-- Validate Coupon RPC (Explicit drop to eliminate return type conflict)
+DROP FUNCTION IF EXISTS public.validate_coupon(text, numeric) CASCADE;
+DROP FUNCTION IF EXISTS public.validate_coupon CASCADE;
+
 CREATE OR REPLACE FUNCTION public.validate_coupon(
   p_code text,
   p_order_total numeric
