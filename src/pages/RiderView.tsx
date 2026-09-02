@@ -167,7 +167,7 @@ export default function RiderView() {
                 <div className="rider-card-top">
                   <span className="stop-num">Stop #{idx + 1}</span>
                   <span className="slot-tag" style={{ background: o.status === 'delivered' ? '#dcfce7' : undefined, color: o.status === 'delivered' ? '#166534' : undefined }}>
-                    {o.status === 'delivered' ? '✅ Delivered' : '⚡ Guaranteed Delivery'}
+                    {o.status === 'delivered' ? '✅ Delivered' : (o.deliveryDate && o.deliveryDate !== 'standard' ? `📅 ${o.deliveryDate}` : '⚡ 12–24h')}
                   </span>
                 </div>
 

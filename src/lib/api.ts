@@ -83,6 +83,7 @@ type OrderRow = {
   phone: string
   pin: string
   delivery_slot?: string | null
+  delivery_date?: string | null
   geo_lat?: number | null
   geo_lng?: number | null
   created_at: string
@@ -265,6 +266,7 @@ function mapOrder(row: OrderRow): Order {
     phone: row.phone,
     pin: row.pin,
     deliverySlot: slot === 'morning' || slot === 'evening' ? (slot as DeliverySlot) : undefined,
+    deliveryDate: row.delivery_date || undefined,
     geoLat: row.geo_lat ?? undefined,
     geoLng: row.geo_lng ?? undefined,
     createdAt: row.created_at,
@@ -788,6 +790,7 @@ export async function createOrder(order: Order): Promise<Order> {
     phone: order.phone,
     pin: order.pin,
     delivery_slot: order.deliverySlot || null,
+    delivery_date: order.deliveryDate || null,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
   }
@@ -795,6 +798,7 @@ export async function createOrder(order: Order): Promise<Order> {
   if (order.geoLat != null) payload.geo_lat = order.geoLat
   if (order.geoLng != null) payload.geo_lng = order.geoLng
   if (order.payerUpiName) (payload as any).payer_upi_name = order.payerUpiName
+  if (order.deliveryDate) (payload as any).delivery_date = order.deliveryDate
 
   let { error: orderError } = await client.from('orders').insert(payload)
   if (orderError) {
@@ -874,6 +878,18 @@ export async function bulkUpdateOrderStatusApi(ids: string[], status: OrderStatu
     ;({ error } = await client.from('orders').update(patch).in('id', ids))
   }
   if (error) throw error
+}
+
+export async function updateOrderDeliveryDateApi(id: string, deliveryDate: string): Promise<void> {
+  const client = requireClient()
+  const { error } = await client
+    .from('orders')
+    .update({ delivery_date: deliveryDate, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) {
+    console.error('updateOrderDeliveryDateApi error:', error)
+    throw error
+  }
 }
 
 export async function checkDuplicateUtrApi(utr: string): Promise<boolean> {

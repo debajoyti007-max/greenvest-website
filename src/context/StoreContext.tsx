@@ -22,6 +22,7 @@ import {
   subscribeOrders,
   subscribeProducts,
   updateOrderStatusApi,
+  updateOrderDeliveryDateApi,
   deleteOrderApi,
   upsertProduct,
   verifyUtrApi,
@@ -83,6 +84,7 @@ interface PlaceOrderOpts {
   utr: string
   payerUpiName?: string
   deliverySlot: import('../types').DeliverySlot
+  deliveryDate?: string
   discountAmount?: number
   zones?: DeliveryZone[]
   geoLat?: number
@@ -114,6 +116,7 @@ interface StoreContextValue {
   toggleStock: (id: string) => Promise<void>
   morningReset: () => Promise<void>
   updateOrderStatus: (id: string, status: OrderStatus, rejectionReason?: string) => Promise<void>
+  updateOrderDeliveryDate: (id: string, deliveryDate: string) => Promise<void>
   bulkUpdateOrderStatus: (ids: string[], status: OrderStatus) => Promise<void>
   checkDuplicateUtr: (utr: string) => Promise<boolean>
   findRecentOrderByUtr: (utr: string) => Promise<Order | null>
@@ -567,6 +570,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         phone: opts.phone.trim(),
         pin: opts.pin.replace(/\D/g, ''),
         deliverySlot: opts.deliverySlot,
+        deliveryDate: opts.deliveryDate,
         geoLat: opts.geoLat,
         geoLng: opts.geoLng,
         createdAt: now,
@@ -814,6 +818,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } else {
         const next = getOrders().map((o) =>
           o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o,
+        )
+        saveOrders(next)
+      }
+    },
+    [cloud],
+  )
+
+  const updateOrderDeliveryDate = useCallback(
+    async (id: string, deliveryDate: string) => {
+      setOrders((prev) =>
+        prev.map((o) => (o.id === id ? { ...o, deliveryDate, updatedAt: new Date().toISOString() } : o)),
+      )
+      if (cloud) {
+        try {
+          await updateOrderDeliveryDateApi(id, deliveryDate)
+        } catch (err) {
+          console.error('updateOrderDeliveryDate failed:', err)
+        }
+      } else {
+        const next = getOrders().map((o) =>
+          o.id === id ? { ...o, deliveryDate, updatedAt: new Date().toISOString() } : o,
         )
         saveOrders(next)
       }
@@ -1330,6 +1355,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toggleStock,
       morningReset,
       updateOrderStatus,
+      updateOrderDeliveryDate,
       bulkUpdateOrderStatus,
       checkDuplicateUtr,
       findRecentOrderByUtr,
@@ -1398,6 +1424,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toggleStock,
       morningReset,
       updateOrderStatus,
+      updateOrderDeliveryDate,
       bulkUpdateOrderStatus,
       checkDuplicateUtr,
       findRecentOrderByUtr,

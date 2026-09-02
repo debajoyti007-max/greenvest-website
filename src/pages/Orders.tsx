@@ -179,6 +179,19 @@ export default function Orders() {
                 <div>
                   <strong>{o.id}</strong>
                   <span className="muted">{new Date(o.createdAt).toLocaleString()}</span>
+                  <span style={{
+                    marginLeft: '8px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    padding: '2px 7px',
+                    borderRadius: '6px',
+                    background: o.deliveryDate && o.deliveryDate !== 'standard' ? '#eff6ff' : '#f0fdf4',
+                    color: o.deliveryDate && o.deliveryDate !== 'standard' ? '#1d4ed8' : '#15803d',
+                    border: '1px solid',
+                    borderColor: o.deliveryDate && o.deliveryDate !== 'standard' ? '#bfdbfe' : '#bbf7d0',
+                  }}>
+                    {o.deliveryDate && o.deliveryDate !== 'standard' ? `📅 ${o.deliveryDate}` : `⚡ 12–24h`}
+                  </span>
                 </div>
                 <span className={`status-pill ${o.status}`}>
                   {o.status === 'pending'

@@ -1,5 +1,5 @@
 import type { Order } from '../types'
-import { DELIVERY_SLOTS } from './business'
+
 
 function escapeHtml(str: unknown): string {
   if (str == null) return ''
@@ -21,10 +21,6 @@ export function printOrderInvoice(order: Order) {
     )
     .join('')
 
-  const slotLabel = order.deliverySlot
-    ? escapeHtml(DELIVERY_SLOTS[order.deliverySlot].en)
-    : '—'
-
   const html = `<!DOCTYPE html><html><head><title>Invoice ${escapeHtml(order.id)}</title>
   <style>
     body{font-family:'Hind Siliguri','Noto Sans Bengali','Nirmala UI',system-ui,sans-serif;padding:24px;color:#111}
@@ -36,7 +32,7 @@ export function printOrderInvoice(order: Order) {
   </style></head><body>
   <h1>GreenVest Invoice</h1>
   <p class="muted">${escapeHtml(order.id)} · ${new Date(order.createdAt).toLocaleString()}</p>
-  <p><strong>${escapeHtml(order.userName)}</strong><br/>${escapeHtml(order.phone)}<br/>${escapeHtml(order.address)}<br/>PIN ${escapeHtml(order.pin)}<br/>Slot: ${slotLabel}</p>
+  <p><strong>${escapeHtml(order.userName)}</strong><br/>${escapeHtml(order.phone)}<br/>${escapeHtml(order.address)}<br/>PIN ${escapeHtml(order.pin)}<br/>Delivery: <b>${order.deliveryDate && order.deliveryDate !== 'standard' ? escapeHtml(order.deliveryDate) : 'Standard 12–24h'}</b></p>
   <table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
   <tbody>${rows}</tbody></table>
   <div class="tot">
@@ -68,10 +64,6 @@ export function printThermalReceipt(order: Order) {
     )
     .join('')
 
-  const slot = order.deliverySlot
-    ? escapeHtml(DELIVERY_SLOTS[order.deliverySlot].en)
-    : 'Standard'
-
   const html = `<!DOCTYPE html><html><head><title>Thermal Receipt ${escapeHtml(order.id)}</title>
   <style>
     @page { size: 58mm auto; margin: 0; }
@@ -87,7 +79,7 @@ export function printThermalReceipt(order: Order) {
   <div>Date: ${new Date(order.createdAt).toLocaleDateString()}</div>
   <div>Cust: ${escapeHtml(order.userName.slice(0, 16))}</div>
   <div>Ph: ${escapeHtml(order.phone)}</div>
-  <div>Slot: ${slot}</div>
+  <div>Delivery: ${order.deliveryDate && order.deliveryDate !== 'standard' ? escapeHtml(order.deliveryDate) : '12–24h'}</div>
   <div class="hr"></div>
   ${rows}
   <div class="hr"></div>

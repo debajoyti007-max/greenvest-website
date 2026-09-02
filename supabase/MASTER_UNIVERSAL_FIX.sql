@@ -239,6 +239,7 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS rejection_reason text;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS assigned_rider_id text;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS geo_lat numeric;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS geo_lng numeric;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS delivery_date text;
 
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "orders_all_access" ON public.orders;

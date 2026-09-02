@@ -92,6 +92,8 @@ export interface Order {
   /** GPS longitude from customer's device */
   geoLng?: number
   deliverySlot?: DeliverySlot
+  /** Preferred delivery date e.g. 'standard' or 'YYYY-MM-DD' */
+  deliveryDate?: string
   rejectionReason?: string
   createdAt: string
   updatedAt: string

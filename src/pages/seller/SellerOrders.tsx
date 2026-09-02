@@ -11,7 +11,7 @@ import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled', 'refunded']
 
-type Filter = 'active' | 'utr' | 'to_pack' | 'today' | 'done' | 'archived' | 'cancelled' | 'all'
+type Filter = 'active' | 'today_delivery' | 'tomorrow_delivery' | 'scheduled' | 'to_pack' | 'utr' | 'done' | 'archived' | 'cancelled' | 'all'
 
 const suffix = (n: number) => {
   if (n % 10 === 1 && n % 100 !== 11) return 'st'
@@ -209,12 +209,13 @@ const statusIcon: Record<OrderStatus, string> = {
 
 export default function SellerOrders() {
   const { user } = useAuth()
-  const { orders, lang, updateOrderStatus, bulkUpdateOrderStatus, verifyUtr, deleteOrder, autoCancelStaleOrders } = useStore()
+  const { orders, lang, updateOrderStatus, updateOrderDeliveryDate, bulkUpdateOrderStatus, verifyUtr, deleteOrder, autoCancelStaleOrders } = useStore()
   const [filter, setFilter] = useState<Filter>('active')
   const [searchQuery, setSearchQuery] = useState('')
   const [customerFilter, setCustomerFilter] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editingDateOrderId, setEditingDateOrderId] = useState<string | null>(null)
   const [purging, setPurging] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const prevCount = useRef(orders.length)
@@ -341,6 +342,11 @@ export default function SellerOrders() {
 
     // Category / Status Filter
     return sorted.filter(o => {
+      const todayIso = new Date().toISOString().split('T')[0]
+      const tomorrowD = new Date()
+      tomorrowD.setDate(tomorrowD.getDate() + 1)
+      const tomorrowIso = tomorrowD.toISOString().split('T')[0]
+
       if (filter === 'all') return true
       if (filter === 'archived') return isArchivedOld(o)
       if (filter === 'done') return o.status === 'delivered' && !isArchivedOld(o)
@@ -348,7 +354,15 @@ export default function SellerOrders() {
       if (isCancelledOld(o)) return false
       if (filter === 'utr') return !o.utrVerified && o.status !== 'cancelled'
       if (filter === 'to_pack') return (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))
-      if (filter === 'today') return isToday(o.createdAt)
+      if (filter === 'today_delivery') {
+        return (o.deliveryDate === todayIso || ((!o.deliveryDate || o.deliveryDate === 'standard') && isToday(o.createdAt))) && o.status !== 'cancelled'
+      }
+      if (filter === 'tomorrow_delivery') {
+        return o.deliveryDate === tomorrowIso && o.status !== 'cancelled'
+      }
+      if (filter === 'scheduled') {
+        return Boolean(o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate !== todayIso) && o.status !== 'cancelled'
+      }
       if (filter === 'active') return o.status !== 'delivered' && o.status !== 'cancelled'
       return true
     })
@@ -372,14 +386,21 @@ export default function SellerOrders() {
     showToast(lang === 'bn' ? 'অর্ডারগুলো মুছে ফেলা হয়েছে' : 'Orders deleted', '🗑️')
   }
 
+  const todayIso = new Date().toISOString().split('T')[0]
+  const tomorrowD = new Date()
+  tomorrowD.setDate(tomorrowD.getDate() + 1)
+  const tomorrowIso = tomorrowD.toISOString().split('T')[0]
+
   const filters: { id: Filter; en: string; bn: string; count?: number }[] = [
-    { id: 'active', en: 'Active 🛵', bn: 'চলমান 🛵', count: orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length },
+    { id: 'active', en: 'Active ⚡', bn: 'চলমান ⚡', count: orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length },
+    { id: 'today_delivery', en: 'Today 📅', bn: 'আজ 📅', count: orders.filter(o => (o.deliveryDate === todayIso || ((!o.deliveryDate || o.deliveryDate === 'standard') && isToday(o.createdAt))) && o.status !== 'cancelled').length },
+    { id: 'tomorrow_delivery', en: 'Tomorrow 🌅', bn: 'আগামীকাল 🌅', count: orders.filter(o => o.deliveryDate === tomorrowIso && o.status !== 'cancelled').length },
+    { id: 'scheduled', en: 'Scheduled 🗓️', bn: 'শিডিউল্ড 🗓️', count: orders.filter(o => o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate !== todayIso && o.status !== 'cancelled').length },
+    { id: 'to_pack', en: 'To Pack 📦', bn: 'প্যাকিং 📦', count: orders.filter(o => (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))).length },
     { id: 'utr', en: 'Pending Pay ⏳', bn: 'পেমেন্ট বাকি ⏳', count: orders.filter(o => !o.utrVerified && o.status !== 'cancelled').length },
-    { id: 'to_pack', en: 'To Pack 📦', bn: 'প্যাকিং বাকি 📦', count: orders.filter(o => (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))).length },
-    { id: 'today', en: 'Today 📅', bn: 'আজ 📅', count: todayOrders.length },
     { id: 'done', en: 'Done ✅', bn: 'ডেলিভারড ✅', count: orders.filter(o => o.status === 'delivered' && !isArchivedOld(o)).length },
     { id: 'archived', en: 'Archived 📂', bn: 'আর্কাইভ 📂', count: orders.filter(o => isArchivedOld(o)).length },
-    { id: 'cancelled', en: 'Trash / Cancelled ❌', bn: 'বাতিল / ট্র্যাশ ❌', count: orders.filter(o => o.status === 'cancelled').length },
+    { id: 'cancelled', en: 'Trash ❌', bn: 'বাতিল ❌', count: orders.filter(o => o.status === 'cancelled').length },
     { id: 'all', en: 'All 🌐', bn: 'সব 🌐' },
   ]
 
@@ -668,11 +689,23 @@ export default function SellerOrders() {
                         </button>
                       )}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: '#6b7280', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#6b7280', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
                       <span>{o.items.map(i => i.emoji).join('')} ₹{o.total}</span>
                       <span>·</span>
                       <span>{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span>· 12–24h Delivery</span>
+                      <span>·</span>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: '6px',
+                        background: o.deliveryDate && o.deliveryDate !== 'standard' ? '#eff6ff' : '#f0fdf4',
+                        color: o.deliveryDate && o.deliveryDate !== 'standard' ? '#1d4ed8' : '#15803d',
+                        border: '1px solid',
+                        borderColor: o.deliveryDate && o.deliveryDate !== 'standard' ? '#bfdbfe' : '#bbf7d0',
+                      }}>
+                        {o.deliveryDate && o.deliveryDate !== 'standard' ? `📅 ${o.deliveryDate}` : `⚡ 12–24h`}
+                      </span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
@@ -822,9 +855,90 @@ export default function SellerOrders() {
                     </div>
 
                     {/* Address */}
-                    <div style={{ fontSize: '0.85rem', color: '#374151', marginBottom: '0.5rem', padding: '0.5rem', background: '#f9fafb', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#374151', marginBottom: '0.4rem', padding: '0.5rem', background: '#f9fafb', borderRadius: '8px' }}>
                       📍 {o.address} · PIN {o.pin || '—'}
                       {o.deliverySlot ? ` · ${o.deliverySlot === 'morning' ? (lang === 'bn' ? 'সকাল' : 'Morning') : (lang === 'bn' ? 'সন্ধ্যা' : 'Evening')}` : ''}
+                    </div>
+
+                    {/* 📅 Delivery Date Scheduling Bar (Seller can view and mark/update) */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      flexWrap: 'wrap',
+                      padding: '0.45rem 0.65rem',
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      borderRadius: '8px',
+                      marginBottom: '0.65rem',
+                      fontSize: '0.82rem',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: 700, color: '#166534' }}>
+                          📅 {lang === 'bn' ? 'ডেলিভারি তারিখ:' : 'Delivery Date:'}
+                        </span>
+                        <span style={{ fontWeight: 600, color: '#14532d', background: '#dcfce7', padding: '1px 8px', borderRadius: '10px' }}>
+                          {o.deliveryDate && o.deliveryDate !== 'standard' ? o.deliveryDate : (lang === 'bn' ? '⚡ স্ট্যান্ডার্ড (১২–২৪ ঘণ্টা)' : '⚡ Standard (12–24h)')}
+                        </span>
+                      </div>
+
+                      <div>
+                        {editingDateOrderId === o.id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <input
+                              type="date"
+                              defaultValue={o.deliveryDate && o.deliveryDate !== 'standard' ? o.deliveryDate : todayIso}
+                              onChange={async (e) => {
+                                if (e.target.value) {
+                                  await updateOrderDeliveryDate(o.id, e.target.value)
+                                  setEditingDateOrderId(null)
+                                  showToast(lang === 'bn' ? '✅ ডেলিভারি তারিখ আপডেট হয়েছে' : '✅ Delivery date updated', '📅')
+                                }
+                              }}
+                              style={{ fontSize: '0.78rem', padding: '2px 5px', borderRadius: '6px', border: '1px solid #86efac' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await updateOrderDeliveryDate(o.id, 'standard')
+                                setEditingDateOrderId(null)
+                                showToast(lang === 'bn' ? '✅ স্ট্যান্ডার্ড ১২–২৪ ঘণ্টা সেট হয়েছে' : '✅ Set to standard 12-24h', '⚡')
+                              }}
+                              style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '6px', background: '#dcfce7', border: '1px solid #86efac', color: '#166534', cursor: 'pointer', fontWeight: 600 }}
+                            >
+                              {lang === 'bn' ? 'স্ট্যান্ডার্ড' : 'Standard'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingDateOrderId(null)}
+                              style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '6px', background: '#fee2e2', border: 'none', color: '#991b1b', cursor: 'pointer' }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingDateOrderId(o.id)}
+                            style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              background: '#ffffff',
+                              border: '1px solid #86efac',
+                              color: '#15803d',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                            }}
+                          >
+                            ✏️ {lang === 'bn' ? 'তারিখ পরিবর্তন' : 'Change Date'}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Money */}

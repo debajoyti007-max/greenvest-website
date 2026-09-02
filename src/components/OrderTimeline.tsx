@@ -24,7 +24,6 @@ export default function OrderTimeline({
   lang,
   createdAt,
   updatedAt,
-  deliverySlot
 }: { 
   order: Order; 
   lang: Lang;
@@ -44,16 +43,13 @@ export default function OrderTimeline({
   const utrDone = order.utrVerified
 
   const isConfirmedNotDelivered = order.status === 'confirmed'
-  const todayStr = new Date().toDateString()
-  const isToday = createdAt && new Date(createdAt).toDateString() === todayStr
-  const dayText = isToday ? 'Today' : 'Tomorrow'
   
   let etaText = ''
-  if (isConfirmedNotDelivered && deliverySlot) {
-    if (deliverySlot === 'morning') {
-      etaText = `Estimated: ${dayText} 8 AM - 12 PM`
-    } else if (deliverySlot === 'evening') {
-      etaText = `Estimated: ${dayText} 4 PM - 8 PM`
+  if (isConfirmedNotDelivered) {
+    if (order.deliveryDate && order.deliveryDate !== 'standard') {
+      etaText = lang === 'bn' ? `📅 নির্ধারিত ডেলিভারির দিন: ${order.deliveryDate}` : `📅 Scheduled Delivery: ${order.deliveryDate}`
+    } else {
+      etaText = lang === 'bn' ? `⚡ ডেলিভারি ১২–২৪ ঘণ্টার মধ্যে` : `⚡ Delivery within 12–24h`
     }
   }
 
