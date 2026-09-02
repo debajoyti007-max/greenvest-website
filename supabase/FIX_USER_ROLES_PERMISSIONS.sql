@@ -50,16 +50,17 @@ CREATE POLICY "profiles_all_access"
   WITH CHECK (true);
 
 -- STEP 4: Atomic SECURITY DEFINER RPC to permanently update user roles
--- This function runs with elevated database privileges and bypasses all RLS restrictions.
 CREATE OR REPLACE FUNCTION public.update_user_role_admin(
   p_user_id text,
   p_role text
-) RETURNS jsonb AS $$
+) RETURNS jsonb 
+LANGUAGE plpgsql 
+SECURITY DEFINER
+AS $$
 DECLARE
   v_result jsonb;
   v_clean_phone text;
 BEGIN
-  -- Validate target role
   IF p_role NOT IN ('customer', 'seller', 'admin', 'rider') THEN
     RAISE EXCEPTION 'Invalid role: %', p_role;
   END IF;
@@ -109,21 +110,9 @@ BEGIN
     RETURNING to_jsonb(public.profiles.*) INTO v_result;
   END IF;
 
-  -- 3. Also synchronize auth.users metadata if the user signed up via Supabase Auth
-  BEGIN
-    UPDATE auth.users
-    SET raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', p_role),
-        raw_app_meta_data  = coalesce(raw_app_meta_data,  '{}'::jsonb) || jsonb_build_object('role', p_role)
-    WHERE id::text = p_user_id 
-       OR lower(email) = lower(p_user_id)
-       OR (length(v_clean_phone) >= 10 AND email = (v_clean_phone || '@greenvest.shop'));
-  EXCEPTION WHEN OTHERS THEN
-    NULL;
-  END;
-
   RETURN v_result;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 -- STEP 5: Grant execute permission to API roles
 GRANT EXECUTE ON FUNCTION public.update_user_role_admin(text, text) TO anon, authenticated, service_role;

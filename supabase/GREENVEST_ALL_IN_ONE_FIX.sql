@@ -125,12 +125,10 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS geo_lat numeric;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS geo_lng numeric;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_khata_order boolean DEFAULT false;
 
--- Drop legacy orders status check constraint and recreate with all valid statuses
 ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_status_check;
 ALTER TABLE public.orders ADD CONSTRAINT orders_status_check 
   CHECK (status IN ('pending', 'advance_paid', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'));
 
--- Drop any legacy trigger that blocked order inserts
 DROP TRIGGER IF EXISTS validate_order_total_trigger ON public.orders;
 DROP FUNCTION IF EXISTS public.validate_order_total();
 
@@ -321,11 +319,14 @@ END $$;
 -- 14. BULLETPROOF RPC FUNCTIONS (SECURITY DEFINER)
 -- ----------------------------------------------------------------------------
 
--- Role Update RPC
+-- Role Update RPC (Pure PL/pgSQL, guaranteed syntax compliance)
 CREATE OR REPLACE FUNCTION public.update_user_role_admin(
   p_user_id text,
   p_role text
-) RETURNS jsonb AS $$
+) RETURNS jsonb 
+LANGUAGE plpgsql 
+SECURITY DEFINER
+AS $$
 DECLARE
   v_result jsonb;
   v_clean_phone text;
@@ -371,20 +372,9 @@ BEGIN
     RETURNING to_jsonb(public.profiles.*) INTO v_result;
   END IF;
 
-  BEGIN
-    UPDATE auth.users
-    SET raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', p_role),
-        raw_app_meta_data  = coalesce(raw_app_meta_data,  '{}'::jsonb) || jsonb_build_object('role', p_role)
-    WHERE id::text = p_user_id 
-       OR lower(email) = lower(p_user_id)
-       OR (length(v_clean_phone) >= 10 AND email = (v_clean_phone || '@greenvest.shop'));
-  EXCEPTION WHEN OTHERS THEN
-    NULL;
-  END;
-
   RETURN v_result;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.update_user_role_admin(text, text) TO anon, authenticated, service_role;
 
