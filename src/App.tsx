@@ -125,7 +125,7 @@ function AppRoutes() {
           <Route
             path="rider"
             element={
-              <RequireRole roles={['rider', 'seller', 'admin']}>
+              <RequireRole roles={['rider', 'admin']}>
                 <RiderView />
               </RequireRole>
             }

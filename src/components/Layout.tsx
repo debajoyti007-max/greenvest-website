@@ -115,7 +115,47 @@ export default function Layout() {
                     {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
                   </NavLink>
                 )}
-                {(user?.role === 'seller' || user?.role === 'admin') && (
+                {user?.role === 'admin' && (
+                  <>
+                    <NavLink
+                      to="/seller"
+                      onClick={closeMenu}
+                      style={{
+                        background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
+                        color: '#ffffff',
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
+                      }}
+                    >
+                      💼 {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
+                    </NavLink>
+                    <NavLink
+                      to="/admin"
+                      onClick={closeMenu}
+                      style={{
+                        background: '#7c3aed',
+                        color: '#ffffff',
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      👑 {lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}
+                    </NavLink>
+                    <NavLink to="/rider" onClick={closeMenu}>
+                      🛵 {lang === 'bn' ? 'রাইডার' : 'Rider'}
+                    </NavLink>
+                  </>
+                )}
+                {user?.role === 'seller' && (
                   <NavLink
                     to="/seller"
                     onClick={closeMenu}
@@ -131,7 +171,7 @@ export default function Layout() {
                       boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
                     }}
                   >
-                    💼 {user.role === 'admin' ? (lang === 'bn' ? 'অ্যাডমিন হাব' : 'Admin Hub') : (lang === 'bn' ? 'সেলার হাব' : 'Seller Hub')}
+                    💼 {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
                   </NavLink>
                 )}
               </>
