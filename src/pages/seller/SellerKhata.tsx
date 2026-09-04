@@ -2,14 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
-import { buildKhataReminderWhatsAppUrl } from '../../lib/khata'
 import { isSuperAdmin } from '../../lib/business'
 import { showToast } from '../../components/Toast'
 import type { CustomerTier, User } from '../../types'
 
 export default function SellerKhata() {
   const { user, users, setUserKhataApproval, setUserTier, refreshUsers } = useAuth()
-  const { khataEntries, addKhataTransaction, getUserKhataBalance, lang } = useStore()
+  const { khataEntries, addKhataTransaction, getUserKhataBalance, lang, sendSupportMessage } = useStore()
 
   const [search, setSearch] = useState('')
   const [filterTab, setFilterTab] = useState<'dues' | 'settled' | 'all'>('dues')
@@ -102,7 +101,7 @@ export default function SellerKhata() {
       setShowAddTxModal(null)
       setTxAmount(100)
       setTxNotes('')
-    } catch (err) {
+    } catch {
       showToast(lang === 'bn' ? 'লেনদেন যোগ করা যায়নি' : 'Failed to record transaction', '❌', 'error')
     }
   }
@@ -155,6 +154,26 @@ export default function SellerKhata() {
     }
   }
 
+  const handleSendInAppKhataReminder = async (customerUser: User, bal: number) => {
+    const text = `📋 [GreenVest Khata Reminder]\nনমস্কার ${customerUser.name}, গ্রীনভেস্টে আপনার বর্তমান বকেয়া খাতা ব্যালেন্স: ₹${bal}। অনুগ্রহ করে সুবিধা মতো পরিশোধ করুন। ধন্যবাদ! 🌱`
+    try {
+      await sendSupportMessage({
+        userId: customerUser.id,
+        userName: customerUser.name,
+        userPhone: customerUser.phone,
+        senderRole: 'seller',
+        message: text,
+        status: 'open',
+      })
+      try {
+        await navigator.clipboard.writeText(text)
+      } catch {}
+      showToast(lang === 'bn' ? `ইন-অ্যাপ রিমাইন্ডার পাঠানো ও কপি হয়েছে (₹${bal})` : `In-app reminder sent & copied (₹${bal})`, '📋')
+    } catch {
+      showToast(lang === 'bn' ? 'রিমাইন্ডার পাঠানো যায়নি' : 'Failed to send reminder', '⚠️')
+    }
+  }
+
   if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
     return <Navigate to="/" replace />
   }
@@ -168,8 +187,8 @@ export default function SellerKhata() {
           </h1>
           <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.9rem' }}>
             {lang === 'bn'
-              ? 'গ্রাহকদের বকেয়া হিসাব, পেমেন্ট রেকর্ড ও WhatsApp রিমাইন্ডার'
-              : 'Customer credit ledger, payment tracking & WhatsApp statement reminders'}
+              ? 'গ্রাহকদের বকেয়া হিসাব, পেমেন্ট রেকর্ড ও ইন-অ্যাপ রিমাইন্ডার'
+              : 'Customer credit ledger, payment tracking & in-app statement reminders'}
           </p>
         </div>
         <Link to="/seller" className="btn btn-ghost">
@@ -202,7 +221,7 @@ export default function SellerKhata() {
             ⚡ {lang === 'bn' ? 'রিমাইন্ডার সিস্টেম' : 'Instant Reminder'}
           </span>
           <div style={{ fontSize: '0.9rem', color: '#6d28d9', marginTop: '0.5rem', fontWeight: 600 }}>
-            {lang === 'bn' ? '১-ক্লিকে WhatsApp UPI লিংক পাঠানো' : '1-Click WhatsApp payment link with UPI QR'}
+            {lang === 'bn' ? '১-ক্লিকে ইন-অ্যাপ স্টেটমেন্ট ও UPI রিমাইন্ডার' : '1-Click in-app payment reminder with UPI QR'}
           </div>
         </div>
       </div>
@@ -360,15 +379,14 @@ export default function SellerKhata() {
                     <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                         {balance > 0 && (
-                          <a
-                            href={buildKhataReminderWhatsAppUrl({ name: c.name, phone: c.phone || '', balance }, lang)}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
                             className="btn btn-sm"
-                            style={{ background: '#25D366', color: 'white', fontWeight: 700, fontSize: '0.75rem', textDecoration: 'none' }}
+                            style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #86efac', fontWeight: 700, fontSize: '0.75rem' }}
+                            onClick={() => void handleSendInAppKhataReminder(c, balance)}
                           >
-                            💬 WhatsApp
-                          </a>
+                            💬 {lang === 'bn' ? 'ইন-অ্যাপ রিমাইন্ডার' : 'In-App Reminder'}
+                          </button>
                         )}
                         {balance > 0 && (
                           <button

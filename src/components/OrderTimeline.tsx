@@ -1,4 +1,5 @@
 import type { Lang, Order, OrderStatus } from '../types'
+import { getOrderDeliveryOtp } from '../lib/business'
 
 const STEPS: { key: OrderStatus; en: string; bn: string }[] = [
   { key: 'advance_paid', en: 'Advance paid', bn: 'অগ্রিম দেওয়া' },
@@ -42,10 +43,8 @@ export default function OrderTimeline({
   const active = stepIndex(order)
   const utrDone = order.utrVerified
 
-  const isConfirmedNotDelivered = order.status === 'confirmed'
-  
   let etaText = ''
-  if (isConfirmedNotDelivered) {
+  if (order.status !== 'delivered') {
     if (order.deliveryDate && order.deliveryDate !== 'standard') {
       etaText = lang === 'bn' ? `📅 নির্ধারিত ডেলিভারির দিন: ${order.deliveryDate}` : `📅 Scheduled Delivery: ${order.deliveryDate}`
     } else {
@@ -88,6 +87,30 @@ export default function OrderTimeline({
         <p className="eta-text muted" style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.9rem' }}>
           {etaText}
         </p>
+      )}
+      {order.status !== 'delivered' && order.id && (
+        <div
+          style={{
+            margin: '0.85rem auto 0',
+            maxWidth: '320px',
+            background: '#f8fafc',
+            border: '1.5px dashed #94a3b8',
+            borderRadius: '12px',
+            padding: '0.65rem 1rem',
+            textAlign: 'center',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+            {lang === 'bn' ? '🔐 ডেলিভারি ওটিপি (OTP)' : '🔐 Delivery Handover OTP'}
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#166534', letterSpacing: '5px', margin: '0.2rem 0' }}>
+            {getOrderDeliveryOtp(order)}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+            {lang === 'bn' ? 'ডেলিভারির সময় রাইডারকে এই ৪ সংখ্যার কোডটি বলুন' : 'Share this 4-digit code with your rider upon delivery'}
+          </div>
+        </div>
       )}
     </>
   )

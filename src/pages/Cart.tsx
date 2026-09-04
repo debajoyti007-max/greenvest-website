@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, computeMarketMrp, MAX_VEGETABLE_QTY_KG, SUPPORT_WHATSAPP } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, computeMarketMrp, MAX_VEGETABLE_QTY_KG } from '../lib/business'
 import { t } from '../lib/i18n'
 
 export default function Cart() {
   const { user } = useAuth()
-  const { cart, products, lang, priceFor, updateCartQty, removeFromCart, cartTotal } = useStore()
+  const { cart, products, lang, priceFor, updateCartQty, removeFromCart, cartTotal, sendSupportMessage } = useStore()
+  const navigate = useNavigate()
   const [showGrades, setShowGrades] = useState(false)
 
   const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
@@ -188,10 +189,10 @@ export default function Cart() {
           </Link>
         )}
 
-        {/* 💬 Clean WhatsApp Order Fallback */}
+        {/* 💬 In-App Support Inquiry */}
         <button
           type="button"
-          onClick={() => {
+          onClick={async () => {
             const lines = cart.map(c => {
               const p = products.find(x => x.id === c.productId)
               const name = p ? (lang === 'bn' ? p.bnName : p.name) : 'Item'
@@ -201,10 +202,20 @@ export default function Cart() {
               const wLbl = c.weightLabel ? ` [${c.weightLabel}]` : ''
               return `• ${name}${wLbl} (Grade ${c.grade}) × ${c.qty} = ₹${price}`
             })
-            const text = encodeURIComponent(
-              `নমস্কার GreenVest, আমি নিচের সবজিগুলো অর্ডার করতে চাই:\n\n${lines.join('\n')}\n\nমোট মূল্য: ₹${cartTotal}\n\nঅনুগ্রহ করে ডেলিভারি ও পেমেন্ট কনফার্ম করুন।`
-            )
-            window.open(`https://wa.me/${SUPPORT_WHATSAPP}?text=${text}`, '_blank', 'noopener,noreferrer')
+            const text = `নমস্কার GreenVest, আমি আমার কার্টের সামগ্রীগুলো নিয়ে সহায়তা চাই:\n\n${lines.join('\n')}\n\nমোট মূল্য: ₹${cartTotal}`
+            if (user) {
+              try {
+                await sendSupportMessage({
+                  userId: user.id,
+                  userName: user.name,
+                  userPhone: user.phone,
+                  senderRole: 'customer',
+                  message: text,
+                  status: 'open',
+                })
+              } catch {}
+            }
+            navigate('/support')
           }}
           style={{
             display: 'flex',
@@ -224,7 +235,7 @@ export default function Cart() {
           }}
         >
           <span>💬</span>
-          <span>{lang === 'bn' ? 'হোয়াটসঅ্যাপে অর্ডার পাঠান' : 'Order via WhatsApp'}</span>
+          <span>{lang === 'bn' ? 'কার্ট নিয়ে ইন-অ্যাপ সাপোর্টে কথা বলুন' : 'Ask In-App Support About Cart'}</span>
         </button>
       </div>
     </div>

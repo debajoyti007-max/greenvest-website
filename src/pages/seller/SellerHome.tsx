@@ -554,8 +554,8 @@ export default function SellerHome() {
           </div>
           <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 1rem', flex: 1 }}>
             {lang === 'bn'
-              ? 'বাকি খাতা হিসাব, ১-ট্যাপ WhatsApp পেমেন্ট লিঙ্ক এবং VIP/পাইকারি টায়ার।'
-              : 'Track customer dues, send 1-tap WhatsApp payment links, and assign VIP tiers.'}
+              ? 'বাকি খাতা হিসাব, ১-ট্যাপ ইন-অ্যাপ পেমেন্ট রিমাইন্ডার এবং VIP/পাইকারি টায়ার।'
+              : 'Track customer dues, send 1-tap in-app payment reminders, and assign VIP tiers.'}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
             <Link

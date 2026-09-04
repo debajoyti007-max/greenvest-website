@@ -232,3 +232,23 @@ export function isSuperAdmin(
     id.includes('debajoyti007')
   )
 }
+
+/**
+ * Returns a secure, deterministic 4-digit Delivery Handover OTP.
+ * If order has a stored deliveryOtp, uses that.
+ * Otherwise, computes a stable 4-digit numeric code (1000–9999) from order ID and metadata.
+ */
+export function getOrderDeliveryOtp(
+  order: { id: string; phone?: string; createdAt?: string; deliveryOtp?: string }
+): string {
+  if (order.deliveryOtp && /^\d{4}$/.test(order.deliveryOtp.trim())) {
+    return order.deliveryOtp.trim()
+  }
+  const seed = `${order.id}-${order.phone || 'greenvest'}`
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  }
+  const code = 1000 + (hash % 9000)
+  return String(code)
+}

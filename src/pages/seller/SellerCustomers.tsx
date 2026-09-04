@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
-import { formatWhatsAppPhone } from '../../lib/whatsapp'
 import { isSuperAdmin } from '../../lib/business'
 import { showToast } from '../../components/Toast'
 import CouponGeneratorModal from '../../components/seller/CouponGeneratorModal'
@@ -23,14 +22,6 @@ type CustomerRow = {
   khataApproved?: boolean
   khataCreditLimit?: number
   isBlocked?: boolean
-}
-
-function waCustomer(phone: string, name: string) {
-  const digits = formatWhatsAppPhone(phone)
-  const text = encodeURIComponent(
-    `নমস্কার ${name}, GreenVest থেকে বলছি। আপনার অর্ডার নিয়ে যোগাযোগ।`,
-  )
-  window.open(`https://wa.me/${digits}?text=${text}`, '_blank', 'noopener,noreferrer')
 }
 
 export default function SellerCustomers() {
@@ -83,21 +74,16 @@ export default function SellerCustomers() {
       const code = `GV${couponModal.name.replace(/\s/g, '').toUpperCase().slice(0, 4)}${Math.floor(Math.random() * 900 + 100)}`
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       await createCoupon({ code, discount_type: couponType, discount_value: couponDiscount, min_order: couponMinOrder, valid: true, expires_at: expires })
-      // Send WhatsApp message
-      const digits = formatWhatsAppPhone(couponModal.phone)
       const discountText = couponType === 'flat' ? `₹${couponDiscount}` : `${couponDiscount}%`
-      const msg = encodeURIComponent(
-        lang === 'bn'
-          ? `🎉 ${couponModal.name}, GreenVest-এ আপনার জন্য বিশেষ অফার!\n🎟️ কুপন কোড: *${code}*\n💸 ছাড়: ${discountText} (মিনিমাম অর্ডার ₹${couponMinOrder})\n⏳ মেয়াদ: ৭ দিন\n🛒 অর্ডার করুন: https://greenvest.shop`
-          : `🎉 Hi ${couponModal.name}, here is a special GreenVest reward!\n🎟️ Coupon Code: *${code}*\n💸 Discount: ${discountText} (min order ₹${couponMinOrder})\n⏳ Valid for 7 days\n🛒 Shop now: https://greenvest.shop`
-      )
-      window.open(`https://wa.me/${digits}?text=${msg}`, '_blank', 'noopener,noreferrer')
       if (couponModal.userId) {
         await sendNotification(couponModal.userId, lang === 'bn' ? '🎉 বিশেষ কুপন অফার!' : '🎉 Special Coupon Offer!', lang === 'bn' ? `কুপন কোড: ${code} — ${discountText} ছাড় পান!` : `Use code ${code} for ${discountText} off your next order!`, 'GreenVest')
       }
-      showToast(lang === 'bn' ? `🎟️ ${couponModal.name}-কে কুপন পাঠানো হয়েছে: ${code}` : `🎟️ Coupon ${code} sent to ${couponModal.name}!`, '🎉')
+      try {
+        await navigator.clipboard.writeText(code)
+      } catch {}
+      showToast(lang === 'bn' ? `🎟️ ${couponModal.name}-কে কুপন পাঠানো হয়েছে (কোড: ${code})` : `🎟️ Coupon ${code} sent to ${couponModal.name}!`, '🎉')
       setCouponModal(null)
-    } catch (err) {
+    } catch {
       showToast(lang === 'bn' ? '❌ কুপন পাঠানো যায়নি' : '❌ Failed to send coupon', '❌')
     } finally {
       setCouponSending(false)
@@ -198,13 +184,17 @@ export default function SellerCustomers() {
     await adminResetUserPin(resetModalUser.id, newPin)
     showToast(lang === 'bn' ? `🔑 ${resetModalUser.name}-এর পিন রিসেট হয়েছে: ${newPin}` : `🔑 PIN reset for ${resetModalUser.name}: ${newPin}`, '🔑')
 
-    const waDigits = formatWhatsAppPhone(resetModalUser.phone)
-    const msg = encodeURIComponent(
-      `নমস্কার ${resetModalUser.name}, GreenVest-এ আপনার অ্যাকাউন্ট পিন নতুন পরিবর্তন করা হয়েছে: ${newPin}\nলগইন করুন: https://greenvest.shop/auth`
-    )
-    if (window.confirm(lang === 'bn' ? 'হোয়াটসঅ্যাপে কাস্টমারকে নতুন পিন পাঠাবেন?' : 'Send new PIN to customer via WhatsApp?')) {
-      window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank', 'noopener,noreferrer')
+    if (resetModalUser.id) {
+      await sendNotification(
+        resetModalUser.id,
+        lang === 'bn' ? '🔐 অ্যাকাউন্ট পিন রিসেট' : '🔐 Account PIN Reset',
+        lang === 'bn' ? `আপনার নতুন পিন: ${newPin}` : `Your new login PIN is: ${newPin}`,
+        'GreenVest Security'
+      )
     }
+    try {
+      await navigator.clipboard.writeText(`PIN for ${resetModalUser.name}: ${newPin}`)
+    } catch {}
     setResetModalUser(null)
   }
 
@@ -465,14 +455,14 @@ export default function SellerCustomers() {
                       📩 {lang === 'bn' ? 'মেসেজ দিন' : 'Send Notification'}
                     </button>
 
-                    {/* WhatsApp button */}
-                    <button
-                      type="button"
+                    {/* Support Chat button */}
+                    <Link
+                      to={c.userId ? `/seller/support?userId=${c.userId}` : '/seller/support'}
                       className="btn btn-secondary btn-sm"
-                      onClick={() => waCustomer(c.phone, c.name)}
+                      style={{ textDecoration: 'none' }}
                     >
-                      💬 WhatsApp
-                    </button>
+                      💬 {lang === 'bn' ? 'সাপোর্ট চ্যাট' : 'Support Chat'}
+                    </Link>
 
                     {/* 🎟️ Send Coupon Button (for spenders >=500) */}
                     {c.spent >= 500 && (
@@ -786,7 +776,7 @@ export default function SellerCustomers() {
                 />
               </label>
               <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '10px', padding: '0.75rem', fontSize: '0.85rem', color: '#166534' }}>
-                👀 {lang === 'bn' ? 'কুপন কোড অ্যাপে তৈরি হবে এবং WhatsApp দিয়ে পাঠানো হবে। মেয়াদ ৭ দিন।' : 'Code will be auto-generated and sent via WhatsApp. Valid for 7 days.'}
+                👀 {lang === 'bn' ? 'কুপন কোড অ্যাপে তৈরি হবে এবং গ্রাহককে ইন-অ্যাপ নোটিফিকেশন পাঠানো হবে। মেয়াদ ৭ দিন।' : 'Code will be generated and sent via in-app notification. Valid for 7 days.'}
               </div>
             </div>
             {/* Footer */}
@@ -800,7 +790,7 @@ export default function SellerCustomers() {
                 disabled={couponSending}
                 style={{ background: '#eab308', color: '#1c1917', border: 'none' }}
               >
-                {couponSending ? '⏳...' : `🎟️ ${lang === 'bn' ? 'WhatsApp-এ কুপন পাঠান' : 'Send Coupon via WhatsApp'}`}
+                {couponSending ? '⏳...' : `🎟️ ${lang === 'bn' ? 'কুপন পাঠান' : 'Send In-App Coupon'}`}
               </button>
             </div>
           </div>

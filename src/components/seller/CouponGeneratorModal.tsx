@@ -121,8 +121,20 @@ export default function CouponGeneratorModal({ onClose }: CouponGeneratorModalPr
     } catch {}
   }
 
-  const handleShareWhatsApp = (msg: string) => {
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
+  const handleShareCoupon = async (msg: string) => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'GreenVest Coupon Offer',
+          text: msg,
+        })
+        return
+      } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(msg)
+      showToast(lang === 'bn' ? 'অফার টেক্সট কপি হয়েছে!' : 'Offer message copied!', '📋')
+    } catch {}
   }
 
   return (
@@ -440,20 +452,20 @@ export default function CouponGeneratorModal({ onClose }: CouponGeneratorModalPr
 
               <button
                 type="button"
-                onClick={() => handleShareWhatsApp(createdCoupon.shareMsg)}
+                onClick={() => void handleShareCoupon(createdCoupon.shareMsg)}
                 style={{
                   padding: '0.75rem',
-                  background: '#22c55e',
+                  background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
                   border: 'none',
                   borderRadius: '10px',
                   fontWeight: 800,
                   color: '#ffffff',
                   cursor: 'pointer',
                   fontSize: '0.92rem',
-                  boxShadow: '0 4px 12px rgba(34, 197, 94, 0.25)',
+                  boxShadow: '0 4px 12px rgba(22, 101, 52, 0.25)',
                 }}
               >
-                📲 {lang === 'bn' ? 'WhatsApp-এ অফার শেয়ার করুন' : 'Share Offer on WhatsApp'}
+                📲 {lang === 'bn' ? 'অফার মেসেজ শেয়ার / কপি' : 'Share / Copy Offer Message'}
               </button>
             </div>
 

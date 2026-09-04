@@ -18,7 +18,7 @@ const dict = {
   fish: { en: 'Fish', bn: 'মাছ' },
   eggs: { en: 'Eggs', bn: 'ডিম' },
   pulses: { en: 'Pulses', bn: 'ডাল' },
-  notifySellerWa: { en: 'Notify seller on WhatsApp', bn: 'সেলারকে WhatsApp-এ জানান' },
+  notifySellerWa: { en: 'In-app Support & Updates', bn: 'ইন-অ্যাপ সাপোর্ট ও আপডেট' },
   uploadPhoto: { en: 'Upload photo', bn: 'ছবি আপলোড' },
   chooseGrade: { en: 'Choose grade', bn: 'গ্রেড বেছে নিন' },
   added: { en: 'Added ✓', bn: 'যোগ হয়েছে ✓' },

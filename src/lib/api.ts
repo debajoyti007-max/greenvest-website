@@ -84,6 +84,7 @@ type OrderRow = {
   pin: string
   delivery_slot?: string | null
   delivery_date?: string | null
+  delivery_otp?: string | null
   geo_lat?: number | null
   geo_lng?: number | null
   created_at: string
@@ -267,6 +268,7 @@ function mapOrder(row: OrderRow): Order {
     pin: row.pin,
     deliverySlot: slot === 'morning' || slot === 'evening' ? (slot as DeliverySlot) : undefined,
     deliveryDate: row.delivery_date || undefined,
+    deliveryOtp: row.delivery_otp || undefined,
     geoLat: row.geo_lat ?? undefined,
     geoLng: row.geo_lng ?? undefined,
     createdAt: row.created_at,
@@ -765,6 +767,13 @@ export async function createOrder(order: Order): Promise<Order> {
     })
 
     if (!rpcErr && atomicRes && (atomicRes as any).success) {
+      if (order.deliveryDate && order.deliveryDate !== 'standard') {
+        try {
+          await client.from('orders').update({ delivery_date: order.deliveryDate }).eq('id', order.id)
+        } catch (dErr) {
+          console.debug('Failed to set delivery_date on order row:', dErr)
+        }
+      }
       return order
     }
     if (rpcErr && rpcErr.message && /already been used/i.test(rpcErr.message)) {

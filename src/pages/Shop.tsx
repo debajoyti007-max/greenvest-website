@@ -25,7 +25,6 @@ import {
 } from '../lib/productImages'
 import { matchesProductQuery } from '../lib/searchUtils'
 import { STORE_LOCATION } from '../lib/delivery'
-import { bulkOrderWhatsAppUrl } from '../lib/whatsapp'
 import type { Grade, Lang, Product, CartItem } from '../types'
 
 const GRADES: Grade[] = ['A', 'B', 'C']
@@ -265,14 +264,12 @@ function ProductCard({
         {isBulkCapReached && (
           <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '4px 8px', margin: '4px 0 8px', fontSize: '0.72rem', color: '#92400e' }}>
             <span>⚠️ {lang === 'bn' ? 'সর্বোচ্চ ১০ কেজি সীমা পৌঁছেছে।' : 'Max 10 kg limit reached.'}</span>
-            <a
-              href={bulkOrderWhatsAppUrl(p.name, lang)}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              to="/support"
               style={{ display: 'block', color: '#15803d', fontWeight: 700, marginTop: '2px', textDecoration: 'underline' }}
             >
-              💬 {lang === 'bn' ? '১০ কেজির বেশি অর্ডারে WhatsApp করুন' : 'For >10 kg, WhatsApp shop owner'}
-            </a>
+              💬 {lang === 'bn' ? '১০ কেজির বেশি অর্ডারে ইন-অ্যাপ সাপোর্টে জানান' : 'For >10 kg, message in-app support'}
+            </Link>
           </div>
         )}
 

@@ -94,6 +94,8 @@ export interface Order {
   deliverySlot?: DeliverySlot
   /** Preferred delivery date e.g. 'standard' or 'YYYY-MM-DD' */
   deliveryDate?: string
+  /** 4-Digit Handover Verification OTP */
+  deliveryOtp?: string
   rejectionReason?: string
   createdAt: string
   updatedAt: string

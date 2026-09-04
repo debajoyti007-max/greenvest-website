@@ -28,6 +28,7 @@ const RiderView = lazy(() => import('./pages/RiderView'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const Support = lazy(() => import('./pages/Support'))
 const SellerSupport = lazy(() => import('./pages/seller/SellerSupport'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
 
@@ -138,7 +139,7 @@ function AppRoutes() {
               </RequireRole>
             }
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </Suspense>

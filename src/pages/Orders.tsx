@@ -14,12 +14,27 @@ export default function Orders() {
   const navigate = useNavigate()
   const [msg, setMsg] = useState('')
 
-  const onShareReceipt = (o: Order) => {
+  const onShareReceipt = async (o: Order) => {
     const itemsText = o.items
       .map((it) => `• ${it.name} (${it.grade}) × ${it.qty} = ₹${it.unitPrice * it.qty}`)
       .join('\n')
-    const text = `🌿 *GreenVest Order #${o.id}*\n📅 Date: ${new Date(o.createdAt).toLocaleDateString()}\n\n*Items:*\n${itemsText}\n\n*Total:* ₹${o.total}\n*Advance Paid:* ₹${o.advanceAmount}\n*Balance Due:* ₹${Math.max(0, o.total - o.advanceAmount)}\n*Delivery Address:* ${o.address} (PIN ${o.pin})\n\n📍 Track: https://greenvest.shop/track?id=${o.id}`
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+    const trackUrl = `${window.location.origin}/track?id=${o.id}`
+    const text = `🌿 GreenVest Order #${o.id}\n📅 Date: ${new Date(o.createdAt).toLocaleDateString()}\n\nItems:\n${itemsText}\n\nTotal: ₹${o.total}\nAdvance Paid: ₹${o.advanceAmount}\nBalance Due: ₹${Math.max(0, o.total - o.advanceAmount)}\nAddress: ${o.address} (PIN ${o.pin})\n\nTrack: ${trackUrl}`
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `GreenVest Order #${o.id}`,
+          text,
+          url: trackUrl,
+        })
+        return
+      } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(text)
+      setMsg(lang === 'bn' ? '✓ রসিদ কপি হয়েছে!' : '✓ Receipt copied to clipboard!')
+      setTimeout(() => setMsg(''), 3000)
+    } catch {}
   }
 
   const [activeTab, setActiveTab] = useState<'recent' | 'archived'>('recent')
@@ -271,9 +286,9 @@ export default function Orders() {
                   <button 
                     type="button" 
                     className="btn btn-secondary" 
-                    onClick={() => onShareReceipt(o)}
+                    onClick={() => void onShareReceipt(o)}
                   >
-                    💬 {lang === 'bn' ? 'WhatsApp রসিদ' : 'WhatsApp Receipt'}
+                    📋 {lang === 'bn' ? 'রসিদ কপি / শেয়ার' : 'Copy / Share Receipt'}
                   </button>
                   {o.status !== 'cancelled' && (o.status === 'pending' || o.status === 'advance_paid') && (Date.now() - new Date(o.createdAt).getTime() < 30 * 60 * 1000) && (
                     <button 

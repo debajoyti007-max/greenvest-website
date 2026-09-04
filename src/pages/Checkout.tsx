@@ -59,7 +59,7 @@ export default function Checkout() {
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
   const [saveAddressToDb, setSaveAddressToDb] = useState(false)
   const [fulfillmentMode, setFulfillmentMode] = useState<'delivery' | 'pickup'>('delivery')
-  const [deliveryDateChoice, setDeliveryDateChoice] = useState<'standard' | 'tomorrow' | 'day_after' | 'custom'>('standard')
+  const [deliveryDateChoice, setDeliveryDateChoice] = useState<'standard' | 'custom'>('standard')
   const [customDate, setCustomDate] = useState('')
 
   const isKhataPermitted = useMemo(() => {
@@ -76,18 +76,9 @@ export default function Checkout() {
 
   const quickDates = useMemo(() => {
     const today = new Date()
-    const tomorrow = new Date(today)
-    tomorrow.setDate(today.getDate() + 1)
-    const dayAfter = new Date(today)
-    dayAfter.setDate(today.getDate() + 2)
+    const nextDay = new Date(today)
+    nextDay.setDate(today.getDate() + 1)
 
-    const daysBn = ['রবি', 'সোম', 'মঙ্গল', 'বুধ', 'বৃহ', 'শুক্র', 'শনি']
-    const monthsBn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    const formatShort = (d: Date) => {
-      const dayName = lang === 'bn' ? daysBn[d.getDay()] : d.toLocaleDateString('en-US', { weekday: 'short' })
-      const month = monthsBn[d.getMonth()]
-      return `${d.getDate()} ${month} (${dayName})`
-    }
     const toIso = (d: Date) => {
       const year = d.getFullYear()
       const month = String(d.getMonth() + 1).padStart(2, '0')
@@ -99,21 +90,29 @@ export default function Checkout() {
     max.setDate(today.getDate() + 7)
 
     return {
-      tomorrowLabel: formatShort(tomorrow),
-      tomorrowIso: toIso(tomorrow),
-      dayAfterLabel: formatShort(dayAfter),
-      dayAfterIso: toIso(dayAfter),
+      defaultDate: toIso(nextDay),
       minDate: toIso(today),
       maxDate: toIso(max),
     }
-  }, [lang])
+  }, [])
+
+  const formatSelectedDate = (isoStr: string) => {
+    if (!isoStr) return ''
+    const d = new Date(isoStr + 'T00:00:00')
+    if (isNaN(d.getTime())) return isoStr
+    const daysBn = ['রবি', 'সোম', 'মঙ্গল', 'বুধ', 'বৃহ', 'শুক্র', 'শনি']
+    const monthsBn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const dayName = lang === 'bn' ? daysBn[d.getDay()] : d.toLocaleDateString('en-US', { weekday: 'short' })
+    const month = monthsBn[d.getMonth()]
+    return `${d.getDate()} ${month} (${dayName})`
+  }
 
   const effectiveDeliveryDate = useMemo(() => {
-    if (deliveryDateChoice === 'tomorrow') return quickDates.tomorrowIso
-    if (deliveryDateChoice === 'day_after') return quickDates.dayAfterIso
-    if (deliveryDateChoice === 'custom' && customDate) return customDate
+    if (deliveryDateChoice === 'custom') {
+      return customDate || quickDates.defaultDate
+    }
     return 'standard'
-  }, [deliveryDateChoice, quickDates, customDate])
+  }, [deliveryDateChoice, customDate, quickDates])
 
   useEffect(() => {
     void refresh()
@@ -291,8 +290,8 @@ export default function Checkout() {
     if (!isPickup && delivery.isOutOfRange) {
       setError(
         lang === 'bn'
-          ? `আপনার পিন কোড বা অবস্থান আমাদের ডেলিভারি সীমার বাইরে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন বা WhatsApp-এ যোগাযোগ করুন।`
-          : `Location is beyond our delivery service area. Please select "Store Pickup" or contact us on WhatsApp.`,
+          ? `আপনার পিন কোড বা অবস্থান আমাদের ডেলিভারি সীমার বাইরে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন বা ইন-অ্যাপ সাপোর্টে যোগাযোগ করুন।`
+          : `Location is beyond our delivery service area. Please select "Store Pickup" or contact in-app support.`,
       )
       submitLockRef.current = false
       return
@@ -494,12 +493,12 @@ export default function Checkout() {
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.35rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
               <button
                 type="button"
                 onClick={() => { setDeliveryDateChoice('standard'); setCustomDate('') }}
                 style={{
-                  padding: '0.5rem 0.25rem',
+                  padding: '0.65rem 0.5rem',
                   borderRadius: '10px',
                   border: deliveryDateChoice === 'standard' ? '2px solid #166534' : '1px solid #cbd5e1',
                   background: deliveryDateChoice === 'standard' ? '#f0fdf4' : '#ffffff',
@@ -507,59 +506,22 @@ export default function Checkout() {
                   textAlign: 'center',
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: '0.78rem', color: deliveryDateChoice === 'standard' ? '#166534' : '#1e293b' }}>
-                  ⚡ {lang === 'bn' ? 'দ্রুত' : 'Fast'}
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: deliveryDateChoice === 'standard' ? '#166534' : '#1e293b' }}>
+                  ⚡ {lang === 'bn' ? 'স্ট্যান্ডার্ড' : 'Standard Fast'}
                 </div>
-                <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
                   12–24h
                 </div>
               </button>
 
               <button
                 type="button"
-                onClick={() => { setDeliveryDateChoice('tomorrow'); setCustomDate(quickDates.tomorrowIso) }}
-                style={{
-                  padding: '0.5rem 0.25rem',
-                  borderRadius: '10px',
-                  border: deliveryDateChoice === 'tomorrow' ? '2px solid #166534' : '1px solid #cbd5e1',
-                  background: deliveryDateChoice === 'tomorrow' ? '#f0fdf4' : '#ffffff',
-                  cursor: 'pointer',
-                  textAlign: 'center',
+                onClick={() => {
+                  setDeliveryDateChoice('custom')
+                  setCustomDate((curr) => curr || quickDates.defaultDate)
                 }}
-              >
-                <div style={{ fontWeight: 700, fontSize: '0.78rem', color: deliveryDateChoice === 'tomorrow' ? '#166534' : '#1e293b' }}>
-                  {lang === 'bn' ? 'আগামীকাল' : 'Tomorrow'}
-                </div>
-                <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
-                  {quickDates.tomorrowLabel.split(' ')[0]} {quickDates.tomorrowLabel.split(' ')[1]}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setDeliveryDateChoice('day_after'); setCustomDate(quickDates.dayAfterIso) }}
                 style={{
-                  padding: '0.5rem 0.25rem',
-                  borderRadius: '10px',
-                  border: deliveryDateChoice === 'day_after' ? '2px solid #166534' : '1px solid #cbd5e1',
-                  background: deliveryDateChoice === 'day_after' ? '#f0fdf4' : '#ffffff',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: '0.78rem', color: deliveryDateChoice === 'day_after' ? '#166534' : '#1e293b' }}>
-                  {lang === 'bn' ? 'পরশু' : 'Day After'}
-                </div>
-                <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
-                  {quickDates.dayAfterLabel.split(' ')[0]} {quickDates.dayAfterLabel.split(' ')[1]}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDeliveryDateChoice('custom')}
-                style={{
-                  padding: '0.5rem 0.25rem',
+                  padding: '0.65rem 0.5rem',
                   borderRadius: '10px',
                   border: deliveryDateChoice === 'custom' ? '2px solid #166534' : '1px solid #cbd5e1',
                   background: deliveryDateChoice === 'custom' ? '#f0fdf4' : '#ffffff',
@@ -567,30 +529,41 @@ export default function Checkout() {
                   textAlign: 'center',
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: '0.78rem', color: deliveryDateChoice === 'custom' ? '#166534' : '#1e293b' }}>
-                  🗓️ {lang === 'bn' ? 'তারিখ' : 'Date'}
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: deliveryDateChoice === 'custom' ? '#166534' : '#1e293b' }}>
+                  🗓️ {lang === 'bn' ? 'পছন্দের তারিখ' : 'Scheduled Date'}
                 </div>
-                <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
-                  {customDate ? customDate.slice(5) : (lang === 'bn' ? 'বাছাই' : 'Pick')}
+                <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
+                  {customDate ? formatSelectedDate(customDate) : (lang === 'bn' ? 'তারিখ বেছে নিন' : 'Pick a Date')}
                 </div>
               </button>
             </div>
 
             {deliveryDateChoice === 'custom' && (
-              <div style={{ marginTop: '0.45rem' }}>
+              <div style={{ marginTop: '0.6rem', padding: '0.6rem', background: '#ffffff', border: '1px solid #bbf7d0', borderRadius: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#166534' }}>
+                    {lang === 'bn' ? 'ক্যালেন্ডার থেকে দিন সিলেক্ট করুন:' : 'Select preferred date:'}
+                  </span>
+                  {customDate && (
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '1px 8px', borderRadius: '10px', border: '1px solid #86efac' }}>
+                      ✓ {formatSelectedDate(customDate)}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="date"
                   min={quickDates.minDate}
                   max={quickDates.maxDate}
-                  value={customDate}
+                  value={customDate || quickDates.defaultDate}
                   onChange={(e) => setCustomDate(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '0.4rem 0.6rem',
+                    padding: '0.45rem 0.6rem',
                     borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.85rem',
+                    border: '1.5px solid #86efac',
+                    fontSize: '0.9rem',
                     background: '#ffffff',
+                    fontWeight: 600,
                   }}
                 />
               </div>

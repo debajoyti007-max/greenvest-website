@@ -4,14 +4,13 @@ import { showToast } from '../../components/Toast'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
-import { formatWhatsAppPhone, orderStatusWhatsAppUrl, paymentVerifiedWhatsAppUrl, riderDispatchWhatsAppUrl } from '../../lib/whatsapp'
-import { isOrderStalePending } from '../../lib/business'
+import { isOrderStalePending, getOrderDeliveryOtp } from '../../lib/business'
 import OrderChat from '../../components/OrderChat'
 import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled', 'refunded']
 
-type Filter = 'active' | 'today_delivery' | 'tomorrow_delivery' | 'scheduled' | 'to_pack' | 'utr' | 'done' | 'archived' | 'cancelled' | 'all'
+type Filter = 'active' | 'today_delivery' | 'scheduled' | 'to_pack' | 'utr' | 'done' | 'archived' | 'cancelled' | 'all'
 
 const suffix = (n: number) => {
   if (n % 10 === 1 && n % 100 !== 11) return 'st'
@@ -293,8 +292,7 @@ export default function SellerOrders() {
 
     try {
       await updateOrderStatus(o.id, 'cancelled', reason)
-      window.open(orderStatusWhatsAppUrl(o, 'cancelled', reason), '_blank', 'noopener,noreferrer')
-      showToast(lang === 'bn' ? 'অর্ডার বাতিল ও কারণ WhatsApp-এ পাঠানো হয়েছে' : 'Order cancelled & reason sent via WhatsApp', 'ℹ️')
+      showToast(lang === 'bn' ? 'অর্ডার বাতিল ও স্ট্যাটাস আপডেট হয়েছে' : 'Order cancelled & status updated', 'ℹ️')
     } catch (err) {
       console.error('Cancel order error:', err)
     }
@@ -304,7 +302,7 @@ export default function SellerOrders() {
     const next = !o.utrVerified
     try {
       await verifyUtr(o.id, next)
-      if (next) window.open(paymentVerifiedWhatsAppUrl(o, lang), '_blank', 'noopener,noreferrer')
+      showToast(lang === 'bn' ? (next ? 'পেমেন্ট ভেরিফায়েড!' : 'পেমেন্ট আন-ভেরিফায়েড') : (next ? 'Payment verified!' : 'Payment unverified'), '✅')
     } catch (err) {
       console.error('Verify UTR error:', err)
     }
@@ -345,9 +343,6 @@ export default function SellerOrders() {
     // Category / Status Filter
     return sorted.filter(o => {
       const todayIso = new Date().toISOString().split('T')[0]
-      const tomorrowD = new Date()
-      tomorrowD.setDate(tomorrowD.getDate() + 1)
-      const tomorrowIso = tomorrowD.toISOString().split('T')[0]
 
       if (filter === 'all') return true
       if (filter === 'archived') return isArchivedOld(o)
@@ -358,9 +353,6 @@ export default function SellerOrders() {
       if (filter === 'to_pack') return (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))
       if (filter === 'today_delivery') {
         return (o.deliveryDate === todayIso || ((!o.deliveryDate || o.deliveryDate === 'standard') && isToday(o.createdAt))) && o.status !== 'cancelled'
-      }
-      if (filter === 'tomorrow_delivery') {
-        return o.deliveryDate === tomorrowIso && o.status !== 'cancelled'
       }
       if (filter === 'scheduled') {
         return Boolean(o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate !== todayIso) && o.status !== 'cancelled'
@@ -389,14 +381,10 @@ export default function SellerOrders() {
   }
 
   const todayIso = new Date().toISOString().split('T')[0]
-  const tomorrowD = new Date()
-  tomorrowD.setDate(tomorrowD.getDate() + 1)
-  const tomorrowIso = tomorrowD.toISOString().split('T')[0]
 
   const filters: { id: Filter; en: string; bn: string; count?: number }[] = [
     { id: 'active', en: 'Active ⚡', bn: 'চলমান ⚡', count: orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length },
     { id: 'today_delivery', en: 'Today 📅', bn: 'আজ 📅', count: orders.filter(o => (o.deliveryDate === todayIso || ((!o.deliveryDate || o.deliveryDate === 'standard') && isToday(o.createdAt))) && o.status !== 'cancelled').length },
-    { id: 'tomorrow_delivery', en: 'Tomorrow 🌅', bn: 'আগামীকাল 🌅', count: orders.filter(o => o.deliveryDate === tomorrowIso && o.status !== 'cancelled').length },
     { id: 'scheduled', en: 'Scheduled 🗓️', bn: 'শিডিউল্ড 🗓️', count: orders.filter(o => o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate !== todayIso && o.status !== 'cancelled').length },
     { id: 'to_pack', en: 'To Pack 📦', bn: 'প্যাকিং 📦', count: orders.filter(o => (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))).length },
     { id: 'utr', en: 'Pending Pay ⏳', bn: 'পেমেন্ট বাকি ⏳', count: orders.filter(o => !o.utrVerified && o.status !== 'cancelled').length },
@@ -708,6 +696,20 @@ export default function SellerOrders() {
                       }}>
                         {o.deliveryDate && o.deliveryDate !== 'standard' ? `📅 ${o.deliveryDate}` : `⚡ 12–24h`}
                       </span>
+                      {o.status !== 'cancelled' && o.status !== 'delivered' && (
+                        <span style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          padding: '1px 6px',
+                          borderRadius: '6px',
+                          background: '#f1f5f9',
+                          color: '#475569',
+                          border: '1px solid #cbd5e1',
+                          letterSpacing: '0.5px'
+                        }}>
+                          🔐 OTP: {getOrderDeliveryOtp(o)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
@@ -955,9 +957,9 @@ export default function SellerOrders() {
                     {/* Action buttons */}
                     <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
                       <a href={`tel:${o.phone}`} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534' }}>📞 Call</a>
-                      <button type="button" onClick={() => openWhatsApp(o, lang)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', cursor: 'pointer', color: '#166534' }}>💬 WhatsApp</button>
+                      <Link to={o.userId ? `/seller/support?userId=${o.userId}` : '/seller/support'} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534' }}>💬 {lang === 'bn' ? 'সাপোর্ট' : 'Support'}</Link>
                       <Link to={`/orders/success/${o.id}`} target="_blank" style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#e0e7ff', border: '1px solid #c7d2fe', fontSize: '0.8rem', textDecoration: 'none', color: '#3730a3', fontWeight: 600 }}>📲 Live Track</Link>
-                      <button type="button" onClick={() => window.open(riderDispatchWhatsAppUrl(o, o.phone), '_blank', 'noopener,noreferrer')} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: '0.8rem', cursor: 'pointer', color: '#1e40af' }}>🛵 Rider</button>
+                      <Link to="/rider" style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: '0.8rem', textDecoration: 'none', color: '#1e40af' }}>🛵 {lang === 'bn' ? 'রাইডার' : 'Rider'}</Link>
                       <button type="button" onClick={() => openMaps(o.address, o.pin || '')} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🗺️ Maps</button>
                       <button type="button" onClick={() => printOrderInvoice(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🧾</button>
                       <button type="button" onClick={() => printThermalReceipt(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🖨️</button>
@@ -975,9 +977,6 @@ export default function SellerOrders() {
                       <select value={o.status} onChange={e => {
                         const s = e.target.value as OrderStatus
                         void updateOrderStatus(o.id, s)
-                        if (['confirmed', 'delivered', 'cancelled'].includes(s)) {
-                          window.open(orderStatusWhatsAppUrl(o, s), '_blank', 'noopener,noreferrer')
-                        }
                       }} style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
                         {STATUSES.map(s => <option key={s} value={s}>{statusIcon[s]} {lang === 'bn' ? statusBn[s] : s}</option>)}
                       </select>
@@ -991,16 +990,6 @@ export default function SellerOrders() {
       )}
     </div>
   )
-}
-
-function openWhatsApp(order: Order, lang: 'en' | 'bn') {
-  const phone = formatWhatsAppPhone(order.phone)
-  const text = encodeURIComponent(
-    lang === 'bn'
-      ? `GreenVest অর্ডার #${order.id.slice(-6)}\nনমস্কার ${order.userName}, মোট ₹${order.total}। স্ট্যাটাস: ${order.status}।`
-      : `GreenVest order #${order.id.slice(-6)}\nHi ${order.userName}, total ₹${order.total}. Status: ${order.status}.`,
-  )
-  window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer')
 }
 
 function openMaps(address: string, pin: string) {

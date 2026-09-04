@@ -99,7 +99,7 @@ export default function TrackOrder() {
       return false
     })
 
-    // 2. Query Supabase directly if not found in local memory (e.g. guest WhatsApp tracking link)
+    // 2. Query Supabase directly if not found in local memory (e.g. shared tracking link)
     if (!found) {
       setLoading(true)
       try {

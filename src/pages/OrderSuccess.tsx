@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN } from '../lib/business'
 import { t } from '../lib/i18n'
-import { openSellerOrderWhatsApp } from '../lib/whatsapp'
 import { printOrderInvoice } from '../lib/printOrder'
 import { showToast } from '../components/Toast'
 import type { Order } from '../types'
@@ -60,10 +59,21 @@ export default function OrderSuccess() {
     }
   }
 
-  const shareWhatsAppCustomer = () => {
+  const handleShareOrder = async () => {
     if (!order) return
-    const text = `GreenVest Order #${order.id}\nTotal: ₹${order.total}\nAdvance Paid: ₹${order.advanceAmount}\nBalance: ₹${order.total - order.advanceAmount}\nStatus: ${order.status}`
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+    const trackUrl = `${window.location.origin}/track?id=${order.id}`
+    const text = `GreenVest Order #${order.id}\nTotal: ₹${order.total}\nAdvance: ₹${order.advanceAmount}\nStatus: ${order.status}\nTrack: ${trackUrl}`
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `GreenVest Order #${order.id}`,
+          text,
+          url: trackUrl,
+        })
+        return
+      } catch {}
+    }
+    await copySummary()
   }
 
   if (!user) return <Navigate to="/auth" replace />
@@ -147,9 +157,9 @@ export default function OrderSuccess() {
       </div>
       <h1>{t(lang, 'orderPlaced')}</h1>
       <p className="lede">
-        {lang === 'bn'
-          ? `পেমেন্ট যাচাইয়ের পর দ্রুত ডেলিভারি ${DELIVERY_WINDOW_BN}-এর মধ্যে।`
-          : `Fast delivery arrives within ${DELIVERY_WINDOW}.`}
+        {order.deliveryDate && order.deliveryDate !== 'standard'
+          ? (lang === 'bn' ? `📅 আপনার অর্ডারটি ${order.deliveryDate} তারিখে ডেলিভারির জন্য শিডিউল করা হয়েছে।` : `📅 Your order is scheduled for delivery on ${order.deliveryDate}.`)
+          : (lang === 'bn' ? `পেমেন্ট যাচাইয়ের পর দ্রুত ডেলিভারি ${DELIVERY_WINDOW_BN}-এর মধ্যে।` : `Fast delivery arrives within ${DELIVERY_WINDOW}.`)}
       </p>
 
       {/* Live Notification Indicator Badge */}
@@ -159,7 +169,23 @@ export default function OrderSuccess() {
       </div>
 
       <div className="order-card">
-        <strong>{order.id}</strong>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+          <strong>{order.id}</strong>
+          <span style={{
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            padding: '2px 8px',
+            borderRadius: '8px',
+            background: order.deliveryDate && order.deliveryDate !== 'standard' ? '#eff6ff' : '#f0fdf4',
+            color: order.deliveryDate && order.deliveryDate !== 'standard' ? '#1d4ed8' : '#15803d',
+            border: '1px solid',
+            borderColor: order.deliveryDate && order.deliveryDate !== 'standard' ? '#bfdbfe' : '#86efac',
+          }}>
+            {order.deliveryDate && order.deliveryDate !== 'standard'
+              ? `📅 ${order.deliveryDate}`
+              : `⚡ 12–24h`}
+          </span>
+        </div>
         <p className="muted">{new Date(order.createdAt).toLocaleString()}</p>
         <OrderTimeline order={order} lang={lang} />
         <ul>
@@ -182,11 +208,11 @@ export default function OrderSuccess() {
         <button type="button" className="btn btn-primary" onClick={() => printOrderInvoice(order)}>
           📄 {lang === 'bn' ? 'অফিসিয়াল PDF রসিদ ডাউনলোড / প্রিন্ট' : 'Download / Print PDF Invoice'}
         </button>
-        <button type="button" className="btn btn-secondary" onClick={() => openSellerOrderWhatsApp(order)}>
-          💬 {lang === 'bn' ? 'WhatsApp এ রসিদ পাঠান' : 'Send Receipt to WhatsApp'}
-        </button>
-        <button type="button" className="btn btn-secondary" onClick={shareWhatsAppCustomer}>
-          📲 Share on WhatsApp
+        <Link to="/support" className="btn btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+          💬 {lang === 'bn' ? 'ইন-অ্যাপ সাপোর্টে যোগাযোগ করুন' : 'Contact In-App Support'}
+        </Link>
+        <button type="button" className="btn btn-secondary" onClick={handleShareOrder}>
+          📲 {lang === 'bn' ? 'অর্ডার শেয়ার করুন' : 'Share Order'}
         </button>
         <button type="button" className="btn btn-secondary" onClick={copySummary}>
           {copied

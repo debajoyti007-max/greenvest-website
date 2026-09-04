@@ -284,7 +284,7 @@ export default function Auth() {
         {mode === 'signup' && (
           <label>
             <span style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>{lang === 'bn' ? 'ফোন নম্বর (WhatsApp)' : 'WhatsApp / Phone for delivery'}</span>
+              <span>{lang === 'bn' ? 'মোবাইল নম্বর (ডেলিভারির জন্য)' : 'Mobile Phone for delivery'}</span>
               <span style={{ fontSize: '0.75rem', color: 'var(--green-600)', fontWeight: 600 }}>
                 {lang === 'bn' ? 'ডেলিভারি অ্যালার্ট পাবেন' : '✅ Used for delivery alerts'}
               </span>

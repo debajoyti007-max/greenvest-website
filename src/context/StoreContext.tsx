@@ -275,7 +275,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // Pass role + id so fetchOrders filters correctly:
         // rider/seller/admin → all orders | customer → only their own
         const ords = await fetchOrders(user.role, user.id, user.email, user.phone)
-        setOrders(ords)
+        // Merge with local cache to safeguard scheduled deliveryDate against empty/null remote schemas
+        const localOrders = getOrders()
+        const localMap = new Map(localOrders.map((o) => [o.id, o]))
+        const mergedOrds = ords.map((o) => {
+          const local = localMap.get(o.id)
+          if (!o.deliveryDate && local?.deliveryDate && local.deliveryDate !== 'standard') {
+            return { ...o, deliveryDate: local.deliveryDate }
+          }
+          return o
+        })
+        setOrders(mergedOrds)
+        saveOrders(mergedOrds)
       } else {
         setOrders([])
       }

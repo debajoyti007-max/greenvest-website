@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import CartBar from './CartBar'
 import NetworkStatus from './NetworkStatus'
@@ -16,14 +16,78 @@ import PwaInstallPrompt from './PwaInstallPrompt'
 import SupportChatWidget from './SupportChatWidget'
 import BottomNav from './BottomNav'
 
+function playSystemAlertChime() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextClass) return
+    const ctx = new AudioContextClass()
+    if (ctx.state === 'suspended') {
+      void ctx.resume()
+    }
+    const tones = [880, 1108.73]
+    tones.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12)
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.12)
+      gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + i * 0.12 + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.25)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(ctx.currentTime + i * 0.12)
+      osc.stop(ctx.currentTime + i * 0.12 + 0.3)
+    })
+  } catch {
+    // AudioContext blocked or not supported
+  }
+}
+
 export default function Layout() {
   const { user, logout } = useAuth()
-  const { cartCount, lang, setLang } = useStore()
+  const { cartCount, lang, setLang, supportMessages } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [islandCompact, setIslandCompact] = useState(false)
   const headerRef = useRef<HTMLElement>(null)
+
+  const openAlertsCount = useMemo(() => {
+    return (supportMessages || []).filter((m) => m.status === 'open').length
+  }, [supportMessages])
+
+  // Alert audio chime and browser tab title flashing for sellers and admins
+  const prevAlertsCountRef = useRef<number>(openAlertsCount)
+  const isPrivileged = user?.role === 'seller' || user?.role === 'admin'
+
+  useEffect(() => {
+    if (!isPrivileged) return
+    if (openAlertsCount > prevAlertsCountRef.current && prevAlertsCountRef.current >= 0) {
+      playSystemAlertChime()
+    }
+    prevAlertsCountRef.current = openAlertsCount
+  }, [openAlertsCount, isPrivileged])
+
+  useEffect(() => {
+    if (!isPrivileged || openAlertsCount === 0) {
+      document.title = 'GreenVest – তাজা সবজি'
+      return
+    }
+
+    let toggle = false
+    const baseTitle = 'GreenVest – তাজা সবজি'
+    const alertTitle = `🚨 (${openAlertsCount}) Alert | GreenVest`
+
+    const timer = setInterval(() => {
+      toggle = !toggle
+      document.title = toggle ? alertTitle : baseTitle
+    }, 1200)
+
+    return () => {
+      clearInterval(timer)
+      document.title = baseTitle
+    }
+  }, [openAlertsCount, isPrivileged])
 
   // Dynamic Island — compact on scroll down, expand on scroll up
   useEffect(() => {
@@ -126,11 +190,27 @@ export default function Layout() {
                         fontWeight: 700,
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '4px',
+                        gap: '6px',
                         boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
                       }}
                     >
                       💼 {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
+                      {openAlertsCount > 0 && (
+                        <span
+                          title={lang === 'bn' ? `${openAlertsCount}টি সক্রিয় সাপোর্ট টিকিট` : `${openAlertsCount} active support alerts`}
+                          style={{
+                            background: '#ef4444',
+                            color: '#ffffff',
+                            borderRadius: '10px',
+                            padding: '1px 6px',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {openAlertsCount}
+                        </span>
+                      )}
                     </NavLink>
                     <NavLink
                       to="/admin"
@@ -165,11 +245,27 @@ export default function Layout() {
                       fontWeight: 700,
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      gap: '6px',
                       boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
                     }}
                   >
                     💼 {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
+                    {openAlertsCount > 0 && (
+                      <span
+                        title={lang === 'bn' ? `${openAlertsCount}টি সক্রিয় সাপোর্ট টিকিট` : `${openAlertsCount} active support alerts`}
+                        style={{
+                          background: '#ef4444',
+                          color: '#ffffff',
+                          borderRadius: '10px',
+                          padding: '1px 6px',
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {openAlertsCount}
+                      </span>
+                    )}
                   </NavLink>
                 )}
               </>
@@ -282,15 +378,25 @@ export default function Layout() {
                 <strong>GreenVest</strong>
               </div>
               <p className="footer-tagline">{t(lang, 'footerLine')}</p>
-              <a
-                href={`https://wa.me/919932871027?text=${encodeURIComponent('Hi GreenVest, I need help with my order.')}`}
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                to="/support"
                 className="footer-wa-btn"
+                style={{
+                  background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
+                  color: '#ffffff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.65rem 1.1rem',
+                  borderRadius: '12px',
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                  fontSize: '0.9rem',
+                  boxShadow: '0 4px 12px rgba(22, 101, 52, 0.2)',
+                }}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                {lang === 'bn' ? 'WhatsApp-এ চ্যাট করুন' : 'Chat on WhatsApp'}
-              </a>
+                💬 {lang === 'bn' ? 'ইন-অ্যাপ লাইভ সাপোর্ট' : 'In-App Live Support'}
+              </Link>
             </div>
 
             {/* Quick links column */}

@@ -12,13 +12,25 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
 
-  const isStaff = user?.role === 'seller' || user?.role === 'admin' || user?.role === 'rider'
+  const isRider = user?.role === 'rider'
+  const isSellerOrAdmin = user?.role === 'seller' || user?.role === 'admin'
+  const todayIso = new Date().toISOString().split('T')[0]
 
-  // 1. Order notifications for customer OR staff
+  // 1. Order notifications for customer OR rider OR seller/admin
   const orderNotifs = orders
     .filter((o) => {
-      if (isStaff) {
-        // Staff see new / pending orders from last 12h
+      if (isRider) {
+        const isConfirmedOrOut = o.status === 'confirmed' || o.status === 'out_for_delivery'
+        if (!isConfirmedOrOut) return false
+
+        const isDueToday = o.deliveryDate === todayIso || (o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate < todayIso)
+        const isRecentConfirm = Date.now() - new Date(o.updatedAt || o.createdAt).getTime() < TWELVE_HOURS
+
+        // Rider receives notification if newly confirmed OR due today/overdue
+        return isDueToday || isRecentConfirm
+      }
+      if (isSellerOrAdmin) {
+        // Seller/admin see new / pending orders from last 12h
         return Date.now() - new Date(o.createdAt).getTime() < TWELVE_HOURS
       }
       return (
@@ -29,7 +41,24 @@ export default function NotificationBell() {
     .map((o) => {
       const shortId = formatOrderId(o.id)
       let text = ''
-      if (isStaff) {
+      if (isRider) {
+        const isDueToday = o.deliveryDate === todayIso || (o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate < todayIso)
+        const isFuture = Boolean(o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate > todayIso)
+
+        if (isDueToday) {
+          text = lang === 'bn'
+            ? `🚨 আজকের ডেলিভারি: #${shortId} (₹${o.total}) আজ ডেলিভারি করতে হবে!`
+            : `🚨 Due Today: #${shortId} (₹${o.total}) scheduled for delivery today!`
+        } else if (isFuture) {
+          text = lang === 'bn'
+            ? `📅 শিডিউল্ড বুকিং: #${shortId} (${o.deliveryDate}) কনফার্ম হয়েছে`
+            : `📅 Scheduled: #${shortId} for ${o.deliveryDate} confirmed`
+        } else {
+          text = lang === 'bn'
+            ? `🛵 নতুন ডেলিভারি: অর্ডার #${shortId} (₹${o.total}) কনফার্ম হয়েছে!`
+            : `🛵 New Delivery: Order #${shortId} (₹${o.total}) confirmed!`
+        }
+      } else if (isSellerOrAdmin) {
         text = o.status === 'pending'
           ? (lang === 'bn' ? `🔔 নতুন অর্ডার #${shortId} (₹${o.total}) এসেছে!` : `🔔 New Order #${shortId} (₹${o.total}) received!`)
           : (lang === 'bn' ? `📦 অর্ডার #${shortId} (${o.status})` : `📦 Order #${shortId} (${o.status})`)
@@ -51,7 +80,7 @@ export default function NotificationBell() {
 
       return {
         id: `order-${o.id}`,
-        link: isStaff ? '/seller/orders' : `/track?id=${shortId}`,
+        link: isRider ? '/rider' : isSellerOrAdmin ? '/seller/orders' : `/track?id=${shortId}`,
         text,
         time: new Date(o.updatedAt || o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         createdAt: new Date(o.updatedAt || o.createdAt).getTime(),
@@ -67,7 +96,7 @@ export default function NotificationBell() {
     })
     .map((n) => ({
       id: n.id,
-      link: '#',
+      link: isRider ? '/rider' : '#',
       text: `📢 ${n.title ? `${n.title}: ` : ''}${n.message}`,
       time: new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       createdAt: new Date(n.createdAt).getTime(),

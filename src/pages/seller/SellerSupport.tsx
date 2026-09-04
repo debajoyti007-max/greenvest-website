@@ -313,6 +313,11 @@ export default function SellerSupport() {
                       </span>
                     </div>
                     <div style={{ fontSize: '0.78rem', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
+                      {thread.lastMsg.message.startsWith('[SYSTEM ALERT:') && (
+                        <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: 800, marginRight: '4px' }}>
+                          🚨 {thread.lastMsg.message.includes('404') ? '404' : 'ERROR'}
+                        </span>
+                      )}
                       {thread.lastMsg.message}
                     </div>
                     {thread.userPhone && (
@@ -436,6 +441,62 @@ export default function SellerSupport() {
               {/* Messages Container */}
               <div style={{ flex: 1, padding: '14px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', background: '#f8fafc' }}>
                 {currentThread.messages.map((m) => {
+                  if (m.message.startsWith('[SYSTEM ALERT:')) {
+                    const is404 = m.message.includes('404')
+                    const pathMatch = m.message.match(/Path:\s*([^\n]+)/)
+                    const path = pathMatch ? pathMatch[1].trim() : ''
+
+                    return (
+                      <div
+                        key={m.id}
+                        style={{
+                          alignSelf: 'center',
+                          width: '96%',
+                          background: is404 ? 'linear-gradient(135deg, #fff1f2 0%, #fff7ed 100%)' : '#fef2f2',
+                          color: '#991b1b',
+                          border: is404 ? '1.5px solid #fed7aa' : '1.5px solid #fecaca',
+                          padding: '12px 14px',
+                          borderRadius: '16px',
+                          fontSize: '0.82rem',
+                          boxShadow: '0 4px 12px rgba(225, 29, 72, 0.04)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '4px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: is404 ? '#fee2e2' : '#fecdd3', color: '#be123c', padding: '3px 10px', borderRadius: '20px', fontWeight: 800, fontSize: '0.74rem' }}>
+                            {is404 ? '🔍 404 BROKEN LINK' : '⚠️ RUNTIME ERROR'}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: '#9f1239', fontWeight: 600 }}>
+                            {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        {path && (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', padding: '6px 10px', borderRadius: '10px', border: '1px solid #fce7f3', marginBottom: '6px', gap: '8px' }}>
+                            <code style={{ fontSize: '0.78rem', color: '#0f172a', wordBreak: 'break-all', fontWeight: 700 }}>
+                              {path}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(path)
+                                  showToast(lang === 'bn' ? 'লিংক কপি হয়েছে' : 'URL copied', '📋')
+                                } catch {}
+                              }}
+                              style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '3px 8px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', color: '#475569' }}
+                            >
+                              📋
+                            </button>
+                          </div>
+                        )}
+
+                        <div style={{ fontSize: '0.72rem', color: '#9f1239', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>👤 {m.userName} {m.userPhone ? `· 📞 ${m.userPhone}` : ''}</span>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   const isStaff = m.senderRole === 'admin' || m.senderRole === 'seller'
                   return (
                     <div

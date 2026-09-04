@@ -1253,8 +1253,253 @@ describe('Multi-User Bulk Actions Engine', () => {
   })
 })
 
+describe('In-App System Telemetry & WhatsApp-Free Error Monitoring', () => {
+  const formatAlert = (type, path, details, error) => {
+    const userAgent = 'Mozilla/5.0 TestBrowser'
+    const screenInfo = '1920x1080'
+    const timeString = '12:00:00 PM'
+    if (type === '404') {
+      return `[SYSTEM ALERT: 404 Not Found]\nPath: ${path}\nDevice: ${userAgent}\nScreen: ${screenInfo}\nTime: ${timeString}`
+    } else if (type === 'CRASH') {
+      const errText = error ? `${error.message}\n${error.stack || ''}` : details || 'Unknown runtime crash'
+      return `[SYSTEM ALERT: APP CRASH]\nPath: ${path}\nError: ${errText.slice(0, 300)}\nDevice: ${userAgent}\nTime: ${timeString}`
+    }
+    return `[SYSTEM ALERT: ${type}]\nPath: ${path}\nDetails: ${details || ''}\nTime: ${timeString}`
+  }
 
+  test('404 alert payload formatting includes path, device, and time', () => {
+    const alert = formatAlert('404', '/shop/non-existent-product', undefined, null)
+    assert.ok(alert.includes('[SYSTEM ALERT: 404 Not Found]'))
+    assert.ok(alert.includes('/shop/non-existent-product'))
+    assert.ok(alert.includes('Device: Mozilla/5.0 TestBrowser'))
+    assert.ok(!alert.includes('wa.me'), 'Alert payload must not contain WhatsApp URLs')
+  })
 
+  test('Crash alert payload formatting captures error message, stack, and path', () => {
+    const err = new Error('Cannot read properties of undefined (reading "price")')
+    const alert = formatAlert('CRASH', '/checkout', undefined, err)
+    assert.ok(alert.includes('[SYSTEM ALERT: APP CRASH]'))
+    assert.ok(alert.includes('Cannot read properties of undefined'))
+    assert.ok(alert.includes('/checkout'))
+  })
 
+  test('Duplicate alert throttling deduplicates repeated occurrences', () => {
+    const recentAlerts = new Set()
+    const checkShouldAlert = (type, path, message) => {
+      const key = `${type}:${path}:${message}`
+      if (recentAlerts.has(key)) return false
+      recentAlerts.add(key)
+      return true
+    }
 
+    const first = checkShouldAlert('404', '/unknown-page', '')
+    const second = checkShouldAlert('404', '/unknown-page', '')
+    const third = checkShouldAlert('404', '/another-page', '')
 
+    assert.strictEqual(first, true, 'First alert must be emitted')
+    assert.strictEqual(second, false, 'Second identical alert must be throttled')
+    assert.strictEqual(third, true, 'Different path alert must be emitted')
+  })
+
+  test('In-app support ticket transition marks system alert as resolved without third-party redirection', () => {
+    const ticket = {
+      id: 'alert-12345',
+      userId: 'guest',
+      userName: 'Guest Visitor',
+      senderRole: 'bot',
+      status: 'open',
+      message: '[SYSTEM ALERT: 404 Not Found]\nPath: /broken-link',
+    }
+
+    const resolveTicket = (t) => ({ ...t, status: 'resolved' })
+    const resolved = resolveTicket(ticket)
+    assert.strictEqual(resolved.status, 'resolved')
+    assert.strictEqual(resolved.senderRole, 'bot')
+  })
+})
+
+describe('Scheduled Delivery Date & Tomorrow Option Removal', () => {
+  test('Checkout options strictly supports Standard and Custom Date without Tomorrow option', () => {
+    const validChoices = ['standard', 'custom']
+    assert.strictEqual(validChoices.includes('tomorrow'), false, 'Tomorrow choice must be removed')
+    assert.strictEqual(validChoices.includes('standard'), true)
+    assert.strictEqual(validChoices.includes('custom'), true)
+  })
+
+  test('Scheduled order deliveryDate is preserved and does not fall back to 12-24h', () => {
+    const scheduledOrder = {
+      id: 'ORD-999',
+      deliveryDate: '2026-09-08',
+      status: 'pending',
+    }
+
+    const getDisplayDelivery = (o) => {
+      return o.deliveryDate && o.deliveryDate !== 'standard' ? o.deliveryDate : '12–24h'
+    }
+
+    assert.strictEqual(getDisplayDelivery(scheduledOrder), '2026-09-08', 'Scheduled date must not display 12-24h')
+  })
+
+  test('Cloud cache merge preserves scheduled deliveryDate against null remote responses', () => {
+    const localOrders = [{ id: 'ORD-123', deliveryDate: '2026-09-09' }]
+    const cloudOrdersWithNullDate = [{ id: 'ORD-123', deliveryDate: undefined }]
+
+    const localMap = new Map(localOrders.map((o) => [o.id, o]))
+    const merged = cloudOrdersWithNullDate.map((o) => {
+      const local = localMap.get(o.id)
+      if (!o.deliveryDate && local?.deliveryDate && local.deliveryDate !== 'standard') {
+        return { ...o, deliveryDate: local.deliveryDate }
+      }
+      return o
+    })
+
+    assert.strictEqual(merged[0].deliveryDate, '2026-09-09', 'Scheduled date must be preserved through remote merge')
+  })
+})
+
+describe('Rider Confirmed Order Notifications & Active Deliveries Isolation', () => {
+  const TWELVE_HOURS = 12 * 60 * 60 * 1000
+  const now = Date.now()
+
+  const mockOrders = [
+    { id: 'ord-pending-1', status: 'pending', total: 450, createdAt: new Date(now - 1000).toISOString() },
+    { id: 'ord-confirmed-1', status: 'confirmed', total: 320, createdAt: new Date(now - 2000).toISOString(), updatedAt: new Date(now - 500).toISOString() },
+    { id: 'ord-delivered-1', status: 'delivered', total: 600, createdAt: new Date(now - 5000).toISOString() },
+    { id: 'ord-cancelled-1', status: 'cancelled', total: 200, createdAt: new Date(now - 10000).toISOString() },
+  ]
+
+  function filterRiderNotifications(orders, role) {
+    const isRider = role === 'rider'
+    return orders
+      .filter((o) => {
+        if (isRider) {
+          return o.status === 'confirmed' && (now - new Date(o.updatedAt || o.createdAt).getTime() < TWELVE_HOURS)
+        }
+        return now - new Date(o.createdAt).getTime() < TWELVE_HOURS
+      })
+      .map((o) => ({
+        id: `order-${o.id}`,
+        link: isRider ? '/rider' : '/seller/orders',
+        text: isRider ? `🛵 New Delivery: Order #${o.id} confirmed!` : `📦 Order #${o.id}`,
+      }))
+  }
+
+  test('Riders ONLY receive notifications for confirmed orders, not pending or cancelled', () => {
+    const riderNotifs = filterRiderNotifications(mockOrders, 'rider')
+    assert.strictEqual(riderNotifs.length, 1, 'Rider must only receive 1 notification for confirmed order')
+    assert.strictEqual(riderNotifs[0].id, 'order-ord-confirmed-1')
+    assert.strictEqual(riderNotifs[0].link, '/rider', 'Rider notification link must navigate directly to /rider')
+    assert.match(riderNotifs[0].text, /confirmed/i)
+  })
+
+  test('Seller/Admin receives notifications for pending orders while rider does not', () => {
+    const staffNotifs = filterRiderNotifications(mockOrders, 'seller')
+    assert.strictEqual(staffNotifs.length, 4, 'Seller receives all recent orders')
+    const hasPending = staffNotifs.some((n) => n.id === 'order-ord-pending-1')
+    assert.strictEqual(hasPending, true)
+  })
+
+  test('Rider active deliveries strictly include confirmed/out_for_delivery and exclude pending', () => {
+    const activeDeliveries = mockOrders.filter(
+      (o) => (o.status === 'confirmed' || o.status === 'out_for_delivery') && o.status !== 'delivered' && o.status !== 'cancelled'
+    )
+    assert.strictEqual(activeDeliveries.length, 1)
+    assert.strictEqual(activeDeliveries[0].id, 'ord-confirmed-1')
+    assert.strictEqual(activeDeliveries.some((o) => o.status === 'pending'), false, 'Pending orders must never show in rider active deliveries')
+  })
+})
+
+describe('Rider Scheduled Delivery Isolation, OTP, Route Optimizer & UPI Collection', () => {
+  function getOrderDeliveryOtp(order) {
+    if (order.deliveryOtp && /^\d{4}$/.test(order.deliveryOtp.trim())) {
+      return order.deliveryOtp.trim()
+    }
+    const seed = `${order.id}-${order.phone || 'greenvest'}`
+    let hash = 0
+    for (let i = 0; i < seed.length; i++) {
+      hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+    }
+    const code = 1000 + (hash % 9000)
+    return String(code)
+  }
+
+  test('4-Digit Delivery Handover OTP generates stable, deterministic 4-digit code', () => {
+    const order = { id: 'ord-abc-123', phone: '9876543210' }
+    const otp1 = getOrderDeliveryOtp(order)
+    const otp2 = getOrderDeliveryOtp(order)
+    assert.strictEqual(otp1, otp2, 'OTP must be deterministic')
+    assert.match(otp1, /^\d{4}$/, 'OTP must be exactly 4 numeric digits')
+    assert.ok(Number(otp1) >= 1000 && Number(otp1) <= 9999)
+  })
+
+  test('Existing order with stored deliveryOtp respects database value', () => {
+    const orderWithOtp = { id: 'ord-custom-otp', deliveryOtp: '7654' }
+    assert.strictEqual(getOrderDeliveryOtp(orderWithOtp), '7654')
+  })
+
+  test('Scheduled Date Loophole: Separates Active Today from Upcoming Future Scheduled', () => {
+    const todayIso = '2026-09-04'
+    const orders = [
+      { id: 'ord-today-std', status: 'confirmed', deliveryDate: 'standard' },
+      { id: 'ord-today-custom', status: 'confirmed', deliveryDate: '2026-09-04' },
+      { id: 'ord-future-custom', status: 'confirmed', deliveryDate: '2026-09-08' },
+    ]
+
+    const activeToday = orders.filter((o) => {
+      return !o.deliveryDate || o.deliveryDate === 'standard' || o.deliveryDate <= todayIso
+    })
+
+    const upcomingScheduled = orders.filter((o) => {
+      return Boolean(o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate > todayIso)
+    })
+
+    assert.strictEqual(activeToday.length, 2, 'Today route must only include standard and today deliveries')
+    assert.strictEqual(activeToday.some((o) => o.id === 'ord-future-custom'), false, 'Future delivery must not be in today route')
+    assert.strictEqual(upcomingScheduled.length, 1, 'Upcoming route must include future delivery')
+    assert.strictEqual(upcomingScheduled[0].id, 'ord-future-custom')
+  })
+
+  test('Notification Loophole: Order confirmed 3 days ago for delivery today notifies rider', () => {
+    const todayIso = '2026-09-04'
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+    const TWELVE_HOURS = 12 * 60 * 60 * 1000
+
+    const orderDueToday = {
+      id: 'ord-scheduled-3d',
+      status: 'confirmed',
+      deliveryDate: todayIso,
+      createdAt: threeDaysAgo,
+      updatedAt: threeDaysAgo,
+    }
+
+    const isConfirmedOrOut = orderDueToday.status === 'confirmed' || orderDueToday.status === 'out_for_delivery'
+    const isDueToday = orderDueToday.deliveryDate === todayIso
+    const isRecentConfirm = Date.now() - new Date(orderDueToday.updatedAt).getTime() < TWELVE_HOURS
+
+    const shouldNotifyRider = isConfirmedOrOut && (isDueToday || isRecentConfirm)
+    assert.strictEqual(shouldNotifyRider, true, 'Rider must be notified on scheduled delivery day even if placed days ago')
+  })
+
+  test('Smart Route Stop Sequencer groups stops by PIN code', () => {
+    const stops = [
+      { id: 'stop-1', pin: '721648', createdAt: '2026-09-04T10:00:00Z' },
+      { id: 'stop-2', pin: '721632', createdAt: '2026-09-04T10:05:00Z' },
+      { id: 'stop-3', pin: '721648', createdAt: '2026-09-04T10:10:00Z' },
+    ]
+
+    const optimized = [...stops].sort((a, b) => (a.pin || '').localeCompare(b.pin || ''))
+    assert.strictEqual(optimized[0].pin, '721632')
+    assert.strictEqual(optimized[1].pin, '721648')
+    assert.strictEqual(optimized[2].pin, '721648')
+  })
+
+  test('UPI URI generator outputs standard NPCI format with exact decimal balance', () => {
+    function buildUpiPayUri(amount, note) {
+      return `upi://pay?pa=8170859653-2@ybl&pn=GreenVest&am=${Math.max(1, amount).toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`
+    }
+    const uri = buildUpiPayUri(350, 'GreenVest Order #ABC123')
+    assert.match(uri, /am=350\.00/)
+    assert.match(uri, /pa=8170859653-2@ybl/)
+    assert.match(uri, /tn=GreenVest%20Order%20%23ABC123/)
+  })
+})

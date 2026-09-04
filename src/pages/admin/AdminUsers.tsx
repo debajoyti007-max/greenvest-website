@@ -3,7 +3,6 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { formatDisplayContact, isSuperAdmin } from '../../lib/business'
-import { formatWhatsAppPhone } from '../../lib/whatsapp'
 import { showToast } from '../../components/Toast'
 import DatabaseCleaner from '../../components/admin/DatabaseCleaner'
 import type { Role } from '../../types'
@@ -86,21 +85,18 @@ export default function AdminUsers() {
         '🔑'
       )
 
-      // Optionally send WhatsApp
-      const phoneStr = u.phone || u.email
-      if (phoneStr) {
-        const waDigits = formatWhatsAppPhone(phoneStr)
-        const msg = encodeURIComponent(
-          `নমস্কার ${u.name}, GreenVest-এ আপনার লগইন পিন আপডেট করা হয়েছে: ${cleanPin}\nলগইন করুন: https://greenvest.shop/auth`
+      // Send In-App Notification & Copy PIN
+      if (u.id) {
+        await sendNotification(
+          u.id,
+          lang === 'bn' ? '🔐 অ্যাকাউন্ট পিন আপডেট' : '🔐 Account PIN Updated',
+          lang === 'bn' ? `আপনার নতুন পিন: ${cleanPin}` : `Your new login PIN is: ${cleanPin}`,
+          'GreenVest Security'
         )
-        if (
-          window.confirm(
-            lang === 'bn' ? 'হোয়াটসঅ্যাপে গ্রাহককে জানাবেন?' : 'Notify customer via WhatsApp?'
-          )
-        ) {
-          window.open(`https://wa.me/${waDigits}?text=${msg}`, '_blank', 'noopener,noreferrer')
-        }
       }
+      try {
+        await navigator.clipboard.writeText(`Customer: ${u.name} | PIN: ${cleanPin}`)
+      } catch {}
     } finally {
       setResettingPinId(null)
     }

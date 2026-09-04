@@ -65,7 +65,7 @@ export default function Privacy() {
         </h2>
         <ul style={{ fontSize: '0.88rem', lineHeight: '1.6', color: '#334155', paddingLeft: '1.2rem' }}>
           <li>{lang === 'bn' ? 'আপনার তাজা শাকসবজি ও মাছের অর্ডার নির্ভুলভাবে প্যাক ও হোম ডেলিভারি নিশ্চিত করতে।' : 'To process, prepare, pack, and fulfill doorstep delivery of fresh groceries and fish.'}</li>
-          <li>{lang === 'bn' ? 'অর্ডার স্ট্যাটাস, কনফার্মেশন ও ডেলিভারি আপডেট প্রদান করতে (ওয়েবসাইট নোটিফিকেশন ও ঐচ্ছিক WhatsApp মেসেজ)।' : 'To send order confirmations, live delivery tracking updates, and invoices.'}</li>
+          <li>{lang === 'bn' ? 'অর্ডার স্ট্যাটাস, কনফার্মেশন ও ডেলিভারি আপডেট প্রদান করতে (ওয়েবসাইট নোটিফিকেশন ও ইন-অ্যাপ লাইভ চ্যাট)।' : 'To send order confirmations, live delivery tracking updates, and in-app invoices.'}</li>
           <li>{lang === 'bn' ? 'ডিজিটাল খাতা পাসবুক পরিচালনা ও কাস্টমার সাপোর্ট সরবরাহ করতে।' : 'To maintain accurate digital Khata credit passbooks and provide responsive customer support.'}</li>
           <li>{lang === 'bn' ? 'আমরা কখনোই আপনার ব্যক্তিগত তথ্য কোনো বিজ্ঞাপনদাতা বা তৃতীয় পক্ষের কাছে বিক্রি, লিজ বা হস্তান্তর করি না।' : 'We NEVER sell, trade, or rent your personal information to third-party marketing companies.'}</li>
         </ul>
