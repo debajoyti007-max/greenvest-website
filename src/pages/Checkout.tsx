@@ -61,6 +61,7 @@ export default function Checkout() {
   const [fulfillmentMode, setFulfillmentMode] = useState<'delivery' | 'pickup'>('delivery')
   const [deliveryDateChoice, setDeliveryDateChoice] = useState<'standard' | 'custom'>('standard')
   const [customDate, setCustomDate] = useState('')
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false)
 
   const isKhataPermitted = useMemo(() => {
     if (user?.khataApproved) return true
@@ -473,101 +474,52 @@ export default function Checkout() {
         <div className="pay-box">
           <h2 style={{ fontSize: '1.05rem', margin: '0 0 0.5rem 0' }}>{lang === 'bn' ? 'পেমেন্ট ও ডেলিভারি' : 'Payment & Delivery'}</h2>
 
-          {/* 📅 Optional Delivery Date Selector (Premium Minimalist) */}
-          <div style={{ margin: '0 0 0.85rem 0', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '14px', padding: '0.75rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                📅 {lang === 'bn' ? 'ডেলিভারির দিন:' : 'Delivery Day:'}
-                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748b', background: '#e2e8f0', padding: '1px 6px', borderRadius: '6px' }}>
-                  {lang === 'bn' ? 'ঐচ্ছিক' : 'Optional'}
-                </span>
+          {/* 🚚 Delivery Schedule Trigger (Ultra-Clean 1-Row Pill) */}
+          <div
+            onClick={() => setShowDeliveryModal(true)}
+            style={{
+              margin: '0 0 0.85rem 0',
+              background: '#ffffff',
+              border: '1.5px solid #cbd5e1',
+              borderRadius: '12px',
+              padding: '0.65rem 0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <span style={{ fontSize: '1.3rem' }}>
+                {deliveryDateChoice === 'custom' ? '🗓️' : '⚡'}
               </span>
-              {deliveryDateChoice !== 'standard' && (
-                <button
-                  type="button"
-                  onClick={() => { setDeliveryDateChoice('standard'); setCustomDate('') }}
-                  style={{ fontSize: '0.72rem', color: '#166534', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
-                >
-                  ↺ {lang === 'bn' ? 'রিসেট' : 'Reset'}
-                </button>
-              )}
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
-              <button
-                type="button"
-                onClick={() => { setDeliveryDateChoice('standard'); setCustomDate('') }}
-                style={{
-                  padding: '0.65rem 0.5rem',
-                  borderRadius: '10px',
-                  border: deliveryDateChoice === 'standard' ? '2px solid #166534' : '1px solid #cbd5e1',
-                  background: deliveryDateChoice === 'standard' ? '#f0fdf4' : '#ffffff',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: deliveryDateChoice === 'standard' ? '#166534' : '#1e293b' }}>
-                  ⚡ {lang === 'bn' ? 'স্ট্যান্ডার্ড' : 'Standard Fast'}
+              <div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
+                  {lang === 'bn' ? 'ডেলিভারির সময়' : 'Delivery Schedule'}
                 </div>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
-                  12–24h
+                <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b' }}>
+                  {deliveryDateChoice === 'custom' && customDate
+                    ? `📅 ${formatSelectedDate(customDate)}`
+                    : (lang === 'bn' ? '⚡ স্ট্যান্ডার্ড ফাস্ট (১২–২৪ ঘণ্টা)' : '⚡ Standard Fast (12–24h)')}
                 </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setDeliveryDateChoice('custom')
-                  setCustomDate((curr) => curr || quickDates.defaultDate)
-                }}
-                style={{
-                  padding: '0.65rem 0.5rem',
-                  borderRadius: '10px',
-                  border: deliveryDateChoice === 'custom' ? '2px solid #166534' : '1px solid #cbd5e1',
-                  background: deliveryDateChoice === 'custom' ? '#f0fdf4' : '#ffffff',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: deliveryDateChoice === 'custom' ? '#166534' : '#1e293b' }}>
-                  🗓️ {lang === 'bn' ? 'পছন্দের তারিখ' : 'Scheduled Date'}
-                </div>
-                <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
-                  {customDate ? formatSelectedDate(customDate) : (lang === 'bn' ? 'তারিখ বেছে নিন' : 'Pick a Date')}
-                </div>
-              </button>
-            </div>
-
-            {deliveryDateChoice === 'custom' && (
-              <div style={{ marginTop: '0.6rem', padding: '0.6rem', background: '#ffffff', border: '1px solid #bbf7d0', borderRadius: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#166534' }}>
-                    {lang === 'bn' ? 'ক্যালেন্ডার থেকে দিন সিলেক্ট করুন:' : 'Select preferred date:'}
-                  </span>
-                  {customDate && (
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '1px 8px', borderRadius: '10px', border: '1px solid #86efac' }}>
-                      ✓ {formatSelectedDate(customDate)}
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="date"
-                  min={quickDates.minDate}
-                  max={quickDates.maxDate}
-                  value={customDate || quickDates.defaultDate}
-                  onChange={(e) => setCustomDate(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.45rem 0.6rem',
-                    borderRadius: '8px',
-                    border: '1.5px solid #86efac',
-                    fontSize: '0.9rem',
-                    background: '#ffffff',
-                    fontWeight: 600,
-                  }}
-                />
               </div>
-            )}
+            </div>
+
+            <div style={{
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              color: '#166534',
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              padding: '0.25rem 0.6rem',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+            }}>
+              {lang === 'bn' ? 'পরিবর্তন' : 'Change'} ❯
+            </div>
           </div>
 
           {/* 💳 Payment Mode Switch (Advance, Full, Khata) */}
@@ -1106,6 +1058,152 @@ export default function Checkout() {
           </button>
         </form>
       </div>
+
+      {/* 🚚 Pop-Up Delivery Schedule Modal */}
+      {showDeliveryModal && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowDeliveryModal(false)}>
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(420px, 94vw)',
+              borderRadius: '18px',
+              padding: '1.25rem',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <strong style={{ fontSize: '1.05rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🚚 {lang === 'bn' ? 'ডেলিভারির সময় নির্বাচন' : 'Choose Delivery Schedule'}
+              </strong>
+              <button
+                type="button"
+                onClick={() => setShowDeliveryModal(false)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: '#94a3b8' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '1rem' }}>
+              {/* Option 1: Standard Fast */}
+              <div
+                onClick={() => {
+                  setDeliveryDateChoice('standard')
+                  setCustomDate('')
+                }}
+                style={{
+                  padding: '0.85rem',
+                  borderRadius: '12px',
+                  border: deliveryDateChoice === 'standard' ? '2px solid #166534' : '1.5px solid #e2e8f0',
+                  background: deliveryDateChoice === 'standard' ? '#f0fdf4' : '#ffffff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>⚡</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: deliveryDateChoice === 'standard' ? '#166534' : '#1e293b' }}>
+                      {lang === 'bn' ? 'স্ট্যান্ডার্ড ফাস্ট ডেলিভারি' : 'Standard Fast Delivery'}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                      {lang === 'bn' ? '১২–২৪ ঘণ্টার মধ্যে তাজা ডেলিভারি' : 'Fresh delivery within 12–24 hours'}
+                    </div>
+                  </div>
+                </div>
+                <span style={{
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  border: deliveryDateChoice === 'standard' ? '6px solid #166534' : '2px solid #cbd5e1',
+                  background: '#ffffff',
+                  display: 'inline-block',
+                }} />
+              </div>
+
+              {/* Option 2: Scheduled Date */}
+              <div
+                onClick={() => {
+                  setDeliveryDateChoice('custom')
+                  setCustomDate((curr) => curr || quickDates.defaultDate)
+                }}
+                style={{
+                  padding: '0.85rem',
+                  borderRadius: '12px',
+                  border: deliveryDateChoice === 'custom' ? '2px solid #166534' : '1.5px solid #e2e8f0',
+                  background: deliveryDateChoice === 'custom' ? '#f0fdf4' : '#ffffff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.65rem',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontSize: '1.5rem' }}>🗓️</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: deliveryDateChoice === 'custom' ? '#166534' : '#1e293b' }}>
+                        {lang === 'bn' ? 'পছন্দের নির্দিষ্ট তারিখ' : 'Scheduled Date'}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                        {customDate
+                          ? (lang === 'bn' ? `নির্ধারিত: ${formatSelectedDate(customDate)}` : `Selected: ${formatSelectedDate(customDate)}`)
+                          : (lang === 'bn' ? 'ভবিষ্যতের সুবিধাজনক দিন বেছে নিন' : 'Choose a future delivery date')}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    border: deliveryDateChoice === 'custom' ? '6px solid #166534' : '2px solid #cbd5e1',
+                    background: '#ffffff',
+                    display: 'inline-block',
+                  }} />
+                </div>
+
+                {deliveryDateChoice === 'custom' && (
+                  <div style={{ marginTop: '0.25rem', paddingTop: '0.65rem', borderTop: '1px dashed #bbf7d0' }} onClick={(e) => e.stopPropagation()}>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#166534', marginBottom: '0.35rem' }}>
+                      {lang === 'bn' ? 'তারিখ বেছে নিন:' : 'Select preferred date:'}
+                    </label>
+                    <input
+                      type="date"
+                      min={quickDates.minDate}
+                      max={quickDates.maxDate}
+                      value={customDate || quickDates.defaultDate}
+                      onChange={(e) => setCustomDate(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '8px',
+                        border: '1.5px solid #86efac',
+                        fontSize: '0.92rem',
+                        background: '#ffffff',
+                        fontWeight: 600,
+                        color: '#1e293b',
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '0.7rem', fontSize: '0.95rem', fontWeight: 700 }}
+              onClick={() => setShowDeliveryModal(false)}
+            >
+              ✓ {lang === 'bn' ? 'নিশ্চিত করুন' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
