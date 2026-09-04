@@ -1012,8 +1012,36 @@ export async function fetchAddresses(userId: string): Promise<Address[]> {
 export async function saveAddress(addr: Address): Promise<void> {
   if (!supabase) return
   try {
-    await supabase.from('addresses').upsert(addr)
-  } catch {}
+    const payload: any = {
+      user_id: addr.user_id,
+      label: addr.label || 'Home',
+      address: addr.address,
+      phone: addr.phone,
+    }
+    if (addr.pin) payload.pin = addr.pin
+    if (addr.is_default !== undefined) payload.is_default = addr.is_default
+
+    if (addr.id) {
+      payload.id = addr.id
+      const { error } = await supabase.from('addresses').upsert(payload)
+      if (error) {
+        // Fallback without extended columns in case database columns aren't migrated yet
+        delete payload.pin
+        delete payload.is_default
+        await supabase.from('addresses').upsert(payload)
+      }
+    } else {
+      const { error } = await supabase.from('addresses').insert(payload)
+      if (error) {
+        // Fallback without extended columns
+        delete payload.pin
+        delete payload.is_default
+        await supabase.from('addresses').insert(payload)
+      }
+    }
+  } catch (err) {
+    console.warn('saveAddress failed:', err)
+  }
 }
 
 export async function deleteAddress(id: number): Promise<void> {
