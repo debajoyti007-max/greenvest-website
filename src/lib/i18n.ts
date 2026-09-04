@@ -35,7 +35,7 @@ const dict = {
   continueShop: { en: 'Continue shopping', bn: 'কেনাকাটা করুন' },
   remove: { en: 'Remove', bn: 'মুছুন' },
   total: { en: 'Total', bn: 'মোট' },
-  advance: { en: 'Advance (50%)', bn: 'অগ্রিম (৫০%)' },
+  advance: { en: 'Advance (10%)', bn: 'অগ্রিম (১০%)' },
   checkout: { en: 'Proceed to checkout', bn: 'চেকআউটে যান' },
   addMore: { en: 'Add more items', bn: 'আরও কিনুন' },
   grade: { en: 'Grade', bn: 'গ্রেড' },

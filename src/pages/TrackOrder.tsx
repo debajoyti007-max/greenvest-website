@@ -188,12 +188,14 @@ export default function TrackOrder() {
               {t(lang, 'total')}: <strong style={{ fontSize: '1.1rem', color: '#166534' }}>₹{matched.total}</strong>
             </span>
             <span style={{ fontSize: '0.85rem' }}>
-              {lang === 'bn' ? 'পেমেন্ট:' : 'Payment:'}{' '}
-              {matched.utrVerified ? (
-                <em className="ok"> ({t(lang, 'verified')})</em>
-              ) : (
-                <em className="wait"> ({t(lang, 'pending')})</em>
-              )}
+              {lang === 'bn' ? 'পেমেন্ট মোড:' : 'Payment Mode:'}{' '}
+              <strong style={{ color: '#166534' }}>
+                {matched.isKhataOrder
+                  ? 'Khata'
+                  : matched.paymentType === 'full'
+                  ? (lang === 'bn' ? 'সম্পূর্ণ (১০০%)' : 'Full (100%)')
+                  : (lang === 'bn' ? `১০% অগ্রিম (₹${matched.advanceAmount})` : `10% Advance (₹${matched.advanceAmount})`)}
+              </strong>
             </span>
           </footer>
 

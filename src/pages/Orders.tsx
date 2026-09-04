@@ -258,12 +258,10 @@ export default function Orders() {
                   {t(lang, 'advance')}: ₹{o.advanceAmount}
                 </span>
                 <span>
-                  {lang === 'bn' ? 'পেমেন্ট:' : 'Payment:'}{' '}
-                  {o.utrVerified ? (
-                    <em className="ok">{t(lang, 'verified')}</em>
-                  ) : (
-                    <em className="wait">{t(lang, 'pending')}</em>
-                  )}
+                  {lang === 'bn' ? 'মোড:' : 'Mode:'}{' '}
+                  <b style={{ color: '#166534' }}>
+                    {o.isKhataOrder ? 'Khata' : o.paymentType === 'full' ? 'Full' : '10% Adv'}
+                  </b>
                 </span>
               </footer>
 

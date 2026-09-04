@@ -69,10 +69,10 @@ export default function Terms() {
             {lang === 'bn' ? `হোম ডেলিভারির জন্য সর্বনিম্ন অর্ডারের পরিমাণ ₹${MIN_ORDER_AMOUNT}।` : `Minimum order value for home delivery is ₹${MIN_ORDER_AMOUNT}.`}
           </li>
           <li>
-            <strong>{lang === 'bn' ? 'অগ্রিম পেমেন্ট যাচাই:' : '50% Advance UPI Payment:'}</strong>{' '}
+            <strong>{lang === 'bn' ? '১০% অগ্রিম পেমেন্ট:' : '10% Advance UPI Payment:'}</strong>{' '}
             {lang === 'bn'
-              ? 'অনলাইন অর্ডারে ৫০% অগ্রিম UPI পেমেন্ট সম্পন্ন করতে হয়। সেলার পেমেন্ট প্রাপ্তি যাচাই করার পর অর্ডার প্যাকেজিং শুরু হয়।'
-              : 'Orders require 50% advance UPI payment. Orders are confirmed and packed upon seller payment verification.'}
+              ? 'অনলাইন অর্ডারে ১০% অগ্রিম UPI পেমেন্ট সম্পন্ন করতে হয়। সেলার অর্ডার কনফার্ম করার পর প্যাকেজিং ও ডেলিভারি শুরু হয়।'
+              : 'Orders require 10% advance UPI payment. Orders are confirmed and packed upon seller confirmation.'}
           </li>
           <li>
             <strong>{lang === 'bn' ? 'খাতা পে (Khata Pay):' : 'Khata Credit Facility:'}</strong>{' '}

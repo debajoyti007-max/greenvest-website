@@ -129,7 +129,7 @@ export default function SellerCustomers() {
       const matchesMonth = spendMode === 'all' ||
         (orderDate.getMonth() === filterMonth && orderDate.getFullYear() === filterYear)
       const orderCleanPhone = o.phone ? o.phone.replace(/\D/g, '').slice(-10) : ''
-      const spentAdd = (o.utrVerified && matchesMonth) ? o.total : 0
+      const spentAdd = matchesMonth ? o.total : 0
 
       // Match by exact User ID -> Phone -> Email
       const existing = (o.userId ? idMap.get(o.userId) : null) ||

@@ -128,7 +128,7 @@ export default function Checkout() {
   const delivery = useMemo(() => calcDeliveryFee(pin, coords, fulfillmentMode), [pin, coords, fulfillmentMode])
   const grandTotal = Math.max(0, cartTotal + delivery.fee - (couponApplied?.discount || 0))
   const [paymentMode, setPaymentMode] = useState<'advance' | 'full' | 'khata'>('advance')
-  const advance = Math.ceil(grandTotal * 0.5)
+  const advance = grandTotal > 0 ? Math.max(1, Math.ceil(grandTotal * 0.1)) : 0
   const payableAmount = paymentMode === 'khata' ? 0 : paymentMode === 'full' ? grandTotal : advance
   const balanceDue = paymentMode === 'khata' ? grandTotal : grandTotal - payableAmount
   const [dynamicQr, setDynamicQr] = useState<string>('')
@@ -319,7 +319,7 @@ export default function Checkout() {
       if (currentKhataBal + grandTotal > creditLimit) {
         setError(
           lang === 'bn'
-            ? `আপনার খাতার বকেয়া সীমা (₹${creditLimit}) অতিক্রম করছে। বর্তমান বকেয়া: ₹${currentKhataBal}। অনুগ্রহ করে বকেয়া পরিশোধ করুন বা ৫০% অগ্রিম পেমেন্ট বেছে নিন।`
+            ? `আপনার খাতার বকেয়া সীমা (₹${creditLimit}) অতিক্রম করছে। বর্তমান বকেয়া: ₹${currentKhataBal}। অনুগ্রহ করে বকেয়া পরিশোধ করুন বা ১০% অগ্রিম পেমেন্ট বেছে নিন।`
             : `Order exceeds your approved Khata credit limit of ₹${creditLimit}. Current dues: ₹${currentKhataBal}. Please clear dues or select UPI Advance.`,
         )
         submitLockRef.current = false
@@ -542,7 +542,7 @@ export default function Checkout() {
                 }}
               >
                 <div style={{ fontWeight: 700, fontSize: '0.85rem', color: paymentMode === 'advance' ? '#166534' : '#1e293b' }}>
-                  ⚡ {lang === 'bn' ? '৫০% অগ্রিম' : '50% Advance'}
+                  ⚡ {lang === 'bn' ? '১০% অগ্রিম' : '10% Advance'}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.15rem' }}>
                   {lang === 'bn' ? `এখন ₹${advance} · বাকি ক্যাশ` : `Pay ₹${advance} now`}
@@ -693,7 +693,7 @@ export default function Checkout() {
               <dt>
                 {paymentMode === 'full'
                   ? (lang === 'bn' ? '💎 সম্পূর্ণ পেমেন্ট (১০০%)' : '💎 Full Payment (100%)')
-                  : (lang === 'bn' ? '⚡ অগ্রিম পাঠান (৫০%)' : '⚡ Pay Advance (50%)')}
+                  : (lang === 'bn' ? '⚡ অগ্রিম পাঠান (১০%)' : '⚡ Pay Advance (10%)')}
               </dt>
               <dd className="accent">₹{payableAmount}</dd>
             </div>

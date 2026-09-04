@@ -569,7 +569,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       
       const isKhata = opts.paymentType === 'khata'
       const isFull = opts.paymentType === 'full'
-      const advanceAmount = isKhata ? 0 : isFull ? total : opts.advanceAmount != null ? opts.advanceAmount : Math.ceil(total * 0.5)
+      const advanceAmount = isKhata ? 0 : isFull ? total : opts.advanceAmount != null ? opts.advanceAmount : (total > 0 ? Math.max(1, Math.ceil(total * 0.1)) : 0)
 
       const now = new Date().toISOString()
       const order: Order = {

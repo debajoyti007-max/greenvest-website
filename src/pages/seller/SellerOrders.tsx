@@ -10,7 +10,7 @@ import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled', 'refunded']
 
-type Filter = 'active' | 'today_delivery' | 'scheduled' | 'to_pack' | 'utr' | 'done' | 'archived' | 'cancelled' | 'all'
+type Filter = 'active' | 'today_delivery' | 'scheduled' | 'to_pack' | 'done' | 'archived' | 'cancelled' | 'all'
 
 const suffix = (n: number) => {
   if (n % 10 === 1 && n % 100 !== 11) return 'st'
@@ -210,7 +210,7 @@ const statusIcon: Record<OrderStatus, string> = {
 
 export default function SellerOrders() {
   const { user } = useAuth()
-  const { orders, lang, updateOrderStatus, updateOrderDeliveryDate, bulkUpdateOrderStatus, verifyUtr, deleteOrder, autoCancelStaleOrders } = useStore()
+  const { orders, lang, updateOrderStatus, updateOrderDeliveryDate, bulkUpdateOrderStatus, deleteOrder, autoCancelStaleOrders } = useStore()
   const [filter, setFilter] = useState<Filter>('active')
   const [searchQuery, setSearchQuery] = useState('')
   const [customerFilter, setCustomerFilter] = useState<string | null>(null)
@@ -260,10 +260,9 @@ export default function SellerOrders() {
     }
   }
 
-  // S3: One-tap accept (verify UTR + confirm on website)
+  // S3: One-tap accept (confirm on website)
   const handleAcceptOrder = async (o: Order) => {
     try {
-      await verifyUtr(o.id, true)
       await updateOrderStatus(o.id, 'confirmed')
       showToast(lang === 'bn' ? '✅ অর্ডার কনফার্ম হয়েছে ও কাস্টমারকে নোটিফিকেশন পাঠানো হয়েছে!' : '✅ Order confirmed! Customer notified.', '🎉')
     } catch (err) {
@@ -298,24 +297,13 @@ export default function SellerOrders() {
     }
   }
 
-  const handleVerifyUtr = async (o: Order) => {
-    const next = !o.utrVerified
-    try {
-      await verifyUtr(o.id, next)
-      showToast(lang === 'bn' ? (next ? 'পেমেন্ট ভেরিফায়েড!' : 'পেমেন্ট আন-ভেরিফায়েড') : (next ? 'Payment verified!' : 'Payment unverified'), '✅')
-    } catch (err) {
-      console.error('Verify UTR error:', err)
-    }
-  }
-
   // Today's summary
   const todayOrders = useMemo(() => orders.filter(o => isToday(o.createdAt)), [orders])
   const todayStats = useMemo(() => {
     const active = todayOrders.filter(o => o.status !== 'cancelled' && o.status !== 'delivered')
     const delivered = todayOrders.filter(o => o.status === 'delivered')
     const revenue = todayOrders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + o.total, 0)
-    const pending = todayOrders.filter(o => !o.utrVerified && o.status !== 'cancelled')
-    return { total: todayOrders.length, active: active.length, delivered: delivered.length, revenue, pendingUtr: pending.length }
+    return { total: todayOrders.length, active: active.length, delivered: delivered.length, revenue }
   }, [todayOrders])
 
   // Filtered orders with search
@@ -349,8 +337,7 @@ export default function SellerOrders() {
       if (filter === 'done') return o.status === 'delivered' && !isArchivedOld(o)
       if (filter === 'cancelled') return o.status === 'cancelled'
       if (isCancelledOld(o)) return false
-      if (filter === 'utr') return !o.utrVerified && o.status !== 'cancelled'
-      if (filter === 'to_pack') return (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))
+      if (filter === 'to_pack') return o.status === 'confirmed' || o.status === 'advance_paid'
       if (filter === 'today_delivery') {
         return (o.deliveryDate === todayIso || ((!o.deliveryDate || o.deliveryDate === 'standard') && isToday(o.createdAt))) && o.status !== 'cancelled'
       }
@@ -386,8 +373,7 @@ export default function SellerOrders() {
     { id: 'active', en: 'Active ⚡', bn: 'চলমান ⚡', count: orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length },
     { id: 'today_delivery', en: 'Today 📅', bn: 'আজ 📅', count: orders.filter(o => (o.deliveryDate === todayIso || ((!o.deliveryDate || o.deliveryDate === 'standard') && isToday(o.createdAt))) && o.status !== 'cancelled').length },
     { id: 'scheduled', en: 'Scheduled 🗓️', bn: 'শিডিউল্ড 🗓️', count: orders.filter(o => o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate !== todayIso && o.status !== 'cancelled').length },
-    { id: 'to_pack', en: 'To Pack 📦', bn: 'প্যাকিং 📦', count: orders.filter(o => (o.status === 'confirmed' || (o.status === 'advance_paid' && o.utrVerified))).length },
-    { id: 'utr', en: 'Pending Pay ⏳', bn: 'পেমেন্ট বাকি ⏳', count: orders.filter(o => !o.utrVerified && o.status !== 'cancelled').length },
+    { id: 'to_pack', en: 'To Pack 📦', bn: 'প্যাকিং 📦', count: orders.filter(o => o.status === 'confirmed' || o.status === 'advance_paid').length },
     { id: 'done', en: 'Done ✅', bn: 'ডেলিভারড ✅', count: orders.filter(o => o.status === 'delivered' && !isArchivedOld(o)).length },
     { id: 'archived', en: 'Archived 📂', bn: 'আর্কাইভ 📂', count: orders.filter(o => isArchivedOld(o)).length },
     { id: 'cancelled', en: 'Trash ❌', bn: 'বাতিল ❌', count: orders.filter(o => o.status === 'cancelled').length },
@@ -720,29 +706,37 @@ export default function SellerOrders() {
                     }}>
                       {statusIcon[o.status]} {lang === 'bn' ? statusBn[o.status] : o.status.replace('_', ' ')}
                     </span>
-                    {!o.utrVerified && !o.isKhataOrder && o.status !== 'cancelled' && (
-                      <span style={{ fontSize: '0.68rem', background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '6px', fontWeight: 700 }}>
-                        {lang === 'bn' ? 'পেমেন্ট চেক ⏳' : 'Check Pay ⏳'}
-                      </span>
-                    )}
+                    <span style={{
+                      fontSize: '0.68rem', padding: '1px 6px', borderRadius: '6px', fontWeight: 700,
+                      background: o.isKhataOrder ? '#f5f3ff' : o.paymentType === 'full' ? '#ecfdf5' : '#eff6ff',
+                      color: o.isKhataOrder ? '#6d28d9' : o.paymentType === 'full' ? '#047857' : '#1d4ed8',
+                    }}>
+                      {o.isKhataOrder
+                        ? (lang === 'bn' ? '📒 খাতা পে' : '📒 Khata')
+                        : o.paymentType === 'full'
+                        ? (lang === 'bn' ? '💎 ফুল পে' : '💎 Full Pay')
+                        : (lang === 'bn' ? `💳 অগ্রিম ₹${o.advanceAmount}` : `💳 10% Adv ₹${o.advanceAmount}`)}
+                    </span>
                   </div>
                   <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{expanded ? '▲' : '▼'}</span>
                 </div>
 
-                {/* 💰 PhonePe / UPI Payment Matcher Box */}
-                {!o.isKhataOrder && !o.utrVerified && o.status !== 'cancelled' && (
-                  <div style={{ margin: '0 1rem 0.6rem', padding: '0.65rem 0.85rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                      <strong style={{ fontSize: '0.85rem', color: '#1e40af' }}>
-                        💰 {lang === 'bn' ? 'PhonePe / ব্যাংকে চেক করুন:' : 'Check in PhonePe / Bank:'}
-                      </strong>
-                      <span style={{ fontSize: '1rem', fontWeight: 800, color: '#1e40af' }}>
+                {/* 💳 Payment Info Box */}
+                {!o.isKhataOrder && o.status !== 'cancelled' && (
+                  <div style={{ margin: '0 1rem 0.6rem', padding: '0.6rem 0.85rem', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.84rem', color: '#334155' }}>
+                        💳 {o.paymentType === 'full' ? (lang === 'bn' ? '১০০% সম্পূর্ণ পেমেন্ট:' : '100% Full Payment:') : (lang === 'bn' ? '১০% অগ্রিম পেমেন্ট:' : '10% Advance Paid:')}
+                      </span>
+                      <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#166534' }}>
                         ₹{o.advanceAmount}
                       </span>
                     </div>
-                    <div style={{ fontSize: '0.82rem', color: '#1e293b' }}>
-                      👤 <b>{lang === 'bn' ? 'প্রেরকের নাম:' : 'Payer Name:'}</b> {o.payerUpiName || o.userName}
-                    </div>
+                    {o.payerUpiName && (
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>
+                        👤 {lang === 'bn' ? 'প্রেরক:' : 'Payer:'} <b>{o.payerUpiName}</b>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -832,21 +826,18 @@ export default function SellerOrders() {
                 {/* Expanded details */}
                 {expanded && (
                   <div style={{ borderTop: '1px solid var(--line, #e5e7eb)', padding: '0.75rem 1rem' }}>
-                    {/* Payment Verification Info */}
+                    {/* Payment Mode Info */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.85rem' }}>
-                        {lang === 'bn' ? 'পেমেন্ট স্ট্যাটাস:' : 'Payment Status:'}{' '}
-                        <b style={{ color: o.utrVerified ? '#16a34a' : '#d97706' }}>
-                          {o.utrVerified ? (lang === 'bn' ? '✅ যাচাইকৃত' : '✅ Verified') : (lang === 'bn' ? '⏳ যাচাই বাকি' : '⏳ Pending Check')}
+                        {lang === 'bn' ? 'পেমেন্ট মোড:' : 'Payment Mode:'}{' '}
+                        <b style={{ color: o.isKhataOrder ? '#7c3aed' : '#16a34a' }}>
+                          {o.isKhataOrder
+                            ? (lang === 'bn' ? '📒 খাতা ক্রেডিট (বাকি)' : '📒 Khata Credit (Pay Later)')
+                            : o.paymentType === 'full'
+                            ? (lang === 'bn' ? '💎 সম্পূর্ণ পেমেন্ট (১০০%)' : '💎 100% Full Payment')
+                            : (lang === 'bn' ? `⚡ ১০% অগ্রিম (₹${o.advanceAmount})` : `⚡ 10% Advance (₹${o.advanceAmount})`)}
                         </b>
                       </span>
-                      <button type="button" onClick={() => void handleVerifyUtr(o)}
-                        style={{
-                          padding: '0.25rem 0.6rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                          background: o.utrVerified ? '#dcfce7' : '#fef9c3', color: o.utrVerified ? '#166534' : '#854d0e'
-                        }}>
-                        {o.utrVerified ? '✅ Verified' : '⏳ Verify Payment'}
-                      </button>
                     </div>
                     {/* Items */}
                     <div style={{ marginBottom: '0.75rem' }}>

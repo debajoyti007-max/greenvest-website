@@ -71,10 +71,8 @@ export default function NotificationBell() {
           text = lang === 'bn' ? `❌ অর্ডার #${shortId} বাতিল করা হয়েছে।` : `❌ Order #${shortId} was cancelled.`
         } else if (o.isKhataOrder) {
           text = lang === 'bn' ? `📒 খাতা অর্ডার #${shortId} গৃহীত হয়েছে!` : `📒 Khata Order #${shortId} placed successfully!`
-        } else if (o.utrVerified) {
-          text = lang === 'bn' ? `✅ অর্ডার #${shortId}-এর পেমেন্ট যাচাই সম্পন্ন!` : `✅ Payment verified for Order #${shortId}!`
         } else {
-          text = lang === 'bn' ? `⏳ অর্ডার #${shortId} পেমেন্ট যাচাইয়ের অপেক্ষায়` : `⏳ Order #${shortId} pending verification`
+          text = lang === 'bn' ? `⚡ অর্ডার #${shortId} জমা হয়েছে! কনফার্মেশনের অপেক্ষায়।` : `⚡ Order #${shortId} placed! Waiting for seller confirmation.`
         }
       }
 

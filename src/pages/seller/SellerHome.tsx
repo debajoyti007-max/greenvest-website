@@ -63,8 +63,8 @@ export default function SellerHome() {
 
   const revenue = orders
     .filter((o) => o.status !== 'cancelled')
-    .reduce((s, o) => s + (o.utrVerified ? o.advanceAmount : 0), 0)
-  const pending = orders.filter((o) => !o.utrVerified && o.status !== 'cancelled').length
+    .reduce((s, o) => s + (o.advanceAmount || o.total || 0), 0)
+  const pending = orders.filter((o) => (o.status === 'pending' || o.status === 'advance_paid')).length
   const active = orders.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled').length
   const inStock = products.filter((p) => p.inStock && !p.archived).length
   const outStock = products.filter((p) => !p.archived && !p.inStock)
@@ -212,10 +212,10 @@ export default function SellerHome() {
             <span style={{ fontSize: '1.2rem' }}>⚠️</span>
             <div>
               <strong style={{ color: '#92400e', fontSize: '0.95rem', display: 'block' }}>
-                {lang === 'bn' ? 'আজকের কাজ বাকি:' : 'Action Required:'}
+                {lang === 'bn' ? 'অ্যাকশন প্রয়োজন:' : 'Action Required:'}
               </strong>
               <span style={{ color: '#b45309', fontSize: '0.85rem' }}>
-                {pending} {lang === 'bn' ? 'টি অর্ডারের পেমেন্ট যাচাই বাকি আছে।' : 'order(s) waiting for payment verification.'}
+                {pending} {lang === 'bn' ? 'টি নতুন অর্ডার কনফার্মেশনের জন্য অপেক্ষা করছে।' : 'new order(s) waiting for confirmation.'}
               </span>
             </div>
           </div>
@@ -332,13 +332,13 @@ export default function SellerHome() {
           }}
         >
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            ⏳ {lang === 'bn' ? 'পেমেন্ট যাচাই বাকি' : 'Payment Pending'}
+            ⏳ {lang === 'bn' ? 'কনফার্মেশন বাকি' : 'Needs Confirmation'}
           </span>
           <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#9a3412', margin: '4px 0' }}>
             {pending}
           </div>
           <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
-            {lang === 'bn' ? 'যাচাইকৃত অগ্রিম: ₹' : 'Verified: ₹'}{revenue}
+            {lang === 'bn' ? 'অগ্রিম সংগৃহীত: ₹' : 'Advance Collected: ₹'}{revenue}
           </span>
         </div>
 

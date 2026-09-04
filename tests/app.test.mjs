@@ -57,16 +57,16 @@ describe('Weight Multipliers & Pricing Calculations', () => {
 describe('Payment Mode, Advance & Balance Calculations', () => {
   function computeOrderFinancials(subtotal, deliveryFee, discount, paymentType) {
     const grandTotal = Math.max(0, subtotal + deliveryFee - discount)
-    const payableAmount = paymentType === 'full' ? grandTotal : Math.ceil(grandTotal * 0.5)
+    const payableAmount = paymentType === 'full' ? grandTotal : (grandTotal > 0 ? Math.max(1, Math.ceil(grandTotal * 0.1)) : 0)
     const balanceDue = grandTotal - payableAmount
     return { grandTotal, payableAmount, balanceDue }
   }
 
-  test('50% Advance mode calculates 50% payable and 50% balance due', () => {
+  test('10% Advance mode calculates 10% payable and 90% balance due', () => {
     const res = computeOrderFinancials(500, 30, 50, 'advance') // total = 480
     assert.equal(res.grandTotal, 480)
-    assert.equal(res.payableAmount, 240)
-    assert.equal(res.balanceDue, 240)
+    assert.equal(res.payableAmount, 48) // 480 * 0.1
+    assert.equal(res.balanceDue, 432)
   })
 
   test('100% Full Payment mode calculates full payable and 0 balance due', () => {
@@ -76,11 +76,11 @@ describe('Payment Mode, Advance & Balance Calculations', () => {
     assert.equal(res.balanceDue, 0)
   })
 
-  test('Rounds odd totals up for advance payment', () => {
+  test('Rounds odd totals up for 10% advance payment', () => {
     const res = computeOrderFinancials(301, 0, 0, 'advance')
     assert.equal(res.grandTotal, 301)
-    assert.equal(res.payableAmount, 151) // Math.ceil(301 * 0.5)
-    assert.equal(res.balanceDue, 150)
+    assert.equal(res.payableAmount, 31) // Math.ceil(301 * 0.1)
+    assert.equal(res.balanceDue, 270)
   })
 })
 
@@ -552,7 +552,7 @@ describe('Dynamic UPI QR & 1-Tap Pay Link Generator', () => {
     assert.ok(uri.includes('cu=INR'))
   })
 
-  test('Formats advance 50% amount correctly with 2 decimal places', () => {
+  test('Formats advance 10% amount correctly with 2 decimal places', () => {
     const uri = buildUpiPayUri('8170859653-2@ybl', 275.5, 'GreenVest Order')
     assert.ok(uri.includes('am=275.50'))
   })

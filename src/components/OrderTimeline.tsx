@@ -41,7 +41,6 @@ export default function OrderTimeline({
   }
 
   const active = stepIndex(order)
-  const utrDone = order.utrVerified
 
   let etaText = ''
   if (order.status !== 'delivered') {
@@ -59,13 +58,21 @@ export default function OrderTimeline({
           const done = i <= active
           const current = i === active
           const label =
-            i === 0 && !utrDone
-              ? lang === 'bn'
-                ? 'পেমেন্ট জমা (যাচাই প্রক্রিয়াধীন)'
-                : 'Payment submitted (Verifying)'
+            i === 0
+              ? order.isKhataOrder
+                ? lang === 'bn'
+                  ? 'অর্ডার জমা (খাতা)'
+                  : 'Order Placed (Khata)'
+                : order.paymentType === 'full'
+                ? lang === 'bn'
+                  ? 'ফুল পেমেন্ট জমা'
+                  : 'Full Payment'
+                : lang === 'bn'
+                ? '১০% অগ্রিম জমা'
+                : '10% Advance Paid'
               : lang === 'bn'
-                ? step.bn
-                : step.en
+              ? step.bn
+              : step.en
           return (
             <li key={step.key} className={`${done ? 'done' : ''} ${current ? 'current' : ''}`}>
               <span className="dot" aria-hidden />

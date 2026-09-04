@@ -40,9 +40,9 @@ export function printOrderInvoice(order: Order) {
     <div>Delivery: ₹${Number(order.deliveryFee)}</div>
     ${order.discountAmount ? `<div style="color:#16a34a">Discount: -₹${Number(order.discountAmount)}</div>` : ''}
     <div><strong>Total: ₹${Number(order.total)}</strong></div>
-    <div>Paid Amount: ₹${Number(order.advanceAmount)} (${order.paymentType === 'full' ? '100% Full' : '50% Advance'})</div>
+    <div>Paid Amount: ₹${Number(order.advanceAmount)} (${order.paymentType === 'full' ? '100% Full' : '10% Advance'})</div>
     <div>Balance Due: ₹${Math.max(0, Number(order.total) - Number(order.advanceAmount))}</div>
-    <div>UTR: ${escapeHtml(order.utr)} ${order.utrVerified ? '(verified)' : '(pending)'}</div>
+    <div>Payment: ${order.isKhataOrder ? 'Khata Credit' : order.paymentType === 'full' ? '100% Full (Prepaid)' : '10% Advance Paid'}</div>
   </div>
   <script>window.onload=()=>window.print()</script>
   </body></html>`
@@ -89,7 +89,7 @@ export function printThermalReceipt(order: Order) {
   <div class="b">Total: ₹${Number(order.total)}</div>
   <div>Paid: ₹${Number(order.advanceAmount)}</div>
   <div>Due: ₹${Math.max(0, Number(order.total) - Number(order.advanceAmount))}</div>
-  <div>UTR: ${escapeHtml(order.utr)}</div>
+  <div>Mode: ${order.isKhataOrder ? 'Khata' : order.paymentType === 'full' ? 'Full Pay' : '10% Advance'}</div>
   <div class="hr"></div>
   <div class="c">Thank You!</div>
   <script>window.onload=()=>window.print()</script>
