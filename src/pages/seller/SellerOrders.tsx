@@ -218,6 +218,7 @@ export default function SellerOrders() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingDateOrderId, setEditingDateOrderId] = useState<string | null>(null)
   const [purging, setPurging] = useState(false)
+  const [processingOrderId, setProcessingOrderId] = useState<string | null>(null)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const prevCount = useRef(orders.length)
 
@@ -262,21 +263,29 @@ export default function SellerOrders() {
 
   // S3: One-tap accept (confirm on website)
   const handleAcceptOrder = async (o: Order) => {
+    if (processingOrderId === o.id) return
+    setProcessingOrderId(o.id)
     try {
       await updateOrderStatus(o.id, 'confirmed')
       showToast(lang === 'bn' ? '✅ অর্ডার কনফার্ম হয়েছে ও কাস্টমারকে নোটিফিকেশন পাঠানো হয়েছে!' : '✅ Order confirmed! Customer notified.', '🎉')
     } catch (err) {
       console.error('Accept order error:', err)
       showToast(lang === 'bn' ? 'অর্ডার গ্রহণ ব্যর্থ হয়েছে' : 'Failed to accept order', '❌', 'error')
+    } finally {
+      setProcessingOrderId(null)
     }
   }
 
   const handleMarkDelivered = async (o: Order) => {
+    if (processingOrderId === o.id) return
+    setProcessingOrderId(o.id)
     try {
       await updateOrderStatus(o.id, 'delivered')
       showToast(lang === 'bn' ? '🚚 অর্ডার সফলভাবে ডেলিভারি সম্পন্ন হয়েছে!' : '🚚 Order marked as delivered!', '✅')
     } catch (err) {
       console.error('Mark delivered error:', err)
+    } finally {
+      setProcessingOrderId(null)
     }
   }
 
@@ -794,15 +803,47 @@ export default function SellerOrders() {
                 {/* Quick action buttons - available for all orders */}
                 <div style={{ padding: '0 1rem 0.6rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                   {(o.status === 'pending' || o.status === 'advance_paid') && (
-                    <button type="button" onClick={() => void handleAcceptOrder(o)}
-                      style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: '#22c55e', color: 'white' }}>
-                      ✅ {lang === 'bn' ? 'অর্ডার গ্রহণ' : 'Accept Order'}
+                    <button type="button"
+                      disabled={processingOrderId === o.id}
+                      onClick={() => void handleAcceptOrder(o)}
+                      style={{ 
+                        flex: 1, 
+                        padding: '0.5rem', 
+                        borderRadius: '8px', 
+                        border: 'none', 
+                        cursor: processingOrderId === o.id ? 'not-allowed' : 'pointer', 
+                        fontWeight: 700, 
+                        fontSize: '0.85rem', 
+                        background: processingOrderId === o.id ? '#86efac' : '#22c55e', 
+                        color: 'white',
+                        opacity: processingOrderId === o.id ? 0.7 : 1,
+                        transition: 'all 0.15s ease'
+                      }}>
+                      {processingOrderId === o.id 
+                        ? (lang === 'bn' ? '⏳ কনফার্ম হচ্ছে...' : '⏳ Confirming...')
+                        : `✅ ${lang === 'bn' ? 'অর্ডার গ্রহণ' : 'Accept Order'}`}
                     </button>
                   )}
                   {o.status === 'confirmed' && (
-                    <button type="button" onClick={() => void handleMarkDelivered(o)}
-                      style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: '#3b82f6', color: 'white' }}>
-                      🚚 {lang === 'bn' ? 'ডেলিভারড' : 'Mark Delivered'}
+                    <button type="button"
+                      disabled={processingOrderId === o.id}
+                      onClick={() => void handleMarkDelivered(o)}
+                      style={{ 
+                        flex: 1, 
+                        padding: '0.5rem', 
+                        borderRadius: '8px', 
+                        border: 'none', 
+                        cursor: processingOrderId === o.id ? 'not-allowed' : 'pointer', 
+                        fontWeight: 700, 
+                        fontSize: '0.85rem', 
+                        background: processingOrderId === o.id ? '#93c5fd' : '#3b82f6', 
+                        color: 'white',
+                        opacity: processingOrderId === o.id ? 0.7 : 1,
+                        transition: 'all 0.15s ease'
+                      }}>
+                      {processingOrderId === o.id 
+                        ? (lang === 'bn' ? '⏳ আপডেট হচ্ছে...' : '⏳ Updating...')
+                        : `🚚 ${lang === 'bn' ? 'ডেলিভারড' : 'Mark Delivered'}`}
                     </button>
                   )}
                   {o.status !== 'cancelled' && (

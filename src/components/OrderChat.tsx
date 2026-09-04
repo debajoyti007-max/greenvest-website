@@ -21,6 +21,7 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
   const [inputText, setInputText] = useState('')
   const [sending, setSending] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
+  const channelRef = useRef<any>(null)
 
   // 1. Lazy On-Demand Supabase Realtime Subscription (Zero background waste)
   useEffect(() => {
@@ -56,9 +57,11 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
         }
       })
       .subscribe()
+    channelRef.current = ch
 
     return () => {
       // Instantly disconnect when user navigates away
+      channelRef.current = null
       if (supabase) {
         void supabase.removeChannel(ch)
       }
@@ -94,7 +97,7 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
 
       // Broadcast to other participant
       if (supabase) {
-        const ch = supabase.channel(`order-chat-${orderId}`)
+        const ch = channelRef.current || supabase.channel(`order-chat-${orderId}`)
         await ch.send({
           type: 'broadcast',
           event: 'new_msg',

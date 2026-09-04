@@ -21,7 +21,6 @@ import {
   insertProduct,
   setAllProductsInStock,
   subscribeOrders,
-  subscribeProducts,
   updateOrderStatusApi,
   updateOrderDeliveryDateApi,
   deleteOrderApi,
@@ -186,6 +185,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   })
   const shiftStatus = useMemo(() => getCurrentShiftStatus(), [])
   const notifChannelRef = useRef<RealtimeChannel | null>(null)
+  const inFlightStatusRef = useRef<Set<string>>(new Set())
   const [reviews, setReviews] = useState<ProductReview[]>(() => {
     try {
       const saved = localStorage.getItem('greenvest_all_reviews')
@@ -241,7 +241,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ── Supabase Realtime: live notification broadcast ─────────────────────────
   const currentUserId = user?.id
   useEffect(() => {
-    if (!cloud || !supabase) return
+    // ⚡ Free Tier Optimization: Do NOT open websocket broadcast channels for anonymous guests.
+    // Only authenticated/logged-in users need live notification push.
+    if (!cloud || !supabase || !user) return
     const ch = supabase
       .channel('gv-broadcasts')
       .on('broadcast', { event: 'notif' }, ({ payload }: { payload: unknown }) => {
@@ -262,7 +264,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (supabase) supabase.removeChannel(ch)
       notifChannelRef.current = null
     }
-  }, [cloud, currentUserId])
+  }, [cloud, currentUserId, user])
 
   const refreshCloud = useCallback(async () => {
     try {
@@ -306,6 +308,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
+  }, [user])
+
+  const refreshOrdersOnly = useCallback(async () => {
+    if (!user) return
+    try {
+      const ords = await fetchOrders(user.role, user.id, user.email, user.phone)
+      const localOrders = getOrders()
+      const localMap = new Map(localOrders.map((o) => [o.id, o]))
+      const mergedOrds = ords.map((o) => {
+        const local = localMap.get(o.id)
+        if (!o.deliveryDate && local?.deliveryDate && local.deliveryDate !== 'standard') {
+          return { ...o, deliveryDate: local.deliveryDate }
+        }
+        return o
+      })
+      setOrders(mergedOrds)
+      saveOrders(mergedOrds)
+    } catch {}
   }, [user])
 
   const refresh = useCallback(async () => {
@@ -386,30 +406,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    let pTimer: ReturnType<typeof setTimeout> | null = null
-    const unsubProds = subscribeProducts(() => {
-      if (pTimer) clearTimeout(pTimer)
-      pTimer = setTimeout(async () => {
-        try {
-          const prods = await fetchProducts(true)
-          setProducts(prods)
-        } catch {}
-      }, 500)
-    })
-
     let oTimer: ReturnType<typeof setTimeout> | null = null
     const unsubOrds = subscribeOrders(() => {
       if (oTimer) clearTimeout(oTimer)
       oTimer = setTimeout(() => {
-        void refreshCloud()
-      }, 1200)
+        void refreshOrdersOnly()
+      }, 1000)
     })
 
     return () => {
-      unsubProds()
       unsubOrds()
     }
-  }, [cloud, user, refreshCloud])
+  }, [cloud, user, refreshOrdersOnly])
 
   // ✅ No polling needed — subscribeOrders + subscribeProducts above handle all live updates via Supabase Realtime.
 
@@ -807,46 +815,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateOrderStatus = useCallback(
     async (id: string, status: OrderStatus, rejectionReason?: string) => {
-      let prevSnapshot: Order[] = []
-      setOrders((prev) => {
-        prevSnapshot = prev
-        return prev.map((o) => (o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o))
-      })
-
-      // 🛡️ Financial Ledger Integrity: Auto-revert Khata debit if a Khata order is cancelled
-      if (status === 'cancelled') {
-        const targetOrder = prevSnapshot.find((o) => o.id === id) || orders.find((o) => o.id === id)
-        if (targetOrder?.isKhataOrder && targetOrder.status !== 'cancelled') {
-          recordKhataTransaction(
-            targetOrder.userId,
-            'payment_credit',
-            targetOrder.total,
-            `Khata Reversal: Order #${targetOrder.id.slice(-6)} Cancelled`,
-            targetOrder.id,
-            user?.name || 'System Reversal',
-          )
-          setKhataEntries(getStoredKhataEntries())
-        }
+      if (inFlightStatusRef.current.has(id)) {
+        return // Prevent concurrent double-invocations for the same order
       }
+      inFlightStatusRef.current.add(id)
+      try {
+        let prevSnapshot: Order[] = []
+        setOrders((prev) => {
+          prevSnapshot = prev
+          return prev.map((o) => (o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o))
+        })
 
-      if (cloud) {
-        try {
-          await updateOrderStatusApi(id, status, rejectionReason)
+        // 🛡️ Financial Ledger Integrity: Auto-revert Khata debit if a Khata order is cancelled
+        if (status === 'cancelled') {
+          const targetOrder = prevSnapshot.find((o) => o.id === id) || orders.find((o) => o.id === id)
+          if (targetOrder?.isKhataOrder && targetOrder.status !== 'cancelled') {
+            recordKhataTransaction(
+              targetOrder.userId,
+              'payment_credit',
+              targetOrder.total,
+              `Khata Reversal: Order #${targetOrder.id.slice(-6)} Cancelled`,
+              targetOrder.id,
+              user?.name || 'System Reversal',
+            )
+            setKhataEntries(getStoredKhataEntries())
+          }
+        }
+
+        if (cloud) {
+          try {
+            await updateOrderStatusApi(id, status, rejectionReason)
+            const next = getOrders().map((o) =>
+              o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o,
+            )
+            saveOrders(next)
+          } catch (err: any) {
+            console.error('updateOrderStatus failed, reverting UI:', err)
+            setOrders(prevSnapshot)
+            showToast(`Error updating order: ${err.message || err}`, 'error')
+            throw err
+          }
+        } else {
           const next = getOrders().map((o) =>
             o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o,
           )
           saveOrders(next)
-        } catch (err: any) {
-          console.error('updateOrderStatus failed, reverting UI:', err)
-          setOrders(prevSnapshot)
-          showToast(`Error updating order: ${err.message || err}`, 'error')
-          throw err
         }
-      } else {
-        const next = getOrders().map((o) =>
-          o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o,
-        )
-        saveOrders(next)
+      } finally {
+        inFlightStatusRef.current.delete(id)
       }
     },
     [cloud, user?.name, orders],
