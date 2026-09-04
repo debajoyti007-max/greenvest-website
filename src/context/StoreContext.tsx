@@ -258,6 +258,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
         showToast(`📢 ${n.title ? n.title + ': ' : ''}${n.message}`, '🔔')
       })
+      .on('broadcast', { event: 'deal_broadcast' }, ({ payload }: { payload: unknown }) => {
+        const d = payload as PromotionalDeal
+        if (!d || !d.id) return
+        setPromotionalDeals((prev) => {
+          if (prev.some((existing) => existing.id === d.id)) return prev
+          const next = [d, ...prev]
+          saveStoredPromotionalDeals(next)
+          return next
+        })
+      })
       .subscribe()
     notifChannelRef.current = ch
     return () => {
@@ -929,6 +939,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })
       if (cloud) {
         await savePromotionalDealApi(newDeal)
+        if (notifChannelRef.current) {
+          try {
+            await notifChannelRef.current.send({
+              type: 'broadcast',
+              event: 'deal_broadcast',
+              payload: newDeal,
+            })
+          } catch (e) {
+            console.warn('Realtime deal broadcast failed:', e)
+          }
+        }
       }
     },
     [cloud],

@@ -17,8 +17,32 @@ export default function DealsBanner({ lang }: { lang: Lang }) {
     return () => clearInterval(timer)
   }, [])
 
-  // Auto-smart filter: only active, non-expired deals
-  const activeDeals = filterActivePromotionalDeals(promotionalDeals)
+  // Customer ignore list persisted in localStorage
+  const [ignoredDealIds, setIgnoredDealIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('gv_dismissed_deals')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })
+
+  const handleIgnoreDeal = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setIgnoredDealIds((prev) => {
+      const next = [...new Set([...prev, id])]
+      try {
+        localStorage.setItem('gv_dismissed_deals', JSON.stringify(next))
+      } catch {}
+      return next
+    })
+    showToast(lang === 'bn' ? 'অফারটি লুকানো হয়েছে' : 'Offer dismissed', '✕')
+  }
+
+  // Auto-smart filter: only active, non-expired, and non-ignored deals
+  const activeDeals = filterActivePromotionalDeals(promotionalDeals).filter(
+    (d) => !ignoredDealIds.includes(d.id),
+  )
   const [activeIdx, setActiveIdx] = useState(0)
 
   // Clamp activeIdx if activeDeals length changes
@@ -107,6 +131,33 @@ export default function DealsBanner({ lang }: { lang: Lang }) {
                 ))}
               </span>
             )}
+
+            {/* 🚫 Ignore Option requested by user */}
+            <button
+              type="button"
+              onClick={(e) => handleIgnoreDeal(currentDeal.id, e)}
+              title={lang === 'bn' ? 'অফারটি ইগনোর করুন' : 'Ignore this offer'}
+              aria-label="Ignore offer"
+              style={{
+                marginLeft: 'auto',
+                background: 'rgba(0, 0, 0, 0.25)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                color: '#ffffff',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(0, 0, 0, 0.45)')}
+              onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(0, 0, 0, 0.25)')}
+            >
+              ✕ {lang === 'bn' ? 'ইগনোর' : 'Ignore'}
+            </button>
           </div>
 
           <h3 className="deals-title">{titleText}</h3>
