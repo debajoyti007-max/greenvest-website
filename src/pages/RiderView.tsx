@@ -166,20 +166,18 @@ export default function RiderView() {
     setOtpError('')
   }
 
-  // Verify OTP and complete delivery
-  const handleVerifyOtpAndDeliver = async (overrideWithoutOtp = false) => {
+  // Verify OTP and complete delivery (Mandatory OTP verification)
+  const handleVerifyOtpAndDeliver = async () => {
     if (!otpModalOrder) return
     const expectedOtp = getOrderDeliveryOtp(otpModalOrder)
 
-    if (!overrideWithoutOtp) {
-      if (!inputOtp.trim() || inputOtp.trim() !== expectedOtp) {
-        setOtpError(
-          lang === 'bn'
-            ? '❌ ভুল ওটিপি। কাস্টমারের ট্র্যাকিং স্ক্রিনে প্রদর্শিত ৪ সংখ্যার ওটিপি দিন।'
-            : '❌ Incorrect OTP. Ask the customer for the 4-digit code on their order screen.',
-        )
-        return
-      }
+    if (!inputOtp.trim() || inputOtp.trim() !== expectedOtp) {
+      setOtpError(
+        lang === 'bn'
+          ? '❌ ভুল ওটিপি। কাস্টমারের ট্র্যাকিং স্ক্রিনে প্রদর্শিত ৪ সংখ্যার ওটিপি দিন।'
+          : '❌ Incorrect OTP. Ask the customer for the 4-digit code on their order screen.',
+      )
+      return
     }
 
     try {
@@ -557,29 +555,10 @@ export default function RiderView() {
               className="btn btn-primary"
               style={{ width: '100%', padding: '0.75rem', fontSize: '0.95rem', fontWeight: 700 }}
               disabled={completingId === otpModalOrder.id || inputOtp.length !== 4}
-              onClick={() => void handleVerifyOtpAndDeliver(false)}
+              onClick={() => void handleVerifyOtpAndDeliver()}
             >
               {completingId === otpModalOrder.id ? '⏳...' : `✓ ${lang === 'bn' ? 'যাচাই ও ডেলিভারি সম্পন্ন' : 'Verify & Mark Delivered'}`}
             </button>
-
-            {/* Emergency seller/admin bypass */}
-            {(user.role === 'seller' || user.role === 'admin') && (
-              <button
-                type="button"
-                onClick={() => void handleVerifyOtpAndDeliver(true)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#94a3b8',
-                  fontSize: '0.75rem',
-                  textDecoration: 'underline',
-                  marginTop: '0.75rem',
-                  cursor: 'pointer',
-                }}
-              >
-                {lang === 'bn' ? '⚠️ সেলার ওভাররাইড (বিনা ওটিপিতে সম্পন্ন)' : '⚠️ Seller Override (Complete without OTP)'}
-              </button>
-            )}
           </div>
         </div>
       )}
