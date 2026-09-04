@@ -832,6 +832,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (cloud) {
         try {
           await updateOrderStatusApi(id, status, rejectionReason)
+          const next = getOrders().map((o) =>
+            o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o,
+          )
+          saveOrders(next)
         } catch (err: any) {
           console.error('updateOrderStatus failed, reverting UI:', err)
           setOrders(prevSnapshot)

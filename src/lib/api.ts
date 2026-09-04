@@ -874,6 +874,22 @@ export async function createOrder(order: Order): Promise<Order> {
 
 export async function updateOrderStatusApi(id: string, status: OrderStatus, rejectionReason?: string): Promise<void> {
   const client = requireClient()
+
+  // 1. Try atomic SECURITY DEFINER RPC first (guarantees persistence even if RLS/triggers exist)
+  try {
+    const { data: rpcData, error: rpcErr } = await client.rpc('update_order_status_admin', {
+      p_order_id: id,
+      p_status: status,
+      p_reason: rejectionReason || null,
+    })
+    if (!rpcErr && rpcData && (rpcData as any).success) {
+      return
+    }
+  } catch (rpcEx) {
+    console.debug('update_order_status_admin RPC fallback to direct update:', rpcEx)
+  }
+
+  // 2. Fallback to direct table update
   const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
   if (rejectionReason !== undefined) patch.rejection_reason = rejectionReason
   let { error } = await client.from('orders').update(patch).eq('id', id)
