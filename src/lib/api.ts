@@ -981,7 +981,10 @@ export async function verifyUtrApi(id: string, verified: boolean): Promise<void>
 
 export async function deleteOrderApi(id: string): Promise<void> {
   const client = requireClient()
-  // Delete order_items first to avoid foreign key violation
+  // Delete related records first to avoid foreign key violations
+  try {
+    await client.from('order_messages').delete().eq('order_id', id)
+  } catch {}
   await client.from('order_items').delete().eq('order_id', id)
   const { error } = await client.from('orders').delete().eq('id', id)
   if (error) {
@@ -1231,7 +1234,15 @@ export async function createCoupon(coupon: {
 export async function saveDailyReport(report: DailyReport): Promise<void> {
   if (!supabase) return
   try {
-    await supabase.from('daily_reports').upsert(report, { onConflict: 'report_date' })
+    const { error } = await supabase.from('daily_reports').upsert(report, { onConflict: 'report_date' })
+    if (error) {
+      // Fallback for minimal legacy daily_reports schema
+      await supabase.from('daily_reports').upsert({
+        report_date: report.report_date,
+        total_orders: report.total_orders,
+        revenue: report.total_revenue,
+      }, { onConflict: 'report_date' })
+    }
   } catch {}
 }
 
@@ -1239,8 +1250,17 @@ export async function fetchDailyReport(date: string): Promise<DailyReport | null
   if (!supabase) return null
   try {
     const { data, error } = await supabase.from('daily_reports').select('*').eq('report_date', date).maybeSingle()
-    if (error) return null
-    return data as DailyReport
+    if (error || !data) return null
+    return {
+      id: data.id,
+      report_date: data.report_date,
+      total_orders: Number(data.total_orders || 0),
+      total_revenue: Number(data.total_revenue ?? data.revenue ?? 0),
+      total_cancelled: Number(data.total_cancelled || 0),
+      mandi_cost: Number(data.mandi_cost || 0),
+      delivery_cost: Number(data.delivery_cost || 0),
+      profit: Number(data.profit || 0),
+    }
   } catch { return null }
 }
 
@@ -1249,7 +1269,12 @@ export async function fetchDeliveryZones(): Promise<DeliveryZone[]> {
   try {
     const { data, error } = await supabase.from('delivery_zones').select('*').eq('active', true)
     if (error) return []
-    return data || []
+    return (data || []).map((row: any) => ({
+      pin_prefix: String(row.pin_prefix),
+      zone: String(row.zone || row.name || 'standard'),
+      fee: Number(row.fee || 40),
+      eta_hours: String(row.eta_hours || '12-24 hours'),
+    }))
   } catch { return [] }
 }
 

@@ -151,15 +151,25 @@ export async function saveKhataEntryApi(entry: KhataEntry): Promise<void> {
 
   try {
     const dbType = entry.type === 'adjustment' ? 'adjustment_credit' : entry.type
-    await supabase.from('khata_ledger').insert({
+    const payload: Record<string, unknown> = {
       user_id: entry.userId,
       type: dbType,
       amount: entry.amount,
       notes: entry.notes || null,
+      description: entry.notes || null,
+      balance_after: entry.balanceAfter || null,
       order_id: entry.orderId || null,
       payment_method: 'upi',
       created_at: entry.createdAt,
-    })
+    }
+
+    const { error } = await supabase.from('khata_ledger').insert(payload)
+    if (error) {
+      // Fallback for minimal legacy schema
+      delete payload.description
+      delete payload.balance_after
+      await supabase.from('khata_ledger').insert(payload)
+    }
   } catch (err) {
     console.warn('saveKhataEntryApi cloud failed:', err)
   }
