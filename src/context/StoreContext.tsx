@@ -17,6 +17,7 @@ import {
   deleteProductApi,
   fetchOrders,
   fetchProducts,
+  invalidateProductCache,
   insertProduct,
   setAllProductsInStock,
   subscribeOrders,
@@ -124,6 +125,7 @@ interface StoreContextValue {
   verifyUtr: (id: string, verified: boolean) => Promise<void>
   deleteOrder: (id: string) => Promise<void>
   refresh: () => Promise<void>
+  safeCloudSync: () => Promise<void>
   fetchAddresses: (userId: string) => Promise<Address[]>
   saveAddress: (addr: Address) => Promise<void>
   deleteAddress: (id: number) => Promise<void>
@@ -324,6 +326,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     document.body.classList.toggle('lang-bn', l === 'bn')
     setLoading(false)
   }, [cloud, refreshCloud, refreshLocal, user?.id])
+
+  const safeCloudSync = useCallback(async () => {
+    invalidateProductCache()
+    if (cloud) {
+      await refreshCloud()
+    } else {
+      refreshLocal()
+    }
+  }, [cloud, refreshCloud, refreshLocal])
 
   useEffect(() => {
     void refresh()
@@ -1375,6 +1386,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       verifyUtr,
       deleteOrder,
       refresh,
+      safeCloudSync,
       fetchAddresses,
       saveAddress,
       deleteAddress,
@@ -1444,6 +1456,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       verifyUtr,
       deleteOrder,
       refresh,
+      safeCloudSync,
       fetchAddresses,
       saveAddress,
       deleteAddress,

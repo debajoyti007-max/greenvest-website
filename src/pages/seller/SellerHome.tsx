@@ -12,10 +12,28 @@ function dayKey(d: Date) {
 
 export default function SellerHome() {
   const { user } = useAuth()
-  const { products, orders, lang, fetchDailyReport, saveDailyReport } = useStore()
+  const { products, orders, lang, fetchDailyReport, saveDailyReport, safeCloudSync } = useStore()
   const [sheet, setSheet] = useState<string | null>(null)
   const [mandiCost, setMandiCost] = useState<number | ''>('')
   const [showCouponModal, setShowCouponModal] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  const handleSafeSync = async () => {
+    setIsSyncing(true)
+    try {
+      await safeCloudSync()
+      showToast(
+        lang === 'bn'
+          ? '✅ ক্লাউড সিঙ্ক সম্পন্ন! তাজা অর্ডার ও স্টক লোড হয়েছে।'
+          : '✅ Cloud synced! Latest orders & stock updated.',
+        '🔄',
+      )
+    } catch {
+      showToast(lang === 'bn' ? 'সিঙ্ক ব্যর্থ হয়েছে' : 'Sync failed', '⚠️', 'error')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -126,25 +144,52 @@ export default function SellerHome() {
               : 'Daily workflow: morning stock → mandi sheet → verify payment → deliver & khata.'}
           </p>
         </div>
-        <Link
-          to="/"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: '#ffffff',
-            border: '1px solid #cbd5e1',
-            padding: '6px 14px',
-            borderRadius: '10px',
-            fontSize: '0.85rem',
-            fontWeight: 700,
-            color: '#334155',
-            textDecoration: 'none',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          }}
-        >
-          🏪 {lang === 'bn' ? 'দোকানের সম্মুখভাগ' : 'View Storefront'}
-        </Link>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={handleSafeSync}
+            disabled={isSyncing}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: isSyncing ? '#f8fafc' : 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
+              border: '1px solid #86efac',
+              padding: '6px 12px',
+              borderRadius: '10px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              color: '#166534',
+              cursor: isSyncing ? 'not-allowed' : 'pointer',
+              boxShadow: '0 1px 3px rgba(22, 101, 52, 0.08)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <span style={{ display: 'inline-block', transform: isSyncing ? 'rotate(360deg)' : 'none', transition: 'transform 0.6s linear' }}>
+              🔄
+            </span>
+            {isSyncing ? (lang === 'bn' ? 'সিঙ্ক হচ্ছে...' : 'Syncing...') : (lang === 'bn' ? 'ক্লাউড সিঙ্ক' : 'Cloud Sync')}
+          </button>
+          <Link
+            to="/"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: '#ffffff',
+              border: '1px solid #cbd5e1',
+              padding: '6px 14px',
+              borderRadius: '10px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              color: '#334155',
+              textDecoration: 'none',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            }}
+          >
+            🏪 {lang === 'bn' ? 'দোকানের সম্মুখভাগ' : 'View Storefront'}
+          </Link>
+        </div>
       </div>
 
       {/* Action required alerts */}

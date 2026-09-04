@@ -11,10 +11,11 @@ import type { Address } from '../types'
 
 export default function Profile() {
   const { user, logout, updateUserProfile, updatePassword } = useAuth()
-  const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang, getUserKhataBalance, khataEntries } = useStore()
+  const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang, getUserKhataBalance, khataEntries, safeCloudSync } = useStore()
 
   const [addresses, setAddresses] = useState<Address[]>([])
   const [loadingAddrs, setLoadingAddrs] = useState(true)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   const [editingName, setEditingName] = useState(false)
   const [editingPhone, setEditingPhone] = useState(false)
@@ -123,6 +124,23 @@ export default function Profile() {
     if (user) {
       const updated = await fetchAddresses(user.id)
       setAddresses(updated)
+    }
+  }
+
+  const handleSafeSync = async () => {
+    setIsSyncing(true)
+    try {
+      await safeCloudSync()
+      showToast(
+        lang === 'bn'
+          ? '✅ ক্লাউড সিঙ্ক সম্পন্ন! তাজা দাম ও অর্ডার আপডেট হয়েছে।'
+          : '✅ Synced with GreenVest Cloud! Latest data updated.',
+        '🔄',
+      )
+    } catch {
+      showToast(lang === 'bn' ? 'সিঙ্ক করতে সমস্যা হয়েছে' : 'Sync failed', '⚠️', 'error')
+    } finally {
+      setIsSyncing(false)
     }
   }
 
@@ -509,6 +527,45 @@ export default function Profile() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Small & Premium Cloud Sync Button */}
+        <div style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span>☁️</span> {lang === 'bn' ? 'ক্লাউড সিঙ্ক ও ক্যাশ রিফ্রেশ' : 'Cloud Sync & Fresh Data'}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+              {lang === 'bn' ? 'সরাসরি ক্লাউড থেকে তাজা দাম ও অর্ডার রিফ্রেশ করুন' : 'Fetch live prices & orders without logging out'}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSafeSync}
+            disabled={isSyncing}
+            style={{
+              padding: '0.4rem 0.85rem',
+              background: isSyncing ? '#f1f5f9' : 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+              border: '1px solid #86efac',
+              borderRadius: '999px',
+              cursor: isSyncing ? 'not-allowed' : 'pointer',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              color: '#166534',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              boxShadow: '0 1px 3px rgba(22, 101, 52, 0.08)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <span style={{ display: 'inline-block', transform: isSyncing ? 'rotate(360deg)' : 'none', transition: 'transform 0.6s linear' }}>
+              🔄
+            </span>
+            {isSyncing
+              ? (lang === 'bn' ? 'সিঙ্ক হচ্ছে...' : 'Syncing...')
+              : (lang === 'bn' ? 'সিঙ্ক করুন' : 'Sync Now')}
+          </button>
         </div>
 
         <div style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
