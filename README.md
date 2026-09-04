@@ -1,102 +1,72 @@
-# GreenVest – Fresh groceries (production)
+# 🥬 GreenVest – Fresh Farm Produce & Fish (Production)
 
-Customer shop + seller tools + admin users.  
-**Manual UPI / UTR** · **Min order ₹500** · **Delivery 12–24 hours**  
-Live data via **Supabase**. Public site on **GitHub Pages**.
+Hyperlocal Mandi-Fresh Daily Vegetables & Fish E-Commerce Platform.  
+**10% Advance UPI** · **Min order ₹500** · **Delivery 12–24 hours** · **Digital Khata Ledger**  
+Live database via **Supabase**. Hosted on **GitHub Pages** with custom domain.
 
-**Live URL:** https://debajoyti007-max.github.io/greenvest-website/
+**Live URL:** [https://greenvest.shop](https://greenvest.shop/)
 
 ---
 
-## How you log in (roles)
+## 👥 How to Log In & Roles
 
-There are **no demo accounts**. Everyone signs up / logs in with a real email at **/auth**.
+Users authenticate with a **10-digit Mobile Number** or **Email** + **4-digit PIN** at **/auth**.
 
-| Role | How you get it | After login |
-|------|----------------|-------------|
-| **Customer** | Sign up on the website | Shop, cart, my orders |
-| **Seller** | Admin clicks **Make seller** (or SQL below) | **/seller** — products, stock, orders, UTR |
-| **Admin** | One-time SQL in Supabase (below) | **/admin** — users; also can open **/seller** |
+| Role | Access | Purpose |
+| :--- | :--- | :--- |
+| **Customer** | Sign up on website | Browse catalog, weekly staples basket, live order tracking, Khata passbook |
+| **Rider** | Assigned by Admin | **/rider** — Delivery manifest, route optimizer, 4-digit OTP handover, UPI balance collection |
+| **Seller** | Assigned by Admin | **/seller** — Mandi procurement, inventory, Grade A/B/C pricing, UTR verification, deals |
+| **Admin** | Supabase SQL / Master | **/admin** — User roles, customer blocklist, shadow cloaking, system telemetry cleaner |
 
-### Make yourself Admin (first time)
-
-1. Open the live site → **Login** → **Sign up** with your real email + strong password.  
-2. Supabase → **SQL Editor** → run (use your email):
+### Make Yourself Admin (First Time)
+1. Open [https://greenvest.shop/auth](https://greenvest.shop/auth) and sign up with your email or phone + 4-digit PIN.
+2. In Supabase → **SQL Editor**, run:
 
 ```sql
-update public.profiles set role = 'admin' where email = 'YOUR_REAL_EMAIL@gmail.com';
+update public.profiles set role = 'admin' where email = 'YOUR_EMAIL@gmail.com';
 ```
 
-3. Log out and log in again → you will see **Admin** (and **Seller**) in the menu.  
-4. Delete any old `*@demo.com` users in Supabase → **Authentication → Users**.
-
-### Make a Seller
-
-**Option A (in the app):** Login as admin → **Admin** → find the user’s email → **Make seller**.  
-**Option B (SQL):**
-
-```sql
-update public.profiles set role = 'seller' where email = 'SELLER_EMAIL@gmail.com';
-```
-
-Seller then logs in → opens **Seller** to manage the shop.
-
-### What the seller manages day-to-day
-
-- **Dashboard** — today’s / yesterday’s sales, low-stock alerts, morning reset  
-- **Products** — add/edit prices, photos, season, stock qty, in/out/archived  
-- **Orders** — verify UTR, update status, WhatsApp customer  
-- **Customers** — list + WhatsApp / call  
-
-Admin does **not** need a revenue screen — business ops stay on the seller side.
+3. Log out and log back in → **Admin** and **Seller** tools will appear in the navigation bar.
 
 ---
 
-## Production checklist (owner)
+## 🛠️ Production Operations
 
-1. **Supabase keys** in GitHub → Settings → Secrets → Actions  
-   - `VITE_SUPABASE_URL`  
-   - `VITE_SUPABASE_ANON_KEY` (anon only — never `service_role`)
-2. If you ever pasted a **service_role** key in chat, **rotate it** in Supabase → Project Settings → API.
-3. **Run SQL once** (fixes season/stock/slot + photo upload): open Supabase → SQL Editor → paste `supabase/migrate-storage-and-columns.sql` → Run.
-4. **Gmail SMTP (Free — fixes signup email):** Supabase → Authentication → SMTP Settings  
-   - Host `smtp.gmail.com` · Port `587`  
-   - User = your Gmail · Password = Gmail **App Password** (not normal password)  
-   - Sender = same Gmail · name `GreenVest`  
-5. Keep **Confirm email ON** after SMTP works. Add redirect URL:  
-   `https://debajoyti007-max.github.io/greenvest-website/auth/reset`  
-   (and later `https://greenvest.shop/auth/reset`)
-6. Push to `master` → GitHub Actions deploys Pages automatically.
-
-### Optional env overrides
-See `.env.example` for `VITE_SUPPORT_PHONE`, `VITE_SUPPORT_WHATSAPP`, `VITE_UPI_ID`, etc.
+### Core Workflows:
+- **Seller Procurement**: Daily mandi sheet aggregates exact net kg with Grade A/B/C breakdown.
+- **Order Confirmation**: 1-tap accept with double-tap lock and in-flight idempotency guards.
+- **Rider Handover**: Customer provides their unique 4-digit delivery handover OTP upon receiving produce.
+- **Promotional Deals & Announcements**: Realtime WebSocket broadcast over `gv-broadcasts` with 1-tap `[ 🎟️ CODE ]` claim and customer `[ ✕ Ignore ]` permanent dismissal.
+- **Khata Credit Ledger**: 1-tap in-app statement reminders and debt settlements.
 
 ---
 
-## Local development
+## 🚀 Local Development & Testing
+
 ```bash
-cd C:\Users\Debajoyti\Documents\greenvest-website
+# 1. Install dependencies
 npm install
-copy .env.example .env
-# fill VITE_SUPABASE_* then:
+
+# 2. Configure environment
+cp .env.example .env
+# Fill VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+
+# 3. Start development server
 npm run dev
+
+# 4. Run test suite (99 tests across 31 suites)
+npm test
+
+# 5. Build and sync for production (/docs + root)
+npm run build
 ```
-Open http://localhost:3000  
-
-Without Supabase keys, **dev only** can use localStorage (no demo logins). Production builds **require** Supabase.
-
-### First-time Supabase setup
-1. Create project at [supabase.com](https://supabase.com)  
-2. SQL Editor → run `supabase/schema.sql`  
-3. Sign up on the site → set your role with the SQL above  
-4. Sync catalog (optional): `node scripts/sync-products.mjs`
 
 ---
 
-## Features
-- Bangla / English UI  
-- Shared products & orders (cloud)  
-- UPI QR + manual UTR, min ₹500, delivery 12–24h  
-- WhatsApp seller notify on order  
-- Seller stock / photo / season / delivery slot / UTR verify  
-- Admin make/revoke sellers (no demo reset)
+## 🗄️ Database Setup & Migrations
+All database tables, cascade deletes, RLS policies, and triggers are consolidated in:
+`supabase/SECURITY_PROTECTIONS_AND_10PERCENT_ADVANCE.sql`
+
+Run this script once in your Supabase SQL Editor to set up the complete schema.
+
