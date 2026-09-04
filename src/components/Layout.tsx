@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import CartBar from './CartBar'
 import NetworkStatus from './NetworkStatus'
@@ -13,8 +13,10 @@ import MandiTicker from './MandiTicker'
 import NotificationBell from './NotificationBell'
 import CustomerNotificationBanner from './CustomerNotificationBanner'
 import PwaInstallPrompt from './PwaInstallPrompt'
-import SupportChatWidget from './SupportChatWidget'
 import BottomNav from './BottomNav'
+
+// ⚡ Performance Optimization: Lazy-load support chat widget so initial layout render is instant
+const SupportChatWidget = lazy(() => import('./SupportChatWidget'))
 
 function playSystemAlertChime() {
   try {
@@ -365,7 +367,9 @@ export default function Layout() {
       </main>
 
       <CartBar />
-      <SupportChatWidget />
+      <Suspense fallback={null}>
+        <SupportChatWidget />
+      </Suspense>
       <Toast />
 
       <footer className="site-footer">

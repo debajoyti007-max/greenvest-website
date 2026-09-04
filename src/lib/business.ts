@@ -10,7 +10,7 @@ export const MIN_ORDER_AMOUNT = 500
 export const MAX_VEGETABLE_QTY_KG = 10
 export const DELIVERY_WINDOW = '12–24 hours'
 export const DELIVERY_WINDOW_BN = '১২–২৪ ঘণ্টা'
-export const ADVANCE_PERCENT = 50
+export const ADVANCE_PERCENT = 10
 /** Alert seller when stockQty is at or below this (and item is in stock). */
 export const LOW_STOCK_QTY = 5
 

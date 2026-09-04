@@ -1,5 +1,4 @@
 import type { KhataEntry } from '../types'
-import { UPI_ID, UPI_BANK } from './business'
 
 const KHATA_STORAGE_KEY = 'gv_khata_ledger_v1'
 
@@ -77,40 +76,6 @@ export function recordKhataTransaction(
   saveKhataEntries(updatedEntries)
 
   return { entry, newBalance }
-}
-
-/** Generates a formatted payment reminder message with UPI details */
-export function buildKhataReminderWhatsAppUrl(
-  customer: { name: string; phone: string; balance: number },
-  lang: 'bn' | 'en' = 'bn',
-): string {
-  const upiLink = `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=GreenVest&am=${customer.balance}&cu=INR`
-  
-  const textBn = `নমস্কার ${customer.name},
-গ্রীনভেস্ট স্টোর (GreenVest) থেকে আপনার ডিজিটাল খাতা বিবরণ:
-
-📋 বর্তমান বকেয়া: ₹${customer.balance}
-🏦 UPI ID: ${UPI_ID} (${UPI_BANK})
-
-বকেয়া পরিশোধ লিংক:
-${upiLink}
-
-ধন্যবাদ,
-গ্রীনভেস্ট স্টোর`
-
-  const textEn = `Hello ${customer.name},
-Here is your digital Khata statement from GreenVest Store:
-
-📋 Outstanding Balance: ₹${customer.balance}
-🏦 UPI ID: ${UPI_ID} (${UPI_BANK})
-
-Payment link:
-${upiLink}
-
-Thank you,
-GreenVest Store`
-
-  return lang === 'bn' ? textBn : textEn
 }
 
 /** Fetches Khata entries from Supabase with fallback to local storage */

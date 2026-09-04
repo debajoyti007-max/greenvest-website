@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, lazy, Suspense } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
-import WeeklyBasketModal from '../components/WeeklyBasketModal'
-import MyUsualBasketModal from '../components/MyUsualBasketModal'
 import CategoryBar from '../components/CategoryBar'
-import ProductReviewsModal from '../components/ProductReviewsModal'
 import DealsBanner from '../components/DealsBanner'
 import ShiftBadge from '../components/ShiftBadge'
-import PincodeCheckerModal from '../components/PincodeCheckerModal'
 import { showToast } from '../components/Toast'
+
+// ⚡ Performance Optimization: Lazy-load heavy dialog modals so initial Shop bundle is lightweight
+const WeeklyBasketModal = lazy(() => import('../components/WeeklyBasketModal'))
+const MyUsualBasketModal = lazy(() => import('../components/MyUsualBasketModal'))
+const ProductReviewsModal = lazy(() => import('../components/ProductReviewsModal'))
+const PincodeCheckerModal = lazy(() => import('../components/PincodeCheckerModal'))
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, computeMarketMrp, SERVICEABLE_PINCODES } from '../lib/business'
@@ -952,31 +954,45 @@ export default function Shop() {
       </div>
 
       {/* 🧺 My Usual Basket Modal (Glass-Mono Popup) */}
-      <MyUsualBasketModal
-        isOpen={showUsualBasketModal}
-        onClose={() => setShowUsualBasketModal(false)}
-        products={products}
-        lang={lang}
-        onAddBulk={handleAddBulkStaples}
-      />
+      {showUsualBasketModal && (
+        <Suspense fallback={null}>
+          <MyUsualBasketModal
+            isOpen={showUsualBasketModal}
+            onClose={() => setShowUsualBasketModal(false)}
+            products={products}
+            lang={lang}
+            onAddBulk={handleAddBulkStaples}
+          />
+        </Suspense>
+      )}
 
       {/* 📦 Weekly Family Basket Modal */}
-      {showBasketModal && <WeeklyBasketModal onClose={() => setShowBasketModal(false)} />}
+      {showBasketModal && (
+        <Suspense fallback={null}>
+          <WeeklyBasketModal onClose={() => setShowBasketModal(false)} />
+        </Suspense>
+      )}
 
       {/* ⭐ Customer Reviews & Star Ratings Modal */}
       {reviewProduct && (
-        <ProductReviewsModal
-          product={reviewProduct}
-          onClose={() => setReviewProduct(null)}
-        />
+        <Suspense fallback={null}>
+          <ProductReviewsModal
+            product={reviewProduct}
+            onClose={() => setReviewProduct(null)}
+          />
+        </Suspense>
       )}
 
       {/* 📍 Pincode Checker Modal */}
-      <PincodeCheckerModal
-        isOpen={showPinModal}
-        onClose={() => setShowPinModal(false)}
-        lang={lang}
-      />
+      {showPinModal && (
+        <Suspense fallback={null}>
+          <PincodeCheckerModal
+            isOpen={showPinModal}
+            onClose={() => setShowPinModal(false)}
+            lang={lang}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
