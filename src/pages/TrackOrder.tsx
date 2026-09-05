@@ -3,108 +3,132 @@ import { Link, useSearchParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import OrderChat from '../components/OrderChat'
 import { useStore } from '../context/StoreContext'
+import { useAuth } from '../context/AuthContext'
 import { formatOrderId } from '../lib/business'
-import { fetchOrderByPublicQuery } from '../lib/api'
+import { fetchOrderByIdAndPhone } from '../lib/api'
 import { t } from '../lib/i18n'
 import type { Order } from '../types'
 
+/** Masks a phone number: shows only last 4 digits. e.g. ******1027 */
+function maskPhone(phone: string): string {
+  const digits = (phone || '').replace(/\D/g, '').slice(-10)
+  if (digits.length < 4) return '**hidden**'
+  return `******${digits.slice(-4)}`
+}
+
+/** Masks an address: shows only the PIN code area. e.g. "...PIN 721648" */
+function maskAddress(address: string): string {
+  if (!address) return '**hidden**'
+  // Show only the PIN code if present, or just show first word + "..."
+  const pinMatch = address.match(/\b\d{6}\b/)
+  if (pinMatch) return `📍 Area PIN: ${pinMatch[0]}`
+  return `📍 ${address.split(' ').slice(0, 3).join(' ')}...`
+}
+
 export default function TrackOrder() {
   const { orders, lang } = useStore()
+  const { user } = useAuth()
   const [searchParams] = useSearchParams()
-  const [query, setQuery] = useState('')
+  const [orderId, setOrderId] = useState('')
+  const [phone, setPhone] = useState('')
   const [matched, setMatched] = useState<Order | null>(null)
   const [searched, setSearched] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Auto-track if URL contains ?id=849201 or ?order=849201
+  // Pre-fill phone from logged-in user for convenience
+  useEffect(() => {
+    if (user?.phone && !phone) {
+      setPhone(user.phone)
+    }
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-track if URL contains ?id=849201 — only auto-searches if user is logged in
+  // (so shared links don't expose other people's orders without phone verification)
   useEffect(() => {
     const paramId = searchParams.get('id') || searchParams.get('order') || searchParams.get('num')
     if (paramId) {
-      setQuery(paramId)
-      const rawInput = paramId.trim().toLowerCase().replace(/^#/, '')
-      const digitsOnly = rawInput.replace(/\D/g, '')
-
-      let found = orders.find((o) => {
-        const oIdRaw = o.id.toLowerCase()
-        const oIdFormatted = formatOrderId(o.id).toLowerCase()
-        const oPhoneDigits = o.phone.replace(/\D/g, '').slice(-10)
-        const oUtr = (o.utr || '').trim().toLowerCase()
-
-        if (oIdRaw === rawInput || oIdFormatted === rawInput || oIdFormatted === `ord-${rawInput}`) return true
-        if (rawInput.length >= 4 && (oIdRaw.endsWith(rawInput) || oIdFormatted.endsWith(rawInput))) return true
-        if (digitsOnly.length >= 4 && oIdRaw.replace(/\D/g, '').endsWith(digitsOnly)) return true
-        if (digitsOnly.length >= 10 && (oPhoneDigits === digitsOnly || (o.userEmail && o.userEmail.includes(digitsOnly)))) return true
-        if (oUtr && (oUtr === rawInput || oUtr.includes(rawInput))) return true
-        return false
-      })
-
-      if (found) {
-        setMatched(found)
-        setSearched(true)
-      } else {
-        // Query Supabase directly if not found in local memory
-        setLoading(true)
-        void fetchOrderByPublicQuery(rawInput).then((res) => {
-          setLoading(false)
-          if (res) {
-            setMatched(res)
-            setSearched(true)
-          }
+      setOrderId(paramId)
+      // Only auto-resolve if the current logged-in user owns this order
+      if (user) {
+        const rawInput = paramId.trim().toLowerCase().replace(/^#/, '')
+        const userPhone = (user.phone || '').replace(/\D/g, '').slice(-10)
+        const found = orders.find((o) => {
+          const oIdRaw = o.id.toLowerCase()
+          const oIdFormatted = formatOrderId(o.id).toLowerCase()
+          const oPhoneDigits = o.phone.replace(/\D/g, '').slice(-10)
+          const isOwner = oPhoneDigits === userPhone || o.userId === user.id
+          if (!isOwner) return false
+          return (
+            oIdRaw === rawInput ||
+            oIdFormatted === rawInput ||
+            oIdFormatted === `ord-${rawInput}` ||
+            (rawInput.length >= 4 && (oIdRaw.endsWith(rawInput) || oIdFormatted.endsWith(rawInput)))
+          )
         })
+        if (found) {
+          setMatched(found)
+          setSearched(true)
+        }
       }
     }
-  }, [searchParams, orders])
+  }, [searchParams, orders, user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onTrack = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
     setMatched(null)
-    setSearched(true)
 
-    const rawInput = query.trim().toLowerCase().replace(/^#/, '')
-    const digitsOnly = rawInput.replace(/\D/g, '')
+    const rawOrderId = orderId.trim().replace(/^#/, '')
+    const rawPhone = phone.trim().replace(/\D/g, '').slice(-10)
 
-    if (!rawInput) {
+    // ── Input Validation ──────────────────────────────────────────
+    if (!rawOrderId) {
       setError(
         lang === 'bn'
-          ? '৪-৬ সংখ্যার অর্ডার আইডি বা মোবাইল নম্বর লিখুন'
-          : 'Enter 4-6 digit Order ID or Mobile Number',
+          ? '❌ অর্ডার আইডি দিন (৪–৬ সংখ্যা)'
+          : '❌ Please enter your Order ID (4–6 digits)',
       )
       return
     }
 
-    // 1. Check in-memory store orders first
-    let found = orders.find((o) => {
+    if (rawPhone.length < 10) {
+      setError(
+        lang === 'bn'
+          ? '❌ ১০-সংখ্যার মোবাইল নম্বরটি দিন যেটি দিয়ে অর্ডার করেছিলেন'
+          : '❌ Enter the 10-digit mobile number used when placing the order',
+      )
+      return
+    }
+
+    setSearched(true)
+    const rawIdLower = rawOrderId.toLowerCase()
+
+    // ── Step 1: Check local in-memory orders (logged-in user's own orders) ──
+    let found: Order | undefined = orders.find((o) => {
       const oIdRaw = o.id.toLowerCase()
       const oIdFormatted = formatOrderId(o.id).toLowerCase()
       const oPhoneDigits = o.phone.replace(/\D/g, '').slice(-10)
-      const oUtr = (o.utr || '').trim().toLowerCase()
 
-      if (oIdRaw === rawInput || oIdFormatted === rawInput || oIdFormatted === `ord-${rawInput}`) {
-        return true
-      }
-      if (rawInput.length >= 4 && (oIdRaw.endsWith(rawInput) || oIdFormatted.endsWith(rawInput))) {
-        return true
-      }
-      if (digitsOnly.length >= 4 && oIdRaw.replace(/\D/g, '').endsWith(digitsOnly)) {
-        return true
-      }
-      if (digitsOnly.length >= 10 && (oPhoneDigits === digitsOnly || (o.userEmail && o.userEmail.includes(digitsOnly)))) {
-        return true
-      }
-      if (oUtr && (oUtr === rawInput || oUtr.includes(rawInput))) {
-        return true
-      }
-      return false
+      // MUST match phone first
+      if (oPhoneDigits !== rawPhone) return false
+
+      return (
+        oIdRaw === rawIdLower ||
+        oIdFormatted === rawIdLower ||
+        oIdFormatted === `ord-${rawIdLower}` ||
+        (rawIdLower.length >= 4 && (oIdRaw.endsWith(rawIdLower) || oIdFormatted.endsWith(rawIdLower)))
+      )
     })
 
-    // 2. Query Supabase directly if not found in local memory (e.g. shared tracking link)
+    // ── Step 2: Query Supabase — requires BOTH order ID + phone ──
     if (!found) {
       setLoading(true)
       try {
-        found = (await fetchOrderByPublicQuery(rawInput)) || undefined
-      } catch {}
+        found = (await fetchOrderByIdAndPhone(rawOrderId, rawPhone)) ?? undefined
+      } catch {
+        // ignore network errors silently
+      }
       setLoading(false)
     }
 
@@ -113,43 +137,68 @@ export default function TrackOrder() {
     } else {
       setError(
         lang === 'bn'
-          ? '❌ কোনো ম্যাচিং অর্ডার পাওয়া যায়নি। অর্ডারের শেষ ৪-৬ সংখ্যা বা ১০-সংখ্যার মোবাইল নম্বর দিন।'
-          : '❌ No matching order found. Please enter your 4-6 digit Order ID or 10-digit Mobile number.',
+          ? '❌ কোনো অর্ডার পাওয়া যায়নি। অর্ডার আইডি ও মোবাইল নম্বর সঠিক কিনা দেখুন।'
+          : '❌ No order found. Please verify your Order ID and the mobile number used at checkout.',
       )
     }
   }
+
+  // Is the logged-in user the owner of this matched order?
+  const isOwner =
+    user != null &&
+    matched != null &&
+    (matched.userId === user.id ||
+      matched.phone.replace(/\D/g, '').slice(-10) === (user.phone || '').replace(/\D/g, '').slice(-10))
 
   return (
     <div className="page narrow track-page">
       <h1>{lang === 'bn' ? 'অর্ডার ট্র্যাক করুন' : 'Track Your Order'}</h1>
       <p className="lede center">
         {lang === 'bn'
-          ? 'সহজেই ৪-৬ সংখ্যার অর্ডার আইডি বা আপনার মোবাইল নম্বর দিয়ে ট্র্যাক করুন।'
-          : 'Track your order status instantly with simple 4-6 digit Order ID or Mobile number.'}
+          ? 'অর্ডার আইডি ও মোবাইল নম্বর দিয়ে আপনার অর্ডারের অবস্থা দেখুন।'
+          : 'Enter your Order ID and the mobile number used at checkout to track your order.'}
       </p>
 
       <form className="form" onSubmit={onTrack}>
+        {/* Row 1: Order ID */}
         <label>
-          {lang === 'bn' ? '৪-৬ সংখ্যার অর্ডার আইডি বা ফোন নম্বর' : '4-6 Digit Order ID or Phone Number'}
+          {lang === 'bn' ? 'অর্ডার আইডি' : 'Order ID'}
           <input
             type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={lang === 'bn' ? '৪-৬ ডিজিটের নম্বর বা মোবাইল নম্বর দিন' : 'Enter 4-6 digit number or mobile number'}
-            required
+            value={orderId}
+            onChange={(e) => setOrderId(e.target.value)}
+            placeholder={lang === 'bn' ? 'যেমন: 849201 বা ORD-849201' : 'e.g. 849201 or ORD-849201'}
+            autoComplete="off"
             style={{ fontSize: '1.05rem', fontWeight: 600 }}
           />
           <span style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.2rem', display: 'block' }}>
-            💡 {lang === 'bn' ? 'অর্ডারের ৪ থেকে ৬ টি নম্বর বা ১০-সংখ্যার ফোন নম্বর দিন' : 'Type your 4 to 6 digit order number or mobile number'}
+            💡 {lang === 'bn' ? 'অর্ডার সফল হওয়ার পর SMS বা অর্ডার পেজে পাবেন' : 'Find it in your confirmation page or SMS'}
+          </span>
+        </label>
+
+        {/* Row 2: Phone Number */}
+        <label style={{ marginTop: '0.75rem' }}>
+          {lang === 'bn' ? 'মোবাইল নম্বর (অর্ডারে যেটি দিয়েছিলেন)' : 'Mobile Number (used when ordering)'}
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder={lang === 'bn' ? '১০-সংখ্যার মোবাইল নম্বর' : '10-digit mobile number'}
+            maxLength={13}
+            autoComplete="tel"
+            style={{ fontSize: '1.05rem', fontWeight: 600 }}
+          />
+          <span style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.2rem', display: 'block' }}>
+            🔒 {lang === 'bn' ? 'আপনার তথ্য সুরক্ষিত রাখতে এটি প্রয়োজন' : 'Required to protect your order privacy'}
           </span>
         </label>
 
         {error && <p className="form-error">{error}</p>}
 
-        <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }} disabled={loading}>
+        <button type="submit" className="btn btn-primary" style={{ marginTop: '0.75rem' }} disabled={loading}>
           {loading
             ? (lang === 'bn' ? '⏳ খোঁজা হচ্ছে...' : '⏳ Searching...')
-            : (`🔍 ${lang === 'bn' ? 'স্ট্যাটাস দেখুন' : 'Track Order'}`)}
+            : (`🔍 ${lang === 'bn' ? 'অর্ডার দেখুন' : 'Track Order'}`)}
         </button>
       </form>
 
@@ -179,8 +228,15 @@ export default function TrackOrder() {
             ))}
           </ul>
 
+          {/* Address & phone are masked for privacy — only the owner (logged in) sees full details */}
           <p className="muted" style={{ fontSize: '0.85rem' }}>
-            📍 {lang === 'bn' ? 'ডেলিভারি ঠিকানা:' : 'Delivery Address:'} {matched.address} (PIN {matched.pin})
+            {isOwner
+              ? `📍 ${lang === 'bn' ? 'ডেলিভারি ঠিকানা:' : 'Delivery Address:'} ${matched.address} (PIN ${matched.pin})`
+              : maskAddress(matched.address)}
+          </p>
+          <p className="muted" style={{ fontSize: '0.85rem' }}>
+            📞 {lang === 'bn' ? 'ফোন:' : 'Phone:'}{' '}
+            {isOwner ? matched.phone : maskPhone(matched.phone)}
           </p>
 
           <footer style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -199,9 +255,12 @@ export default function TrackOrder() {
             </span>
           </footer>
 
-          <div style={{ marginTop: '1rem' }}>
-            <OrderChat orderId={matched.id} role="customer" lang={lang} />
-          </div>
+          {/* Order Chat — only visible to the logged-in owner */}
+          {isOwner && (
+            <div style={{ marginTop: '1rem' }}>
+              <OrderChat orderId={matched.id} role="customer" lang={lang} />
+            </div>
+          )}
         </article>
       )}
 

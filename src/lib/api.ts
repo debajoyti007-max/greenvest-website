@@ -675,7 +675,13 @@ export async function fetchOrders(
   })
 }
 
-export async function fetchOrderByPublicQuery(rawQuery: string): Promise<Order | null> {
+/**
+ * @deprecated Use fetchOrderByIdAndPhone instead.
+ * This function is kept only for internal admin/seller staff queries
+ * that already have verified authentication context.
+ * DO NOT call from public-facing pages.
+ */
+async function fetchOrderByPublicQueryInternal(rawQuery: string): Promise<Order | null> {
   if (!supabase) return null
 
   const cleaned = (rawQuery || '').trim().toLowerCase().replace(/^#/, '')
@@ -683,7 +689,7 @@ export async function fetchOrderByPublicQuery(rawQuery: string): Promise<Order |
   if (!cleaned) return null
 
   try {
-    let query = supabase.from('orders').select('*, order_items(*)')
+    const query = supabase.from('orders').select('*, order_items(*)')
     const filters: string[] = [`id.eq.${cleaned}`, `id.ilike.%${cleaned}`]
     if (digitsOnly.length >= 10) {
       filters.push(`phone.eq.${digitsOnly.slice(-10)}`)
@@ -693,10 +699,62 @@ export async function fetchOrderByPublicQuery(rawQuery: string): Promise<Order |
       return mapOrder(data as OrderRow)
     }
   } catch (err) {
-    console.debug('fetchOrderByPublicQuery error:', err)
+    console.debug('fetchOrderByPublicQueryInternal error:', err)
   }
   return null
 }
+
+/**
+ * Secure dual-factor order lookup for the public /track page.
+ * Requires BOTH the Order ID AND the customer's 10-digit phone number.
+ * This prevents strangers from looking up other people's orders by guessing IDs.
+ */
+export async function fetchOrderByIdAndPhone(
+  rawOrderId: string,
+  rawPhone: string,
+): Promise<Order | null> {
+  if (!supabase) return null
+
+  const cleanId = (rawOrderId || '').trim().replace(/^#/i, '')
+  const cleanPhone = (rawPhone || '').replace(/\D/g, '').slice(-10)
+
+  if (!cleanId || cleanPhone.length < 10) return null
+
+  try {
+    const idLower = cleanId.toLowerCase()
+    // Try exact ID match first
+    let { data, error } = await supabase
+      .from('orders')
+      .select('*, order_items(*)')
+      .eq('phone', cleanPhone)
+      .or(`id.eq.${cleanId},id.ilike.%${idLower}`)
+      .limit(1)
+      .maybeSingle()
+
+    if (error || !data) {
+      // Try suffix match: user typed last 4-6 digits of order ID
+      if (cleanId.length >= 4 && cleanId.length <= 6) {
+        ;({ data, error } = await supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .eq('phone', cleanPhone)
+          .ilike('id', `%${cleanId}`)
+          .limit(1)
+          .maybeSingle())
+      }
+    }
+
+    if (!error && data) {
+      return mapOrder(data as OrderRow)
+    }
+  } catch (err) {
+    console.debug('fetchOrderByIdAndPhone error:', err)
+  }
+  return null
+}
+
+// Re-export internal function for admin/seller staff code that uses the old name
+export { fetchOrderByPublicQueryInternal as fetchOrderByPublicQuery }
 
 export async function updateOrderUtrApi(orderId: string, utr: string): Promise<boolean> {
   const client = requireClient()
