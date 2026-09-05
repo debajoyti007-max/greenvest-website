@@ -98,8 +98,7 @@ BEGIN
     'is_blocked',         v_profile.is_blocked,
     'tier',               v_profile.tier,
     'khata_approved',     v_profile.khata_approved,
-    'khata_credit_limit', v_profile.khata_credit_limit,
-    'avatar_url',         v_profile.avatar_url
+    'khata_credit_limit', v_profile.khata_credit_limit
   );
 END;
 $func$;

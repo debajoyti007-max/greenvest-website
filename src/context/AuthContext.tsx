@@ -407,11 +407,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Fallback: try padded pin
         }
 
-        const rpcData = rpcResult as { ok: boolean; error?: string; id?: string; email?: string; name?: string; role?: string; phone?: string; is_super_admin?: boolean; is_blocked?: boolean; tier?: string; khata_approved?: boolean; khata_credit_limit?: number; avatar_url?: string } | null
+        const rpcData = rpcResult as { ok: boolean; error?: string; id?: string; email?: string; name?: string; role?: string; phone?: string; is_super_admin?: boolean; is_blocked?: boolean; tier?: string; khata_approved?: boolean; khata_credit_limit?: number } | null
 
-        if (!rpcData || (!rpcData.ok && rpcErr)) {
-          // RPC failed entirely — network/infra issue
+        if (rpcErr && !rpcData) {
+          // True infrastructure failure — RPC call didn't execute at all
+          console.error('login_with_pin hard failure:', rpcErr)
           return { ok: false, error: '❌ Login service temporarily unavailable. Please try again.' }
+        }
+        if (!rpcData) {
+          // Schema cache miss or unexpected null
+          return { ok: false, error: '❌ Login is starting up. Please wait 10 seconds and try again.' }
         }
 
         if (!rpcData.ok) {
@@ -470,7 +475,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             tier: data.tier,
             khata_approved: data.khata_approved,
             khata_credit_limit: data.khata_credit_limit,
-            avatar_url: data.avatar_url,
             created_at: undefined,
           }
           const profile = mapProfile(profileRow as any)
