@@ -16,18 +16,6 @@ export const LOW_STOCK_QTY = 5
 
 export const SERVICEABLE_PINCODES = ['721632', '721633', '721643'] as const
 
-export const DELIVERY_SLOTS = {
-  morning: { en: 'Morning Shift (7:00 AM – 12:00 PM)', bn: 'সকালের শিফট (সকাল ৭:০০ – দুপুর ১২:০০)' },
-  evening: { en: 'Evening Shift (4:00 PM – 9:00 PM)', bn: 'সন্ধ্যার শিফট (বিকাল ৪:০০ – রাত ৯:০০)' },
-} as const
-
-export const SHIFT_HOURS = {
-  morningStart: 7,
-  morningEnd: 12,
-  eveningStart: 16,
-  eveningEnd: 21,
-}
-
 /**
  * Automatically computes dynamic market MRP strikethrough:
  * 1. If seller specifies an explicit overrideMrp > sellingPrice, it uses that exact value.
@@ -146,9 +134,6 @@ export const SUPPORT_WHATSAPP = env('VITE_SUPPORT_WHATSAPP', '919932871027')
 export const SUPPORT_EMAIL = env('VITE_SUPPORT_EMAIL', 'greenvest.orders@gmail.com')
 export const SUPPORT_HOURS = env('VITE_SUPPORT_HOURS', '7:00 AM – 9:00 PM')
 
-/** @deprecated use SUPPORT_WHATSAPP */
-export const SELLER_WHATSAPP = SUPPORT_WHATSAPP
-
 export const UPI_ID = env('VITE_UPI_ID', '8170859653-2@ybl')
 export const UPI_BANK = env('VITE_UPI_BANK', 'State Bank of India ····9764')
 const assetBase = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
@@ -179,13 +164,6 @@ export function formatOrderId(id: string): string {
   const digits = clean.replace(/\D/g, '')
   if (digits.length >= 6) return `ORD-${digits.slice(-6)}`
   return `ORD-${clean.slice(-6).toUpperCase()}`
-}
-
-/** Generates a collision-resistant 6-digit numeric Order ID (e.g. ORD-849201). */
-export function generateShortOrderId(): string {
-  const timeSlice = Date.now().toString().slice(-4)
-  const rand = Math.floor(10 + Math.random() * 90)
-  return `ORD-${timeSlice}${rand}`
 }
 
 export const STALE_PENDING_ORDER_TIMEOUT_HOURS = 2

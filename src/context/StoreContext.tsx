@@ -49,7 +49,7 @@ import {
   deleteSupportThreadApi,
   cleanupOldSupportMessagesApi,
 } from '../lib/api'
-import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
+import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, ADVANCE_PERCENT, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
 import { calcDeliveryFee, STORE_LOCATION } from '../lib/delivery'
 import { getStoredKhataEntries, recordKhataTransaction, calculateUserKhataBalance, fetchKhataEntriesApi, saveKhataEntryApi } from '../lib/khata'
 import { getStoredPromotionalDeals, saveStoredPromotionalDeals } from '../lib/deals'
@@ -587,7 +587,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       
       const isKhata = opts.paymentType === 'khata'
       const isFull = opts.paymentType === 'full'
-      const advanceAmount = isKhata ? 0 : isFull ? total : opts.advanceAmount != null ? opts.advanceAmount : (total > 0 ? Math.max(1, Math.ceil(total * 0.1)) : 0)
+      const advanceAmount = isKhata ? 0 : isFull ? total : opts.advanceAmount != null ? opts.advanceAmount : (total > 0 ? Math.max(1, Math.ceil(total * (ADVANCE_PERCENT / 100))) : 0)
 
       const now = new Date().toISOString()
       const order: Order = {

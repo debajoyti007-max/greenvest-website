@@ -24,19 +24,3 @@ export function formatAuthIdentifier(input: string): string {
   }
   return trimmed
 }
-
-/**
- * Robust phone extractor for stored profiles and synthetic phone emails.
- * Returns the last 10 digits, or undefined when no valid phone is found.
- */
-export function extractPhone(phone?: string | null, email?: string | null): string | undefined {
-  if (phone && phone.trim()) {
-    const digits = phone.replace(/\D/g, '')
-    if (digits.length >= 10) return digits.slice(-10)
-  }
-  if (email && email.endsWith('@greenvest.shop')) {
-    const digits = email.replace('@greenvest.shop', '').replace(/\D/g, '')
-    if (digits.length >= 10) return digits.slice(-10)
-  }
-  return undefined
-}

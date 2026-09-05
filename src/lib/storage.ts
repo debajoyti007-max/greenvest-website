@@ -38,14 +38,6 @@ export function storePin(email: string, pin: string): void {
   } catch {}
 }
 
-export function removePin(email: string): void {
-  try {
-    const pins = safeJsonParse<Record<string, string>>(localStorage.getItem(PINS_KEY), {})
-    delete pins[email.toLowerCase()]
-    localStorage.setItem(PINS_KEY, JSON.stringify(pins))
-  } catch {}
-}
-
 // Module-level flag so ensureSeeded() is a true no-op after the first run.
 // This stops the localStorage read/write/event cascade on every render.
 let _seeded = false

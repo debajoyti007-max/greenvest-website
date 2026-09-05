@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
 import { isValidIndianPhone, cleanDigits } from '../lib/phone'
+import { formatAuthIdentifier } from '../lib/authUtils'
 import { t } from '../lib/i18n'
 import type { Role } from '../types'
 
@@ -39,13 +40,6 @@ export default function Auth() {
   }
 
   if (user) return <Navigate to={redirectFor(user.role)} replace />
-
-  const getTargetEmail = (raw: string) => {
-    const trimmed = raw.trim().toLowerCase().replace(/\s+/g, '')
-    if (trimmed.includes('@')) return trimmed
-    const digits = cleanDigits(trimmed)
-    return digits ? `${digits}@greenvest.shop` : trimmed
-  }
 
   const handleIdentifierChange = (val: string) => {
     setEmailOrPhone(val)
@@ -97,7 +91,7 @@ export default function Auth() {
       }
       setBusy(true)
       try {
-        const targetMail = getTargetEmail(cleanId)
+        const targetMail = formatAuthIdentifier(cleanId)
         const res = await login(targetMail, password.trim())
 
         if (!res.ok) {
@@ -122,7 +116,7 @@ export default function Auth() {
         setError(lang === 'bn' ? 'অ্যাকাউন্টের নাম (ইউজারনেম) লিখুন' : 'Enter your registered Username / Full Name')
         return
       }
-      const targetMail = getTargetEmail(cleanId)
+      const targetMail = formatAuthIdentifier(cleanId)
       if (!targetMail) {
         setError(lang === 'bn' ? 'মোবাইল নম্বর বা জিমেইল দিন' : 'Enter mobile number or Gmail address')
         return
@@ -170,7 +164,7 @@ export default function Auth() {
 
     setBusy(true)
     try {
-      const targetMail = getTargetEmail(emailOrPhone)
+      const targetMail = formatAuthIdentifier(emailOrPhone)
       const res = await signup(name, targetMail, password, phone || cleanDigits(emailOrPhone))
       if (!res.ok) {
         setError(res.error || (lang === 'bn' ? 'সাইন আপ ব্যর্থ' : 'Signup failed'))

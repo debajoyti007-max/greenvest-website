@@ -4,21 +4,21 @@
  */
 
 import { idbEnqueueOutbox, idbGetPendingOutbox, idbRemoveOutbox, type OutboxOrder } from './indexedDb'
-import { showToast } from '../lib/toast'
+import { showToast } from './toast'
 
 let isSyncing = false
 
 export async function queueOfflineOrder(id: string, payload: any): Promise<boolean> {
   const queued = await idbEnqueueOutbox(id, payload)
   if (queued) {
-    showToast('?? ???????? ??????? ???????? ??????? ????????? ????? ????? ???????????????? ??? ????', '??')
+    showToast('📦 অর্ডারটি অফলাইনে সংরক্ষিত হয়েছে। ইন্টারনেট সংযোগ পেলেই স্বয়ংক্রিয়ভাবে জমা হবে।', '💾')
   }
   return queued
 }
 
 export async function syncPendingOfflineOrders(
   submitFn: (payload: any) => Promise<any>,
-  lang: 'en' | 'bn' = 'bn'
+  lang: 'en' | 'bn' = 'bn',
 ): Promise<number> {
   if (isSyncing || typeof navigator === 'undefined' || !navigator.onLine) {
     return 0
@@ -49,9 +49,9 @@ export async function syncPendingOfflineOrders(
     if (syncedCount > 0) {
       showToast(
         lang === 'bn'
-          ? `? ${syncedCount}?? ?????? ?????? ??????? ???????? ??? ??????!`
-          : `? ${syncedCount} offline orders synced to server!`,
-        '??'
+          ? `✅ ${syncedCount}টি অফলাইন অর্ডার সফলভাবে সার্ভারে জমা হয়েছে!`
+          : `✅ ${syncedCount} offline orders synced to server!`,
+        '🎉',
       )
     }
   } finally {

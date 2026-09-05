@@ -116,12 +116,3 @@ export function catLabel(lang: Lang, category: string): string {
   const k = map[category]
   return k ? t(lang, k) : category
 }
-
-export function zoneLabel(lang: Lang, zone: string): string {
-  const z = zone.toLowerCase()
-  if (z === 'local') return t(lang, 'local')
-  if (z === 'nearby') return t(lang, 'nearby')
-  if (z === 'far') return t(lang, 'far')
-  if (z === 'standard') return t(lang, 'standard')
-  return zone
-}

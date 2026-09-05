@@ -17,16 +17,3 @@ export function isValidIndianPhone(input: string): boolean {
   }
   return false
 }
-
-export function formatPhoneDisplay(input: string): string {
-  let digits = cleanDigits(input)
-  if (digits.startsWith('91') && digits.length === 12) {
-    digits = digits.slice(2)
-  } else if (digits.startsWith('0') && digits.length === 11) {
-    digits = digits.slice(1)
-  }
-  if (digits.length === 10) {
-    return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`
-  }
-  return input.trim()
-}

@@ -1,6 +1,6 @@
-import { NavLink, useLocation } from "react-router-dom"
-import { useStore } from "../context/StoreContext"
-import { useAuth } from "../context/AuthContext"
+import { NavLink, useLocation } from 'react-router-dom'
+import { useStore } from '../context/StoreContext'
+import { useAuth } from '../context/AuthContext'
 
 export default function BottomNav() {
   const { cartCount, lang } = useStore()
@@ -9,10 +9,10 @@ export default function BottomNav() {
 
   const path = location.pathname
   if (
-    path.startsWith("/seller") ||
-    path.startsWith("/admin") ||
-    path.startsWith("/rider") ||
-    path.startsWith("/auth")
+    path.startsWith('/seller') ||
+    path.startsWith('/admin') ||
+    path.startsWith('/rider') ||
+    path.startsWith('/auth')
   ) {
     return null
   }
@@ -22,37 +22,37 @@ export default function BottomNav() {
 
   return (
     <nav className="mobile-bottom-nav" aria-label="Bottom navigation">
-      <NavLink to="/" end className={`bottom-nav-item${isActive("/", true) ? " active" : ""}`}>
-        <span className="bottom-nav-icon">??</span>
-        <span>{lang === "bn" ? "???" : "Shop"}</span>
+      <NavLink to="/" end className={`bottom-nav-item${isActive('/', true) ? ' active' : ''}`}>
+        <span className="bottom-nav-icon">🏠</span>
+        <span>{lang === 'bn' ? 'হোম' : 'Shop'}</span>
       </NavLink>
 
-      <NavLink to="/cart" className={`bottom-nav-item${isActive("/cart") ? " active" : ""}`}>
-        <span className="bottom-nav-icon">??</span>
+      <NavLink to="/cart" className={`bottom-nav-item${isActive('/cart') ? ' active' : ''}`}>
+        <span className="bottom-nav-icon">🛒</span>
         {cartCount > 0 && (
-          <span className="bottom-nav-badge">{cartCount > 9 ? "9+" : cartCount}</span>
+          <span className="bottom-nav-badge">{cartCount > 9 ? '9+' : cartCount}</span>
         )}
-        <span>{lang === "bn" ? "?????" : "Cart"}</span>
+        <span>{lang === 'bn' ? 'কার্ট' : 'Cart'}</span>
       </NavLink>
 
       {user && (
-        <NavLink to="/orders" className={`bottom-nav-item${isActive("/orders") ? " active" : ""}`}>
-          <span className="bottom-nav-icon">??</span>
-          <span>{lang === "bn" ? "??????" : "Orders"}</span>
+        <NavLink to="/orders" className={`bottom-nav-item${isActive('/orders') ? ' active' : ''}`}>
+          <span className="bottom-nav-icon">📦</span>
+          <span>{lang === 'bn' ? 'অর্ডার' : 'Orders'}</span>
         </NavLink>
       )}
 
-      <NavLink to="/track" className={`bottom-nav-item${isActive("/track") ? " active" : ""}`}>
-        <span className="bottom-nav-icon">??</span>
-        <span>{lang === "bn" ? "???????" : "Track"}</span>
+      <NavLink to="/track" className={`bottom-nav-item${isActive('/track') ? ' active' : ''}`}>
+        <span className="bottom-nav-icon">📍</span>
+        <span>{lang === 'bn' ? 'ট্র্যাক' : 'Track'}</span>
       </NavLink>
 
       <NavLink
-        to={user ? "/profile" : "/auth"}
-        className={`bottom-nav-item${isActive("/profile") || isActive("/auth") ? " active" : ""}`}
+        to={user ? '/profile' : '/auth'}
+        className={`bottom-nav-item${isActive('/profile') || isActive('/auth') ? ' active' : ''}`}
       >
-        <span className="bottom-nav-icon">{user ? "??" : "??"}</span>
-        <span>{user ? (lang === "bn" ? "????????" : "Profile") : (lang === "bn" ? "????" : "Login")}</span>
+        <span className="bottom-nav-icon">{user ? '👤' : '🔑'}</span>
+        <span>{user ? (lang === 'bn' ? 'প্রোফাইল' : 'Profile') : (lang === 'bn' ? 'লগইন' : 'Login')}</span>
       </NavLink>
     </nav>
   )
