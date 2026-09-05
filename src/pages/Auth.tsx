@@ -17,7 +17,7 @@ function redirectFor(role: Role) {
 type Mode = 'login' | 'signup' | 'forgot' | 'mfa'
 
 export default function Auth() {
-  const { user, login, verifyAdminOtp, signup, resetPassword, loading } = useAuth()
+  const { user, login, signup, resetPassword, loading } = useAuth()
   const { lang } = useStore()
   const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('login')
@@ -25,7 +25,6 @@ export default function Auth() {
   const [emailOrPhone, setEmailOrPhone] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
-  const [mfaCode, setMfaCode] = useState('')
   const [botTrap, setBotTrap] = useState('')
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
@@ -84,23 +83,8 @@ export default function Auth() {
     const cleanName = name.trim().replace(/\s+/g, ' ')
     const cleanId = emailOrPhone.trim()
 
-    // ───── SUPER ADMIN MFA 2-STEP VERIFICATION ─────
+    // ───── SUPER ADMIN MFA (Waits for email link click) ─────
     if (mode === 'mfa') {
-      if (mfaCode.length !== 6) {
-        setError(lang === 'bn' ? '৬-সংখ্যার কোড দিন' : 'Please enter the 6-digit code')
-        return
-      }
-      setBusy(true)
-      try {
-        const res = await verifyAdminOtp(mfaCode.trim())
-        if (!res.ok) {
-          setError(res.error || (lang === 'bn' ? 'কোড ভুল হয়েছে বা মেয়াদ শেষ হয়েছে' : 'Invalid or expired code'))
-          return
-        }
-        navigate(redirectFor(res.user!.role))
-      } finally {
-        setBusy(false)
-      }
       return
     }
 
@@ -260,64 +244,63 @@ export default function Auth() {
 
       <form className="form" onSubmit={onSubmit}>
         {mode === 'mfa' ? (
-          <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>👑</div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-              {lang === 'bn' ? 'সুপার অ্যাডমিন ২-স্টেপ যাচাই' : 'Super Admin 2-Step Verification'}
+          <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+            <div style={{ fontSize: '3.5rem', marginBottom: '0.75rem' }}>✉️</div>
+            <h2 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: '0.5rem', color: '#10b981' }}>
+              {lang === 'bn' ? 'আপনার জিমেইলে সাইন-ইন লিংক পাঠানো হয়েছে!' : 'Check Your Gmail!'}
             </h2>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted, #64748b)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+            <p style={{ fontSize: '0.95rem', color: 'var(--text-muted, #94a3b8)', marginBottom: '1.5rem', lineHeight: 1.6 }}>
               {lang === 'bn'
-                ? '📧 আপনার জিমেইলে সাইন-ইন পাঠানো হয়েছে! আপনি সরাসরি ইমেইলের "Sign in"-এ ট্যাপ করতে পারেন অথবা নিচে কোড দিতে পারেন:'
-                : '📧 A sign-in email was sent to your Gmail! You can simply tap "Sign in" in your email, or enter the code below:'}
+                ? 'আমরা আপনার জিমেইলে একটি সুরক্ষিত লিংক পাঠিয়েছি। ইমেইলটি খুলে নীল "Sign in" লিংকে ট্যাপ করুন — আপনি সরাসরি অ্যাডমিন প্যানেলে প্রবেশ করবেন।'
+                : 'We sent a secure 1-tap sign-in link to your Gmail. Open the email and tap the blue "Sign in" link to enter your Admin Panel directly.'}
             </p>
 
-            <label style={{ textAlign: 'left', display: 'block' }}>
-              <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>
-                {lang === 'bn' ? '৬-সংখ্যার ওটিপি কোড (OTP)' : '6-Digit OTP Code'}
+            <div style={{
+              background: '#0f172a',
+              border: '1px solid #334155',
+              borderRadius: '12px',
+              padding: '1.25rem',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.75rem'
+            }}>
+              <span style={{ fontSize: '1.25rem' }}>⏳</span>
+              <span style={{ fontSize: '0.9rem', color: '#cbd5e1', fontWeight: 500 }}>
+                {lang === 'bn' ? 'ইমেইল ক্লিকের অপেক্ষায়...' : 'Waiting for you to tap "Sign in" in email...'}
               </span>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="123456"
-                autoFocus
-                required
-                style={{
-                  fontSize: '1.75rem',
-                  letterSpacing: '0.5rem',
-                  textAlign: 'center',
-                  fontWeight: 700,
-                  marginTop: '0.5rem',
-                }}
-              />
-            </label>
+            </div>
 
-            <button
-              type="submit"
+            <a
+              href="https://mail.google.com"
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn btn-primary"
-              style={{ width: '100%', marginTop: '1.25rem', padding: '0.85rem', fontSize: '1.05rem', fontWeight: 700 }}
-              disabled={busy || mfaCode.length !== 6}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '0.85rem',
+                textDecoration: 'none',
+                fontWeight: 700,
+                textAlign: 'center',
+                fontSize: '1rem',
+              }}
             >
-              {busy
-                ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Verifying...')
-                : (lang === 'bn' ? 'যাচাই করে প্রবেশ করুন 👑' : 'Verify & Enter 👑')}
-            </button>
+              📬 {lang === 'bn' ? 'জিমেইল খুলুন' : 'Open Gmail'}
+            </a>
 
             <button
               type="button"
               className="btn-link"
-              style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '1rem', fontSize: '0.85rem' }}
+              style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '1.25rem', fontSize: '0.85rem' }}
               onClick={() => {
                 setMode('login')
-                setMfaCode('')
                 setError('')
                 setInfo('')
               }}
             >
-              {lang === 'bn' ? '← লগইন ফর্মে ফিরে যান' : '← Back to Login'}
+              {lang === 'bn' ? '← অন্যভাবে লগইন করুন' : '← Back to Login'}
             </button>
           </div>
         ) : (

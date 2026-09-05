@@ -230,6 +230,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           // Network error — keep existing in-memory user if any
         }
+      } else {
+        // Check if user just landed via a Magic Link email redirect
+        try {
+          const { data: sessionData } = await supabase.auth.getSession()
+          if (sessionData?.session?.user?.email) {
+            const { data: profileRow } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('email', sessionData.session.user.email.toLowerCase())
+              .maybeSingle()
+            if (profileRow) {
+              const profile = mapProfile(profileRow as any)
+              if (profile) {
+                setUser(profile)
+                userRef.current = profile
+                setSessionUserId(profile.id)
+                await loadUsersIfStaff(profile)
+              }
+            }
+          }
+        } catch {
+          /* ignore */
+        }
       }
       setLoading(false)
       initializedRef.current = true
@@ -259,10 +282,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const client = supabase
     if (!cloud || !client) return
 
-    // 🔗 Magic Link & Email OTP link listener:
-    // If you tap "Sign in" in the Gmail app, it automatically completes the Super Admin login!
-    const { data: authSub } = client.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user?.email) {
+    // 🔗 Magic Link listener:
+    // When you tap "Sign in" in your Gmail, this catches the session and immediately logs you in!
+    const { data: authSub } = client.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user?.email) {
         try {
           const { data: profileRow } = await client
             .from('profiles')
