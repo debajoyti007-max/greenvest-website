@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
+﻿import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { reportSystemAlert } from '../lib/telemetry'
-import { useStore } from '../context/StoreContext'
+import { useStore } from '../context/useStore'
 
 export default function NotFound() {
   const location = useLocation()

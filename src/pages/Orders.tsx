@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import OrderChat from '../components/OrderChat'
 import FreshnessRating from '../components/FreshnessRating'
 import OrderTimeline from '../components/OrderTimeline'
-import { useAuth } from '../context/AuthContext'
-import { useStore } from '../context/StoreContext'
+import { useAuth } from '../context/useAuth'
+import { useStore } from '../context/useStore'
 import { t } from '../lib/i18n'
 import type { Order, OrderItem } from '../types'
 

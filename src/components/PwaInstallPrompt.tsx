@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useStore } from '../context/StoreContext'
+﻿import { useState, useEffect } from 'react'
+import { useStore } from '../context/useStore'
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: Array<string>

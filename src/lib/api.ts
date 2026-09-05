@@ -1605,7 +1605,7 @@ export async function deletePromotionalDealApi(dealId: string): Promise<void> {
   }
 }
 
-export async function fetchSupportMessagesApi(): Promise<import('../types').SupportMessage[]> {
+export async function fetchSupportMessagesApi(userId?: string): Promise<import('../types').SupportMessage[]> {
   const localKey = 'gv_support_messages'
   let cached: import('../types').SupportMessage[] = []
   try {
@@ -1615,11 +1615,16 @@ export async function fetchSupportMessagesApi(): Promise<import('../types').Supp
   if (!supabase) return cached
 
   try {
-    const { data, error } = await supabase
+    // 🔒 Security: scope to the specific user's thread unless staff (no userId passed)
+    let query = supabase
       .from('support_messages')
       .select('*')
       .order('created_at', { ascending: true })
       .limit(200)
+    if (userId) {
+      query = query.eq('user_id', userId)
+    }
+    const { data, error } = await query
 
     if (!error && data) {
       const mapped: import('../types').SupportMessage[] = data.map((r: any) => ({

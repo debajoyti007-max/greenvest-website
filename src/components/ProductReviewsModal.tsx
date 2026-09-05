@@ -1,6 +1,6 @@
-import { useState, useMemo, type FormEvent } from 'react'
-import { useAuth } from '../context/AuthContext'
-import { useStore } from '../context/StoreContext'
+﻿import { useState, useMemo, type FormEvent } from 'react'
+import { useAuth } from '../context/useAuth'
+import { useStore } from '../context/useStore'
 import type { Product } from '../types'
 
 interface ProductReviewsModalProps {

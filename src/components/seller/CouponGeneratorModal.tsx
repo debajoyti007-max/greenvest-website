@@ -1,7 +1,7 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { showToast } from '../../lib/toast'
-import { useStore } from '../../context/StoreContext'
-import { useAuth } from '../../context/AuthContext'
+import { useStore } from '../../context/useStore'
+import { useAuth } from '../../context/useAuth'
 
 interface CouponGeneratorModalProps {
   onClose: () => void

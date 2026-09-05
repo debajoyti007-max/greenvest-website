@@ -1,4 +1,4 @@
-import { useStore } from '../context/StoreContext'
+﻿import { useStore } from '../context/useStore'
 import type { Lang } from '../types'
 
 export default function ShiftBadge({ lang }: { lang: Lang }) {

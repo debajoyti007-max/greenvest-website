@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, lazy, Suspense } from 'react'
+﻿import { useEffect, useMemo, useState, useRef, lazy, Suspense } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import CategoryBar from '../components/CategoryBar'
@@ -11,8 +11,8 @@ const WeeklyBasketModal = lazy(() => import('../components/WeeklyBasketModal'))
 const MyUsualBasketModal = lazy(() => import('../components/MyUsualBasketModal'))
 const ProductReviewsModal = lazy(() => import('../components/ProductReviewsModal'))
 const PincodeCheckerModal = lazy(() => import('../components/PincodeCheckerModal'))
-import { useAuth } from '../context/AuthContext'
-import { useStore } from '../context/StoreContext'
+import { useAuth } from '../context/useAuth'
+import { useStore } from '../context/useStore'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, computeMarketMrp, SERVICEABLE_PINCODES } from '../lib/business'
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'

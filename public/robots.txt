@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+
+# Block private user-authenticated areas
+Disallow: /admin
+Disallow: /seller
+Disallow: /rider
+Disallow: /profile
+Disallow: /checkout
+
+# Allow public shopping pages explicitly
+Allow: /shop
+Allow: /cart
+Allow: /track-order
+
+Sitemap: https://greenvest.shop/sitemap.xml

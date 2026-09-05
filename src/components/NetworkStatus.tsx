@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useStore } from '../context/StoreContext'
+﻿import { useEffect, useState } from 'react'
+import { useStore } from '../context/useStore'
 import { syncPendingOfflineOrders } from '../lib/offlineQueue'
 
 export default function NetworkStatus() {

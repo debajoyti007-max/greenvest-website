@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useStore } from '../context/StoreContext'
-import { useAuth } from '../context/AuthContext'
+﻿import { useState } from 'react'
+import { useStore } from '../context/useStore'
+import { useAuth } from '../context/useAuth'
 import { isDealExpired } from '../lib/deals'
 import { showToast } from '../lib/toast'
 

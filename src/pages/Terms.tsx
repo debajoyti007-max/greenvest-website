@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
-import { useStore } from '../context/StoreContext'
+﻿import { Link } from 'react-router-dom'
+import { useStore } from '../context/useStore'
 import { MIN_ORDER_AMOUNT, SUPPORT_PHONE } from '../lib/business'
 import { STORE_LOCATION } from '../lib/delivery'
 

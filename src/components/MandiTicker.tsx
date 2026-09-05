@@ -1,4 +1,4 @@
-import { useStore } from '../context/StoreContext'
+﻿import { useStore } from '../context/useStore'
 
 export default function MandiTicker() {
   const { products, lang } = useStore()

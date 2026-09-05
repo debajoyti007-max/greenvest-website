@@ -1,6 +1,6 @@
-import { NavLink, useLocation } from 'react-router-dom'
-import { useStore } from '../context/StoreContext'
-import { useAuth } from '../context/AuthContext'
+﻿import { NavLink, useLocation } from 'react-router-dom'
+import { useStore } from '../context/useStore'
+import { useAuth } from '../context/useAuth'
 
 export default function BottomNav() {
   const { cartCount, lang } = useStore()

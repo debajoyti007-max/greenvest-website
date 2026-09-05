@@ -1,7 +1,6 @@
 import {
   createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -116,7 +115,8 @@ function clearLoginAttempts(identifier: string): void {
 }
 
 
-const AuthContext = createContext<AuthContextValue | null>(null)
+// eslint-disable-next-line react/only-export-components -- context must be exported for useAuth.ts hook companion file
+export const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>(() => {
@@ -533,7 +533,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       userRef.current = newUser
       return { ok: true, user: newUser }
     },
-    [cloud, allowLocal, loadUsersIfStaff],
+    [cloud, allowLocal],
   )
 
   const logout = useCallback(async () => {
@@ -606,7 +606,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsers(updated)
       return { ok: true }
     },
-    [cloud, users],
+    [cloud],
   )
 
   const updatePassword = useCallback(
@@ -1055,8 +1055,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) throw new Error('useAuth must be used within AuthProvider')
-  return context
-}

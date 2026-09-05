@@ -2,7 +2,6 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import {
   createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -75,7 +74,7 @@ import {
 } from '../lib/storage'
 import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, KhataEntry, CustomerTier, ShiftInfo, PromotionalDeal, SupportMessage } from '../types'
 import { showToast } from '../lib/toast'
-import { useAuth } from './AuthContext'
+import { useAuth } from './useAuth'
 
 interface PlaceOrderOpts {
   address: string
@@ -159,7 +158,8 @@ interface StoreContextValue {
   cleanupOldSupportMessages: (daysOld?: number) => Promise<number>
 }
 
-const StoreContext = createContext<StoreContextValue | null>(null)
+// eslint-disable-next-line react/only-export-components -- context must be exported for useStore.ts hook companion file
+export const StoreContext = createContext<StoreContextValue | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { user, mode } = useAuth()
@@ -194,7 +194,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return SEED_REVIEWS
   })
 
-  // Hydrate reviews from Supabase if connected
+  // Hydrate reviews from Supabase if connected (public catalog data — safe for all)
   useEffect(() => {
     if (!cloud) return
     fetchProductReviewsApi().then((data) => {
@@ -203,27 +203,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     })
 
-    // Hydrate promotional deals from Supabase if connected
+    // Hydrate promotional deals from Supabase if connected (public marketing data — safe for all)
     fetchPromotionalDealsApi().then((deals) => {
       if (deals && Array.isArray(deals) && deals.length > 0) {
         setPromotionalDeals(deals)
       }
     })
+  }, [cloud])
 
-    // Hydrate Khata entries from Supabase if connected
-    fetchKhataEntriesApi().then((entries) => {
+  // ── 🔒 Security Guard: Khata & Support Hydration ONLY for authenticated users ──
+  // Never hydrate private financial or support data for anonymous guests.
+  const userRole = user?.role
+  const userId = user?.id
+  useEffect(() => {
+    if (!cloud || !userId) return // ⛔ Anonymous guests — skip entirely
+
+    const isStaff = userRole === 'admin' || userRole === 'seller'
+
+    // Khata: staff sees all entries; customers see only their own ledger
+    fetchKhataEntriesApi(isStaff ? undefined : userId).then((entries) => {
       if (entries && Array.isArray(entries) && entries.length > 0) {
         setKhataEntries(entries)
       }
     })
 
-    // Hydrate Support messages from Supabase if connected
-    fetchSupportMessagesApi().then((msgs) => {
+    // Support messages: only staff or the active user's own ticket thread
+    fetchSupportMessagesApi(isStaff ? undefined : userId).then((msgs) => {
       if (msgs && Array.isArray(msgs) && msgs.length > 0) {
         setSupportMessages(msgs)
       }
     })
-  }, [cloud])
+  }, [cloud, userId, userRole])
 
   const refreshLocal = useCallback(() => {
     ensureSeeded()
@@ -658,7 +668,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCart([])
       return order
     },
-    [user, cloud, products, priceFor, refreshCloud, lang],
+    [user, cloud, products, priceFor, refreshCloud],
   )
 
   const reorderFromOrder = useCallback(
@@ -1535,8 +1545,3 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }
 
-export function useStore() {
-  const ctx = useContext(StoreContext)
-  if (!ctx) throw new Error('useStore must be used within StoreProvider')
-  return ctx
-}

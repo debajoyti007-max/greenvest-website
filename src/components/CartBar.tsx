@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
-import { useStore } from '../context/StoreContext'
+﻿import { Link } from 'react-router-dom'
+import { useStore } from '../context/useStore'
 import { MIN_ORDER_AMOUNT } from '../lib/business'
 
 export default function CartBar() {
