@@ -438,7 +438,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
               const { error: otpErr } = await supabase.auth.signInWithOtp({
                 email: profile.email,
-                options: { shouldCreateUser: true },
+                options: {
+                  shouldCreateUser: true,
+                  emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/#/admin` : undefined,
+                },
               })
               if (otpErr) {
                 console.error('Super Admin OTP send failed:', otpErr)
