@@ -1,10 +1,10 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { showToast } from '../../lib/toast'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
-import { isOrderStalePending, getOrderDeliveryOtp } from '../../lib/business'
+import { isOrderStalePending } from '../../lib/business'
 import OrderChat from '../../components/OrderChat'
 import type { Order, OrderStatus } from '../../types'
 
@@ -691,20 +691,6 @@ export default function SellerOrders() {
                       }}>
                         {o.deliveryDate && o.deliveryDate !== 'standard' ? `📅 ${o.deliveryDate}` : `⚡ 12–24h`}
                       </span>
-                      {o.status !== 'cancelled' && o.status !== 'delivered' && (
-                        <span style={{
-                          fontSize: '0.68rem',
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: '6px',
-                          background: '#f1f5f9',
-                          color: '#475569',
-                          border: '1px solid #cbd5e1',
-                          letterSpacing: '0.5px'
-                        }}>
-                          🔐 OTP: {getOrderDeliveryOtp(o)}
-                        </span>
-                      )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
