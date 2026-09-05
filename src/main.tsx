@@ -24,6 +24,12 @@ if (typeof window !== 'undefined') {
       error: reason instanceof Error ? reason : null,
     })
   })
+
+  // Normalize legacy hash-routed /#/admin links to HTML5 /admin
+  if (window.location.hash.startsWith('#/admin')) {
+    const hashRemainder = window.location.hash.replace('#/admin', '')
+    window.history.replaceState(null, '', `${window.location.origin}/admin${hashRemainder}`)
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

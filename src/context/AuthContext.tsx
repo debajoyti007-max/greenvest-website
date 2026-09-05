@@ -207,7 +207,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Bug 7 fix: use ref so this callback isn't recreated each time initialized changes
     if (!initializedRef.current) setLoading(true)
     if (cloud && supabase) {
-      // Restore session from localStorage userId (we don't use Supabase Auth sessions)
+      // 1. Check if user just landed via a Magic Link email redirect or active Supabase session
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const sessionEmail = sessionData?.session?.user?.email
+        if (sessionEmail) {
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', sessionEmail.toLowerCase())
+            .maybeSingle()
+          if (profileRow) {
+            const profile = mapProfile(profileRow as any)
+            if (profile) {
+              setUser(profile)
+              userRef.current = profile
+              setSessionUserId(profile.id)
+              await loadUsersIfStaff(profile)
+              setLoading(false)
+              initializedRef.current = true
+              return
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase session check error:', err)
+      }
+
+      // 2. Restore session from localStorage userId if no active Supabase Auth session
       const localId = getSessionUserId()
       if (localId) {
         try {
@@ -229,29 +256,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } catch {
           // Network error — keep existing in-memory user if any
-        }
-      } else {
-        // Check if user just landed via a Magic Link email redirect
-        try {
-          const { data: sessionData } = await supabase.auth.getSession()
-          if (sessionData?.session?.user?.email) {
-            const { data: profileRow } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('email', sessionData.session.user.email.toLowerCase())
-              .maybeSingle()
-            if (profileRow) {
-              const profile = mapProfile(profileRow as any)
-              if (profile) {
-                setUser(profile)
-                userRef.current = profile
-                setSessionUserId(profile.id)
-                await loadUsersIfStaff(profile)
-              }
-            }
-          }
-        } catch {
-          /* ignore */
         }
       }
       setLoading(false)
@@ -301,6 +305,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               userRef.current = profile
               setSessionUserId(profile.id)
               await loadUsersIfStaff(profile)
+              if (
+                (profile.role === 'admin' || profile.isSuperAdmin) &&
+                typeof window !== 'undefined' &&
+                (window.location.pathname === '/' || window.location.pathname === '/auth')
+              ) {
+                window.location.replace(`${window.location.origin}/admin`)
+              }
             }
           }
         } catch (err) {
@@ -463,7 +474,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 email: profile.email,
                 options: {
                   shouldCreateUser: true,
-                  emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/#/admin` : undefined,
+                  emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/admin` : undefined,
                 },
               })
               if (otpErr) {
@@ -632,12 +643,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(async () => {
-    // No supabase.auth.signOut() needed — we manage sessions via localStorage
+    if (cloud && supabase) {
+      try {
+        await supabase.auth.signOut()
+      } catch {
+        /* ignore */
+      }
+    }
     setSessionUserId(null)
     setUser(null)
     userRef.current = null
     setUsers([])
-  }, [])
+  }, [cloud])
 
   const resetPassword = useCallback(
     async (nameInput: string, email: string, newPin: string): Promise<AuthResult> => {
