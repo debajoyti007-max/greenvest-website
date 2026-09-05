@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
@@ -22,6 +22,7 @@ type CustomerRow = {
   khataApproved?: boolean
   khataCreditLimit?: number
   isBlocked?: boolean
+  isSuperAdmin?: boolean
 }
 
 export default function SellerCustomers() {
@@ -115,6 +116,7 @@ export default function SellerCustomers() {
         khataApproved: u.khataApproved,
         khataCreditLimit: u.khataCreditLimit,
         isBlocked: u.isBlocked,
+        isSuperAdmin: u.isSuperAdmin,
       }
       userMap.set(u.id, row)
       idMap.set(u.id, row)

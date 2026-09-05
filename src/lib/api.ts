@@ -116,6 +116,7 @@ type ProfileRow = {
   isBlocked?: boolean | null
   is_blocked?: boolean | null
   pin?: string | null
+  is_super_admin?: boolean | null
   created_at: string
 }
 
@@ -294,6 +295,8 @@ export function mapProfile(row: ProfileRow): User {
     khataCreditLimit: row.khata_credit_limit != null ? Number(row.khata_credit_limit) : 2000,
     phone: derivedPhone || undefined,
     isBlocked: row.is_blocked ?? row.isBlocked ?? false,
+    // 🔒 Security: isSuperAdmin is set ONLY by the database, never by env vars in frontend code
+    isSuperAdmin: row.is_super_admin === true,
     createdAt: row.created_at,
   }
 }

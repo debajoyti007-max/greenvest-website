@@ -25,7 +25,7 @@ import {
 } from '../lib/storage'
 import type { Role, User } from '../types'
 
-type AuthResult = { ok: boolean; error?: string; user?: User }
+type AuthResult = { ok: boolean; error?: string; user?: User; mfaPending?: boolean }
 
 interface AuthContextValue {
   user: User | null
@@ -33,7 +33,11 @@ interface AuthContextValue {
   loading: boolean
   configured: boolean
   mode: 'cloud' | 'local'
+  /** True when super admin PIN is verified but email OTP not yet entered */
+  mfaPending: boolean
   login: (email: string, password: string) => Promise<AuthResult>
+  /** Verify the 6-digit email OTP sent to super admin's Gmail after PIN success */
+  verifyAdminOtp: (code: string) => Promise<AuthResult>
   signup: (name: string, email: string, password: string, phone?: string) => Promise<AuthResult>
   logout: () => Promise<void>
   resetPassword: (name: string, email: string, newPin: string) => Promise<AuthResult>
@@ -48,30 +52,6 @@ interface AuthContextValue {
   refresh: () => Promise<void>
   refreshUsers: () => Promise<void>
   checkAccountExists: (email: string) => Promise<boolean>
-}
-
-/**
- * Returns true when the given identifier belongs to the super admin.
- * Identity is driven entirely by environment variables — no personal data
- * is hardcoded in the source tree.
- */
-function isSuperAdminIdentifier(identifier: string): boolean {
-  const clean = (identifier || '').toLowerCase().trim()
-  const adminEmail = (import.meta.env.VITE_SUPER_ADMIN_EMAIL ?? '').toLowerCase().trim()
-  const adminPhone = (import.meta.env.VITE_SUPER_ADMIN_PHONE ?? '').replace(/\D/g, '')
-  const adminPhoneEmail = adminPhone ? `${adminPhone}@greenvest.shop` : ''
-  return (
-    (adminEmail !== '' && (clean === adminEmail || clean.includes(adminEmail.split('@')[0]))) ||
-    (adminPhone !== '' && (clean === adminPhone || clean === adminPhoneEmail))
-  )
-}
-
-function ensureAdminRole(profile: User | null): User | null {
-  if (!profile) return null
-  if (isSuperAdminIdentifier(profile.email || '') || isSuperAdminIdentifier(profile.phone || '')) {
-    return { ...profile, role: 'admin' }
-  }
-  return profile
 }
 
 /** Pad 4-digit PIN to meet Supabase 6-char minimum. */
@@ -128,10 +108,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sessionUserId = getSessionUserId()
     if (!sessionUserId) return null
     const all = getUsers()
-    const found = all.find((u) => u.id === sessionUserId) || null
-    return found ? ensureAdminRole(found) : null
+    return all.find((u) => u.id === sessionUserId) || null
   })
   const [loading, setLoading] = useState(false)
+  // MFA state: set after PIN success for super admin, cleared after OTP verified
+  const [mfaPending, setMfaPending] = useState(false)
+  const mfaProfileRef = useRef<User | null>(null)
   // Use a ref for initialized so refresh() doesn't re-create itself (Bug 7 fix)
   const initializedRef = useRef(false)
   const cloud = isSupabaseConfigured
@@ -142,8 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sessionUserId = getSessionUserId()
     if (!sessionUserId) return null
     const all = getUsers()
-    const found = all.find((u) => u.id === sessionUserId) || null
-    return found ? ensureAdminRole(found) : null
+    return all.find((u) => u.id === sessionUserId) || null
   })())
 
   const loadUsersIfStaff = useCallback(async (profile: User | null) => {
@@ -182,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (finalUser.id) map.set(finalUser.id, finalUser)
       })
       if (profile && profile.id) {
-        map.set(profile.id, ensureAdminRole(profile)!)
+        map.set(profile.id, profile)
       }
       const finalUsers = Array.from(map.values())
       setUsers(finalUsers)
@@ -216,9 +197,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       const found = all.find((u) => u.id === id) || null
       if (found) {
-        const checked = ensureAdminRole(found)
-        setUser(checked)
-        userRef.current = checked
+        setUser(found)
+        userRef.current = found
       }
     }
   }, [])
@@ -237,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .eq('id', localId)
             .maybeSingle()
           if (profileRow) {
-            const profile = ensureAdminRole(mapProfile(profileRow as any))
+            const profile = mapProfile(profileRow as any)
             if (profile) {
               setUser(profile)
               userRef.current = profile
@@ -291,7 +271,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (payload) => {
           const row = payload.new as any
           if (!row) return
-          const updated = ensureAdminRole(mapProfile(row))
+          const updated = mapProfile(row)
           if (updated) {
             setUser(updated)
             userRef.current = updated
@@ -416,11 +396,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          const profile = ensureAdminRole(mapProfile(profileRow as any))
+          const profile = mapProfile(profileRow as any)
 
           if (profile?.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Contact GreenVest Admin.' }
           if (!profile) return { ok: false, error: 'Profile error. Please contact support.' }
 
+          // 🔐 Super Admin 2FA: Send 6-digit code to Gmail
+          if (profile.isSuperAdmin && cloud && supabase) {
+            try {
+              const { error: otpErr } = await supabase.auth.signInWithOtp({
+                email: profile.email,
+                options: { shouldCreateUser: true },
+              })
+              if (otpErr) {
+                console.error('Super Admin OTP send failed:', otpErr)
+                return { ok: false, error: `Failed to send verification code to ${profile.email}: ${otpErr.message}` }
+              }
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err)
+              return { ok: false, error: `Error sending security code to Gmail: ${msg}` }
+            }
+
+            mfaProfileRef.current = profile
+            setMfaPending(true)
+            return { ok: true, mfaPending: true, user: profile }
+          }
 
           setUser(profile)
           userRef.current = profile
@@ -452,6 +452,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { ok: true, user: found }
     },
     [cloud, allowLocal, loadUsersIfStaff],
+  )
+
+  const verifyAdminOtp = useCallback(
+    async (code: string): Promise<AuthResult> => {
+      const pendingProfile = mfaProfileRef.current
+      if (!pendingProfile || !pendingProfile.isSuperAdmin) {
+        return { ok: false, error: 'No super admin verification session pending.' }
+      }
+      if (!cloud || !supabase) {
+        return { ok: false, error: 'Cloud service unavailable.' }
+      }
+
+      try {
+        const { data, error } = await supabase.auth.verifyOtp({
+          email: pendingProfile.email,
+          token: code.trim(),
+          type: 'email',
+        })
+
+        if (error || !data) {
+          return { ok: false, error: '❌ Invalid or expired verification code. Please check your Gmail.' }
+        }
+
+        // Super Admin 2FA passed! Complete session.
+        setMfaPending(false)
+        mfaProfileRef.current = null
+        setUser(pendingProfile)
+        userRef.current = pendingProfile
+        setSessionUserId(pendingProfile.id)
+        await loadUsersIfStaff(pendingProfile)
+        return { ok: true, user: pendingProfile }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { ok: false, error: msg || 'Verification failed.' }
+      }
+    },
+    [cloud, loadUsersIfStaff],
   )
 
   const signup = useCallback(
@@ -548,28 +585,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (nameInput: string, email: string, newPin: string): Promise<AuthResult> => {
       const authEmail = formatAuthIdentifier(email)
 
-      // 🛡️ Super Admin Shield: Master Administrator PIN cannot be modified or reset via public forms
-      if (isSuperAdminIdentifier(authEmail) || isSuperAdminIdentifier(email)) {
-        return {
-          ok: false,
-          error: '🛡️ Super Admin Shield: Master Administrator accounts cannot be reset from public forms. Please access the database directly or use root credentials.',
-        }
-      }
-
       if (newPin.length !== 4 || /\D/.test(newPin)) {
         return { ok: false, error: 'PIN must be exactly 4 digits.' }
       }
-
 
       if (cloud && supabase) {
         // Fix: use .eq() not .or() — PostgREST misparses emails with @ and . in .or() strings
         const { data: profileRow } = await supabase
           .from('profiles')
-          .select('id,email,name')
+          .select('id,email,name,is_super_admin')
           .eq('email', authEmail.toLowerCase())
           .maybeSingle()
 
         if (profileRow) {
+          // 🛡️ Super Admin Shield: Master Administrator PIN cannot be modified or reset via public forms
+          if (profileRow.is_super_admin) {
+            return {
+              ok: false,
+              error: '🛡️ Super Admin Shield: Master Administrator accounts cannot be reset from public forms. Please access the database directly.',
+            }
+          }
           const dbName = normalizeText((profileRow.name as string) || '')
           const givenName = normalizeText(nameInput || '')
           // Security Check: Verify registered name matches to prevent unauthorized PIN hijacking
@@ -644,6 +679,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const targetEmail = targetUser?.email || ''
       const targetPhone = targetUser?.phone || ''
       const actualId = targetUser?.id || userId
+
+      // 🛡️ Super Admin Protection: Nobody can alter the Super Admin's role
+      if (targetUser?.isSuperAdmin) {
+        return { ok: false, error: '🛡️ Super Admin Shield: Master Administrator role cannot be modified.' }
+      }
+
+      // 👑 Only Super Admin can promote someone to Admin
+      if (role === 'admin' && !user?.isSuperAdmin) {
+        return { ok: false, error: '👑 Permission Denied: Only Super Admin can assign the Admin role.' }
+      }
+
+      // 👑 Only Super Admin can revoke or change an existing Admin's role
+      if (targetUser?.role === 'admin' && role !== 'admin' && !user?.isSuperAdmin) {
+        return { ok: false, error: '👑 Permission Denied: Only Super Admin can revoke the Admin role.' }
+      }
 
       // 1. Optimistic update
       setUsers((prev) =>
@@ -867,10 +917,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const actualId = targetUser?.id || userId
 
       // 🛡️ Super Admin Shield: Master accounts cannot be deleted
-      if (isSuperAdminIdentifier(targetEmail) || isSuperAdminIdentifier(targetPhone) || isSuperAdminIdentifier(actualId)) {
+      if (targetUser?.isSuperAdmin) {
         return {
           ok: false,
           error: '🛡️ Super Admin Shield: Master Administrator account cannot be deleted.',
+        }
+      }
+
+      // 👑 Only Super Admin can delete another Administrator
+      if (targetUser?.role === 'admin' && !user?.isSuperAdmin) {
+        return {
+          ok: false,
+          error: '👑 Permission Denied: Only Super Admin can delete an Administrator account.',
         }
       }
 
@@ -891,42 +949,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             error: `⚠️ Cannot delete: Customer has an unpaid Khata balance of ₹${balance}. Settle all dues to ₹0 before deleting or block the account instead.`,
           }
         }
-      } catch (err) {
-        console.warn('Khata check error during user delete:', err)
-      }
+      } catch {}
 
       // Safety Check 2: Active orders in transit
       try {
-        const allOrders = getOrders()
-        const activeOrder = allOrders.find(
+        const activeOrders = getOrders().filter(
           (o) =>
-            (o.userId === actualId || (targetEmail && o.userEmail.toLowerCase() === targetEmail.toLowerCase()) || (targetPhone && o.phone === targetPhone)) &&
-            (o.status === 'pending' || o.status === 'advance_paid' || o.status === 'confirmed' || o.status === 'out_for_delivery')
+            (o.userId === actualId || (targetPhone && o.phone === targetPhone)) &&
+            ['pending', 'advance_paid', 'confirmed', 'out_for_delivery'].includes(o.status),
         )
-        if (activeOrder) {
+        if (activeOrders.length > 0) {
           return {
             ok: false,
-            error: `⚠️ Cannot delete: Customer has an active order #${activeOrder.id.slice(-6)} in '${activeOrder.status}' status. Complete or cancel the order first.`,
+            error: `⚠️ Cannot delete: Customer has ${activeOrders.length} active order(s) in transit. Wait until orders are delivered or cancelled before deleting.`,
           }
         }
-      } catch (err) {
-        console.warn('Order check error during user delete:', err)
-      }
+      } catch {}
 
-      // 1. Delete from Supabase
+      // 1. Optimistic local delete
+      setUsers((prev) => prev.filter((u) => u.id !== actualId && (!targetEmail || u.email !== targetEmail)))
+      saveUsers(getUsers().filter((u) => u.id !== actualId && (!targetEmail || u.email !== targetEmail)))
+
+      // 2. Cloud delete
       if (cloud && supabase) {
         try {
           await deleteUserProfileApi(actualId, targetEmail, targetPhone)
-        } catch (err: any) {
+          const cloudUsers = await fetchProfiles()
+          setUsers(cloudUsers)
+          saveUsers(cloudUsers)
+          return { ok: true }
+        } catch (err: unknown) {
           console.error('deleteUser cloud error:', err)
-          return { ok: false, error: err.message || 'Failed to delete customer from database.' }
+          const currentReal = getUsers()
+          setUsers(currentReal)
+          const msg = err instanceof Error ? err.message : String(err)
+          return { ok: false, error: msg || 'Failed to delete user from Supabase database' }
         }
       }
-
-      // 2. Remove from React state and localStorage
-      setUsers((prev) => prev.filter((u) => u.id !== actualId && u.id !== userId && (!targetEmail || u.email !== targetEmail)))
-      const currentStored = getUsers().filter((u) => u.id !== actualId && u.id !== userId && (!targetEmail || u.email !== targetEmail))
-      saveUsers(currentStored)
 
       return { ok: true }
     },
@@ -941,7 +1000,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...(data.name ? { name: data.name.trim() } : {}),
         ...(cleanPhone ? { phone: cleanPhone } : {}),
       }
-      const updated = ensureAdminRole({ ...user, ...patch })
+      const updated = { ...user, ...patch }
       setUser(updated)
       userRef.current = updated
       saveUsers(getUsers().map((u) => (u.id === user.id ? { ...u, ...patch } : u)))
@@ -1012,7 +1071,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       configured: cloud || allowLocal,
       mode: cloud ? ('cloud' as const) : ('local' as const),
+      mfaPending,
       login,
+      verifyAdminOtp,
       signup,
       logout,
       resetPassword,
@@ -1034,7 +1095,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       cloud,
       allowLocal,
+      mfaPending,
       login,
+      verifyAdminOtp,
       signup,
       logout,
       resetPassword,

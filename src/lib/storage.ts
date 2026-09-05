@@ -82,23 +82,9 @@ function write<T>(key: string, value: T) {
   void idbSet(key, value)
 }
 
-// ⚠️ Only the admin seed entry is kept here — for LOCAL fallback mode only.
-// Real user accounts must NOT be hardcoded — they live in Supabase Auth.
-// Identity is read from environment variables; never store real data in source.
-const _adminEmail = import.meta.env.VITE_SUPER_ADMIN_EMAIL ?? ''
-const _adminPhone = (import.meta.env.VITE_SUPER_ADMIN_PHONE ?? '').replace(/\D/g, '')
-export const DEFAULT_USERS: User[] = _adminEmail
-  ? [
-      {
-        id: 'admin-local-seed',
-        name: 'Admin',
-        email: _adminEmail,
-        role: 'admin',
-        phone: _adminPhone || undefined,
-        createdAt: '2026-08-01T00:00:00.000Z',
-      },
-    ]
-  : []
+// Admin identity is verified via Supabase database (is_super_admin column).
+// No personal data is seeded from env vars into the JS bundle.
+export const DEFAULT_USERS: User[] = []
 
 /** Local catalog & user accounts bootstrap. */
 export function ensureSeeded() {

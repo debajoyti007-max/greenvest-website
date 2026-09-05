@@ -1132,42 +1132,25 @@ describe('Offline Queue & Storage Resilience Engine', () => {
 
 describe('Shadow Super Admin Cloaking & Customer Lists', () => {
   const isSuperAdmin = (target) => {
-    if (!target) return false
-    if (typeof target === 'string') {
-      const clean = target.toLowerCase().trim()
-      return clean === 'debajoyti007@gmail.com' || clean.includes('debajoyti007') || clean === '8170859653' || clean === '8170859653@greenvest.shop'
-    }
-    const email = (target.email || '').toLowerCase().trim()
-    const phone = (target.phone || '').trim()
-    const id = (target.id || '').toLowerCase().trim()
-    return (
-      email === 'debajoyti007@gmail.com' ||
-      email.includes('debajoyti007') ||
-      email === '8170859653@greenvest.shop' ||
-      phone === '8170859653' ||
-      phone.includes('8170859653') ||
-      id === '8170859653' ||
-      id.includes('debajoyti007')
-    )
+    if (!target || typeof target === 'string') return false
+    return target.isSuperAdmin === true
   }
 
-  test('Correctly identifies master email, phone, and objects as Super Admin', () => {
-    assert.ok(isSuperAdmin('debajoyti007@gmail.com'))
-    assert.ok(isSuperAdmin('8170859653'))
-    assert.ok(isSuperAdmin({ email: 'debajoyti007@greenvest.shop', name: 'Debajoyti' }))
-    assert.ok(isSuperAdmin({ phone: '8170859653', name: 'Debajoyti' }))
+  test('Correctly identifies user object with isSuperAdmin: true as Super Admin', () => {
+    assert.ok(isSuperAdmin({ id: 'usr-super', isSuperAdmin: true, role: 'admin' }))
   })
 
-  test('Rejects regular customers, riders, and sellers as Super Admin', () => {
+  test('Rejects regular customers, riders, sellers, and normal admins as Super Admin', () => {
     assert.strictEqual(isSuperAdmin('customer@gmail.com'), false)
-    assert.strictEqual(isSuperAdmin('9876543210'), false)
-    assert.strictEqual(isSuperAdmin({ email: 'seller@greenvest.shop', phone: '9876543210' }), false)
+    assert.strictEqual(isSuperAdmin({ email: 'seller@greenvest.shop', role: 'seller' }), false)
+    assert.strictEqual(isSuperAdmin({ email: 'admin@greenvest.shop', role: 'admin' }), false)
+    assert.strictEqual(isSuperAdmin({ email: 'admin@greenvest.shop', role: 'admin', isSuperAdmin: false }), false)
   })
 
   test('Completely filters out Super Admin from public customer directories (Shadow Mode)', () => {
     const mixedUsers = [
       { id: 'usr-1', name: 'Rahul Roy', phone: '9832011223', email: 'rahul@gmail.com', role: 'customer' },
-      { id: 'usr-super', name: 'Master Admin', phone: '8170859653', email: 'debajoyti007@gmail.com', role: 'admin' },
+      { id: 'usr-super', name: 'Master Admin', phone: '8170859653', email: 'debajoyti007@gmail.com', role: 'admin', isSuperAdmin: true },
       { id: 'usr-2', name: 'Priya Das', phone: '9732112233', email: 'priya@gmail.com', role: 'customer' },
     ]
 

@@ -16,6 +16,8 @@ export interface User {
   isBlocked?: boolean
   khataApproved?: boolean
   khataCreditLimit?: number
+  /** True only when the database has is_super_admin=true for this profile. Never set from env vars. */
+  isSuperAdmin?: boolean
   createdAt: string
 }
 

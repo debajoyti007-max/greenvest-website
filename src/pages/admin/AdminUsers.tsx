@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
@@ -362,65 +362,67 @@ export default function AdminUsers() {
                         </span>
                       ) : (
                         <>
-                          {/* Make Admin / Revoke Admin */}
-                          {u.role !== 'admin' ? (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}
-                              onClick={async () => {
-                                if (
-                                  window.confirm(
-                                    lang === 'bn'
-                                      ? `${u.name}-কে অ্যাডমিন বানাবেন?`
-                                      : `Make ${u.name} an Admin?`
-                                  )
-                                ) {
-                                  const res = await setUserRole(u.id, 'admin' as Role)
-                                  if (res && !res.ok) {
-                                    showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
-                                  } else {
-                                    showToast(
+                          {/* Make Admin / Revoke Admin: Only Super Admin can grant or revoke Admin role */}
+                          {isViewerSuperAdmin && (
+                            u.role !== 'admin' ? (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}
+                                onClick={async () => {
+                                  if (
+                                    window.confirm(
                                       lang === 'bn'
-                                        ? `👑 ${u.name} এখন অ্যাডমিন!`
-                                        : `👑 ${u.name} is now an Admin!`,
-                                      '👑',
+                                        ? `${u.name}-কে অ্যাডমিন বানাবেন?`
+                                        : `Make ${u.name} an Admin?`
                                     )
+                                  ) {
+                                    const res = await setUserRole(u.id, 'admin' as Role)
+                                    if (res && !res.ok) {
+                                      showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
+                                    } else {
+                                      showToast(
+                                        lang === 'bn'
+                                          ? `👑 ${u.name} এখন অ্যাডমিন!`
+                                          : `👑 ${u.name} is now an Admin!`,
+                                        '👑',
+                                      )
+                                    }
                                   }
-                                }
-                              }}
-                            >
-                              👑 {lang === 'bn' ? 'অ্যাডমিন বানান' : 'Make Admin'}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              style={{ color: '#dc2626' }}
-                              onClick={async () => {
-                                if (
-                                  window.confirm(
-                                    lang === 'bn'
-                                      ? `${u.name}-এর অ্যাডমিন রোল বাতিল করবেন?`
-                                      : `Revoke Admin from ${u.name}?`,
-                                  )
-                                ) {
-                                  const res = await setUserRole(u.id, 'customer' as Role)
-                                  if (res && !res.ok) {
-                                    showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
-                                  } else {
-                                    showToast(
+                                }}
+                              >
+                                👑 {lang === 'bn' ? 'অ্যাডমিন বানান' : 'Make Admin'}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                style={{ color: '#dc2626' }}
+                                onClick={async () => {
+                                  if (
+                                    window.confirm(
                                       lang === 'bn'
-                                        ? `${u.name}-এর অ্যাডমিন বাতিল হয়েছে`
-                                        : `Revoked Admin from ${u.name}`,
-                                      'ℹ️',
+                                        ? `${u.name}-এর অ্যাডমিন রোল বাতিল করবেন?`
+                                        : `Revoke Admin from ${u.name}?`,
                                     )
+                                  ) {
+                                    const res = await setUserRole(u.id, 'customer' as Role)
+                                    if (res && !res.ok) {
+                                      showToast(`⚠️ Database error: ${res.error}`, '❌', 'error')
+                                    } else {
+                                      showToast(
+                                        lang === 'bn'
+                                          ? `${u.name}-এর অ্যাডমিন বাতিল হয়েছে`
+                                          : `Revoked Admin from ${u.name}`,
+                                        'ℹ️',
+                                      )
+                                    }
                                   }
-                                }
-                              }}
-                            >
-                              {lang === 'bn' ? 'অ্যাডমিন বাতিল' : 'Revoke Admin'}
-                            </button>
+                                }}
+                              >
+                                {lang === 'bn' ? 'অ্যাডমিন বাতিল' : 'Revoke Admin'}
+                              </button>
+                            )
                           )}
 
                           {/* Make Seller / Revoke Seller */}
@@ -735,7 +737,7 @@ export default function AdminUsers() {
                   <option value="customer">👤 Customer</option>
                   <option value="seller">🏪 Seller</option>
                   <option value="rider">🛵 Rider</option>
-                  <option value="admin">👑 Admin</option>
+                  {isViewerSuperAdmin && <option value="admin">👑 Admin</option>}
                 </select>
 
                 {/* Bulk Block */}
