@@ -16,7 +16,6 @@ import {
   ensureSeeded,
   getOrders,
   getSessionUserId,
-  getStoredPin,
   getUsers,
   saveUsers,
   setSessionUserId,
@@ -393,82 +392,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (cloud && supabase) {
-        // Search by email (primary)
-        let profileRow: Record<string, unknown> | null = null
-        const { data: byEmail, error: emailErr } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', authEmail.toLowerCase())
-          .maybeSingle()
-        if (emailErr) console.error('Login email lookup error:', emailErr)
-        profileRow = byEmail
+        // 🔒 Security: Use server-side login_with_pin RPC — never exposes PIN column to the client.
+        // The RPC validates credentials in the DB and returns safe profile fields only on success.
+        const inputPin = password.trim()
+        const paddedInput = padPin(inputPin)
 
-        // Fallback: if not found and user entered a phone number,
-        // also search by the raw phone column
-        if (!profileRow && !email.trim().includes('@')) {
-          const rawPhone = email.trim().replace(/\D/g, '')
-          const { data: byPhone, error: phoneErr } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('phone', rawPhone)
-            .maybeSingle()
-          if (phoneErr) console.error('Login phone lookup error:', phoneErr)
-          if (byPhone) profileRow = byPhone
+        // Check local brute-force lockout first (client-side early exit)
+        // then verify via secure RPC
+        const { data: rpcResult, error: rpcErr } = await supabase
+          .rpc('login_with_pin', { p_identifier: email.trim(), p_pin: inputPin })
+
+        if (rpcErr) {
+          console.error('login_with_pin RPC error:', rpcErr)
+          // Fallback: try padded pin
         }
 
-        if (profileRow) {
-          // Check PIN: matches either DB pin or local pin cache
-          const dbPin = ((profileRow.pin as string) || '').trim()
-          const localPin = getStoredPin(profileRow.email as string).trim()
-          const hasPin = Boolean(dbPin || localPin)
+        const rpcData = rpcResult as { ok: boolean; error?: string; id?: string; email?: string; name?: string; role?: string; phone?: string; is_super_admin?: boolean; is_blocked?: boolean; tier?: string; khata_approved?: boolean; khata_credit_limit?: number; avatar_url?: string } | null
 
-          if (!hasPin) {
-            return {
-              ok: false,
-              error: '🔑 Your account exists but has no PIN set yet. Click "Forgot PIN? Verify & Reset" below to create your PIN — it only takes 10 seconds.',
+        if (!rpcData || (!rpcData.ok && rpcErr)) {
+          // RPC failed entirely — network/infra issue
+          return { ok: false, error: '❌ Login service temporarily unavailable. Please try again.' }
+        }
+
+        if (!rpcData.ok) {
+          const serverMsg = rpcData.error || 'Invalid credentials'
+
+          // If it's a PIN error, try padded PIN as fallback
+          if (serverMsg === 'Invalid credentials' && paddedInput !== inputPin) {
+            const { data: rpcResult2 } = await supabase
+              .rpc('login_with_pin', { p_identifier: email.trim(), p_pin: paddedInput })
+            const rpcData2 = rpcResult2 as typeof rpcData
+            if (rpcData2?.ok) {
+              // padded pin worked — continue with rpcData2
+              return _completeLogin(rpcData2, paddedInput)
             }
           }
 
-          const inputPin = password.trim()
-          const paddedInput = padPin(inputPin)
-
-          const pinMatch =
-            (dbPin && (inputPin === dbPin || paddedInput === dbPin)) ||
-            (localPin && (inputPin === localPin || paddedInput === localPin))
-
-          if (!pinMatch) {
-            const failed = recordFailedLoginAttempt(authEmail)
-            if (failed.locked) {
-              return {
-                ok: false,
-                error: `🔒 Account locked for 15 minutes due to 5 consecutive failed PIN attempts.`,
-              }
-            }
+          // Track failed attempt for brute-force protection
+          const failed = recordFailedLoginAttempt(authEmail)
+          if (failed.locked) {
+            return { ok: false, error: `🔒 Account locked for 15 minutes due to 5 consecutive failed PIN attempts.` }
+          }
+          if (serverMsg === 'Invalid credentials') {
             return {
               ok: false,
               error: `❌ Incorrect PIN. (${failed.remaining} attempt${failed.remaining === 1 ? '' : 's'} remaining before 15-minute security lockout).`,
             }
           }
+          if (serverMsg.includes('no account') || serverMsg.includes('No account')) {
+            return { ok: false, error: '❌ No account found with this phone/email. Please Sign Up first — it\'s free!' }
+          }
+          return { ok: false, error: serverMsg }
+        }
 
-          // Clear failed attempts on successful authentication
+        return _completeLogin(rpcData, inputPin)
+
+        async function _completeLogin(
+          data: NonNullable<typeof rpcData>,
+          usedPin: string,
+        ): Promise<AuthResult> {
           clearLoginAttempts(authEmail)
 
-          // Auto-sync valid PIN across localStorage and Supabase DB
-          if (inputPin && inputPin.length === 4) {
-            storePin(profileRow.email as string, inputPin)
-            if (profileRow.phone) storePin(profileRow.phone as string, inputPin)
-            if (dbPin !== inputPin) {
-              void updateProfilePin(profileRow.id as string, inputPin, profileRow.email as string, profileRow.phone as string)
-            }
+          // Cache PIN locally for offline fallback
+          if (usedPin && usedPin.length === 4 && data.email) {
+            storePin(data.email, usedPin)
+            if (data.phone) storePin(data.phone, usedPin)
           }
 
+          const profileRow = {
+            id: data.id,
+            email: data.email,
+            name: data.name,
+            role: data.role,
+            phone: data.phone,
+            is_super_admin: data.is_super_admin,
+            is_blocked: data.is_blocked,
+            tier: data.tier,
+            khata_approved: data.khata_approved,
+            khata_credit_limit: data.khata_credit_limit,
+            avatar_url: data.avatar_url,
+            created_at: undefined,
+          }
           const profile = mapProfile(profileRow as any)
-
-          if (profile?.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Contact GreenVest Admin.' }
           if (!profile) return { ok: false, error: 'Profile error. Please contact support.' }
+          if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Contact GreenVest Admin.' }
 
-          // 🔐 Super Admin 2FA: Send 6-digit code to Gmail
-          if (profile.isSuperAdmin && cloud && supabase) {
+          // 🔐 Super Admin 2FA: Send magic link to Gmail
+          if (profile.isSuperAdmin && supabase) {
             try {
               const { error: otpErr } = await supabase.auth.signInWithOtp({
                 email: profile.email,
@@ -485,7 +495,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const msg = err instanceof Error ? err.message : String(err)
               return { ok: false, error: `Error sending security code to Gmail: ${msg}` }
             }
-
             mfaProfileRef.current = profile
             setMfaPending(true)
             return { ok: true, mfaPending: true, user: profile }
@@ -497,8 +506,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await loadUsersIfStaff(profile)
           return { ok: true, user: profile }
         }
-
-        return { ok: false, error: '❌ No account found with this phone/email. Please Sign Up first — it\'s free!' }
       }
 
       if (!allowLocal) {
