@@ -262,10 +262,13 @@ export default function Auth() {
         {mode === 'mfa' ? (
           <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>👑</div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+              {lang === 'bn' ? 'সুপার অ্যাডমিন ২-স্টেপ যাচাই' : 'Super Admin 2-Step Verification'}
+            </h2>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted, #64748b)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
               {lang === 'bn'
-                ? 'আপনার জিমেইলে পাঠানো ৬-সংখ্যার সিকিউরিটি কোড দিন:'
-                : 'Enter the 6-digit security code sent to your Gmail:'}
+                ? '📧 আপনার জিমেইলে সাইন-ইন পাঠানো হয়েছে! আপনি সরাসরি ইমেইলের "Sign in"-এ ট্যাপ করতে পারেন অথবা নিচে কোড দিতে পারেন:'
+                : '📧 A sign-in email was sent to your Gmail! You can simply tap "Sign in" in your email, or enter the code below:'}
             </p>
 
             <label style={{ textAlign: 'left', display: 'block' }}>

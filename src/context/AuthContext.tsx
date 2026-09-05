@@ -256,8 +256,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh()
-    // No supabase.auth listener needed — sessions are managed via localStorage
-  }, [refresh])
+    const client = supabase
+    if (!cloud || !client) return
+
+    // 🔗 Magic Link & Email OTP link listener:
+    // If you tap "Sign in" in the Gmail app, it automatically completes the Super Admin login!
+    const { data: authSub } = client.auth.onAuthStateChange(async (event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user?.email) {
+        try {
+          const { data: profileRow } = await client
+            .from('profiles')
+            .select('*')
+            .eq('email', session.user.email.toLowerCase())
+            .maybeSingle()
+          if (profileRow) {
+            const profile = mapProfile(profileRow as any)
+            if (profile) {
+              setMfaPending(false)
+              mfaProfileRef.current = null
+              setUser(profile)
+              userRef.current = profile
+              setSessionUserId(profile.id)
+              await loadUsersIfStaff(profile)
+            }
+          }
+        } catch (err) {
+          console.warn('Magic link session hydrate error:', err)
+        }
+      }
+    })
+
+    return () => {
+      authSub?.subscription?.unsubscribe()
+    }
+  }, [cloud, refresh, loadUsersIfStaff])
 
   // ── Realtime: auto-update role/status when admin changes this user's profile ──
   const currentUserId = user?.id
