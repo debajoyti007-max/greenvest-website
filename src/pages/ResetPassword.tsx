@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { showToast } from '../components/Toast'
+import { showToast } from '../lib/toast'
 import { t } from '../lib/i18n'
 
 /** Landed here from reset link — set a new 4-digit PIN. */

@@ -2,8 +2,8 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useStore } from '../context/StoreContext'
-import { showToast } from '../components/Toast'
-import { getOrderDeliveryOtp } from '../lib/business'
+import { showToast } from '../lib/toast'
+import { verifyDeliveryOtpApi } from '../lib/api'
 import { generateDynamicUpiQr } from '../lib/payment'
 import { STORE_LOCATION, calculateDistanceKm } from '../lib/delivery'
 import type { Order } from '../types'
@@ -41,7 +41,7 @@ function playRiderChime() {
 
 export default function RiderView() {
   const { user } = useAuth()
-  const { orders, lang, updateOrderStatus } = useStore()
+  const { orders, lang } = useStore()
   const [tab, setTab] = useState<RiderTab>('active')
   const [completingId, setCompletingId] = useState<string | null>(null)
 
@@ -166,23 +166,31 @@ export default function RiderView() {
     setOtpError('')
   }
 
-  // Verify OTP and complete delivery (Mandatory OTP verification)
+  // Verify OTP server-side and complete delivery (atomic — OTP never leaves the DB)
   const handleVerifyOtpAndDeliver = async () => {
     if (!otpModalOrder) return
-    const expectedOtp = getOrderDeliveryOtp(otpModalOrder)
-
-    if (!inputOtp.trim() || inputOtp.trim() !== expectedOtp) {
+    if (!inputOtp.trim()) {
       setOtpError(
         lang === 'bn'
-          ? '❌ ভুল ওটিপি। কাস্টমারের ট্র্যাকিং স্ক্রিনে প্রদর্শিত ৪ সংখ্যার ওটিপি দিন।'
-          : '❌ Incorrect OTP. Ask the customer for the 4-digit code on their order screen.',
+          ? '❌ ওটিপি দিন।'
+          : '❌ Please enter the OTP.',
       )
       return
     }
 
     try {
       setCompletingId(otpModalOrder.id)
-      await updateOrderStatus(otpModalOrder.id, 'delivered')
+      const result = await verifyDeliveryOtpApi(otpModalOrder.id, inputOtp)
+
+      if (!result.ok) {
+        setOtpError(
+          lang === 'bn'
+            ? '❌ ভুল ওটিপি। কাস্টমারের ট্র্যাকিং স্ক্রিনে প্রদর্শিত ৪ সংখ্যার ওটিপি দিন।'
+            : '❌ Incorrect OTP. Ask the customer for the 4-digit code on their order screen.',
+        )
+        return
+      }
+
       const targetOrder = otpModalOrder
       setOtpModalOrder(null)
       showToast(

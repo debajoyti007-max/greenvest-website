@@ -45,3 +45,7 @@ PROJECT_BLUEPRINT.md
 *.cert
 *.pfx
 *.p12
+
+# Local build artifacts (CI deploys from dist/ — never commit these)
+/assets/
+/docs/

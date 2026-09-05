@@ -1,5 +1,5 @@
 import { useStore } from '../context/StoreContext'
-import { showToast } from './Toast'
+import { showToast } from '../lib/toast'
 
 interface WeeklyBasketModalProps {
   onClose: () => void

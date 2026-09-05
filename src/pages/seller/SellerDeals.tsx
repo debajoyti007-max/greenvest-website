@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
-import { showToast } from '../../components/Toast'
+import { showToast } from '../../lib/toast'
 import { DEAL_GRADIENTS, DEFAULT_PROMOTIONAL_DEALS, isDealExpired, formatDealTimeRemaining } from '../../lib/deals'
 import type { PromotionalDeal } from '../../types'
 

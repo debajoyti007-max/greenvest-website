@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { showToast } from '../../components/Toast'
+import { showToast } from '../../lib/toast'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'

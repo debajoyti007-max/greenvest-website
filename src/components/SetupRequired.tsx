@@ -1,5 +1,4 @@
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../lib/business'
-import { isProductionMisconfigured } from '../lib/runtime'
 
 /** Full-page block when production has no Supabase. */
 export default function SetupRequired() {
@@ -16,8 +15,4 @@ export default function SetupRequired() {
       </p>
     </div>
   )
-}
-
-export function shouldBlockApp() {
-  return isProductionMisconfigured()
 }

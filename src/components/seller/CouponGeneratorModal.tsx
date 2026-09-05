@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { showToast } from '../Toast'
+import { showToast } from '../../lib/toast'
 import { useStore } from '../../context/StoreContext'
 import { useAuth } from '../../context/AuthContext'
 

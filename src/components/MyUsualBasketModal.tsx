@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import type { Grade, Lang, Product } from '../types'
 import { resolveProductImage } from '../lib/productImages'
-import { showToast } from './Toast'
+import { showToast } from '../lib/toast'
 
 interface UsualStapleConfig {
   id: string

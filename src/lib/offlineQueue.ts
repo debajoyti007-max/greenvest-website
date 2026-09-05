@@ -1,17 +1,17 @@
-﻿/**
+/**
  * GreenVest Background Offline Order Synchronization Queue
  * Automatically replays and commits queued offline orders to Supabase on reconnect.
  */
 
 import { idbEnqueueOutbox, idbGetPendingOutbox, idbRemoveOutbox, type OutboxOrder } from './indexedDb'
-import { showToast } from '../components/Toast'
+import { showToast } from '../lib/toast'
 
 let isSyncing = false
 
 export async function queueOfflineOrder(id: string, payload: any): Promise<boolean> {
   const queued = await idbEnqueueOutbox(id, payload)
   if (queued) {
-    showToast('📦 অর্ডারটি অফলাইনে সংরক্ষিত হয়েছে। ইন্টারনেট সংযোগ পেলেই স্বয়ংক্রিয়ভাবে জমা হবে।', '💾')
+    showToast('?? ???????? ??????? ???????? ??????? ????????? ????? ????? ???????????????? ??? ????', '??')
   }
   return queued
 }
@@ -49,9 +49,9 @@ export async function syncPendingOfflineOrders(
     if (syncedCount > 0) {
       showToast(
         lang === 'bn'
-          ? `✅ ${syncedCount}টি অফলাইন অর্ডার সফলভাবে সার্ভারে জমা হয়েছে!`
-          : `✅ ${syncedCount} offline orders synced to server!`,
-        '🎉'
+          ? `? ${syncedCount}?? ?????? ?????? ??????? ???????? ??? ??????!`
+          : `? ${syncedCount} offline orders synced to server!`,
+        '??'
       )
     }
   } finally {

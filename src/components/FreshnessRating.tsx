@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { showToast } from './Toast'
+import { showToast } from '../lib/toast'
 
 interface FreshnessRatingProps {
   orderId: string

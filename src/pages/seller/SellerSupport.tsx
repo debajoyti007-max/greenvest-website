@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useStore } from '../../context/StoreContext'
 import { useAuth } from '../../context/AuthContext'
-import { showToast } from '../../components/Toast'
+import { showToast } from '../../lib/toast'
 import { formatOrderId } from '../../lib/business'
 import type { SupportMessage } from '../../types'
 

@@ -55,7 +55,7 @@ export function validateUtrStrict(input: string): ValidationResult {
   }
 
   // Check if non-digits were entered
-  if (/[^\d\s\-]/.test(raw)) {
+  if (/[^\d\s-]/.test(raw)) {
     return {
       isValid: false,
       errorBn: 'UTR নম্বরে শুধুমাত্র ১২টি সংখ্যা হতে হবে (কোনো অক্ষর চলবে না)।',
@@ -188,14 +188,14 @@ export function getOrCreateCartIdempotencyKey(userId: string, cartTotal: number)
         return parsed.token
       }
     }
-  } catch (e) {
+  } catch {
     // sessionStorage failed / private browsing
   }
 
   const newToken = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
   try {
     sessionStorage.setItem(key, JSON.stringify({ token: newToken, cartTotal, timestamp: Date.now() }))
-  } catch (e) {}
+  } catch {}
 
   return newToken
 }
@@ -206,5 +206,5 @@ export function getOrCreateCartIdempotencyKey(userId: string, cartTotal: number)
 export function clearCartIdempotencyKey(userId: string): void {
   try {
     sessionStorage.removeItem(`gv_order_idempotency_${userId}`)
-  } catch (e) {}
+  } catch {}
 }

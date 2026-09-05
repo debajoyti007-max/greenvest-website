@@ -205,32 +205,36 @@ export function isOrderStalePending(
 /**
  * Detects whether an identifier, user object, or email belongs to the Master Super Admin.
  * Used for Shadow Admin mode to cloak the owner from customer lists and subordinate admins.
+ *
+ * Identity is read from environment variables — never hardcoded in source.
+ * Set VITE_SUPER_ADMIN_EMAIL and VITE_SUPER_ADMIN_PHONE in your .env file.
  */
 export function isSuperAdmin(
   target?: { email?: string; phone?: string; id?: string } | string | null
 ): boolean {
   if (!target) return false
+
+  const adminEmail = (import.meta.env.VITE_SUPER_ADMIN_EMAIL ?? '').toLowerCase().trim()
+  const adminPhone = (import.meta.env.VITE_SUPER_ADMIN_PHONE ?? '').replace(/\D/g, '')
+
+  function matchesAdmin(email: string, phone: string, id: string): boolean {
+    if (adminEmail && (email === adminEmail || email.includes(adminEmail.split('@')[0]))) return true
+    if (adminPhone && (phone === adminPhone || phone.includes(adminPhone))) return true
+    if (adminPhone && id === adminPhone) return true
+    if (adminEmail && id.includes(adminEmail.split('@')[0])) return true
+    return false
+  }
+
   if (typeof target === 'string') {
     const clean = target.toLowerCase().trim()
-    return (
-      clean === 'debajoyti007@gmail.com' ||
-      clean.includes('debajoyti007') ||
-      clean === '8170859653' ||
-      clean === '8170859653@greenvest.shop'
-    )
+    const digits = clean.replace(/\D/g, '')
+    return matchesAdmin(clean, digits, clean)
   }
+
   const email = (target.email || '').toLowerCase().trim()
-  const phone = (target.phone || '').trim()
+  const phone = (target.phone || '').replace(/\D/g, '')
   const id = (target.id || '').toLowerCase().trim()
-  return (
-    email === 'debajoyti007@gmail.com' ||
-    email.includes('debajoyti007') ||
-    email === '8170859653@greenvest.shop' ||
-    phone === '8170859653' ||
-    phone.includes('8170859653') ||
-    id === '8170859653' ||
-    id.includes('debajoyti007')
-  )
+  return matchesAdmin(email, phone, id)
 }
 
 /**

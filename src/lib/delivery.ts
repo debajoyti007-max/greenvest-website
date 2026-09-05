@@ -10,7 +10,7 @@ export const STORE_LOCATION = {
   lng: 87.9106158,
   mapsUrl: 'https://maps.app.goo.gl/pdafSPpPPBymCDgDA',
   pin: '721648',
-  phone: '8170859653',
+  phone: (import.meta.env.VITE_SUPPORT_PHONE ?? import.meta.env.VITE_SUPER_ADMIN_PHONE ?? '').replace(/\D/g, '').slice(-10),
   hours: '7:00 AM – 12:00 PM & 4:00 PM – 9:00 PM',
   hoursBn: 'সকাল ৭:০০ – ১২:০০ ও বিকাল ৪:০০ – রাত ৯:০০',
   maxDeliveryRadiusKm: 15,

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * GreenVest Native IndexedDB Deep Storage Engine
  * Provides resilient, long-term offline storage that survives browser cache clearing.
  */

@@ -930,6 +930,38 @@ export async function createOrder(order: Order): Promise<Order> {
   return order
 }
 
+/**
+ * Verifies the 4-digit delivery handover OTP server-side via the
+ * `verify_delivery_handover` Supabase RPC.
+ *
+ * The database compares the entered OTP against `orders.delivery_otp`
+ * atomically and, on success, sets `status = 'delivered'` in the same
+ * transaction.  The client never sees the stored OTP — it is never sent
+ * to the browser.
+ *
+ * Returns `{ ok: true }` on success, `{ ok: false, error }` on failure.
+ */
+export async function verifyDeliveryOtpApi(
+  orderId: string,
+  enteredOtp: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const client = requireClient()
+  try {
+    const { data, error } = await client.rpc('verify_delivery_handover', {
+      p_order_id: orderId,
+      p_otp: enteredOtp.trim(),
+    })
+    if (error) {
+      return { ok: false, error: error.message || 'OTP verification failed' }
+    }
+    const result = data as { success: boolean; message?: string } | null
+    if (result?.success) return { ok: true }
+    return { ok: false, error: result?.message || 'Incorrect OTP' }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Network error during OTP verification' }
+  }
+}
+
 export async function updateOrderStatusApi(id: string, status: OrderStatus, rejectionReason?: string): Promise<void> {
   const client = requireClient()
 

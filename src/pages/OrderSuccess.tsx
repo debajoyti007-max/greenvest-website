@@ -6,7 +6,7 @@ import { useStore } from '../context/StoreContext'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN } from '../lib/business'
 import { t } from '../lib/i18n'
 import { printOrderInvoice } from '../lib/printOrder'
-import { showToast } from '../components/Toast'
+import { showToast } from '../lib/toast'
 import type { Order } from '../types'
 
 export default function OrderSuccess() {

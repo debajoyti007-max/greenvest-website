@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../context/StoreContext'
 import { useAuth } from '../context/AuthContext'
 import { isDealExpired } from '../lib/deals'
-import { showToast } from './Toast'
+import { showToast } from '../lib/toast'
 
 const TWELVE_HOURS = 12 * 60 * 60 * 1000
 

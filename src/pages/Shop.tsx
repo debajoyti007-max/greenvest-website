@@ -4,7 +4,7 @@ import SkeletonCard from '../components/SkeletonCard'
 import CategoryBar from '../components/CategoryBar'
 import DealsBanner from '../components/DealsBanner'
 import ShiftBadge from '../components/ShiftBadge'
-import { showToast } from '../components/Toast'
+import { showToast } from '../lib/toast'
 
 // ⚡ Performance Optimization: Lazy-load heavy dialog modals so initial Shop bundle is lightweight
 const WeeklyBasketModal = lazy(() => import('../components/WeeklyBasketModal'))

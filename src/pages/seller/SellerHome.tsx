@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { showToast } from '../../components/Toast'
+import { showToast } from '../../lib/toast'
 import CouponGeneratorModal from '../../components/seller/CouponGeneratorModal'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'

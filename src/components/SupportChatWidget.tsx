@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { useAuth } from '../context/AuthContext'
 import { formatOrderId } from '../lib/business'
-import { showToast } from './Toast'
+import { showToast } from '../lib/toast'
 
 export default function SupportChatWidget() {
   const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, cartCount } = useStore()

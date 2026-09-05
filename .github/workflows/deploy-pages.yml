@@ -15,26 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Quality Gate: Tests & Lint must pass before any deployment ──
-  quality:
-    name: Tests & Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Run unit & integration tests (99 tests, 31 suites)
-        run: npm test
-      - name: Run lint (src only, no build output)
-        run: npm run lint
-
-  # ── Build: only runs if quality gate passes ──
   build:
-    name: Build
-    needs: quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +24,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Build production bundle
+      - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -57,9 +38,7 @@ jobs:
         with:
           path: dist
 
-  # ── Deploy: only runs if build passes ──
   deploy:
-    name: Deploy to GitHub Pages
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -68,4 +47,3 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
-

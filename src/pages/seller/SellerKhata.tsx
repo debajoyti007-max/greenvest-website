@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { isSuperAdmin } from '../../lib/business'
-import { showToast } from '../../components/Toast'
+import { showToast } from '../../lib/toast'
 import type { CustomerTier, User } from '../../types'
 
 export default function SellerKhata() {

@@ -12,6 +12,7 @@ import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
 import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, updateProfileKhata, deleteUserProfileApi, mapProfile } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { calculateUserKhataBalance, getStoredKhataEntries } from '../lib/khata'
+import { normalizeText, formatAuthIdentifier } from '../lib/authUtils'
 import {
   ensureSeeded,
   getOrders,
@@ -50,13 +51,19 @@ interface AuthContextValue {
   checkAccountExists: (email: string) => Promise<boolean>
 }
 
+/**
+ * Returns true when the given identifier belongs to the super admin.
+ * Identity is driven entirely by environment variables — no personal data
+ * is hardcoded in the source tree.
+ */
 function isSuperAdminIdentifier(identifier: string): boolean {
   const clean = (identifier || '').toLowerCase().trim()
+  const adminEmail = (import.meta.env.VITE_SUPER_ADMIN_EMAIL ?? '').toLowerCase().trim()
+  const adminPhone = (import.meta.env.VITE_SUPER_ADMIN_PHONE ?? '').replace(/\D/g, '')
+  const adminPhoneEmail = adminPhone ? `${adminPhone}@greenvest.shop` : ''
   return (
-    clean === 'debajoyti007@gmail.com' ||
-    clean.includes('debajoyti007') ||
-    clean === '8170859653@greenvest.shop' ||
-    clean === '8170859653'
+    (adminEmail !== '' && (clean === adminEmail || clean.includes(adminEmail.split('@')[0]))) ||
+    (adminPhone !== '' && (clean === adminPhone || clean === adminPhoneEmail))
   )
 }
 
@@ -66,33 +73,6 @@ function ensureAdminRole(profile: User | null): User | null {
     return { ...profile, role: 'admin' }
   }
   return profile
-}
-
-export function normalizeText(str: string): string {
-  return str.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-export function formatAuthIdentifier(input: string): string {
-  const trimmed = normalizeText(input)
-  const digitsOnly = trimmed.replace(/\D/g, '')
-  if (digitsOnly.length >= 10 && !trimmed.includes('@')) {
-    const last10 = digitsOnly.slice(-10)
-    return `${last10}@greenvest.shop`
-  }
-  return trimmed
-}
-
-/** Robust phone extractor for stored profiles and synthetic phone emails */
-export function extractPhone(phone?: string | null, email?: string | null): string | undefined {
-  if (phone && phone.trim()) {
-    const digits = phone.replace(/\D/g, '')
-    if (digits.length >= 10) return digits.slice(-10)
-  }
-  if (email && email.endsWith('@greenvest.shop')) {
-    const digits = email.replace('@greenvest.shop', '').replace(/\D/g, '')
-    if (digits.length >= 10) return digits.slice(-10)
-  }
-  return undefined
 }
 
 /** Pad 4-digit PIN to meet Supabase 6-char minimum. */

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { useAuth } from '../context/AuthContext'
 import { formatOrderId } from '../lib/business'
-import { showToast } from '../components/Toast'
+import { showToast } from '../lib/toast'
 
 export default function Support() {
   const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, shiftStatus } = useStore()

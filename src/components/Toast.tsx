@@ -1,29 +1,21 @@
 import { useEffect, useState } from 'react'
+import { _registerToastSetter, type ToastMessage } from '../lib/toast'
 
-export interface ToastMessage {
-  id: number
-  text: string
-  emoji?: string
-  type?: 'success' | 'error' | 'info'
-}
-
-let _setToast: ((msg: ToastMessage) => void) | null = null
-
-export function showToast(text: string, emoji = '✅', type: ToastMessage['type'] = 'success') {
-  _setToast?.({ id: Date.now(), text, emoji, type })
-}
-
+/**
+ * Global toast container.  Mount once at app root.
+ * Use `showToast()` from `src/lib/toast.ts` to display notifications.
+ */
 export default function Toast() {
   const [messages, setMessages] = useState<ToastMessage[]>([])
 
   useEffect(() => {
-    _setToast = (msg) => {
+    _registerToastSetter((msg) => {
       setMessages((prev) => [...prev.slice(-2), msg])
       setTimeout(() => {
         setMessages((prev) => prev.filter((m) => m.id !== msg.id))
       }, 2800)
-    }
-    return () => { _setToast = null }
+    })
+    return () => { _registerToastSetter(null) }
   }, [])
 
   if (messages.length === 0) return null

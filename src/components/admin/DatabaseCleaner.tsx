@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { Lang, Order, Product, User, OrderStatus } from '../../types'
-import { showToast } from '../Toast'
+import { showToast } from '../../lib/toast'
 import { getAppNotifications, saveAppNotifications } from '../../lib/storage'
 
 interface DatabaseCleanerProps {

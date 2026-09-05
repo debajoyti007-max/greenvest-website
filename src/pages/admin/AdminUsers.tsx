@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useStore } from '../../context/StoreContext'
 import { formatDisplayContact, isSuperAdmin } from '../../lib/business'
-import { showToast } from '../../components/Toast'
+import { showToast } from '../../lib/toast'
 import DatabaseCleaner from '../../components/admin/DatabaseCleaner'
 import type { Role } from '../../types'
 

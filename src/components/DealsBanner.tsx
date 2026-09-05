@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../context/StoreContext'
 import { filterActivePromotionalDeals, formatDealTimeRemaining } from '../lib/deals'
-import { showToast } from './Toast'
+import { showToast } from '../lib/toast'
 import type { Lang } from '../types'
 
 export default function DealsBanner({ lang }: { lang: Lang }) {

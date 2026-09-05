@@ -74,7 +74,7 @@ import {
   uid,
 } from '../lib/storage'
 import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, KhataEntry, CustomerTier, ShiftInfo, PromotionalDeal, SupportMessage } from '../types'
-import { showToast } from '../components/Toast'
+import { showToast } from '../lib/toast'
 import { useAuth } from './AuthContext'
 
 interface PlaceOrderOpts {
