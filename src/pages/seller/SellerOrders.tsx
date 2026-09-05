@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { showToast } from '../../lib/toast'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
 import { isOrderStalePending } from '../../lib/business'
 import OrderChat from '../../components/OrderChat'
+import ItemPackingManifest from '../../components/seller/ItemPackingManifest'
 import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled', 'refunded']
@@ -210,7 +211,11 @@ const statusIcon: Record<OrderStatus, string> = {
 
 export default function SellerOrders() {
   const { user } = useAuth()
-  const { orders, lang, updateOrderStatus, updateOrderDeliveryDate, bulkUpdateOrderStatus, deleteOrder, autoCancelStaleOrders } = useStore()
+  const { orders, products, lang, updateOrderStatus, updateOrderDeliveryDate, bulkUpdateOrderStatus, deleteOrder, autoCancelStaleOrders } = useStore()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [viewMode, setViewMode] = useState<'orders' | 'manifest'>(() => {
+    return searchParams.get('view') === 'manifest' ? 'manifest' : 'orders'
+  })
   const [filter, setFilter] = useState<Filter>('active')
   const [searchQuery, setSearchQuery] = useState('')
   const [customerFilter, setCustomerFilter] = useState<string | null>(null)
@@ -452,8 +457,86 @@ export default function SellerOrders() {
         </div>
       </div>
 
-      {/* S7: Today's Summary Bar */}
-      <div style={{ ...cs, padding: '0.75rem 1rem', margin: '0.75rem 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
+      {/* ── View Switcher: Orders vs Item Sourcing & Packing Manifest ── */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '0.4rem',
+          margin: '0.85rem 0',
+          background: '#f1f5f9',
+          padding: '4px',
+          borderRadius: '10px',
+          border: '1px solid #e2e8f0',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setViewMode('orders')
+            setSearchParams({})
+          }}
+          style={{
+            flex: 1,
+            padding: '0.55rem 0.75rem',
+            fontSize: '0.84rem',
+            fontWeight: viewMode === 'orders' ? 700 : 500,
+            background: viewMode === 'orders' ? '#ffffff' : 'transparent',
+            color: viewMode === 'orders' ? '#166534' : '#64748b',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            boxShadow: viewMode === 'orders' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+          }}
+        >
+          📋 {lang === 'bn' ? 'অর্ডার ভিত্তিক তালিকা' : 'Orders View'} ({filtered.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setViewMode('manifest')
+            setSearchParams({ view: 'manifest' })
+          }}
+          style={{
+            flex: 1,
+            padding: '0.55rem 0.75rem',
+            fontSize: '0.84rem',
+            fontWeight: viewMode === 'manifest' ? 700 : 500,
+            background: viewMode === 'manifest' ? '#ffffff' : 'transparent',
+            color: viewMode === 'manifest' ? '#166534' : '#64748b',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            boxShadow: viewMode === 'manifest' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+          }}
+        >
+          📊 {lang === 'bn' ? 'মালামাল ও প্রকিউরমেন্ট শিট (কেজি ও পিস)' : 'Item Sourcing & Packing (kg / pcs)'}
+        </button>
+      </div>
+
+      {viewMode === 'manifest' ? (
+        <ItemPackingManifest
+          orders={orders}
+          products={products}
+          lang={lang}
+          onSelectOrder={(orderId) => {
+            setViewMode('orders')
+            setSearchParams({})
+            setSearchQuery(orderId)
+            setFilter('all')
+          }}
+        />
+      ) : (
+        <>
+          {/* S7: Today's Summary Bar */}
+          <div style={{ ...cs, padding: '0.75rem 1rem', margin: '0.75rem 0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
         <div>
           <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'var(--primary)' }}>{todayStats.total}</div>
           <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{lang === 'bn' ? 'আজ মোট' : 'Today'}</div>
@@ -1004,10 +1087,12 @@ export default function SellerOrders() {
               </article>
             )
           })}
-        </div>
-      )}
-    </div>
-  )
+          </div>
+        )}
+      </>
+    )}
+  </div>
+)
 }
 
 function openMaps(address: string, pin: string) {

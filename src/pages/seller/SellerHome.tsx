@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { showToast } from '../../lib/toast'
 import CouponGeneratorModal from '../../components/seller/CouponGeneratorModal'
@@ -483,6 +483,26 @@ export default function SellerHome() {
               }}
             >
               📋 {lang === 'bn' ? 'সমস্ত অর্ডার দেখুন' : 'Manage Orders'}
+            </Link>
+            <Link
+              to="/seller/orders?view=manifest"
+              style={{
+                background: '#f0fdf4',
+                border: '1.5px solid #86efac',
+                color: '#15803d',
+                textAlign: 'center',
+                padding: '8px',
+                borderRadius: '8px',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              📊 {lang === 'bn' ? 'মালামাল সোর্সিং শিট (কেজি ও পিস)' : '12–24h Item Sourcing (kg / pcs)'}
             </Link>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
               <button
