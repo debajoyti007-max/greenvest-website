@@ -411,6 +411,22 @@ export async function updateProfilePin(userId: string, pin: string, email?: stri
 }
 
 export async function updateProfileBlocked(userId: string, isBlocked: boolean, email?: string, phone?: string): Promise<void> {
+  const client = requireClient()
+  const lookupId = userId || email || phone || ''
+  if (lookupId) {
+    try {
+      const { data: rpcData, error: rpcErr } = await client.rpc('update_user_block_admin', {
+        p_user_id: lookupId,
+        p_is_blocked: isBlocked,
+      })
+      if (!rpcErr && rpcData) return
+      if (rpcErr) {
+        console.warn('update_user_block_admin RPC failed, falling back:', rpcErr)
+      }
+    } catch (err) {
+      console.warn('update_user_block_admin RPC exception:', err)
+    }
+  }
   return updateProfileField(userId, email, phone, { isBlocked })
 }
 
@@ -423,6 +439,23 @@ export async function updateProfileTier(userId: string, tier: CustomerTier, emai
 }
 
 export async function updateProfileKhata(userId: string, khataApproved: boolean, khataCreditLimit: number, email?: string, phone?: string): Promise<void> {
+  const client = requireClient()
+  const lookupId = userId || email || phone || ''
+  if (lookupId) {
+    try {
+      const { data: rpcData, error: rpcErr } = await client.rpc('update_user_khata_admin', {
+        p_user_id: lookupId,
+        p_approved: khataApproved,
+        p_credit_limit: khataCreditLimit,
+      })
+      if (!rpcErr && rpcData) return
+      if (rpcErr) {
+        console.warn('update_user_khata_admin RPC failed, falling back:', rpcErr)
+      }
+    } catch (err) {
+      console.warn('update_user_khata_admin RPC exception:', err)
+    }
+  }
   return updateProfileField(userId, email, phone, { khata_approved: khataApproved, khata_credit_limit: khataCreditLimit })
 }
 
