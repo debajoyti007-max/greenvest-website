@@ -2156,7 +2156,8 @@ button.linkish {
   font-weight: 600;
   position: sticky;
   top: 0;
-  z-index: 1000;
+  z-index: 9999;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
 }
 
 @keyframes skeletonShimmer {

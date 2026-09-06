@@ -922,6 +922,26 @@ export default function SellerOrders() {
                       ✕ {lang === 'bn' ? 'বাতিল' : 'Cancel'}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => sendOrderWhatsApp(o, lang)}
+                    title={lang === 'bn' ? 'কাস্টমারকে WhatsApp-এ বিল ও লাইভ ট্র্যাকিং পাঠান' : 'Send WhatsApp invoice & tracking to customer'}
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #86efac',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      background: '#f0fdf4',
+                      color: '#15803d',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    💬 WhatsApp
+                  </button>
                 </div>
 
                 {/* S4: Balance due for delivered orders */}
@@ -1058,6 +1078,7 @@ export default function SellerOrders() {
                     {/* Action buttons */}
                     <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
                       <a href={`tel:${o.phone}`} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534' }}>📞 Call</a>
+                      <button type="button" onClick={() => sendOrderWhatsApp(o, lang)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#dcfce7', border: '1px solid #86efac', fontSize: '0.8rem', cursor: 'pointer', color: '#15803d', fontWeight: 600 }}>💬 WhatsApp</button>
                       <Link to={o.userId ? `/seller/support?userId=${o.userId}` : '/seller/support'} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534' }}>💬 {lang === 'bn' ? 'সাপোর্ট' : 'Support'}</Link>
                       <Link to={`/orders/success/${o.id}`} target="_blank" style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#e0e7ff', border: '1px solid #c7d2fe', fontSize: '0.8rem', textDecoration: 'none', color: '#3730a3', fontWeight: 600 }}>📲 Live Track</Link>
                       <Link to="/rider" style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: '0.8rem', textDecoration: 'none', color: '#1e40af' }}>🛵 {lang === 'bn' ? 'রাইডার' : 'Rider'}</Link>
@@ -1098,4 +1119,28 @@ export default function SellerOrders() {
 function openMaps(address: string, pin: string) {
   const q = encodeURIComponent(`${address} ${pin}`.trim())
   window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, '_blank', 'noopener,noreferrer')
+}
+
+function sendOrderWhatsApp(o: Order, lang: string) {
+  const cleanPhone = o.phone.replace(/\D/g, '').slice(-10)
+  if (!cleanPhone) {
+    showToast(lang === 'bn' ? 'কাস্টমারের ফোন নম্বর পাওয়া যায়নি' : 'No phone number found for customer', '⚠️')
+    return
+  }
+  const balance = Math.max(0, o.total - (o.advanceAmount || 0))
+  const itemsSummary = o.items.map((it) => `• ${it.name} (${it.grade}) × ${it.qty}`).join('\n')
+  const statusLabel =
+    o.status === 'confirmed'
+      ? (lang === 'bn' ? 'কনফার্ম করা হয়েছে এবং প্যাকিং চলছে 📦' : 'Confirmed & Packing in progress 📦')
+      : o.status === 'delivered'
+      ? (lang === 'bn' ? 'ডেলিভারি সম্পন্ন হয়েছে ✅' : 'Delivered successfully ✅')
+      : (lang === 'bn' ? 'গ্রহণ করা হয়েছে ⏳' : 'Received & Processing ⏳')
+
+  const msg =
+    lang === 'bn'
+      ? `🌿 *GreenVest অর্ডার আপডেট*\n\nনমস্কার ${o.userName}!\nআপনার অর্ডার #${o.id} ${statusLabel}।\n\n🛍️ *পণ্য তালিকা:*\n${itemsSummary}\n\n💰 মোট: ₹${o.total} | অগ্রিম: ₹${o.advanceAmount} | বাকি: ₹${balance}\n📍 ঠিকানা: ${o.address}\n\n📲 লাইভ ট্র্যাক করুন:\nhttps://greenvest.shop/track?id=${o.id}\n\nGreenVest-এর সাথে থাকার জন্য ধন্যবাদ! 🌱`
+      : `🌿 *GreenVest Order Update*\n\nHello ${o.userName}!\nYour order #${o.id} is ${statusLabel}.\n\n🛍️ *Items:*\n${itemsSummary}\n\n💰 Total: ₹${o.total} | Paid: ₹${o.advanceAmount} | Balance: ₹${balance}\n📍 Address: ${o.address}\n\n📲 Track live:\nhttps://greenvest.shop/track?id=${o.id}\n\nThank you for choosing GreenVest! 🌱`
+
+  const url = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
