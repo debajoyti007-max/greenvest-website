@@ -24,7 +24,6 @@ import {
   updateOrderDeliveryDateApi,
   deleteOrderApi,
   upsertProduct,
-  verifyUtrApi,
   updateOrderUtrApi,
   fetchAddresses as fetchAddressesApi,
   saveAddress as saveAddressApi,
@@ -1201,48 +1200,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud],
   )
 
-  const verifyUtr = useCallback(
-    async (id: string, verified: boolean) => {
-      let prevSnapshot: Order[] = []
-      setOrders((prev) => {
-        prevSnapshot = prev
-        return prev.map((o) =>
-          o.id === id
-            ? {
-                ...o,
-                utrVerified: verified,
-                status: verified ? ('confirmed' as OrderStatus) : o.status,
-                updatedAt: new Date().toISOString(),
-              }
-            : o,
-        )
-      })
-
-      if (cloud) {
-        try {
-          await verifyUtrApi(id, verified)
-        } catch (err: any) {
-          console.error('verifyUtr failed, reverting UI:', err)
-          setOrders(prevSnapshot)
-          showToast(`Verify UTR failed: ${err.message || err}`, 'error')
-          throw err
-        }
-      } else {
-        const next = getOrders().map((o) =>
-          o.id === id
-            ? {
-                ...o,
-                utrVerified: verified,
-                status: verified ? ('confirmed' as OrderStatus) : o.status,
-                updatedAt: new Date().toISOString(),
-              }
-            : o,
-        )
-        saveOrders(next)
-      }
-    },
-    [cloud],
-  )
+  // verifyUtr: UTR verification was removed from the product.
+  // Kept as a stub so any lingering references don't crash.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const verifyUtr = useCallback(async (_id: string, _verified: boolean) => {
+    // no-op: UTR verify feature removed. Sellers use 1-tap Accept Order.
+  }, [])
 
   const updateOrderUtr = useCallback(
     async (orderId: string, newUtr: string) => {

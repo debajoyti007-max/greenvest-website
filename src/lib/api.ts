@@ -1053,28 +1053,25 @@ export async function findRecentOrderByUtrApi(userId: string, utr: string): Prom
   return null
 }
 
-export async function verifyUtrApi(id: string, verified: boolean): Promise<void> {
-  const client = requireClient()
-  const patch: Record<string, unknown> = {
-    utr_verified: verified,
-    updated_at: new Date().toISOString(),
-  }
-  if (verified) patch.status = 'confirmed'
-
-  let { error } = await client.from('orders').update(patch).eq('id', id)
-  if (error) {
-    // Try Admin Security Definer RPC
-    try {
-      const { error: rpcErr } = await client.rpc('verify_utr_admin', { p_id: id, p_verified: verified })
-      if (!rpcErr) return
-    } catch {}
-    throw error
-  }
-}
+// verifyUtrApi removed — UTR verification feature was removed.
+// Sellers now use 1-tap Accept Order only (no UTR entry required).
 
 export async function deleteOrderApi(id: string): Promise<void> {
   const client = requireClient()
-  // Delete related records first to avoid foreign key violations
+
+  // 1. Primary path: SECURITY DEFINER RPC — handles cascaded cleanup at DB level
+  try {
+    const { data: rpcData, error: rpcErr } = await client.rpc('delete_order_admin', { p_order_id: id })
+    if (!rpcErr) {
+      const result = rpcData as { success?: boolean } | null
+      if (result?.success !== false) return // Success via RPC
+    }
+    console.warn('delete_order_admin RPC failed, falling back to direct delete:', rpcErr)
+  } catch (rpcEx) {
+    console.warn('delete_order_admin RPC exception, falling back:', rpcEx)
+  }
+
+  // 2. Fallback: direct delete (cascade order_messages, order_items first)
   try {
     await client.from('order_messages').delete().eq('order_id', id)
   } catch {}
@@ -1766,9 +1763,32 @@ export async function cleanupOldSupportMessagesApi(daysOld = 7): Promise<number>
 
 export async function deleteUserProfileApi(userId: string, email?: string, phone?: string): Promise<void> {
   const client = requireClient()
-  const cleanPhone = phone ? phone.replace(/\D/g, '').slice(-10) : ''
 
-  // 1. Delete from profiles
+  // 1. Primary path: SECURITY DEFINER RPC — has 4 built-in safety guards:
+  //    (a) Super Admin Shield, (b) Khata balance check,
+  //    (c) Active orders check, (d) Cascaded cleanup of addresses + notifications
+  if (userId) {
+    try {
+      const { data: rpcData, error: rpcErr } = await client.rpc('delete_user_admin', { p_user_id: userId })
+      if (!rpcErr) {
+        const result = rpcData as { ok?: boolean; error?: string } | null
+        if (result?.ok === false && result?.error) {
+          // RPC explicitly rejected (e.g. khata due, active orders, super admin shield)
+          throw new Error(result.error)
+        }
+        return // Success via RPC
+      }
+      console.warn('delete_user_admin RPC failed, falling back to direct delete:', rpcErr)
+    } catch (rpcEx: any) {
+      // Re-throw only if it's a business-logic rejection (not a DB/grant error)
+      if (rpcEx?.message && !rpcEx.message.includes('permission') && !rpcEx.message.includes('grant')) {
+        throw rpcEx
+      }
+    }
+  }
+
+  // 2. Fallback: direct table delete (requires profiles_delete_admin_only RLS policy)
+  const cleanPhone = phone ? phone.replace(/\D/g, '').slice(-10) : ''
   if (userId) {
     await client.from('profiles').delete().eq('id', userId)
   }
@@ -1780,7 +1800,7 @@ export async function deleteUserProfileApi(userId: string, email?: string, phone
     await client.from('profiles').delete().eq('email', `${cleanPhone}@greenvest.shop`)
   }
 
-  // 2. Clean associated addresses and notifications
+  // 3. Clean associated data
   try {
     if (userId) {
       await client.from('addresses').delete().eq('user_id', userId)
@@ -1790,3 +1810,4 @@ export async function deleteUserProfileApi(userId: string, email?: string, phone
     console.warn('cleanup on user delete warning:', cleanErr)
   }
 }
+
