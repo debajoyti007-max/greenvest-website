@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import OrderChat from '../components/OrderChat'
 import FreshnessRating from '../components/FreshnessRating'
@@ -244,6 +244,11 @@ export default function Orders() {
                   ? ` · ${o.deliverySlot === 'morning' ? (lang === 'bn' ? 'সকাল' : 'Morning') : lang === 'bn' ? 'সন্ধ্যা' : 'Evening'}`
                   : ''}
               </p>
+              {o.deliveryNotes && (
+                <p style={{ fontSize: '0.82rem', color: '#854d0e', background: '#fefce8', padding: '3px 8px', borderRadius: '6px', margin: '-0.25rem 0 0.5rem', display: 'inline-block' }}>
+                  🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক / নির্দেশ:' : 'Landmark / Note:'} {o.deliveryNotes}
+                </p>
+              )}
               <footer>
                 <span>
                   {t(lang, 'subtotal')}: ₹{o.subtotal ?? o.total}
@@ -288,17 +293,18 @@ export default function Orders() {
                   >
                     📋 {lang === 'bn' ? 'রসিদ কপি / শেয়ার' : 'Copy / Share Receipt'}
                   </button>
-                  {o.status !== 'cancelled' && (o.status === 'pending' || o.status === 'advance_paid') && (Date.now() - new Date(o.createdAt).getTime() < 30 * 60 * 1000) && (
+                  {o.status !== 'cancelled' && (o.status === 'pending' || o.status === 'advance_paid') && (Date.now() - new Date(o.createdAt).getTime() < 15 * 60 * 1000) && (
                     <button 
                       type="button" 
                       className="btn btn-secondary warn" 
                       onClick={() => {
-                        if (confirm('Are you sure?')) {
-                          updateOrderStatus(o.id, 'cancelled')
+                        const msg = lang === 'bn' ? 'আপনি কি নিশ্চিত যে আপনি এই অর্ডারটি বাতিল করতে চান?' : 'Are you sure you want to cancel this order?'
+                        if (confirm(msg)) {
+                          updateOrderStatus(o.id, 'cancelled', 'Cancelled by customer')
                         }
                       }}
                     >
-                      Cancel Order
+                      ❌ {lang === 'bn' ? 'অর্ডার বাতিল' : 'Cancel Order'}
                     </button>
                   )}
                   {activeTab === 'recent' && (o.status === 'delivered' || o.status === 'cancelled') && !archivedIds.includes(o.id) && (

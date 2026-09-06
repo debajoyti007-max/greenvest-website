@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/useAuth'
@@ -209,6 +209,44 @@ export default function OrderSuccess() {
               : (lang === 'bn' ? `১০% অগ্রিম (₹${order.advanceAmount})` : `10% Advance Paid (₹${order.advanceAmount})`)}
           </strong>
         </p>
+      </div>
+
+      {/* 🎁 Refer a Friend Banner on Success */}
+      <div style={{
+        margin: '1.25rem 0',
+        padding: '1rem',
+        background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
+        border: '1.5px solid #86efac',
+        borderRadius: '12px',
+        textAlign: 'center',
+      }}>
+        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#166534', marginBottom: '0.3rem' }}>
+          🎁 {lang === 'bn' ? 'বন্ধুদের রেফার করে পান ₹৫০ ছাড়!' : 'Refer Friends & Get ₹50 OFF!'}
+        </div>
+        <p style={{ margin: '0 0 0.75rem', fontSize: '0.84rem', color: '#15803d' }}>
+          {lang === 'bn'
+            ? `আপনার রেফার কোড: ${order.phone ? `GV-${order.phone.replace(/\D/g, '').slice(-4)}` : 'GV-2026'}। বন্ধুরা প্রথম অর্ডারে পাবেন ₹৫০ ছাড়!`
+            : `Your referral code: ${order.phone ? `GV-${order.phone.replace(/\D/g, '').slice(-4)}` : 'GV-2026'}. Friends get ₹50 OFF!`}
+        </p>
+        <a
+          href={`https://wa.me/?text=${encodeURIComponent(`🌿 GreenVest থেকে টাটকা সবজি কিনুন! আমার রেফার কোড ${order.phone ? `GV-${order.phone.replace(/\D/g, '').slice(-4)}` : 'GV-2026'} ব্যবহার করলে পাবেন ₹৫০ ছাড়: https://greenvest.shop/?ref=${order.phone ? `GV-${order.phone.replace(/\D/g, '').slice(-4)}` : 'GV-2026'}`)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: '#25D366',
+            color: '#ffffff',
+            padding: '7px 16px',
+            borderRadius: '8px',
+            fontWeight: 700,
+            fontSize: '0.86rem',
+            textDecoration: 'none',
+          }}
+        >
+          💬 {lang === 'bn' ? 'WhatsApp-এ বন্ধুদের পাঠান' : 'Share on WhatsApp'}
+        </a>
       </div>
 
       <div className="form-actions" style={{ flexWrap: 'wrap', gap: '0.6rem' }}>

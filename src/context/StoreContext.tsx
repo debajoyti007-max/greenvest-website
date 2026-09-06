@@ -90,6 +90,7 @@ interface PlaceOrderOpts {
   paymentType?: 'full' | 'advance' | 'khata'
   advanceAmount?: number
   isKhataOrder?: boolean
+  deliveryNotes?: string
 }
 
 interface StoreContextValue {
@@ -621,6 +622,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pin: opts.pin.replace(/\D/g, ''),
         deliverySlot: opts.deliverySlot,
         deliveryDate: opts.deliveryDate,
+        deliveryNotes: opts.deliveryNotes?.trim() || undefined,
         geoLat: opts.geoLat,
         geoLng: opts.geoLng,
         createdAt: now,

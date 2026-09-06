@@ -30,6 +30,15 @@ if (typeof window !== 'undefined') {
     const hashRemainder = window.location.hash.replace('#/admin', '')
     window.history.replaceState(null, '', `${window.location.origin}/admin${hashRemainder}`)
   }
+
+  // Register PWA Service Worker for offline shell and speed
+  if ('serviceWorker' in navigator && !window.location.host.includes('localhost')) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.debug('ServiceWorker registration skipped/failed:', err)
+      })
+    })
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import OrderChat from '../components/OrderChat'
@@ -6,6 +6,7 @@ import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
 import { formatOrderId } from '../lib/business'
 import { fetchOrderByIdAndPhone } from '../lib/api'
+import { showToast } from '../lib/toast'
 import { t } from '../lib/i18n'
 import type { Order } from '../types'
 
@@ -26,7 +27,7 @@ function maskAddress(address: string): string {
 }
 
 export default function TrackOrder() {
-  const { orders, lang } = useStore()
+  const { orders, lang, updateOrderStatus } = useStore()
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const [orderId, setOrderId] = useState('')
@@ -35,6 +36,25 @@ export default function TrackOrder() {
   const [searched, setSearched] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+
+  const handleCancelOrder = async (o: Order) => {
+    const confirmMsg = lang === 'bn'
+      ? 'আপনি কি নিশ্চিত যে আপনি এই অর্ডারটি বাতিল করতে চান?'
+      : 'Are you sure you want to cancel this order?'
+    if (!window.confirm(confirmMsg)) return
+
+    setCancelling(true)
+    try {
+      await updateOrderStatus(o.id, 'cancelled', 'Cancelled by customer')
+      setMatched((prev) => (prev && prev.id === o.id ? { ...prev, status: 'cancelled' } : prev))
+      showToast(lang === 'bn' ? 'অর্ডার সফলভাবে বাতিল করা হয়েছে' : 'Order cancelled successfully', 'info')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to cancel order', 'error')
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   // Pre-fill phone from logged-in user for convenience
   useEffect(() => {
@@ -234,6 +254,11 @@ export default function TrackOrder() {
               ? `📍 ${lang === 'bn' ? 'ডেলিভারি ঠিকানা:' : 'Delivery Address:'} ${matched.address} (PIN ${matched.pin})`
               : maskAddress(matched.address)}
           </p>
+          {isOwner && (matched as any).deliveryNotes && (
+            <p style={{ fontSize: '0.82rem', color: '#854d0e', background: '#fefce8', padding: '4px 10px', borderRadius: '6px', margin: '0.35rem 0' }}>
+              🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক / নির্দেশ:' : 'Landmark / Note:'} {(matched as any).deliveryNotes}
+            </p>
+          )}
           <p className="muted" style={{ fontSize: '0.85rem' }}>
             📞 {lang === 'bn' ? 'ফোন:' : 'Phone:'}{' '}
             {isOwner ? matched.phone : maskPhone(matched.phone)}
@@ -254,6 +279,23 @@ export default function TrackOrder() {
               </strong>
             </span>
           </footer>
+
+          {/* Customer Self-Cancel within 15 mins */}
+          {isOwner && matched.status !== 'cancelled' && (matched.status === 'pending' || matched.status === 'advance_paid') && (Date.now() - new Date(matched.createdAt).getTime() < 15 * 60 * 1000) && (
+            <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid #f1f5f9' }}>
+              <button
+                type="button"
+                className="btn btn-secondary warn"
+                style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
+                disabled={cancelling}
+                onClick={() => handleCancelOrder(matched)}
+              >
+                {cancelling
+                  ? (lang === 'bn' ? '⏳ বাতিল করা হচ্ছে...' : '⏳ Cancelling...')
+                  : (lang === 'bn' ? '❌ অর্ডার বাতিল করুন (১৫ মিনিটের মধ্যে)' : '❌ Cancel Order (Within 15 mins)')}
+              </button>
+            </div>
+          )}
 
           {/* Order Chat — only visible to the logged-in owner */}
           {isOwner && (

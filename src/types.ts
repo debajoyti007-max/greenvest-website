@@ -98,6 +98,7 @@ export interface Order {
   deliveryDate?: string
   /** 4-Digit Handover Verification OTP */
   deliveryOtp?: string
+  deliveryNotes?: string
   rejectionReason?: string
   createdAt: string
   updatedAt: string

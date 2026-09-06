@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
@@ -28,6 +28,32 @@ export default function Profile() {
 
   const [showPinForm, setShowPinForm] = useState(false)
   const [newPinVal, setNewPinVal] = useState('')
+  const [copiedRef, setCopiedRef] = useState(false)
+
+  const referralCode = useMemo(() => {
+    if (!user) return 'GV-2026'
+    const phoneDigits = (user.phone || '').replace(/\D/g, '').slice(-4)
+    if (phoneDigits.length === 4) return `GV-${phoneDigits}`
+    const idDigits = (user.id || '').replace(/\D/g, '').slice(-4) || '2026'
+    return `GV-${idDigits}`
+  }, [user])
+
+  const handleCopyReferral = async () => {
+    try {
+      await navigator.clipboard.writeText(referralCode)
+      setCopiedRef(true)
+      showToast(lang === 'bn' ? 'রেফারেল কোড কপি হয়েছে!' : 'Referral code copied!', '🎉')
+      setTimeout(() => setCopiedRef(false), 2500)
+    } catch {
+      showToast('Copy failed', 'error')
+    }
+  }
+
+  const referralShareUrl = `https://greenvest.shop/?ref=${referralCode}`
+  const referralMsg = lang === 'bn'
+    ? `🌿 GreenVest থেকে তাজা সবজি ও আলু-পটল কিনুন! আমার রেফার কোড ${referralCode} ব্যবহার করলে পাবেন ₹৫০ ছাড়! এখনই অর্ডার করুন: ${referralShareUrl}`
+    : `🌿 Buy fresh vegetables & essentials on GreenVest! Use my referral code ${referralCode} to get ₹50 OFF your first order: ${referralShareUrl}`
+  const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(referralMsg)}`
 
   useEffect(() => {
     if (user) {
@@ -271,6 +297,88 @@ export default function Profile() {
           </div>
         </div>
       </section>
+
+      {/* 🤝 Refer & Earn ₹50 Card */}
+      {user && (
+        <section style={{
+          background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+          border: '1.5px solid #86efac',
+          borderRadius: '16px',
+          padding: '1.2rem',
+          boxShadow: '0 4px 16px rgba(22, 101, 52, 0.08)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
+            <span style={{ fontSize: '1.5rem' }}>🤝</span>
+            <h3 style={{ margin: 0, color: '#166534', fontSize: '1.05rem' }}>
+              {lang === 'bn' ? 'প্রতিবেশীকে রেফার করুন — পান ₹৫০ ছাড়!' : 'Refer a Neighbor — Get ₹50 OFF!'}
+            </h3>
+          </div>
+          <p style={{ margin: '0 0 0.85rem', fontSize: '0.84rem', color: '#166534', lineHeight: 1.4 }}>
+            {lang === 'bn'
+              ? 'আপনার বন্ধু বা প্রতিবেশীকে GreenVest-এ আমন্ত্রণ জানান। তারা প্রথম অর্ডারে পাবেন ₹৫০ ছাড়, আর তাদের ডেলিভারির পর আপনার অ্যাকাউন্টেও মিলবে ₹৫০ ছাড়ের কুপন!'
+              : 'Invite friends or neighbors to GreenVest. They get ₹50 OFF their first order, and you get ₹50 OFF after their delivery!'}
+          </p>
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: '#ffffff',
+            border: '1.5px dashed #22c55e',
+            borderRadius: '12px',
+            padding: '0.6rem 0.9rem',
+            marginBottom: '0.75rem',
+          }}>
+            <div>
+              <span style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>
+                {lang === 'bn' ? 'আপনার রেফার কোড' : 'Your Referral Code'}
+              </span>
+              <strong style={{ fontSize: '1.15rem', color: '#15803d', letterSpacing: '0.05rem' }}>
+                {referralCode}
+              </strong>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopyReferral}
+              style={{
+                padding: '5px 12px',
+                background: copiedRef ? '#15803d' : '#f0fdf4',
+                color: copiedRef ? '#ffffff' : '#15803d',
+                border: '1px solid #86efac',
+                borderRadius: '8px',
+                fontWeight: 600,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+              }}
+            >
+              {copiedRef ? '✓ Copied' : '📋 Copy'}
+            </button>
+          </div>
+
+          <a
+            href={whatsappShareUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary"
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              background: '#25D366',
+              border: 'none',
+              color: '#ffffff',
+              fontWeight: 700,
+              textDecoration: 'none',
+              padding: '0.6rem 1rem',
+              borderRadius: '10px',
+            }}
+          >
+            💬 {lang === 'bn' ? 'হোয়াটসঅ্যাপে বন্ধুদের শেয়ার করুন' : 'Share on WhatsApp'}
+          </a>
+        </section>
+      )}
 
       {/* 📒 Digital Khata Passbook & Customer Tier */}
       {user && (

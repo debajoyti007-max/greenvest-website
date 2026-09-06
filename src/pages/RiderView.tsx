@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
@@ -414,6 +414,20 @@ export default function RiderView() {
                 <div className="rider-cust-info">
                   <h2>{o.userName}</h2>
                   <p className="rider-address">📍 {o.address} (PIN {o.pin})</p>
+                  {o.deliveryNotes && (
+                    <div style={{
+                      marginTop: '0.35rem',
+                      padding: '0.35rem 0.65rem',
+                      background: '#fefce8',
+                      border: '1px solid #fde047',
+                      borderRadius: '8px',
+                      fontSize: '0.82rem',
+                      color: '#854d0e',
+                      fontWeight: 600,
+                    }}>
+                      🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক / নির্দেশ:' : 'Landmark / Note:'} {o.deliveryNotes}
+                    </div>
+                  )}
                 </div>
 
                 <div className="rider-items-summary">

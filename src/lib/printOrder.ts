@@ -32,7 +32,7 @@ export function printOrderInvoice(order: Order) {
   </style></head><body>
   <h1>GreenVest Invoice</h1>
   <p class="muted">${escapeHtml(order.id)} · ${new Date(order.createdAt).toLocaleString()}</p>
-  <p><strong>${escapeHtml(order.userName)}</strong><br/>${escapeHtml(order.phone)}<br/>${escapeHtml(order.address)}<br/>PIN ${escapeHtml(order.pin)}<br/>Delivery: <b>${order.deliveryDate && order.deliveryDate !== 'standard' ? escapeHtml(order.deliveryDate) : 'Standard 12–24h'}</b></p>
+  <p><strong>${escapeHtml(order.userName)}</strong><br/>${escapeHtml(order.phone)}<br/>${escapeHtml(order.address)}<br/>${order.deliveryNotes ? `<b>Landmark/Note: ${escapeHtml(order.deliveryNotes)}</b><br/>` : ''}PIN ${escapeHtml(order.pin)}<br/>Delivery: <b>${order.deliveryDate && order.deliveryDate !== 'standard' ? escapeHtml(order.deliveryDate) : 'Standard 12–24h'}</b></p>
   <table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
   <tbody>${rows}</tbody></table>
   <div class="tot">

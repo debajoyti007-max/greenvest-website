@@ -270,6 +270,7 @@ function mapOrder(row: OrderRow): Order {
     deliverySlot: slot === 'morning' || slot === 'evening' ? (slot as DeliverySlot) : undefined,
     deliveryDate: row.delivery_date || undefined,
     deliveryOtp: row.delivery_otp || undefined,
+    deliveryNotes: (row as any).delivery_notes || undefined,
     geoLat: row.geo_lat ?? undefined,
     geoLng: row.geo_lng ?? undefined,
     createdAt: row.created_at,
@@ -835,6 +836,13 @@ export async function createOrder(order: Order): Promise<Order> {
           console.debug('Failed to set delivery_date on order row:', dErr)
         }
       }
+      if (order.deliveryNotes) {
+        try {
+          await client.from('orders').update({ delivery_notes: order.deliveryNotes }).eq('id', order.id)
+        } catch (nErr) {
+          console.debug('Failed to set delivery_notes on order row:', nErr)
+        }
+      }
       return order
     }
     if (rpcErr && rpcErr.message && /already been used/i.test(rpcErr.message)) {
@@ -869,6 +877,7 @@ export async function createOrder(order: Order): Promise<Order> {
     pin: order.pin,
     delivery_slot: order.deliverySlot || null,
     delivery_date: order.deliveryDate || null,
+    delivery_notes: order.deliveryNotes || null,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
   }
@@ -877,6 +886,7 @@ export async function createOrder(order: Order): Promise<Order> {
   if (order.geoLng != null) payload.geo_lng = order.geoLng
   if (order.payerUpiName) (payload as any).payer_upi_name = order.payerUpiName
   if (order.deliveryDate) (payload as any).delivery_date = order.deliveryDate
+  if (order.deliveryNotes) (payload as any).delivery_notes = order.deliveryNotes
 
   let { error: orderError } = await client.from('orders').insert(payload)
   if (orderError) {
@@ -1163,6 +1173,32 @@ export async function deleteAddress(id: number): Promise<void> {
 export async function validateCoupon(code: string, orderTotal: number): Promise<Coupon | null> {
   const cleanCode = code.trim().toUpperCase()
   if (!cleanCode) return null
+
+  // 0. Dynamic Referral Code Engine (e.g. GV-8170, REF-8170, or GV8170)
+  if (/^(GV-?|REF-?)[A-Z0-9]{3,8}$/.test(cleanCode)) {
+    const MIN_REF_ORDER = 300
+    if (orderTotal < MIN_REF_ORDER) {
+      return {
+        code: cleanCode,
+        discount_type: 'flat',
+        discount_value: 0,
+        min_order: MIN_REF_ORDER,
+        valid: false,
+        discount: 0,
+        message: `⚠️ রেফারেল কোডের জন্য সর্বনিম্ন ₹${MIN_REF_ORDER} টাকার অর্ডার প্রয়োজন।`,
+      }
+    }
+    return {
+      code: cleanCode,
+      discount_type: 'flat',
+      discount_value: 50,
+      min_order: MIN_REF_ORDER,
+      valid: true,
+      active: true,
+      discount: 50,
+      message: '🎉 রেফারেল উপহার: ₹৫০ ছাড় সফলভাবে যোগ হয়েছে!',
+    }
+  }
 
   // 1. Try Supabase RPC if configured
   if (supabase) {

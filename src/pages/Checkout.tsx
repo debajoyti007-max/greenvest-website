@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
@@ -362,6 +362,7 @@ export default function Checkout() {
         payerUpiName: finalPayerName,
         deliverySlot: 'morning',
         deliveryDate: effectiveDeliveryDate === 'standard' ? undefined : effectiveDeliveryDate,
+        deliveryNotes: landmark.trim() || undefined,
         discountAmount: couponApplied?.discount || 0,
         geoLat,
         geoLng,
@@ -909,11 +910,11 @@ export default function Checkout() {
               </label>
 
               <label>
-                🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক (ঐচ্ছিক)' : 'Landmark (Optional)'}
+                🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক ও রাইডারের নির্দেশ (ঐচ্ছিক)' : 'Landmark & Delivery Note (Optional)'}
                 <input
                   value={landmark}
                   onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
-                  placeholder={lang === 'bn' ? 'যেমন: প্রাইমারি স্কুলের পাশে / হাসপাতাল মোড়' : 'e.g. Near School / Hospital More'}
+                  placeholder={lang === 'bn' ? 'যেমন: শিব মন্দিরের কাছে হলুদ বাড়ি / গেটে রেখে কল করবেন' : 'e.g. Yellow house near temple / Leave at gate & call'}
                 />
               </label>
 
