@@ -13,10 +13,30 @@ REVOKE EXECUTE ON FUNCTION public.verify_delivery_handover(text, text) FROM PUBL
 REVOKE EXECUTE ON FUNCTION public.create_order_with_items(jsonb) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.create_order_with_items(jsonb) FROM anon;
 
--- FIX 3: profiles UPDATE restricted to owner only
+-- FIX 3: profiles UPDATE — owner can update own row; admin-role users can update any row
+-- Business-logic guards (prevent escalation, protect is_super_admin) enforced by DB triggers
 DROP POLICY IF EXISTS "profiles_update_safe" ON public.profiles;
-CREATE POLICY "profiles_update_own" ON public.profiles FOR UPDATE TO authenticated
-  USING (id = auth.uid()::text) WITH CHECK (id = auth.uid()::text);
+DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
+CREATE POLICY "profiles_update_own_or_admin"
+  ON public.profiles
+  FOR UPDATE
+  TO authenticated
+  USING (
+    id = auth.uid()::text
+    OR EXISTS (
+      SELECT 1 FROM public.profiles p2
+      WHERE p2.id = auth.uid()::text
+        AND p2.role = 'admin'
+    )
+  )
+  WITH CHECK (
+    id = auth.uid()::text
+    OR EXISTS (
+      SELECT 1 FROM public.profiles p2
+      WHERE p2.id = auth.uid()::text
+        AND p2.role = 'admin'
+    )
+  );
 
 -- FIX 4: orders UPDATE restricted to owner or staff
 DROP POLICY IF EXISTS "orders_update_limited" ON public.orders;
@@ -68,3 +88,9 @@ CREATE POLICY "order_items_insert_authenticated" ON public.order_items FOR INSER
 -- FIX 10: support_messages - block anon insert
 DROP POLICY IF EXISTS "support_messages_insert_public" ON public.support_messages;
 CREATE POLICY "support_messages_insert_authenticated" ON public.support_messages FOR INSERT TO authenticated WITH CHECK (true);
+
+-- FIX 11: Re-grant update_user_role_admin to authenticated
+-- Migration 007 overly revoked this SECURITY DEFINER function from all non-service_role callers.
+-- Admins need EXECUTE on this RPC to change user roles from the Admin panel.
+-- The function itself is SECURITY DEFINER and has internal guards against privilege escalation.
+GRANT EXECUTE ON FUNCTION public.update_user_role_admin(text, text) TO authenticated;
