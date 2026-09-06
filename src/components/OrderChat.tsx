@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { ChatMessage } from '../types'
-import { fetchOrderMessagesApi, sendOrderMessageApi } from '../lib/api'
+import { fetchOrderMessagesApi, sendOrderMessageApi, subscribeOrderMessages } from '../lib/api'
 import { supabase } from '../lib/supabase'
 
 interface OrderChatProps {
@@ -23,7 +23,10 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
   const boxRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<any>(null)
 
-  // 1. Lazy On-Demand Supabase Realtime Subscription (Zero background waste)
+  // ── Dual Realtime Strategy ──────────────────────────────────────────────────
+  // 1. Broadcast (instant): fires immediately when both sides are online
+  // 2. postgres_changes (reliable): fires from DB, catches missed broadcasts
+  //    when the recipient was offline or navigated away during send
   useEffect(() => {
     if (!orderId) return
 
@@ -39,7 +42,7 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
 
     if (!supabase) return
 
-    // Subscribe to order-specific channel ONLY while this component is on-screen
+    // A) Broadcast channel — instant delivery when recipient is live on the page
     const channelName = `order-chat-${orderId}`
     const ch = supabase
       .channel(channelName)
@@ -59,12 +62,29 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
       .subscribe()
     channelRef.current = ch
 
+    // B) postgres_changes — DB-level guarantee: re-fetch if broadcast was missed
+    // Fires on INSERT of any row where order_id = this orderId
+    const unsubDb = subscribeOrderMessages(orderId, () => {
+      void fetchOrderMessagesApi(orderId).then((freshMsgs) => {
+        if (freshMsgs.length === 0) return
+        setMessages((prev) => {
+          // Merge: keep all current messages, add any new ones not already present
+          const ids = new Set(prev.map((m) => m.id))
+          const newOnes = freshMsgs.filter((m) => !ids.has(m.id))
+          if (newOnes.length === 0) return prev
+          const next = [...prev, ...newOnes]
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(next))
+          } catch {}
+          return next
+        })
+      })
+    })
+
     return () => {
-      // Instantly disconnect when user navigates away
       channelRef.current = null
-      if (supabase) {
-        void supabase.removeChannel(ch)
-      }
+      if (supabase) void supabase.removeChannel(ch)
+      unsubDb()
     }
   }, [orderId, storageKey])
 

@@ -123,6 +123,7 @@ interface StoreContextValue {
   verifyUtr: (id: string, verified: boolean) => Promise<void>
   deleteOrder: (id: string) => Promise<void>
   refresh: () => Promise<void>
+  refreshOrdersOnly: () => Promise<void>
   safeCloudSync: () => Promise<void>
   fetchAddresses: (userId: string) => Promise<Address[]>
   saveAddress: (addr: Address) => Promise<void>
@@ -156,6 +157,7 @@ interface StoreContextValue {
   reopenSupportTicket: (userId: string) => Promise<void>
   deleteSupportThread: (userId: string) => Promise<void>
   cleanupOldSupportMessages: (daysOld?: number) => Promise<number>
+  refreshSupportMessages: () => Promise<void>
 }
 
 // eslint-disable-next-line react/only-export-components -- context must be exported for useStore.ts hook companion file
@@ -1174,6 +1176,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud],
   )
 
+  const refreshSupportMessages = useCallback(async () => {
+    if (!cloud || !userId) return
+    const isStaff = userRole === 'admin' || userRole === 'seller'
+    try {
+      const msgs = await fetchSupportMessagesApi(isStaff ? undefined : userId)
+      if (msgs && Array.isArray(msgs)) {
+        setSupportMessages(msgs)
+        saveStoredSupportMessages(msgs)
+      }
+    } catch (err) {
+      console.warn('refreshSupportMessages error:', err)
+    }
+  }, [cloud, userId, userRole])
+
   const bulkUpdateOrderStatus = useCallback(
     async (ids: string[], status: OrderStatus) => {
       if (ids.length === 0) return
@@ -1402,6 +1418,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       verifyUtr,
       deleteOrder,
       refresh,
+      refreshOrdersOnly,
       safeCloudSync,
       fetchAddresses,
       saveAddress,
@@ -1441,6 +1458,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       reopenSupportTicket,
       deleteSupportThread,
       cleanupOldSupportMessages,
+      refreshSupportMessages,
     }),
     [
       products,
@@ -1472,6 +1490,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       verifyUtr,
       deleteOrder,
       refresh,
+      refreshOrdersOnly,
       safeCloudSync,
       fetchAddresses,
       saveAddress,
@@ -1504,6 +1523,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       reopenSupportTicket,
       deleteSupportThread,
       cleanupOldSupportMessages,
+      refreshSupportMessages,
     ],
   )
 

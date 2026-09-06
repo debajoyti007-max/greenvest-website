@@ -1,9 +1,10 @@
-﻿import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useStore } from '../../context/useStore'
 import { useAuth } from '../../context/useAuth'
 import { showToast } from '../../lib/toast'
 import { formatOrderId } from '../../lib/business'
+import { subscribeSupportMessages } from '../../lib/api'
 import type { SupportMessage } from '../../types'
 
 export default function SellerSupport() {
@@ -16,6 +17,7 @@ export default function SellerSupport() {
     reopenSupportTicket,
     deleteSupportThread,
     cleanupOldSupportMessages,
+    refreshSupportMessages,
     orders,
   } = useStore()
 
@@ -24,6 +26,27 @@ export default function SellerSupport() {
   const [sending, setSending] = useState(false)
   const [filterTab, setFilterTab] = useState<'open' | 'resolved' | 'all'>('open')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Live incoming support messages subscription for staff
+  const staffSupportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const unsub = subscribeSupportMessages(undefined, () => {
+      if (staffSupportTimerRef.current) clearTimeout(staffSupportTimerRef.current)
+      staffSupportTimerRef.current = setTimeout(async () => {
+        await refreshSupportMessages()
+        showToast(
+          lang === 'bn'
+            ? '💬 নতুন গ্রাহক সহায়তা বার্তা এসেছে!'
+            : '💬 New customer support message received!',
+          '🔔',
+        )
+      }, 500)
+    })
+    return () => {
+      unsub()
+      if (staffSupportTimerRef.current) clearTimeout(staffSupportTimerRef.current)
+    }
+  }, [lang, refreshSupportMessages])
 
   // Auto-clean resolved junk messages older than 7 days on mount (keeps DB size under 1%)
   useEffect(() => {

@@ -1,12 +1,13 @@
-﻿import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
 import { formatOrderId } from '../lib/business'
 import { showToast } from '../lib/toast'
+import { subscribeSupportMessages } from '../lib/api'
 
 export default function Support() {
-  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, shiftStatus } = useStore()
+  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, shiftStatus, refreshSupportMessages } = useStore()
   const { user } = useAuth()
   const [inputMsg, setInputMsg] = useState('')
   const [sending, setSending] = useState(false)
@@ -29,6 +30,30 @@ export default function Support() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [userThread.length])
+
+  // ── Live support reply subscription ────────────────────────────────────────
+  // Subscribes to new support_messages for this user. When the seller/admin
+  // replies in the support desk, the customer sees the reply instantly.
+  const supportRefTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!user?.id) return
+    const unsub = subscribeSupportMessages(user.id, () => {
+      if (supportRefTimerRef.current) clearTimeout(supportRefTimerRef.current)
+      supportRefTimerRef.current = setTimeout(async () => {
+        await refreshSupportMessages()
+        showToast(
+          lang === 'bn'
+            ? '💬 সাপোর্ট টিম থেকে নতুন উত্তর এসেছে!'
+            : '💬 New reply from Support Team!',
+          '🌱',
+        )
+      }, 500)
+    })
+    return () => {
+      unsub()
+      if (supportRefTimerRef.current) clearTimeout(supportRefTimerRef.current)
+    }
+  }, [user?.id, lang, refreshSupportMessages])
 
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || inputMsg).trim()

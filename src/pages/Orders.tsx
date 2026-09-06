@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import OrderChat from '../components/OrderChat'
 import FreshnessRating from '../components/FreshnessRating'
@@ -6,11 +6,13 @@ import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { t } from '../lib/i18n'
+import { subscribeCustomerOrders } from '../lib/api'
+import { showToast } from '../lib/toast'
 import type { Order, OrderItem } from '../types'
 
 export default function Orders() {
   const { user } = useAuth()
-  const { orders, lang, reorderFromOrder, updateOrderStatus } = useStore()
+  const { orders, lang, reorderFromOrder, updateOrderStatus, refreshOrdersOnly } = useStore()
   const navigate = useNavigate()
   const [msg, setMsg] = useState('')
 
@@ -53,6 +55,35 @@ export default function Orders() {
   useEffect(() => {
     localStorage.setItem('gv_cleared_orders', JSON.stringify(clearedIds))
   }, [clearedIds])
+
+  // ── Live order status subscription ─────────────────────────────────────────
+  // Subscribe to Supabase Realtime for this customer's own orders.
+  // When seller confirms / rider picks up → instant toast + refresh, no manual reload.
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevStatusMapRef = useRef<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!user?.id) return
+    const unsub = subscribeCustomerOrders(user.id, () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+      refreshTimerRef.current = setTimeout(async () => {
+        const prevMap = prevStatusMapRef.current
+        await refreshOrdersOnly()
+        // We can't directly read the updated orders here (closure), so we rely on
+        // the next render — the orders state in context will update and the component re-renders.
+        // Show a generic update toast so the customer knows something changed.
+        showToast(
+          lang === 'bn' ? '🔄 আপনার অর্ডারের স্ট্যাটাস আপডেট হয়েছে!' : '🔄 Your order status has been updated!',
+          '📦',
+        )
+        prevStatusMapRef.current = prevMap
+      }, 1000)
+    })
+    return () => {
+      unsub()
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+    }
+  }, [user?.id, refreshOrdersOnly, lang])
 
   const mine = useMemo(() => {
     if (!user) return []

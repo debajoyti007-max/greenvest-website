@@ -1151,6 +1151,89 @@ export function subscribeProducts(onChange: () => void) {
   }
 }
 
+// ── Customer-specific order subscription (free-tier optimized) ───────────────
+// Opens only for logged-in customers. Filtered by user_id so the channel only
+// fires when THEIR orders change — no wasted events from other users.
+export function subscribeCustomerOrders(userId: string, onChange: () => void) {
+  if (!isSupabaseConfigured || !supabase || !userId) return () => {}
+  const client = supabase
+  const channel = client
+    .channel(`customer-orders-${userId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'orders', filter: `user_id=eq.${userId}` },
+      () => onChange(),
+    )
+    .subscribe()
+  return () => {
+    void client.removeChannel(channel)
+  }
+}
+
+// ── Per-order message subscription (DB-level guarantee) ──────────────────────
+// Listens to postgres_changes on order_messages filtered to a specific orderId.
+// This is a reliable DB-level fallback — if the recipient was offline when the
+// broadcast fired, they still get the message when they open the chat.
+export function subscribeOrderMessages(orderId: string, onChange: () => void) {
+  if (!isSupabaseConfigured || !supabase || !orderId) return () => {}
+  const client = supabase
+  const channel = client
+    .channel(`order-msg-db-${orderId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'order_messages', filter: `order_id=eq.${orderId}` },
+      () => onChange(),
+    )
+    .subscribe()
+  return () => {
+    void client.removeChannel(channel)
+  }
+}
+
+// ── Single order subscription for live tracking (free-tier optimized) ────────
+// Used on TrackOrder.tsx when viewing a specific order. Subscribes only while on page.
+export function subscribeSingleOrder(orderId: string, onChange: () => void) {
+  if (!isSupabaseConfigured || !supabase || !orderId) return () => {}
+  const client = supabase
+  const channel = client
+    .channel(`order-track-${orderId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
+      () => onChange(),
+    )
+    .subscribe()
+  return () => {
+    void client.removeChannel(channel)
+  }
+}
+
+// ── Support messages subscription (scoped to customer or all for staff) ──────
+// If userId is provided: listens only for that user's messages.
+// If userId is undefined: listens for any incoming message (used in seller support desk).
+export function subscribeSupportMessages(userId: string | undefined, onChange: () => void) {
+  if (!isSupabaseConfigured || !supabase) return () => {}
+  const client = supabase
+  const channelName = userId ? `support-msgs-${userId}` : 'support-msgs-staff'
+  const filter = userId ? `user_id=eq.${userId}` : undefined
+  const channel = client
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'support_messages',
+        ...(filter ? { filter } : {}),
+      },
+      () => onChange(),
+    )
+    .subscribe()
+  return () => {
+    void client.removeChannel(channel)
+  }
+}
+
 
 export async function fetchAddresses(userId: string): Promise<Address[]> {
   if (!supabase || !userId) return []

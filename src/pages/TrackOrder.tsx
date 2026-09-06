@@ -1,11 +1,11 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import OrderChat from '../components/OrderChat'
 import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
 import { formatOrderId } from '../lib/business'
-import { fetchOrderByIdAndPhone } from '../lib/api'
+import { fetchOrderByIdAndPhone, subscribeSingleOrder } from '../lib/api'
 import { showToast } from '../lib/toast'
 import { t } from '../lib/i18n'
 import type { Order } from '../types'
@@ -93,6 +93,36 @@ export default function TrackOrder() {
       }
     }
   }, [searchParams, orders, user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Live single-order tracking subscription (free-tier optimized) ──────────
+  // Subscribes only while the customer is on this page tracking this specific order
+  const trackRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!matched?.id) return
+    const currentOrderId = matched.id
+    const currentPhone = matched.phone
+    const unsub = subscribeSingleOrder(currentOrderId, () => {
+      if (trackRefreshTimerRef.current) clearTimeout(trackRefreshTimerRef.current)
+      trackRefreshTimerRef.current = setTimeout(async () => {
+        try {
+          const fresh = await fetchOrderByIdAndPhone(currentOrderId, currentPhone)
+          if (fresh) {
+            setMatched(fresh)
+            showToast(
+              lang === 'bn'
+                ? `📦 অর্ডারের অবস্থা আপডেট: ${fresh.status}`
+                : `📦 Order status updated: ${fresh.status}`,
+              '🚚',
+            )
+          }
+        } catch {}
+      }, 500)
+    })
+    return () => {
+      unsub()
+      if (trackRefreshTimerRef.current) clearTimeout(trackRefreshTimerRef.current)
+    }
+  }, [matched?.id, matched?.phone, lang])
 
   const onTrack = async (e: FormEvent) => {
     e.preventDefault()
