@@ -1,12 +1,15 @@
-﻿// GreenVest Service Worker (v1.0.0)
-const CACHE_NAME = 'greenvest-static-v1'
+// GreenVest Service Worker (v2.0.0)
+const CACHE_NAME = 'greenvest-static-v2'
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
   '/favicon.svg',
   '/icon-192.png',
-  '/icon-512.png'
+  '/icon-512.png',
+  // ⚡ Pre-cache hero banners so they appear instantly on repeat visits / slow 4G
+  '/veg/hero_veggies_mobile.webp',
+  '/veg/hero_veggies.webp',
 ]
 
 // Install: pre-cache core shell

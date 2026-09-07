@@ -495,9 +495,20 @@ export default function Shop() {
     return []
   }, [cartTotal, available, shortfall, priceFor, cart])
 
+  // ⚡ Pre-fetch Cart & Checkout JS chunks on first "Add to Cart" click
+  // These are lazy-loaded by App.tsx — we warm them up silently so navigation is instant
+  const prefetchedRef = useRef(false)
+  const prefetchCartChunks = () => {
+    if (prefetchedRef.current) return
+    prefetchedRef.current = true
+    void import(/* webpackChunkName: "Cart" */ './Cart')
+    void import(/* webpackChunkName: "Checkout" */ './Checkout')
+  }
+
   const handleAddDirect = (p: Product, g: Grade, qty = 1, weightMultiplier = 1, weightLabel?: string) => {
     if (!p.inStock) return
     addToCart(p.id, g, qty, weightMultiplier, weightLabel)
+    prefetchCartChunks()
     const lbl = weightLabel && weightLabel !== p.unit ? ` (${weightLabel})` : ''
     showToast(
       lang === 'bn'
@@ -511,6 +522,7 @@ export default function Shop() {
     items.forEach((item) => {
       addToCart(item.product.id, item.grade, item.qty)
     })
+    prefetchCartChunks()
   }
 
   const scrollToGrid = () => {

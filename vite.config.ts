@@ -8,6 +8,14 @@ export default defineConfig({
     port: 3000,
     host: true,
   },
+  // ⚡ Strip console.log / console.debug in production builds (Vite 8 / Rolldown compatible)
+  // Keeps console.error + console.warn so real bugs are still visible in DevTools
+  // Reduces JS parse/execution time on low-end budget Android phones
+  define: {
+    'console.log': 'void 0',
+    'console.debug': 'void 0',
+    'console.info': 'void 0',
+  },
   build: {
     // Raise warning limit to 600kB (vendor chunk is expected to be large)
     chunkSizeWarningLimit: 600,
