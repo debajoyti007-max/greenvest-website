@@ -96,8 +96,10 @@ export async function fetchKhataEntriesApi(userId?: string): Promise<KhataEntry[
       orderId: r.order_id || undefined,
       type: (r.type === 'adjustment_credit' || r.type === 'adjustment_debit') ? 'adjustment' : r.type,
       amount: Number(r.amount),
-      balanceAfter: 0,
-      notes: r.notes || undefined,
+      balanceAfter: r.balance_after != null ? Number(r.balance_after) : undefined,
+      notes: r.notes || r.description || undefined,
+      description: r.description || r.notes || undefined,
+      paymentMethod: (r.payment_method as 'upi' | 'cash') || undefined,
       recordedBy: 'GreenVest Staff',
       createdAt: r.created_at,
     }))
@@ -120,11 +122,11 @@ export async function saveKhataEntryApi(entry: KhataEntry): Promise<void> {
       user_id: entry.userId,
       type: dbType,
       amount: entry.amount,
-      notes: entry.notes || null,
-      description: entry.notes || null,
-      balance_after: entry.balanceAfter || null,
+      notes: entry.notes || entry.description || null,
+      description: entry.description || entry.notes || null,
+      balance_after: entry.balanceAfter != null ? entry.balanceAfter : null,
       order_id: entry.orderId || null,
-      payment_method: 'upi',
+      payment_method: entry.paymentMethod || 'upi',
       created_at: entry.createdAt,
     }
 

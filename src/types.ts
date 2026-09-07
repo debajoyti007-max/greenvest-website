@@ -114,6 +114,8 @@ export interface KhataEntry {
   amount: number
   balanceAfter?: number
   notes?: string
+  /** Maps to khata_ledger.description DB column */
+  description?: string
   paymentMethod?: 'upi' | 'cash'
   recordedBy?: string
   createdBy?: string

@@ -113,7 +113,7 @@ type ProfileRow = {
   khata_approved?: boolean | null
   khata_credit_limit?: number | null
   phone?: string | null
-  isBlocked?: boolean | null
+  // isBlocked column was dropped from DB in migration 014 — only is_blocked remains
   is_blocked?: boolean | null
   pin?: string | null
   is_super_admin?: boolean | null
@@ -256,7 +256,7 @@ function mapOrder(row: OrderRow): Order {
     discountAmount: row.discount != null ? Number(row.discount) : undefined,
     total: Number(row.total),
     advanceAmount: Number(row.advance_amount),
-    paymentType: row.payment_type === 'full' ? 'full' : 'advance',
+    paymentType: (row.payment_type as 'full' | 'advance' | 'khata') || 'advance',
     paymentMode: (row.payment_mode as 'online' | 'khata' | undefined) || undefined,
     isKhataOrder: row.payment_mode === 'khata' || row.payment_type === 'khata',
     rejectionReason: row.rejection_reason || undefined,
@@ -295,7 +295,7 @@ export function mapProfile(row: ProfileRow): User {
     khataApproved: Boolean(row.khata_approved),
     khataCreditLimit: row.khata_credit_limit != null ? Number(row.khata_credit_limit) : 2000,
     phone: derivedPhone || undefined,
-    isBlocked: row.is_blocked ?? row.isBlocked ?? false,
+    isBlocked: Boolean(row.is_blocked),
     // 🔒 Security: isSuperAdmin is set ONLY by the database, never by env vars in frontend code
     isSuperAdmin: row.is_super_admin === true,
     createdAt: row.created_at,
@@ -582,6 +582,12 @@ export async function upsertProduct(product: Product): Promise<Product> {
       p_image_url: product.imageUrl || null,
       p_emoji: product.emoji || '🥬',
       p_archived: Boolean(product.archived),
+      // C3 Fix: pass new product columns that were previously dropped on RPC fallback path
+      p_mrp: product.mrp ?? null,
+      p_available_grades: product.availableGrades && product.availableGrades.length > 0 ? product.availableGrades : ['A', 'B', 'C'],
+      p_sold_as: product.soldAs || 'loose',
+      p_gram_options: product.gramOptions || null,
+      p_stock_qty: product.stockQty ?? null,
     })
     if (!rpcErr && rpcData) {
       const mapped = mapProduct(rpcData as ProductRow)
@@ -862,19 +868,16 @@ export async function createOrder(order: Order): Promise<Order> {
     })
 
     if (!rpcErr && atomicRes && (atomicRes as any).success) {
-      if (order.deliveryDate && order.deliveryDate !== 'standard') {
-        try {
-          await client.from('orders').update({ delivery_date: order.deliveryDate }).eq('id', order.id)
-        } catch (dErr) {
-          console.debug('Failed to set delivery_date on order row:', dErr)
-        }
-      }
-      if (order.deliveryNotes) {
-        try {
-          await client.from('orders').update({ delivery_notes: order.deliveryNotes }).eq('id', order.id)
-        } catch (nErr) {
-          console.debug('Failed to set delivery_notes on order row:', nErr)
-        }
+      // Patch fields the RPC doesn't accept as parameters — done as a single UPDATE
+      const patch: Record<string, unknown> = {}
+      if (order.deliveryDate && order.deliveryDate !== 'standard') patch.delivery_date = order.deliveryDate
+      if (order.deliveryNotes) patch.delivery_notes = order.deliveryNotes
+      // M1 Fix: geo coords and payer UPI name were previously silently lost on RPC path
+      if (order.geoLat != null) patch.geo_lat = order.geoLat
+      if (order.geoLng != null) patch.geo_lng = order.geoLng
+      if (order.payerUpiName) patch.payer_upi_name = order.payerUpiName
+      if (Object.keys(patch).length > 0) {
+        void client.from('orders').update(patch).eq('id', order.id)
       }
       return order
     }
