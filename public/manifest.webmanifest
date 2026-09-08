@@ -1,7 +1,7 @@
 {
-  "name": "GreenVest – তাজা সবজি",
-  "short_name": "GreenVest",
-  "description": "GreenVest — fresh vegetables with grade A/B/C, min order ₹500, delivery in 12–24 hours.",
+  "name": "MS GreenMart – তাজা সবজি ও মাছ",
+  "short_name": "MS GreenMart",
+  "description": "MS GreenMart — তাজা সবজি ও টাটকা মাছ, সরাসরি আপনার ঘরে। সহজে ১-ট্যাপ UPI ও খাতা পেমেন্ট।",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

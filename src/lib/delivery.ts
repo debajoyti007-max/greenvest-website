@@ -2,10 +2,10 @@ import type { DeliveryZone as DbDeliveryZone } from '../types'
 import { SERVICEABLE_PINCODES } from './business'
 
 export const STORE_LOCATION = {
-  name: 'GreenVest Store',
-  nameBn: 'গ্রীনভেস্ট স্টোর',
-  address: 'GreenVest Store, Purba Medinipur, PIN 721648',
-  addressBn: 'গ্রীনভেস্ট স্টোর, পূর্ব মেদিনীপুর, পিন: ৭২১৬৪৮',
+  name: 'MS GreenMart Store',
+  nameBn: 'এম.এস গ্রিনমার্ট আউটলেট',
+  address: 'MS GreenMart Store, Purba Medinipur, PIN 721648',
+  addressBn: 'এম.এস গ্রিনমার্ট আউটলেট, পূর্ব মেদিনীপুর, পিন: ৭২১৬৪৮',
   lat: 22.1746825,
   lng: 87.9106158,
   mapsUrl: 'https://maps.app.goo.gl/pdafSPpPPBymCDgDA',

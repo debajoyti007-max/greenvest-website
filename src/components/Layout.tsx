@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import CartBar from './CartBar'
 import NetworkStatus from './NetworkStatus'
@@ -72,13 +72,13 @@ export default function Layout() {
 
   useEffect(() => {
     if (!isPrivileged || openAlertsCount === 0) {
-      document.title = 'GreenVest – তাজা সবজি'
+      document.title = 'MS GreenMart – তাজা সবজি ও মাছ'
       return
     }
 
     let toggle = false
-    const baseTitle = 'GreenVest – তাজা সবজি'
-    const alertTitle = `🚨 (${openAlertsCount}) Alert | GreenVest`
+    const baseTitle = 'MS GreenMart – তাজা সবজি ও মাছ'
+    const alertTitle = `🚨 (${openAlertsCount}) Alert | MS GreenMart`
 
     const timer = setInterval(() => {
       toggle = !toggle
@@ -121,11 +121,11 @@ export default function Layout() {
       <header ref={headerRef} className={`site-header${islandCompact ? ' island-compact' : ''}`}>
         <div className="header-inner">
           <Link to={user?.role === 'rider' ? '/rider' : '/'} className="brand" onClick={closeMenu}>
-            <span className="brand-mark" aria-hidden>
-              🌿
+            <span className="brand-mark" aria-hidden style={{ background: '#ffffff', padding: '2px', border: '1.5px solid #16a34a' }}>
+              <img src="/favicon.svg" alt="MS GreenMart" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px' }} />
             </span>
             <span className="brand-text">
-              <strong>GreenVest</strong>
+              <strong>MS GreenMart</strong>
               <em>{t(lang, 'freshTag')}</em>
             </span>
           </Link>
@@ -378,8 +378,8 @@ export default function Layout() {
             {/* Brand column */}
             <div className="footer-brand">
               <div className="footer-logo">
-                <span aria-hidden>🌿</span>
-                <strong>GreenVest</strong>
+                <img src="/favicon.svg" alt="MS GreenMart" style={{ width: 28, height: 28, borderRadius: '6px' }} />
+                <strong>MS GreenMart</strong>
               </div>
               <p className="footer-tagline">{t(lang, 'footerLine')}</p>
               <Link
@@ -418,7 +418,7 @@ export default function Layout() {
             <div className="footer-col">
               <h4 className="footer-col-title">{lang === 'bn' ? '🏪 আউটলেট' : '🏪 Our Outlet'}</h4>
               <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '0 0 0.5rem', lineHeight: 1.4 }}>
-                <strong>GreenVest Store</strong><br />
+                <strong>MS GreenMart Outlet</strong><br />
                 {lang === 'bn' ? 'পূর্ব মেদিনীপুর, পিন: ৭২১৬৪৮' : 'Purba Medinipur, PIN 721648'}
               </p>
               <a
@@ -453,7 +453,7 @@ export default function Layout() {
                 : `Delivery ${DELIVERY_WINDOW} · Min ₹${MIN_ORDER_AMOUNT} · 🇮🇳 Country of Origin: India`}
             </span>
             <span className="footer-copy">
-              © {new Date().getFullYear()} GreenVest · FSSAI Hygiene Compliant · Purba Medinipur, West Bengal
+              © {new Date().getFullYear()} MS GreenMart · FSSAI Hygiene Compliant · Purba Medinipur, West Bengal
             </span>
           </div>
         </div>

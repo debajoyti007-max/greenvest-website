@@ -30,7 +30,7 @@ export function printOrderInvoice(order: Order) {
     th{font-size:12px;text-transform:uppercase;color:#555}
     .tot{margin-top:16px;font-size:16px}
   </style></head><body>
-  <h1>GreenVest Invoice</h1>
+  <h1>MS GreenMart Invoice</h1>
   <p class="muted">${escapeHtml(order.id)} · ${new Date(order.createdAt).toLocaleString()}</p>
   <p><strong>${escapeHtml(order.userName)}</strong><br/>${escapeHtml(order.phone)}<br/>${escapeHtml(order.address)}<br/>${order.deliveryNotes ? `<b>Landmark/Note: ${escapeHtml(order.deliveryNotes)}</b><br/>` : ''}PIN ${escapeHtml(order.pin)}<br/>Delivery: <b>${order.deliveryDate && order.deliveryDate !== 'standard' ? escapeHtml(order.deliveryDate) : 'Standard 12–24h'}</b></p>
   <table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
@@ -72,8 +72,8 @@ export function printThermalReceipt(order: Order) {
     .b { font-weight: bold; }
     .hr { border-bottom: 1px dashed #000; margin: 4px 0; }
   </style></head><body>
-  <div class="c b">GREENVEST</div>
-  <div class="c">Fresh Vegetables</div>
+  <div class="c b">MS GREENMART</div>
+  <div class="c">Fresh Veggies & Fish</div>
   <div class="hr"></div>
   <div>ID: ${escapeHtml(order.id)}</div>
   <div>Date: ${new Date(order.createdAt).toLocaleDateString()}</div>

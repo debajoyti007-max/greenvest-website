@@ -77,7 +77,7 @@ const dict = {
   contact: { en: 'Contact Us', bn: 'যোগাযোগ করুন' },
   privacy: { en: 'Privacy & Policy', bn: 'গোপনীয়তা ও নীতি' },
   terms: { en: 'Terms', bn: 'শর্তাবলী' },
-  freshTag: { en: 'Fresh groceries', bn: 'তাজা সবজি' },
+  freshTag: { en: 'Fresh Veggies & Fish', bn: 'তাজা সবজি ও মাছ' },
   footerLine: {
     en: 'Fresh daily vegetables & fish, delivered to your door',
     bn: 'তাজা সবজি ও মাছ, সরাসরি আপনার দরজায়',
