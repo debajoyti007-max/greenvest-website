@@ -121,8 +121,8 @@ export default function Layout() {
       <header ref={headerRef} className={`site-header${islandCompact ? ' island-compact' : ''}`}>
         <div className="header-inner">
           <Link to={user?.role === 'rider' ? '/rider' : '/'} className="brand" onClick={closeMenu}>
-            <span className="brand-mark" aria-hidden style={{ background: '#ffffff', padding: '2px', border: '1.5px solid #16a34a' }}>
-              <img src="/favicon.svg" alt="MS GreenMart" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px' }} />
+            <span className="brand-mark" aria-hidden style={{ background: '#ffffff', padding: '2px', border: '1.5px solid #16a34a', overflow: 'hidden' }}>
+              <img src="/icon-192.png?v=3" alt="MS GreenMart" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px', display: 'block' }} />
             </span>
             <span className="brand-text">
               <strong>MS GreenMart</strong>
@@ -378,7 +378,7 @@ export default function Layout() {
             {/* Brand column */}
             <div className="footer-brand">
               <div className="footer-logo">
-                <img src="/favicon.svg" alt="MS GreenMart" style={{ width: 28, height: 28, borderRadius: '6px' }} />
+                <img src="/icon-192.png?v=3" alt="MS GreenMart" style={{ width: 28, height: 28, borderRadius: '6px', objectFit: 'cover' }} />
                 <strong>MS GreenMart</strong>
               </div>
               <p className="footer-tagline">{t(lang, 'footerLine')}</p>
