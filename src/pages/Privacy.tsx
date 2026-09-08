@@ -1,4 +1,4 @@
-﻿import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useStore } from '../context/useStore'
 import { SUPPORT_PHONE } from '../lib/business'
 import { STORE_LOCATION } from '../lib/delivery'
@@ -26,8 +26,8 @@ export default function Privacy() {
         </h2>
         <p style={{ fontSize: '0.88rem', lineHeight: '1.6', color: '#334155' }}>
           {lang === 'bn'
-            ? 'GreenVest ("আমরা", "আমাদের", "ওয়েবসাইট") আমাদের গ্রাহকদের ব্যক্তিগত তথ্যের গোপনীয়তা ও সুরক্ষায় প্রতিশ্রুতিবদ্ধ। এই গোপনীয়তা নীতি ব্যাখ্যা করে কিভাবে greenvest.shop ব্যবহার করার সময় আপনার তথ্য সংগৃহীত, ব্যবহৃত ও সুরক্ষিত রাখা হয়।'
-            : 'GreenVest ("we", "our", "platform") is firmly committed to protecting your personal data and privacy. This Privacy Policy outlines how your personal information is collected, processed, and safeguarded when using greenvest.shop.'}
+            ? 'MS GreenMart ("আমরা", "আমাদের", ওয়েবসাইট: greenvest.shop) আমাদের গ্রাহকদের ব্যক্তিগত তথ্যের গোপনীয়তা ও সুরক্ষায় প্রতিশ্রুতিবদ্ধ। এই গোপনীয়তা নীতি ব্যাখ্যা করে কিভাবে greenvest.shop ব্যবহার করার সময় আপনার তথ্য সংগৃহীত, ব্যবহৃত ও সুরক্ষিত রাখা হয়।'
+            : 'MS GreenMart ("we", "our", platform: greenvest.shop) is firmly committed to protecting your personal data and privacy. This Privacy Policy outlines how your personal information is collected, processed, and safeguarded when using greenvest.shop.'}
         </p>
       </section>
 
