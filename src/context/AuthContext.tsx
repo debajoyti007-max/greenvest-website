@@ -20,6 +20,7 @@ import {
   saveUsers,
   setSessionUserId,
   storePin,
+  getActiveUserPin,
   uid,
 } from '../lib/storage'
 import type { Role, User } from '../types'
@@ -135,7 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (cloud) {
       let cloudUsers: User[] = []
       try {
-        cloudUsers = await fetchProfiles()
+        const callerPin = getActiveUserPin(profile)
+        cloudUsers = await fetchProfiles(profile.id, callerPin)
       } catch {
         cloudUsers = []
       }
@@ -340,6 +342,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (updated) {
             setUser(updated)
             userRef.current = updated
+            if (updated.role === 'admin' || updated.role === 'seller') {
+              void loadUsersIfStaff(updated)
+            }
           }
         }
       )
@@ -347,7 +352,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       if (supabase) void supabase.removeChannel(channel)
     }
-  }, [cloud, currentUserId])
+  }, [cloud, currentUserId, loadUsersIfStaff])
 
   // ── Staff Realtime: auto-sync newly registered customers and live profile edits ──
   useEffect(() => {
@@ -458,9 +463,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ): Promise<AuthResult> {
           clearLoginAttempts(authEmail)
 
-          // Cache PIN locally for offline fallback
-          if (usedPin && usedPin.length === 4 && data.email) {
-            storePin(data.email, usedPin)
+          // Cache PIN locally for offline fallback and Staff Gateway RPC
+          if (usedPin && usedPin.length === 4) {
+            if (data.id) storePin(data.id, usedPin)
+            if (data.email) storePin(data.email, usedPin)
             if (data.phone) storePin(data.phone, usedPin)
           }
 

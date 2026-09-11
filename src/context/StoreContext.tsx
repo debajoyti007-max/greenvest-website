@@ -69,6 +69,7 @@ import {
   saveProducts,
   setLang as persistLang,
   STORE_EVENT,
+  getActiveUserPin,
   uid,
 } from '../lib/storage'
 import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, KhataEntry, CustomerTier, ShiftInfo, PromotionalDeal, SupportMessage } from '../types'
@@ -223,7 +224,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const isStaff = userRole === 'admin' || userRole === 'seller'
 
     // Khata: staff sees all entries; customers see only their own ledger
-    fetchKhataEntriesApi(isStaff ? undefined : userId).then((entries) => {
+    const callerPin = getActiveUserPin(user)
+    fetchKhataEntriesApi(isStaff ? undefined : userId, user?.id, callerPin).then((entries) => {
       if (entries && Array.isArray(entries) && entries.length > 0) {
         setKhataEntries(entries)
       }
@@ -235,7 +237,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSupportMessages(msgs)
       }
     })
-  }, [cloud, userId, userRole])
+  }, [cloud, user, userId, userRole])
 
   const refreshLocal = useCallback(() => {
     ensureSeeded()
@@ -298,9 +300,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
       document.body.classList.toggle('lang-bn', l === 'bn')
       if (user) {
-        // Pass role + id so fetchOrders filters correctly:
-        // rider/seller/admin → all orders | customer → only their own
-        const ords = await fetchOrders(user.role, user.id, user.email, user.phone)
+        // Pass role + id + pin so fetchOrders filters correctly via Staff Gateway RPC
+        const callerPin = getActiveUserPin(user)
+        const ords = await fetchOrders(user.role, user.id, user.email, user.phone, 100, callerPin)
         // Merge with local cache to safeguard scheduled deliveryDate against empty/null remote schemas
         const localOrders = getOrders()
         const localMap = new Map(localOrders.map((o) => [o.id, o]))
@@ -335,7 +337,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refreshOrdersOnly = useCallback(async () => {
     if (!user) return
     try {
-      const ords = await fetchOrders(user.role, user.id, user.email, user.phone)
+      const callerPin = getActiveUserPin(user)
+      const ords = await fetchOrders(user.role, user.id, user.email, user.phone, 100, callerPin)
       const localOrders = getOrders()
       const localMap = new Map(localOrders.map((o) => [o.id, o]))
       const mergedOrds = ords.map((o) => {

@@ -23,19 +23,43 @@ export const STORE_EVENT = 'greenvest-store-update'
 // This works independently of the Supabase profiles table schema.
 const PINS_KEY = 'gv_pins'
 
-export function getStoredPin(email: string): string {
+export function getStoredPin(identifier: string): string {
+  if (!identifier) return ''
   try {
     const pins = safeJsonParse<Record<string, string>>(localStorage.getItem(PINS_KEY), {})
-    return pins[email.toLowerCase()] || ''
+    return pins[identifier.toLowerCase()] || ''
   } catch { return '' }
 }
 
-export function storePin(email: string, pin: string): void {
+export function storePin(identifier: string, pin: string): void {
+  if (!identifier || !pin) return
   try {
     const pins = safeJsonParse<Record<string, string>>(localStorage.getItem(PINS_KEY), {})
-    pins[email.toLowerCase()] = pin
+    pins[identifier.toLowerCase()] = pin
     localStorage.setItem(PINS_KEY, JSON.stringify(pins))
   } catch {}
+}
+
+export function getActiveUserPin(user?: { id?: string; email?: string; phone?: string } | null): string {
+  if (!user) return ''
+  if (user.id) {
+    const pin = getStoredPin(user.id)
+    if (pin) return pin
+  }
+  if (user.phone) {
+    const pin = getStoredPin(user.phone)
+    if (pin) return pin
+    const cleanPhone = user.phone.replace(/\D/g, '').slice(-10)
+    if (cleanPhone) {
+      const pin2 = getStoredPin(cleanPhone)
+      if (pin2) return pin2
+    }
+  }
+  if (user.email) {
+    const pin = getStoredPin(user.email)
+    if (pin) return pin
+  }
+  return ''
 }
 
 // Module-level flag so ensureSeeded() is a true no-op after the first run.

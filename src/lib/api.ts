@@ -309,8 +309,28 @@ export async function fetchProfile(userId: string): Promise<User | null> {
   return data ? mapProfile(data as ProfileRow) : null
 }
 
-export async function fetchProfiles(): Promise<User[]> {
+export async function fetchProfiles(callerId?: string, callerPin?: string): Promise<User[]> {
   const client = requireClient()
+
+  // 1. If caller credentials provided (Staff PIN login), query through secure Gateway RPC
+  if (callerId) {
+    try {
+      const { data: rpcData, error: rpcErr } = await client.rpc('get_staff_customers', {
+        p_caller_id: callerId,
+        p_caller_pin: callerPin || '',
+      })
+      if (!rpcErr && rpcData && Array.isArray(rpcData)) {
+        return (rpcData as ProfileRow[]).map(mapProfile)
+      }
+      if (rpcErr) {
+        console.warn('get_staff_customers RPC fallback notice:', rpcErr.message)
+      }
+    } catch (err) {
+      console.warn('get_staff_customers RPC exception:', err)
+    }
+  }
+
+  // 2. Fallback to direct profiles query (e.g. for Super Admin with active Supabase session)
   const { data, error } = await client.from('profiles').select('*').order('created_at', { ascending: true })
   if (error) throw error
   return (data as ProfileRow[]).map(mapProfile)
@@ -633,9 +653,28 @@ export async function fetchOrders(
   userEmail?: string,
   userPhone?: string,
   limitCount = 100,
+  userPin?: string,
 ): Promise<Order[]> {
   const client = requireClient()
   const isStaff = userRole === 'seller' || userRole === 'admin' || userRole === 'rider'
+
+  // 1. Staff Gateway: try secure RPC for sellers, admins, and riders
+  if (isStaff && userId) {
+    try {
+      const { data: rpcData, error: rpcErr } = await client.rpc('get_staff_orders', {
+        p_caller_id: userId,
+        p_caller_pin: userPin || '',
+      })
+      if (!rpcErr && rpcData && Array.isArray(rpcData)) {
+        return (rpcData as OrderRow[]).map(mapOrder)
+      }
+      if (rpcErr) {
+        console.warn('get_staff_orders RPC fallback notice:', rpcErr.message)
+      }
+    } catch (err) {
+      console.warn('get_staff_orders RPC exception:', err)
+    }
+  }
 
   // Privacy isolation: non-staff users must provide an identifier
   if (!isStaff && !userId && !userEmail && !userPhone) {

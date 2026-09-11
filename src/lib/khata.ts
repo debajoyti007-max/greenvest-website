@@ -79,18 +79,43 @@ export function recordKhataTransaction(
 }
 
 /** Fetches Khata entries from Supabase with fallback to local storage */
-export async function fetchKhataEntriesApi(userId?: string): Promise<KhataEntry[]> {
+export async function fetchKhataEntriesApi(userId?: string, callerId?: string, callerPin?: string): Promise<KhataEntry[]> {
   const fallback = getStoredKhataEntries()
   const { supabase } = await import('./supabase')
   if (!supabase) return fallback
 
   try {
-    let query = supabase.from('khata_ledger').select('*').order('created_at', { ascending: false })
-    if (userId) query = query.eq('user_id', userId)
-    const { data, error } = await query
-    if (error || !data) return fallback
+    let rawData: any[] | null = null
 
-    const mapped: KhataEntry[] = data.map((r: any) => ({
+    // 1. If staff credentials provided, use secure Gateway RPC
+    if (callerId) {
+      try {
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('get_staff_khata_ledger', {
+          p_caller_id: callerId,
+          p_caller_pin: callerPin || '',
+        })
+        if (!rpcErr && rpcData && Array.isArray(rpcData)) {
+          rawData = rpcData
+        }
+      } catch {}
+    }
+
+    // 2. Fallback to direct query
+    if (!rawData) {
+      let query = supabase.from('khata_ledger').select('*').order('created_at', { ascending: false })
+      if (userId) query = query.eq('user_id', userId)
+      const { data, error } = await query
+      if (!error && data) rawData = data
+    }
+
+    if (!rawData) return fallback
+
+    let finalData = rawData
+    if (userId) {
+      finalData = finalData.filter((r: any) => r.user_id === userId)
+    }
+
+    const mapped: KhataEntry[] = finalData.map((r: any) => ({
       id: String(r.id),
       userId: r.user_id,
       orderId: r.order_id || undefined,
