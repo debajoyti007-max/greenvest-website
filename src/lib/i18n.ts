@@ -77,10 +77,10 @@ const dict = {
   contact: { en: 'Contact Us', bn: 'যোগাযোগ করুন' },
   privacy: { en: 'Privacy & Policy', bn: 'গোপনীয়তা ও নীতি' },
   terms: { en: 'Terms', bn: 'শর্তাবলী' },
-  freshTag: { en: 'Fresh Veggies & Fish', bn: 'তাজা সবজি ও মাছ' },
+  freshTag: { en: 'Fresh Produce & Groceries', bn: 'তাজা শাকসবজি ও বাজার' },
   footerLine: {
-    en: 'Fresh daily vegetables & fish, delivered to your door',
-    bn: 'তাজা সবজি ও মাছ, সরাসরি আপনার দরজায়',
+    en: 'Fresh daily vegetables & groceries, delivered to your door',
+    bn: 'প্রতিদিনের তাজা শাকসবজি ও বাজার, সরাসরি আপনার দরজায়',
   },
   local: { en: 'Local', bn: 'লোকাল' },
   nearby: { en: 'Nearby', bn: 'কাছাকাছি' },

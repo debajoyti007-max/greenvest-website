@@ -703,8 +703,8 @@ export default function Shop() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
             <img
-              src="/logo.png?v=3"
-              alt="MS GreenMart Logo"
+              src="/logo.png?v=1.2"
+              alt="MS Vegetable Center Logo"
               style={{
                 width: '84px',
                 height: '84px',
@@ -721,7 +721,7 @@ export default function Shop() {
                 ⭐ {lang === 'bn' ? 'পূর্ব মেদিনীপুরের বিশ্বস্ত বাজার' : 'Trusted Local Bazaar'}
               </div>
               <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#14532d', letterSpacing: '-0.3px' }}>
-                {lang === 'bn' ? 'এম.এস গ্রিনমার্ট – প্রতিদিনের তাজা সবজি ও মাছ' : 'MS GreenMart – Daily Fresh Veggies & Fish'}
+                {lang === 'bn' ? 'এম.এস ভেজিটেবল সেন্টার – প্রতিদিনের তাজা সবজি ও বাজার' : 'MS Vegetable Center – Daily Fresh Veggies & Groceries'}
               </h2>
               <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: '#475569', lineHeight: 1.4 }}>
                 {lang === 'bn'

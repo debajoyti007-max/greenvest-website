@@ -8,6 +8,7 @@ import { useStore } from '../context/useStore'
 import { t } from '../lib/i18n'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
 import { STORE_LOCATION } from '../lib/delivery'
+import { APP_VERSION_LABEL } from '../lib/version'
 
 import MandiTicker from './MandiTicker'
 import NotificationBell from './NotificationBell'
@@ -72,13 +73,13 @@ export default function Layout() {
 
   useEffect(() => {
     if (!isPrivileged || openAlertsCount === 0) {
-      document.title = 'MS GreenMart – তাজা সবজি ও মাছ'
+      document.title = 'MS Vegetable Center – তাজা সবজি ও বাজার'
       return
     }
 
     let toggle = false
-    const baseTitle = 'MS GreenMart – তাজা সবজি ও মাছ'
-    const alertTitle = `🚨 (${openAlertsCount}) Alert | MS GreenMart`
+    const baseTitle = 'MS Vegetable Center – তাজা সবজি ও বাজার'
+    const alertTitle = `🚨 (${openAlertsCount}) Alert | MS Vegetable Center`
 
     const timer = setInterval(() => {
       toggle = !toggle
@@ -122,10 +123,10 @@ export default function Layout() {
         <div className="header-inner">
           <Link to={user?.role === 'rider' ? '/rider' : '/'} className="brand" onClick={closeMenu}>
             <span className="brand-mark" aria-hidden style={{ background: '#ffffff', padding: '2px', border: '1.5px solid #16a34a', overflow: 'hidden' }}>
-              <img src="/icon-192.png?v=3" alt="MS GreenMart" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px', display: 'block' }} />
+              <img src="/icon-192.png?v=1.2" alt="MS Vegetable Center" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', display: 'block' }} />
             </span>
             <span className="brand-text">
-              <strong>MS GreenMart</strong>
+              <strong>MS Vegetable Center</strong>
               <em>{t(lang, 'freshTag')}</em>
             </span>
           </Link>
@@ -378,8 +379,8 @@ export default function Layout() {
             {/* Brand column */}
             <div className="footer-brand">
               <div className="footer-logo">
-                <img src="/icon-192.png?v=3" alt="MS GreenMart" style={{ width: 28, height: 28, borderRadius: '6px', objectFit: 'cover' }} />
-                <strong>MS GreenMart</strong>
+                <img src="/icon-192.png?v=1.2" alt="MS Vegetable Center" style={{ width: 28, height: 28, borderRadius: '6px', objectFit: 'contain' }} />
+                <strong>MS Vegetable Center</strong>
               </div>
               <p className="footer-tagline">{t(lang, 'footerLine')}</p>
               <Link
@@ -418,7 +419,7 @@ export default function Layout() {
             <div className="footer-col">
               <h4 className="footer-col-title">{lang === 'bn' ? '🏪 আউটলেট' : '🏪 Our Outlet'}</h4>
               <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '0 0 0.5rem', lineHeight: 1.4 }}>
-                <strong>MS GreenMart Outlet</strong><br />
+                <strong>MS Vegetable Center Outlet</strong><br />
                 {lang === 'bn' ? 'পূর্ব মেদিনীপুর, পিন: ৭২১৬৪৮' : 'Purba Medinipur, PIN 721648'}
               </p>
               <a
@@ -452,8 +453,10 @@ export default function Layout() {
                 ? `ডেলিভারি ${DELIVERY_WINDOW_BN} · মিনিমাম ₹${MIN_ORDER_AMOUNT} · 🇮🇳 কান্ট্রি অফ অরিজিন: ভারত`
                 : `Delivery ${DELIVERY_WINDOW} · Min ₹${MIN_ORDER_AMOUNT} · 🇮🇳 Country of Origin: India`}
             </span>
-            <span className="footer-copy">
-              © {new Date().getFullYear()} MS GreenMart · FSSAI Hygiene Compliant · Purba Medinipur, West Bengal
+            <span className="footer-copy" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span>© {new Date().getFullYear()} MS Vegetable Center</span>
+              <span style={{ background: 'rgba(255,255,255,0.12)', color: '#86efac', padding: '1px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700 }}>{APP_VERSION_LABEL}</span>
+              <span>· FSSAI Hygiene Compliant · Purba Medinipur, West Bengal</span>
             </span>
           </div>
         </div>

@@ -68,7 +68,7 @@ export default function Terms() {
         </div>
 
         <h1 style={{ fontSize: '1.85rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.5rem', letterSpacing: '-0.5px' }}>
-          {lang === 'bn' ? 'MS GreenMart গ্রাহক নীতিমালা ও শর্তাবলী' : 'MS GreenMart Terms of Service & Customer Policy'}
+          {lang === 'bn' ? 'MS Vegetable Center গ্রাহক নীতিমালা ও শর্তাবলী' : 'MS Vegetable Center Terms of Service & Customer Policy'}
         </h1>
         <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.6 }}>
           {lang === 'bn'
@@ -143,8 +143,8 @@ export default function Terms() {
           </h2>
           <p style={{ fontSize: '0.88rem', lineHeight: '1.65', color: '#334155', margin: 0 }}>
             {lang === 'bn'
-              ? 'MS GreenMart (ওয়েবসাইট: greenvest.shop) একটি হাইপারলোকাল তাজা শাকসবজি ও জীবন্ত/তাজা মাছের ডিজিটাল গ্রোসারি প্ল্যাটফর্ম। আমাদের সমস্ত পণ্য প্রতিদিন ভোরবেলায় পূর্ব মেদিনীপুরের স্থানীয় কৃষক, নিজস্ব বাগান এবং লাইসেন্সপ্রাপ্ত মান্ডি থেকে সরাসরি সংগৃহীত হয়। দেশের কৃষি ও কৃষককে উৎসাহিত করতে আমাদের পণ্যের কান্ট্রি অফ অরিজিন সম্পূর্ণ ভারতীয় (India 🇮🇳)।'
-              : 'MS GreenMart (operated at greenvest.shop) is a hyperlocal fresh farm-produce, fish, and daily essentials platform. All items are harvested fresh every morning from verified Purba Medinipur agricultural farms, local fisheries, and government-regulated wholesale mandis. Country of Origin for all farm items is India 🇮🇳.'}
+              ? 'MS Vegetable Center (ওয়েবসাইট: greenvest.shop) একটি হাইপারলোকাল তাজা শাকসবজি ও জীবন্ত/তাজা মাছের ডিজিটাল গ্রোসারি প্ল্যাটফর্ম। আমাদের সমস্ত পণ্য প্রতিদিন ভোরবেলায় পূর্ব মেদিনীপুরের স্থানীয় কৃষক, নিজস্ব বাগান এবং লাইসেন্সপ্রাপ্ত মান্ডি থেকে সরাসরি সংগৃহীত হয়। দেশের কৃষি ও কৃষককে উৎসাহিত করতে আমাদের পণ্যের কান্ট্রি অফ অরিজিন সম্পূর্ণ ভারতীয় (India 🇮🇳)।'
+              : 'MS Vegetable Center (operated at greenvest.shop) is a hyperlocal fresh farm-produce, fish, and daily essentials platform. All items are harvested fresh every morning from verified Purba Medinipur agricultural farms, local fisheries, and government-regulated wholesale mandis. Country of Origin for all farm items is India 🇮🇳.'}
           </p>
         </div>
 

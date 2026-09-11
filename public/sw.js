@@ -1,5 +1,5 @@
-// GreenVest / MS GreenMart Service Worker (v3.0.0)
-const CACHE_NAME = 'greenvest-static-v3'
+// MS Vegetable Center Service Worker (v1.2.0)
+const CACHE_NAME = 'msveg-static-v1.2'
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
   '/icon-192.png',
   '/icon-512.png',
   '/logo.png',
+  '/logo-transparent.png',
   // ⚡ Pre-cache hero banners so they appear instantly on repeat visits / slow 4G
   '/veg/hero_veggies_mobile.webp',
   '/veg/hero_veggies.webp',
