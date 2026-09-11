@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
@@ -146,7 +146,7 @@ export default function Cart() {
         </div>
         <div>
           <span>{t(lang, 'advance')}</span>
-          <strong>₹{Math.ceil(cartTotal * 0.5)}</strong>
+          <strong>₹{cartTotal > 0 ? Math.max(1, Math.ceil(cartTotal * 0.1)) : 0}</strong>
         </div>
         <p className="hint" style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, margin: '0.25rem 0' }}>
           {lang === 'bn'
