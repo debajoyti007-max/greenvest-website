@@ -15,7 +15,15 @@ export function printOrderInvoice(order: Order) {
   const rows = order.items
     .map(
       (it) => {
-        const weightText = it.weightLabel ? ` [${escapeHtml(it.weightLabel)}]` : ''
+        const mult = it.weightMultiplier || 1
+        const totalKg = Number((it.qty * mult).toFixed(2))
+        const totalWeightText = totalKg < 1 ? `${Math.round(totalKg * 1000)}g` : `${totalKg} kg`
+        const weightText =
+          it.qty > 1
+            ? ` — <b>${totalWeightText}</b> (${it.weightLabel || (mult === 1 ? '1 kg' : `${mult}kg`)} × ${it.qty})`
+            : it.weightLabel
+            ? ` [${escapeHtml(it.weightLabel)}]`
+            : ''
         return `<tr><td>${escapeHtml(it.emoji)} ${escapeHtml(it.name)}${weightText} (G${escapeHtml(it.grade)})</td><td>${Number(it.qty)}</td><td>₹${Number(it.unitPrice)}</td><td>₹${Number(it.unitPrice) * Number(it.qty)}</td></tr>`
       }
     )
@@ -58,7 +66,10 @@ export function printThermalReceipt(order: Order) {
   const rows = order.items
     .map(
       (it) => {
-        const weightText = it.weightLabel ? ` [${escapeHtml(it.weightLabel)}]` : ''
+        const mult = it.weightMultiplier || 1
+        const totalKg = Number((it.qty * mult).toFixed(2))
+        const totalWeightText = totalKg < 1 ? `${Math.round(totalKg * 1000)}g` : `${totalKg}kg`
+        const weightText = it.qty > 1 ? ` [${totalWeightText}]` : it.weightLabel ? ` [${escapeHtml(it.weightLabel)}]` : ''
         return `<div>${escapeHtml(it.name.slice(0, 14))}${weightText} (G${escapeHtml(it.grade)}) x${Number(it.qty)} = ₹${Number(it.unitPrice) * Number(it.qty)}</div>`
       }
     )

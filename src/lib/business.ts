@@ -65,6 +65,91 @@ export function calculateTierDiscount(basePrice: number, tier?: CustomerTier): n
   return basePrice
 }
 
+/** Converts english digits to Bengali digits */
+export function toBnDigits(val: number | string): string {
+  const bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯']
+  return String(val).replace(/[0-9]/g, (d) => bnDigits[Number(d)] ?? d)
+}
+
+/**
+ * Returns a crystal-clear formatted string explaining physical weight/amount and breakdown.
+ * Example:
+ * 5 units of 1 kg -> "মোট পরিমাণ: ৫ কেজি (১ কেজি × ৫)" / "Total Weight: 5 kg (1 kg × 5)"
+ * 3 units of 500g -> "মোট পরিমাণ: ১.৫ কেজি (৫০০ গ্রাম × ৩)" / "Total Weight: 1.5 kg (500g × 3)"
+ * 1 unit of 5 kg  -> "পরিমাণ: ৫ কেজি" / "Weight: 5 kg"
+ */
+export function formatItemWeightDetail(
+  qty: number,
+  weightMultiplier: number = 1,
+  weightLabel?: string,
+  unit: string = 'kg',
+  lang: 'en' | 'bn' = 'en'
+): { totalWeightText: string; breakdownText: string; fullBadgeText: string } {
+  const isKg = unit.toLowerCase() === 'kg'
+  const mult = weightMultiplier || 1
+
+  if (isKg) {
+    const totalKg = Number((qty * mult).toFixed(2))
+
+    // Format single unit label
+    const singleLabelEn =
+      weightLabel ||
+      (mult === 1 ? '1 kg' : mult === 0.25 ? '250g' : mult === 0.5 ? '500g' : `${mult} kg`)
+    const singleLabelBn = singleLabelEn
+      .replace(/250g/i, '২৫০ গ্রাম')
+      .replace(/500g/i, '৫০০ গ্রাম')
+      .replace(/(\d+(\.\d+)?)\s*kg/i, (_, num) => `${toBnDigits(num)} কেজি`)
+      .replace(/kg/i, 'কেজি')
+
+    // Format total weight
+    let totalTextEn = ''
+    let totalTextBn = ''
+    if (totalKg < 1) {
+      const grams = Math.round(totalKg * 1000)
+      totalTextEn = `${grams}g`
+      totalTextBn = `${toBnDigits(grams)} গ্রাম`
+    } else {
+      totalTextEn = `${totalKg} kg`
+      totalTextBn = `${toBnDigits(totalKg)} কেজি`
+    }
+
+    const totalWeightText = lang === 'bn' ? totalTextBn : totalTextEn
+    const singleLabel = lang === 'bn' ? singleLabelBn : singleLabelEn
+
+    if (qty > 1) {
+      const breakdownText =
+        lang === 'bn' ? `${singleLabel} × ${toBnDigits(qty)}` : `${singleLabel} × ${qty}`
+      const fullBadgeText =
+        lang === 'bn'
+          ? `📦 মোট পরিমাণ: ${totalWeightText} (${breakdownText})`
+          : `📦 Total Weight: ${totalWeightText} (${breakdownText})`
+      return { totalWeightText, breakdownText, fullBadgeText }
+    } else {
+      const fullBadgeText =
+        lang === 'bn' ? `📦 পরিমাণ: ${totalWeightText}` : `📦 Weight: ${totalWeightText}`
+      return { totalWeightText, breakdownText: '', fullBadgeText }
+    }
+  }
+
+  // Non-kg items (piece, packet, bundle, etc.)
+  const uEn = unit
+  const uBn =
+    unit === 'packet' || unit === 'pkt'
+      ? 'প্যাকেট'
+      : unit === 'piece' || unit === 'pc'
+      ? 'পিস'
+      : unit === 'bunch' || unit === 'bundle'
+      ? 'আঁটি'
+      : unit
+  const unitName = lang === 'bn' ? uBn : uEn
+  const qtyStr = lang === 'bn' ? toBnDigits(qty) : String(qty)
+
+  const totalWeightText = `${qtyStr} ${unitName}`
+  const fullBadgeText =
+    lang === 'bn' ? `📦 মোট: ${totalWeightText}` : `📦 Total: ${totalWeightText}`
+  return { totalWeightText, breakdownText: '', fullBadgeText }
+}
+
 /** Get live shift status of the store based on current hour */
 export function getCurrentShiftStatus(): ShiftInfo {
   const now = new Date()

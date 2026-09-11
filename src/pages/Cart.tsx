@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, computeMarketMrp, MAX_VEGETABLE_QTY_KG } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, computeMarketMrp, MAX_VEGETABLE_QTY_KG, formatItemWeightDetail } from '../lib/business'
 import { t } from '../lib/i18n'
 
 export default function Cart() {
@@ -63,6 +63,7 @@ export default function Cart() {
           const line = unitPrice * item.qty
           const isAtMaxKg = item.qty * mult >= MAX_VEGETABLE_QTY_KG
           const weightDisplay = item.weightLabel || (mult === 1 ? p.unit : mult === 0.25 ? '250g' : mult === 0.5 ? '500g' : `${mult}kg`)
+          const weightDetail = formatItemWeightDetail(item.qty, mult, item.weightLabel, p.unit, lang)
           return (
             <li key={`${item.productId}-${item.grade}-${mult}`} className="cart-row">
               <span className="cart-emoji">{p.emoji}</span>
@@ -70,6 +71,23 @@ export default function Cart() {
                 <div className="cart-dual-title">
                   <strong className="cart-bn">{p.bnName}</strong>
                   <span className="cart-en">{p.name}</span>
+                </div>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    color: '#166534',
+                    padding: '2px 7px',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    margin: '3px 0 2px',
+                    width: 'fit-content',
+                  }}
+                >
+                  {weightDetail.fullBadgeText}
                 </div>
                 <span className="cart-meta-mono">
                   {t(lang, 'grade')} {item.grade} {weightDisplay ? `· ${weightDisplay}` : ''} ·{' '}
@@ -99,7 +117,14 @@ export default function Cart() {
                 >
                   −
                 </button>
-                <span>{item.qty}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '32px' }}>
+                  <span style={{ fontWeight: 800 }}>{item.qty}</span>
+                  {item.qty > 1 && (
+                    <span style={{ fontSize: '0.66rem', color: '#166534', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>
+                      {weightDetail.totalWeightText}
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
                   disabled={isAtMaxKg}

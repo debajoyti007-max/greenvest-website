@@ -4,7 +4,7 @@ import { showToast } from '../../lib/toast'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
-import { isOrderStalePending } from '../../lib/business'
+import { isOrderStalePending, formatItemWeightDetail } from '../../lib/business'
 import OrderChat from '../../components/OrderChat'
 import ItemPackingManifest from '../../components/seller/ItemPackingManifest'
 import type { Order, OrderStatus } from '../../types'
@@ -971,12 +971,22 @@ export default function SellerOrders() {
                     </div>
                     {/* Items */}
                     <div style={{ marginBottom: '0.75rem' }}>
-                      {o.items.map(it => (
-                        <div key={`${it.productId}-${it.grade}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '0.2rem 0' }}>
-                          <span>{it.emoji} {it.name} · Grade {it.grade} × {it.qty}</span>
-                          <span style={{ fontWeight: 600 }}>₹{it.unitPrice * it.qty}</span>
-                        </div>
-                      ))}
+                      {o.items.map(it => {
+                        const wd = formatItemWeightDetail(it.qty, it.weightMultiplier, it.weightLabel, 'kg', lang)
+                        return (
+                          <div key={`${it.productId}-${it.grade}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', padding: '0.2rem 0' }}>
+                            <span>
+                              {it.emoji} {it.name} · Grade {it.grade} × {it.qty}
+                              {it.qty > 1 && (
+                                <span style={{ marginLeft: '6px', fontSize: '0.72rem', color: '#166534', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                                  {wd.totalWeightText}
+                                </span>
+                              )}
+                            </span>
+                            <span style={{ fontWeight: 600 }}>₹{it.unitPrice * it.qty}</span>
+                          </div>
+                        )
+                      })}
                     </div>
 
                     {/* Address */}

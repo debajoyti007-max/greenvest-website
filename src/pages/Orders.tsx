@@ -6,6 +6,7 @@ import OrderTimeline from '../components/OrderTimeline'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { t } from '../lib/i18n'
+import { formatItemWeightDetail } from '../lib/business'
 import { subscribeCustomerOrders } from '../lib/api'
 import { showToast } from '../lib/toast'
 import type { Order, OrderItem } from '../types'
@@ -261,12 +262,22 @@ export default function Orders() {
                 deliverySlot={o.deliverySlot} 
               />
               <ul>
-                {o.items.map((it: OrderItem) => (
-                  <li key={`${it.productId}-${it.grade}`}>
-                    {it.emoji} {it.name} · {t(lang, 'grade')} {it.grade} × {it.qty} — ₹
-                    {it.unitPrice * it.qty}
-                  </li>
-                ))}
+                {o.items.map((it: OrderItem) => {
+                  const wd = formatItemWeightDetail(it.qty, it.weightMultiplier, it.weightLabel, 'kg', lang)
+                  return (
+                    <li key={`${it.productId}-${it.grade}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '3px 0' }}>
+                      <span>
+                        {it.emoji} {it.name} · {t(lang, 'grade')} {it.grade} × {it.qty}
+                        {it.qty > 1 && (
+                          <span style={{ marginLeft: '6px', fontSize: '0.74rem', color: '#166534', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                            {wd.totalWeightText}
+                          </span>
+                        )}
+                      </span>
+                      <strong>₹{it.unitPrice * it.qty}</strong>
+                    </li>
+                  )
+                })}
               </ul>
               <p className="muted">
                 {o.address}

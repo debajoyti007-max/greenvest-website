@@ -5,6 +5,7 @@ import { useStore } from '../context/useStore'
 import { showToast } from '../lib/toast'
 import { verifyDeliveryOtpApi } from '../lib/api'
 import { generateDynamicUpiQr } from '../lib/payment'
+import { formatItemWeightDetail } from '../lib/business'
 import { STORE_LOCATION, calculateDistanceKm } from '../lib/delivery'
 import type { Order } from '../types'
 
@@ -431,11 +432,17 @@ export default function RiderView() {
                 </div>
 
                 <div className="rider-items-summary">
-                  {o.items.map((it) => (
-                    <span key={`${it.productId}-${it.grade}`} className="rider-item-chip">
-                      {it.emoji} {it.name} × {it.qty}
-                    </span>
-                  ))}
+                  {o.items.map((it) => {
+                    const wd = formatItemWeightDetail(it.qty, it.weightMultiplier, it.weightLabel, 'kg', lang)
+                    return (
+                      <span key={`${it.productId}-${it.grade}`} className="rider-item-chip">
+                        {it.emoji} {it.name} × {it.qty}
+                        {it.qty > 1 && (
+                          <b style={{ marginLeft: '4px', color: '#166534' }}>({wd.totalWeightText})</b>
+                        )}
+                      </span>
+                    )
+                  })}
                 </div>
 
                 {/* Balance Collection Box with 1-Tap Dynamic UPI QR */}

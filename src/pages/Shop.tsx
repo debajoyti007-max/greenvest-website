@@ -13,7 +13,7 @@ const ProductReviewsModal = lazy(() => import('../components/ProductReviewsModal
 const PincodeCheckerModal = lazy(() => import('../components/PincodeCheckerModal'))
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, computeMarketMrp, SERVICEABLE_PINCODES } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, computeMarketMrp, SERVICEABLE_PINCODES, toBnDigits } from '../lib/business'
 import { LOW_STOCK_QTY, SEASON_LABELS } from '../lib/business'
 import { catLabel, t } from '../lib/i18n'
 import {
@@ -247,6 +247,7 @@ function ProductCard({
               { val: 0.5, label: '500g' },
               { val: 1, label: '1 kg' },
               { val: 2, label: '2 kg' },
+              { val: 5, label: '5 kg' },
             ].map((chip) => (
               <button
                 key={chip.label}
@@ -309,9 +310,18 @@ function ProductCard({
                 >
                   −
                 </button>
-                <span style={{ fontWeight: 800, fontSize: '0.88rem', minWidth: '20px', textAlign: 'center' }}>
-                  {cartQty}
-                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '32px', padding: '0 4px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.88rem', lineHeight: 1.2 }}>
+                    {cartQty}
+                  </span>
+                  {isKg && (
+                    <span style={{ fontSize: '0.62rem', color: '#bbf7d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>
+                      {lang === 'bn'
+                        ? `${toBnDigits(Number((cartQty * weightMultiplier).toFixed(2)))}কেজি`
+                        : `${Number((cartQty * weightMultiplier).toFixed(2))}kg`}
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
                   disabled={isBulkCapReached}
