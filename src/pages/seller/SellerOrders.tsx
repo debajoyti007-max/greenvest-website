@@ -992,7 +992,6 @@ export default function SellerOrders() {
                     {/* Address */}
                     <div style={{ fontSize: '0.85rem', color: '#374151', marginBottom: '0.4rem', padding: '0.5rem', background: '#f9fafb', borderRadius: '8px' }}>
                       📍 {o.address} · PIN {o.pin || '—'}
-                      {o.deliverySlot ? ` · ${o.deliverySlot === 'morning' ? (lang === 'bn' ? 'সকাল' : 'Morning') : (lang === 'bn' ? 'সন্ধ্যা' : 'Evening')}` : ''}
                     </div>
 
                     {/* 📅 Delivery Date Scheduling Bar (Seller can view and mark/update) */}
@@ -1148,7 +1147,7 @@ function sendOrderWhatsApp(o: Order, lang: string) {
 
   const otp = getOrderDeliveryOtp(o)
   const otpLine =
-    o.status !== 'delivered' && o.status !== 'cancelled'
+    o.status === 'confirmed' || (o.status as string) === 'out_for_delivery'
       ? (lang === 'bn' ? `🔐 ডেলিভারি ওটিপি: *${otp}* (ডেলিভারির সময় রাইডারকে দিন)\n\n` : `🔐 Delivery OTP: *${otp}* (give to rider upon delivery)\n\n`)
       : ''
 

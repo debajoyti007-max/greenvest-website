@@ -259,7 +259,6 @@ export default function Orders() {
                 lang={lang} 
                 createdAt={o.createdAt} 
                 updatedAt={o.updatedAt} 
-                deliverySlot={o.deliverySlot} 
               />
               <ul>
                 {o.items.map((it: OrderItem) => {
@@ -282,9 +281,6 @@ export default function Orders() {
               <p className="muted">
                 {o.address}
                 {o.pin ? ` · PIN ${o.pin}` : ''} · {o.phone}
-                {o.deliverySlot
-                  ? ` · ${o.deliverySlot === 'morning' ? (lang === 'bn' ? 'সকাল' : 'Morning') : lang === 'bn' ? 'সন্ধ্যা' : 'Evening'}`
-                  : ''}
               </p>
               {o.deliveryNotes && (
                 <p style={{ fontSize: '0.82rem', color: '#854d0e', background: '#fefce8', padding: '3px 8px', borderRadius: '6px', margin: '-0.25rem 0 0.5rem', display: 'inline-block' }}>

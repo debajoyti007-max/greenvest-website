@@ -267,7 +267,6 @@ export default function TrackOrder() {
             lang={lang}
             createdAt={matched.createdAt}
             updatedAt={(matched as any).updatedAt}
-            deliverySlot={(matched as any).deliverySlot}
           />
 
           <ul style={{ margin: '0.75rem 0', paddingLeft: '1.25rem' }}>
