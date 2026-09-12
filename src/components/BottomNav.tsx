@@ -1,4 +1,4 @@
-﻿import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
 
@@ -35,17 +35,17 @@ export default function BottomNav() {
         <span>{lang === 'bn' ? 'কার্ট' : 'Cart'}</span>
       </NavLink>
 
-      {user && (
+      {user ? (
         <NavLink to="/orders" className={`bottom-nav-item${isActive('/orders') ? ' active' : ''}`}>
           <span className="bottom-nav-icon">📦</span>
           <span>{lang === 'bn' ? 'অর্ডার' : 'Orders'}</span>
         </NavLink>
+      ) : (
+        <NavLink to="/track" className={`bottom-nav-item${isActive('/track') ? ' active' : ''}`}>
+          <span className="bottom-nav-icon">📍</span>
+          <span>{lang === 'bn' ? 'ট্র্যাক' : 'Track'}</span>
+        </NavLink>
       )}
-
-      <NavLink to="/track" className={`bottom-nav-item${isActive('/track') ? ' active' : ''}`}>
-        <span className="bottom-nav-icon">📍</span>
-        <span>{lang === 'bn' ? 'ট্র্যাক' : 'Track'}</span>
-      </NavLink>
 
       <NavLink
         to={user ? '/profile' : '/auth'}

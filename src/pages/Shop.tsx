@@ -525,13 +525,13 @@ export default function Shop() {
       {
         image: HERO_VEGGIES_IMAGE,
         mobileImage: HERO_VEGGIES_MOBILE_IMAGE,
-        kicker: lang === 'bn' ? '🚜 সরাসরি খামার থেকে প্রতিদিন তাজা' : '🚜 Farm-Fresh Daily Harvest',
+        kicker: lang === 'bn' ? 'সরাসরি খামার থেকে প্রতিদিন তাজা' : 'Farm-Fresh Daily Harvest',
         title: lang === 'bn' ? 'তাজা সবজি ও আলু-টমেটো' : 'Fresh Vegetables & Organic Produce',
         sub:
           lang === 'bn'
             ? `গ্রেড A/B/C · মিনিমাম ₹${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`
             : `Grade A/B/C · Min ₹${MIN_ORDER_AMOUNT} · Delivery ${DELIVERY_WINDOW}`,
-        buttonText: lang === 'bn' ? 'সবজি কিনুন 🛒' : 'Shop Veggies 🛒',
+        buttonText: lang === 'bn' ? 'সবজি কিনুন' : 'Shop Veggies',
         onClick: () => {
           setCategory('Vegetables')
           scrollToGrid()
@@ -540,13 +540,13 @@ export default function Shop() {
       {
         image: HERO_FISH_IMAGE,
         mobileImage: HERO_FISH_MOBILE_IMAGE,
-        kicker: lang === 'bn' ? '🐟 নদী ও সমুদ্রের টাটকা মাছ' : '🐟 Fresh River & Sea Catch',
+        kicker: lang === 'bn' ? 'নদী ও সমুদ্রের টাটকা মাছ' : 'Fresh River & Sea Catch',
         title: lang === 'bn' ? 'তাজা রুই, ইলিশ, চিংড়ি ও ভেটকি' : 'Fresh Rui, Hilsa, Prawns & Fish',
         sub:
           lang === 'bn'
             ? '১০০% টাটকা মাছ · প্রতিদিনের বাজার দর · দ্রুত হোম ডেলিভারি'
             : '100% Fresh Daily Catch · Live Market Prices · Fast Home Delivery',
-        buttonText: lang === 'bn' ? 'মাছ দেখুন 🐟' : 'Explore Fish 🐟',
+        buttonText: lang === 'bn' ? 'মাছ দেখুন' : 'Explore Fish',
         onClick: () => {
           setCategory('Fish')
           scrollToGrid()
@@ -555,13 +555,13 @@ export default function Shop() {
       {
         image: HERO_IMAGE,
         mobileImage: HERO_MOBILE_IMAGE,
-        kicker: lang === 'bn' ? '⭐ সেরা মানের নিশ্চয়তা' : '⭐ Guaranteed Quality & Best Prices',
+        kicker: lang === 'bn' ? 'সেরা মানের নিশ্চয়তা' : 'Guaranteed Quality & Best Prices',
         title: lang === 'bn' ? 'আপনার বাজেটে এ, বি, সি গ্রেড' : 'Grade A, B, C For Every Budget',
         sub:
           lang === 'bn'
             ? 'প্রতিদিনের তাজা দর · নিয়মিত ক্রেতাদের বিশেষ কুপন ছাড়'
             : 'Daily Price Updates · Special Coupon Offers For Frequent Buyers',
-        buttonText: lang === 'bn' ? 'এখনই অর্ডার করুন 🚀' : 'Order Now 🚀',
+        buttonText: lang === 'bn' ? 'এখনই অর্ডার করুন' : 'Order Now',
         onClick: scrollToGrid,
       },
     ],
@@ -672,71 +672,6 @@ export default function Shop() {
           <div>
             <strong>{lang === 'bn' ? 'নিরাপদ UPI' : 'Secure UPI'}</strong>
             <span>{lang === 'bn' ? '১০০% বিশ্বস্ত' : 'Safe & Encrypted'}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 🌟 MS GreenMart Brand Welcome Banner showcasing the full logo */}
-      <div style={{ maxWidth: '1200px', margin: '0 auto 1.25rem', padding: '0 1rem' }}>
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 50%, #fefce8 100%)',
-            border: '1.5px solid #86efac',
-            borderRadius: '20px',
-            padding: '1.25rem 1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '1.25rem',
-            flexWrap: 'wrap',
-            boxShadow: '0 8px 24px -4px rgba(22, 101, 52, 0.08)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-            <img
-              src="/logo.png?v=1.2"
-              alt="MS Vegetable Center Logo"
-              style={{
-                width: '84px',
-                height: '84px',
-                borderRadius: '16px',
-                objectFit: 'contain',
-                background: '#ffffff',
-                border: '1.5px solid #bbf7d0',
-                padding: '4px',
-                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.15)',
-              }}
-            />
-            <div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '4px' }}>
-                ⭐ {lang === 'bn' ? 'পূর্ব মেদিনীপুরের বিশ্বস্ত বাজার' : 'Trusted Local Bazaar'}
-              </div>
-              <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#14532d', letterSpacing: '-0.3px' }}>
-                {lang === 'bn' ? 'এম.এস ভেজিটেবল সেন্টার – প্রতিদিনের তাজা সবজি ও বাজার' : 'MS Vegetable Center – Daily Fresh Veggies & Groceries'}
-              </h2>
-              <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: '#475569', lineHeight: 1.4 }}>
-                {lang === 'bn'
-                  ? 'সরাসরি স্থানীয় মাঠ ও মান্ডি থেকে সংগৃহীত · গ্রেড A/B/C গ্যারান্টি · সহজে UPI ও খাতা পে'
-                  : 'Direct morning harvest from local farms & mandis · Grade A/B/C Quality Guarantee · Doorstep Delivery'}
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              type="button"
-              onClick={scrollToGrid}
-              className="btn btn-primary"
-              style={{
-                padding: '0.6rem 1.2rem',
-                fontSize: '0.88rem',
-                fontWeight: 700,
-                borderRadius: '12px',
-                boxShadow: '0 4px 12px rgba(22, 101, 52, 0.25)',
-              }}
-            >
-              🛒 {lang === 'bn' ? 'বাজার দেখুন' : 'Explore Produce'}
-            </button>
           </div>
         </div>
       </div>

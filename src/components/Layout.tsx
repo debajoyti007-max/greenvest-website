@@ -10,7 +10,6 @@ import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/bu
 import { STORE_LOCATION } from '../lib/delivery'
 import { APP_VERSION_LABEL } from '../lib/version'
 
-import MandiTicker from './MandiTicker'
 import NotificationBell from './NotificationBell'
 import CustomerNotificationBanner from './CustomerNotificationBanner'
 import PwaInstallPrompt from './PwaInstallPrompt'
@@ -118,7 +117,6 @@ export default function Layout() {
       <CustomerNotificationBanner />
       <PwaInstallPrompt />
       <NetworkStatus />
-      <MandiTicker />
       <header ref={headerRef} className={`site-header${islandCompact ? ' island-compact' : ''}`}>
         <div className="header-inner">
           <Link to={user?.role === 'rider' ? '/rider' : '/'} className="brand" onClick={closeMenu}>
@@ -147,7 +145,7 @@ export default function Layout() {
             {user?.role === 'rider' ? (
               <>
                 <NavLink to="/rider" onClick={closeMenu}>
-                  {lang === 'bn' ? '🛵 রাইডার ভিউ' : '🛵 Rider View'}
+                  {lang === 'bn' ? 'রাইডার ড্যাশবোর্ড' : 'Rider View'}
                 </NavLink>
                 <NavLink to="/profile" onClick={closeMenu}>
                   {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
@@ -159,27 +157,30 @@ export default function Layout() {
                 <NavLink to="/" end onClick={closeMenu}>
                   {t(lang, 'shop')}
                 </NavLink>
+                {user ? (
+                  <>
+                    <NavLink to="/orders" onClick={closeMenu}>
+                      {t(lang, 'orders')}
+                    </NavLink>
+                    <NavLink to="/profile" onClick={closeMenu}>
+                      {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
+                    </NavLink>
+                  </>
+                ) : (
+                  <>
+                    <NavLink to="/track" onClick={closeMenu}>
+                      {lang === 'bn' ? 'ট্র্যাক' : 'Track'}
+                    </NavLink>
+                    <NavLink to="/auth" onClick={closeMenu}>
+                      {lang === 'bn' ? 'লগইন' : 'Login'}
+                    </NavLink>
+                  </>
+                )}
                 <NavLink to="/cart" onClick={closeMenu}>
                   {t(lang, 'cart')}
                   {cartCount > 0 && <span className="badge">{cartCount}</span>}
                 </NavLink>
-                <NavLink to="/track" onClick={closeMenu}>
-                  {lang === 'bn' ? 'ট্র্যাক' : 'Track Order'}
-                </NavLink>
-                <NavLink to="/support" onClick={closeMenu}>
-                  {lang === 'bn' ? '💬 সাপোর্ট' : '💬 Support'}
-                </NavLink>
                 <NotificationBell />
-                {user && (
-                  <NavLink to="/orders" onClick={closeMenu}>
-                    {t(lang, 'orders')}
-                  </NavLink>
-                )}
-                {user && (
-                  <NavLink to="/profile" onClick={closeMenu}>
-                    {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
-                  </NavLink>
-                )}
                 {user?.role === 'admin' && (
                   <>
                     <NavLink
@@ -400,7 +401,7 @@ export default function Layout() {
                   boxShadow: '0 4px 12px rgba(22, 101, 52, 0.2)',
                 }}
               >
-                💬 {lang === 'bn' ? 'ইন-অ্যাপ লাইভ সাপোর্ট' : 'In-App Live Support'}
+                {lang === 'bn' ? 'লাইভ সাপোর্ট ডেস্ক' : 'Live Support Desk'}
               </Link>
             </div>
 
@@ -417,7 +418,7 @@ export default function Layout() {
 
             {/* Store Location column */}
             <div className="footer-col">
-              <h4 className="footer-col-title">{lang === 'bn' ? '🏪 আউটলেট' : '🏪 Our Outlet'}</h4>
+              <h4 className="footer-col-title">{lang === 'bn' ? 'আউটলেট' : 'Our Outlet'}</h4>
               <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '0 0 0.5rem', lineHeight: 1.4 }}>
                 <strong>MS Vegetable Center Outlet</strong><br />
                 {lang === 'bn' ? 'পূর্ব মেদিনীপুর, পিন: ৭২১৬৪৮' : 'Purba Medinipur, PIN 721648'}
@@ -428,7 +429,7 @@ export default function Layout() {
                 rel="noopener noreferrer"
                 style={{ color: '#86efac', fontSize: '0.8rem', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
               >
-                🗺️ {lang === 'bn' ? 'গুগল ম্যাপে দেখুন' : 'View on Google Maps'}
+                {lang === 'bn' ? 'গুগল ম্যাপে দেখুন' : 'View on Google Maps'}
               </a>
             </div>
 
@@ -436,13 +437,13 @@ export default function Layout() {
             <div className="footer-col">
               <h4 className="footer-col-title">{lang === 'bn' ? 'সহায়তা ও আইনি' : 'Support & Legal'}</h4>
               <nav className="footer-links" aria-label="Legal">
-                <Link to="/support">{lang === 'bn' ? '💬 সাপোর্ট ডেস্ক' : '💬 Support Desk'}</Link>
+                <Link to="/support">{lang === 'bn' ? 'সাপোর্ট ডেস্ক' : 'Support Desk'}</Link>
                 <Link to="/contact">{t(lang, 'contact')}</Link>
                 <Link to="/privacy">{t(lang, 'privacy')}</Link>
                 <Link to="/terms">{t(lang, 'terms')}</Link>
               </nav>
               <p className="footer-hours">
-                🕐 {lang === 'bn' ? 'সকাল ৭টা – রাত ৯টা' : '7:00 am – 9:00 pm'}
+                {lang === 'bn' ? 'সময়: সকাল ৭টা – রাত ৯টা' : 'Hours: 7:00 am – 9:00 pm'}
               </p>
             </div>
           </div>
