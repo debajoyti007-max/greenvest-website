@@ -1,4 +1,4 @@
-﻿import { execSync } from 'child_process'
+import { execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 
@@ -39,5 +39,14 @@ fs.copyFileSync(path.join(DIST, 'index.html'), INDEX_HTML)
 fs.copyFileSync(path.join(DIST, '404.html'), path.join(ROOT, '404.html'))
 fs.writeFileSync(path.join(ROOT, 'CNAME'), 'greenvest.shop')
 fs.writeFileSync(path.join(ROOT, '.nojekyll'), '')
+
+// Ensure search crawlers and PWA files are present in root
+const publicFiles = ['robots.txt', 'sitemap.xml', 'manifest.webmanifest', 'sw.js', 'favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.png', 'logo-transparent.png', 'logo.jpg']
+for (const file of publicFiles) {
+  const distFile = path.join(DIST, file)
+  if (fs.existsSync(distFile)) {
+    fs.copyFileSync(distFile, path.join(ROOT, file))
+  }
+}
 
 console.log('✨ Build & Dual Sync (Root + /docs) Successful!')

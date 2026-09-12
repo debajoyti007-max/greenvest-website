@@ -1,7 +1,7 @@
 {
-  "name": "MS GreenMart – তাজা সবজি ও মাছ",
-  "short_name": "MS GreenMart",
-  "description": "MS GreenMart — তাজা সবজি ও টাটকা মাছ, সরাসরি আপনার ঘরে। সহজে ১-ট্যাপ UPI ও খাতা পেমেন্ট।",
+  "name": "MS Vegetable Center – তাজা সবজি ও বাজার",
+  "short_name": "MS Vegetable Center",
+  "description": "MS Vegetable Center — তাজা শাকসবজি, মাছ ও দৈনিক বাজার, সরাসরি আপনার ঘরে। সহজে ১-ট্যাপ UPI ও খাতা পেমেন্ট।",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
