@@ -188,6 +188,23 @@ export default function SellerDeals() {
     showToast(lang === 'bn' ? '⚡ অফারটি পরবর্তী ২৪ ঘণ্টার জন্য নবায়ন করা হয়েছে!' : '⚡ Offer renewed for next 24 hours!', '🎉')
   }
 
+  const handleShareDealWhatsApp = (deal: PromotionalDeal) => {
+    const title = lang === 'bn' ? deal.titleBn : (deal.titleEn || deal.titleBn)
+    const subtitle = lang === 'bn' ? deal.subtitleBn : (deal.subtitleEn || deal.subtitleBn)
+    const couponLine = deal.couponCode
+      ? (lang === 'bn' ? `\n🎟️ কুপন কোড: *${deal.couponCode}*` : `\n🎟️ Coupon Code: *${deal.couponCode}*`)
+      : ''
+    const shopUrl = window.location.origin
+
+    const msg =
+      lang === 'bn'
+        ? `🥦 *MS Vegetable Center — বিশেষ অফার!* 🌱\n\n🔥 *${title}*\n${subtitle ? subtitle + '\n' : ''}${couponLine}\n\n🛒 তাজা সবজি কিনতে এখনই ভিজিট করুন:\n${shopUrl}\n\n*MS Vegetable Center* — সরাসরি ফার্ম ও মান্ডি থেকে সেরা সবজি!`
+        : `🥦 *MS Vegetable Center — Special Offer!* 🌱\n\n🔥 *${title}*\n${subtitle ? subtitle + '\n' : ''}${couponLine}\n\n🛒 Order fresh vegetables now:\n${shopUrl}\n\n*MS Vegetable Center* — Best quality fresh from mandi!`
+
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   const handleResetDefaults = async () => {
     if (!window.confirm(lang === 'bn' ? 'ডিফল্ট অফারগুলো পুনরায় লোড করবেন?' : 'Reset to default promotional offers?')) {
       return
@@ -405,6 +422,15 @@ export default function SellerDeals() {
                       ⚡ {lang === 'bn' ? '২৪ ঘণ্টার জন্য নবায়ন' : 'Renew 24h'}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{ background: '#dcfce7', borderColor: '#86efac', color: '#166534', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    onClick={() => handleShareDealWhatsApp(deal)}
+                    title={lang === 'bn' ? 'হোয়াটসঅ্যাপে গ্রাহকদের সাথে অফার শেয়ার করুন' : 'Share offer with customers via WhatsApp'}
+                  >
+                    📲 {lang === 'bn' ? 'হোয়াটসঅ্যাপ' : 'WhatsApp'}
+                  </button>
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"

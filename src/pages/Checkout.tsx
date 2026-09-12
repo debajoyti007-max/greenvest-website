@@ -12,6 +12,7 @@ import {
   getOrCreateCartIdempotencyKey,
   clearCartIdempotencyKey,
 } from '../lib/validation'
+import { isDealExpired } from '../lib/deals'
 import { queueOfflineOrder } from '../lib/offlineQueue'
 import type { Address } from '../types'
 
@@ -23,6 +24,7 @@ export default function Checkout() {
     lang,
     placeOrder,
     orders,
+    promotionalDeals,
     findRecentOrderByUtr,
     fetchAddresses,
     saveAddress,
@@ -123,6 +125,57 @@ export default function Checkout() {
       sessionStorage.removeItem('gv_pending_coupon')
     }
   }, [refresh])
+
+  const availableCoupons = useMemo(() => {
+    return (promotionalDeals || [])
+      .filter((d) => d.isActive !== false && d.couponCode && !isDealExpired(d))
+      .map((d) => ({
+        code: d.couponCode!.trim().toUpperCase(),
+        title: lang === 'bn' ? d.titleBn : (d.titleEn || d.titleBn),
+      }))
+      .filter((v, idx, arr) => arr.findIndex((x) => x.code === v.code) === idx)
+  }, [promotionalDeals, lang])
+
+  const handleApplyCoupon = async (codeToApply: string) => {
+    const clean = codeToApply.trim().toUpperCase()
+    if (!clean) return
+
+    // 🛡️ Promo Coupon Throttling: Max 4 checks per minute
+    try {
+      const raw = sessionStorage.getItem('gv_coupon_checks')
+      const now = Date.now()
+      let timestamps: number[] = raw ? JSON.parse(raw) : []
+      timestamps = timestamps.filter((t) => now - t < 60000)
+      if (timestamps.length >= 4) {
+        setCouponError(
+          lang === 'bn'
+            ? '⚠️ খুব বেশি কুপন চেষ্টা করা হয়েছে। ১ মিনিট পরে চেষ্টা করুন।'
+            : '⚠️ Too many coupon attempts. Please wait 1 minute.'
+        )
+        return
+      }
+      timestamps.push(now)
+      sessionStorage.setItem('gv_coupon_checks', JSON.stringify(timestamps))
+    } catch {}
+
+    setCouponLoading(true)
+    setCouponError('')
+    try {
+      const result = await validateCoupon(clean, cartTotal + delivery.fee)
+      if (result && result.valid && result.discount) {
+        setCouponApplied({
+          discount: result.discount,
+          message: result.message || `✅ ${lang === 'bn' ? 'কুপন প্রযোজ্য হয়েছে!' : 'Coupon applied!'}`,
+        })
+      } else {
+        setCouponError(lang === 'bn' ? '❌ এই কুপন কোডটি বৈধ নয় বা মেয়াদ শেষ।' : '❌ Invalid or expired coupon code.')
+      }
+    } catch {
+      setCouponError(lang === 'bn' ? 'কুপন যাচাই করা যায়নি। পরে চেষ্টা করুন।' : 'Could not verify coupon. Try again.')
+    } finally {
+      setCouponLoading(false)
+    }
+  }
 
   const coords = useMemo(() => (geoLat && geoLng ? { lat: geoLat, lng: geoLng } : null), [geoLat, geoLng])
   const delivery = useMemo(() => calcDeliveryFee(pin, coords, fulfillmentMode), [pin, coords, fulfillmentMode])
@@ -722,43 +775,51 @@ export default function Checkout() {
               <button
                 type="button"
                 disabled={couponLoading || !couponCode.trim()}
-                onClick={async () => {
-                  if (!couponCode.trim()) return
-
-                  // 🛡️ Promo Coupon Throttling: Max 4 checks per minute
-                  try {
-                    const raw = sessionStorage.getItem('gv_coupon_checks')
-                    const now = Date.now()
-                    let timestamps: number[] = raw ? JSON.parse(raw) : []
-                    timestamps = timestamps.filter(t => now - t < 60000)
-                    if (timestamps.length >= 4) {
-                      setCouponError(lang === 'bn' ? '⚠️ খুব বেশি কুপন চেষ্টা করা হয়েছে। ১ মিনিট পরে চেষ্টা করুন।' : '⚠️ Too many coupon attempts. Please wait 1 minute.')
-                      return
-                    }
-                    timestamps.push(now)
-                    sessionStorage.setItem('gv_coupon_checks', JSON.stringify(timestamps))
-                  } catch {}
-
-                  setCouponLoading(true)
-                  setCouponError('')
-                  try {
-                    const result = await validateCoupon(couponCode.trim(), cartTotal + delivery.fee)
-                    if (result && result.valid && result.discount) {
-                      setCouponApplied({ discount: result.discount, message: result.message || `✅ ${lang === 'bn' ? 'কুপন প্রযোজ্য হয়েছে!' : 'Coupon applied!'}` })
-                    } else {
-                      setCouponError(lang === 'bn' ? '❌ এই কুপন কোডটি বৈধ নয় বা মেয়াদ শেষ।' : '❌ Invalid or expired coupon code.')
-                    }
-                  } catch {
-                    setCouponError(lang === 'bn' ? 'কুপন যাচাই করা যায়নি। পরে চেষ্টা করুন।' : 'Could not verify coupon. Try again.')
-                  } finally {
-                    setCouponLoading(false)
-                  }
-                }}
+                onClick={() => void handleApplyCoupon(couponCode)}
                 style={{ padding: '0.5rem 1rem', borderRadius: '8px', background: '#eab308', color: '#1c1917', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem' }}
               >
                 {couponLoading ? '⏳' : (lang === 'bn' ? 'প্রয়োগ করুন' : 'Apply')}
               </button>
             </div>
+
+            {/* 🏷️ 1-Tap Available Coupon Offers */}
+            {availableCoupons.length > 0 && (
+              <div style={{ marginTop: '0.65rem', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#854d0e' }}>
+                  {lang === 'bn' ? 'অফার:' : 'Offers:'}
+                </span>
+                {availableCoupons.map((c) => {
+                  const isThisApplied = Boolean(couponApplied && couponCode.trim().toUpperCase() === c.code)
+                  return (
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => {
+                        setCouponCode(c.code)
+                        void handleApplyCoupon(c.code)
+                      }}
+                      style={{
+                        background: isThisApplied ? '#dcfce7' : '#ffffff',
+                        border: isThisApplied ? '1.5px solid #22c55e' : '1px dashed #ca8a04',
+                        color: isThisApplied ? '#166534' : '#854d0e',
+                        borderRadius: '6px',
+                        padding: '3px 8px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      {isThisApplied ? '✅' : '🎟️'} <strong>{c.code}</strong>
+                      {c.title && <span style={{ opacity: 0.85, fontWeight: 500 }}>({c.title})</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
             {couponApplied && <p style={{ color: '#166534', fontWeight: 600, fontSize: '0.85rem', margin: '0.4rem 0 0' }}>{couponApplied.message}</p>}
             {couponError && <p style={{ color: '#dc2626', fontSize: '0.85rem', margin: '0.4rem 0 0' }}>{couponError}</p>}
           </div>

@@ -5,6 +5,7 @@ import CouponGeneratorModal from '../../components/seller/CouponGeneratorModal'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
 import { printPackingList, printRiderManifest } from '../../lib/printOrder'
+import { cleanupOldNotificationsApi, cleanupOldSupportMessagesApi } from '../../lib/api'
 
 function dayKey(d: Date) {
   return d.toDateString()
@@ -17,6 +18,18 @@ export default function SellerHome() {
   const [mandiCost, setMandiCost] = useState<number | ''>('')
   const [showCouponModal, setShowCouponModal] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+
+  // 🧹 Quiet Free-Tier Storage Optimizer: safely cleans old notifications and resolved tickets (>30 days)
+  // Orders, customers, khata balances, and inventory are 100% permanent and NEVER touched.
+  useEffect(() => {
+    const lastPrune = localStorage.getItem('gv_last_storage_prune')
+    const now = Date.now()
+    if (!lastPrune || now - Number(lastPrune) > 24 * 60 * 60 * 1000) {
+      localStorage.setItem('gv_last_storage_prune', String(now))
+      void cleanupOldSupportMessagesApi(30)
+      void cleanupOldNotificationsApi(30)
+    }
+  }, [])
 
   const handleSafeSync = async () => {
     setIsSyncing(true)

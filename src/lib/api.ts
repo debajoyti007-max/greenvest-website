@@ -1580,6 +1580,22 @@ export async function saveNotificationApi(notif: AppNotification): Promise<void>
   } catch {}
 }
 
+export async function cleanupOldNotificationsApi(daysOld = 30): Promise<number> {
+  const cutoffTime = Date.now() - daysOld * 24 * 60 * 60 * 1000
+  const cutoffIso = new Date(cutoffTime).toISOString()
+  if (!supabase) return 0
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .lt('created_at', cutoffIso)
+    if (!error) return 1
+  } catch (err) {
+    console.warn('cleanupOldNotificationsApi error:', err)
+  }
+  return 0
+}
+
 // ── Realtime Order Messages / Chat ──────────────────────────────────────────
 export async function fetchOrderMessagesApi(orderId: string): Promise<ChatMessage[]> {
   if (!supabase || !orderId) return []
