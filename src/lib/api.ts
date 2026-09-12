@@ -1333,31 +1333,7 @@ export async function validateCoupon(code: string, orderTotal: number): Promise<
   const cleanCode = code.trim().toUpperCase()
   if (!cleanCode) return null
 
-  // 0. Dynamic Referral Code Engine (e.g. GV-8170, REF-8170, or GV8170)
-  if (/^(GV-?|REF-?)[A-Z0-9]{3,8}$/.test(cleanCode)) {
-    const MIN_REF_ORDER = 300
-    if (orderTotal < MIN_REF_ORDER) {
-      return {
-        code: cleanCode,
-        discount_type: 'flat',
-        discount_value: 0,
-        min_order: MIN_REF_ORDER,
-        valid: false,
-        discount: 0,
-        message: `⚠️ রেফারেল কোডের জন্য সর্বনিম্ন ₹${MIN_REF_ORDER} টাকার অর্ডার প্রয়োজন।`,
-      }
-    }
-    return {
-      code: cleanCode,
-      discount_type: 'flat',
-      discount_value: 50,
-      min_order: MIN_REF_ORDER,
-      valid: true,
-      active: true,
-      discount: 50,
-      message: '🎉 রেফারেল উপহার: ₹৫০ ছাড় সফলভাবে যোগ হয়েছে!',
-    }
-  }
+
 
   // 1. Try Supabase RPC if configured
   if (supabase) {

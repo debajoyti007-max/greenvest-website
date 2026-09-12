@@ -395,24 +395,7 @@ export default function Shop() {
     return () => clearInterval(timer)
   }, [])
 
-  // Capture Referral Link e.g. /?ref=GV-8170
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      const refCode = params.get('ref') || params.get('referral')
-      if (refCode) {
-        const cleanRef = refCode.trim().toUpperCase()
-        sessionStorage.setItem('gv_pending_coupon', cleanRef)
-        localStorage.setItem('gv_referred_by', cleanRef)
-        showToast(
-          lang === 'bn'
-            ? `🎉 রেফারেল কোড (${cleanRef}) যুক্ত হয়েছে! চেকআউটে ₹৫০ ছাড় প্রযোজ্য হবে।`
-            : `🎉 Referral code (${cleanRef}) active! ₹50 discount applies at checkout.`,
-          '🎁'
-        )
-      }
-    } catch {}
-  }, [lang])
+
 
   // Touch swipe support for mobile
   const touchStartX = useRef<number>(0)
