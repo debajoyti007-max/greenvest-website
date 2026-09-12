@@ -88,40 +88,34 @@
     <meta name="twitter:description" content="GreenVest (MS Vegetable Center) — তাজা শাকসবজি, মাছ ও দৈনিক বাজার সরাসরি আপনার ঘরে। সহজে ১-ট্যাপ UPI ও খাতা পেমেন্ট।" />
     <meta name="twitter:image" content="https://greenvest.shop/logo.png?v=1.2" />
 
-    <!-- ── JSON-LD: GroceryStore Structured Data for Google ── -->
+    <!-- ── JSON-LD: WebSite & GroceryStore Structured Data for Google ── -->
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "GroceryStore",
-      "name": "GreenVest",
-      "alternateName": "MS Vegetable Center",
-      "description": "Fresh Grade A/B/C vegetables, fish and daily groceries with fast delivery. Supports UPI payment and Khata credit.",
-      "url": "https://greenvest.shop",
-      "logo": "https://greenvest.shop/logo.png",
-      "image": "https://greenvest.shop/logo.png",
-      "priceRange": "₹₹",
-      "currenciesAccepted": "INR",
-      "paymentAccepted": "Cash, UPI",
-      "telephone": "",
-      "areaServed": {
-        "@type": "Country",
-        "name": "India"
+    [
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "GreenVest",
+        "alternateName": ["greenvest.shop", "MS Vegetable Center"],
+        "url": "https://greenvest.shop/"
       },
-      "hasOfferCatalog": {
-        "@type": "OfferCatalog",
-        "name": "Fresh Vegetables & Groceries",
-        "itemListElement": [
-          {
-            "@type": "Offer",
-            "itemOffered": {
-              "@type": "Product",
-              "name": "Fresh Vegetables and Daily Produce",
-              "category": "Groceries"
-            }
-          }
-        ]
+      {
+        "@context": "https://schema.org",
+        "@type": "GroceryStore",
+        "name": "GreenVest",
+        "alternateName": "MS Vegetable Center",
+        "description": "Fresh Grade A/B/C vegetables, fish and daily groceries with fast doorstep delivery. Supports UPI payment and Khata credit.",
+        "url": "https://greenvest.shop/",
+        "logo": "https://greenvest.shop/logo.png",
+        "image": "https://greenvest.shop/logo.png",
+        "priceRange": "₹₹",
+        "currenciesAccepted": "INR",
+        "paymentAccepted": "Cash, UPI",
+        "areaServed": {
+          "@type": "Country",
+          "name": "India"
+        }
       }
-    }
+    ]
     </script>
   </head>
   <body>
