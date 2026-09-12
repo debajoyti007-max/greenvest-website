@@ -8,10 +8,11 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfiles, checkAccountExistsByEmail, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, updateProfileKhata, deleteUserProfileApi, mapProfile } from '../lib/api'
+import { fetchProfiles, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, updateProfileKhata, deleteUserProfileApi, mapProfile } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { calculateUserKhataBalance, getStoredKhataEntries } from '../lib/khata'
-import { normalizeText, formatAuthIdentifier } from '../lib/authUtils'
+import { formatAuthIdentifier } from '../lib/authUtils'
+import { cleanDigits } from '../lib/phone'
 import {
   ensureSeeded,
   getOrders,
@@ -149,7 +150,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (su.role && su.role !== 'customer') {
           if (su.id) roleMap.set(su.id, su.role)
           if (su.email) roleMap.set(su.email.toLowerCase(), su.role)
-          if (su.phone) roleMap.set(su.phone, su.role)
         }
       })
 
@@ -157,8 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cloudUsers.forEach((u) => {
         const overrideRole =
           roleMap.get(u.id) ||
-          (u.email && roleMap.get(u.email.toLowerCase())) ||
-          (u.phone && roleMap.get(u.phone))
+          (u.email && roleMap.get(u.email.toLowerCase()))
 
         const finalUser = overrideRole ? { ...u, role: overrideRole } : u
         if (finalUser.id) map.set(finalUser.id, finalUser)
@@ -586,43 +585,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ): Promise<AuthResult> => {
       const authEmail = formatAuthIdentifier(email)
       if (cloud && supabase) {
-        // Simple approach: insert directly into profiles table — no Supabase Auth needed
-        // Step 1: check if already registered
-        // Fix: use .eq() not .or() — PostgREST misparses emails with @ and . in .or() strings
-        const { data: existing } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', authEmail.toLowerCase())
-          .maybeSingle()
-
-        if (existing) {
-          return { ok: false, error: 'This phone number / email is already registered. Click Login tab to sign in.' }
-        }
-
-        // Bug 5 fix: use crypto.randomUUID() so the ID is a valid UUID (not 'u-...')
-        // Bug 1 fix: store PIN in `profiles.pin` column so login works on any device
-        const newId = crypto.randomUUID()
-        const { error: insertErr } = await supabase.from('profiles').insert({
-          id: newId,
-          email: authEmail.toLowerCase(),
-          name: name.trim(),
-          role: 'customer',
-          phone: phoneVal?.trim() || null,
-          pin: password,           // ← stored in DB (survives device changes)
+        // Atomic Registration: Prevents duplicate phone/email registration and race conditions
+        const targetPhone = phoneVal?.trim() || cleanDigits(email)
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('register_customer_atomic', {
+          p_name: name.trim(),
+          p_email: authEmail.toLowerCase(),
+          p_phone: targetPhone || '',
+          p_pin: password.trim(),
         })
 
-        if (insertErr) return { ok: false, error: insertErr.message || 'Signup failed. Try again.' }
+        if (rpcErr) {
+          console.error('register_customer_atomic error:', rpcErr)
+          return { ok: false, error: 'Registration service temporarily unavailable. Please try again.' }
+        }
 
-        // Also cache PIN in localStorage for instant offline login
-        storePin(authEmail, password)
+        const resData = rpcRes as { ok: boolean; error?: string; user?: any } | null
+        if (!resData?.ok) {
+          return { ok: false, error: resData?.error || 'Signup failed. Please try again.' }
+        }
+
+        const newUserObj = resData.user
+        storePin(authEmail, password.trim())
 
         const profile: User = {
-          id: newId,
-          email: authEmail,
-          name: name.trim(),
+          id: newUserObj.id,
+          email: newUserObj.email,
+          name: newUserObj.name,
           role: 'customer',
-          phone: phoneVal?.trim() || undefined,
-          createdAt: new Date().toISOString(),
+          phone: newUserObj.phone || undefined,
+          createdAt: newUserObj.createdAt || new Date().toISOString(),
         }
         setUser(profile)
         userRef.current = profile
@@ -682,39 +673,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (cloud && supabase) {
-        // Fix: use .eq() not .or() — PostgREST misparses emails with @ and . in .or() strings
-        const { data: profileRow } = await supabase
-          .from('profiles')
-          .select('id,email,name,is_super_admin')
-          .eq('email', authEmail.toLowerCase())
-          .maybeSingle()
+        // Atomic & Secure: Allows unauthenticated PIN reset while validating registered name via RPC
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('reset_pin_with_verification', {
+          p_identifier: email.trim(),
+          p_name: nameInput.trim(),
+          p_new_pin: newPin.trim(),
+        })
 
-        if (profileRow) {
-          // 🛡️ Super Admin Shield: Master Administrator PIN cannot be modified or reset via public forms
-          if (profileRow.is_super_admin) {
-            return {
-              ok: false,
-              error: '🛡️ Super Admin Shield: Master Administrator accounts cannot be reset from public forms. Please access the database directly.',
-            }
-          }
-          const dbName = normalizeText((profileRow.name as string) || '')
-          const givenName = normalizeText(nameInput || '')
-          // Security Check: Verify registered name matches to prevent unauthorized PIN hijacking
-          if (dbName && givenName && !dbName.includes(givenName) && !givenName.includes(dbName)) {
-            return {
-              ok: false,
-              error: '❌ Security Check Failed: Account holder name does not match our records. Please enter your registered name or contact Admin.',
-            }
-          }
-
-          // update PIN in DB so it works on all devices
-          await supabase.from('profiles').update({ pin: newPin }).eq('id', profileRow.id)
-          // Also update localStorage cache
-          storePin(profileRow.email, newPin)
-          return { ok: true }
+        if (rpcErr) {
+          console.error('reset_pin_with_verification RPC error:', rpcErr)
+          return { ok: false, error: 'Password reset service temporarily unavailable. Please try again.' }
         }
 
-        return { ok: false, error: 'Account not found with that email/phone. Please Sign Up first.' }
+        const resData = rpcRes as { ok: boolean; error?: string; message?: string } | null
+        if (!resData?.ok) {
+          return { ok: false, error: resData?.error || 'PIN reset failed.' }
+        }
+
+        storePin(authEmail, newPin.trim())
+        return { ok: true }
       }
 
       // Local fallback (dev mode only)
@@ -1136,18 +1113,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
       if (memMatch) return true
 
-      // 3️⃣ Try Supabase (may fail due to RLS for unauthenticated)
+      // 3️⃣ Try Supabase (calls lightweight check_account_exists RPC, safe for anon)
       if (cloud && supabase) {
         try {
-          const found = await checkAccountExistsByEmail(authEmail)
-          if (found) return true
-          // Also try with original email if different
+          const { data: exists, error: rpcErr } = await supabase.rpc('check_account_exists', {
+            p_identifier: authEmail,
+          })
+          if (!rpcErr && exists) return true
           if (authEmail !== normalEmail) {
-            const found2 = await checkAccountExistsByEmail(normalEmail)
-            if (found2) return true
+            const { data: exists2, error: rpcErr2 } = await supabase.rpc('check_account_exists', {
+              p_identifier: normalEmail,
+            })
+            if (!rpcErr2 && exists2) return true
           }
         } catch {
-          /* RLS may block — that's OK, local check already ran */
+          /* Fallback gracefully */
         }
       }
 

@@ -184,7 +184,11 @@ export default function Auth() {
       const targetMail = formatAuthIdentifier(emailOrPhone)
       const res = await signup(name, targetMail, password, phone || cleanDigits(emailOrPhone))
       if (!res.ok) {
-        setError(res.error || (lang === 'bn' ? 'সাইন আপ ব্যর্থ' : 'Signup failed'))
+        let msg = res.error || (lang === 'bn' ? 'সাইন আপ ব্যর্থ' : 'Signup failed')
+        if (lang === 'bn' && (msg.includes('already registered') || msg.includes('নিবন্ধিত'))) {
+          msg = '⚠️ এই মোবাইল নম্বর বা ইমেইলটি ইতিমধ্যে নিবন্ধিত! অনুগ্রহ করে "লগইন" ট্যাবে ট্যাপ করে আপনার ৪-সংখ্যার পিন দিয়ে লগইন করুন।'
+        }
+        setError(msg)
         return
       }
       if (res.user) {
