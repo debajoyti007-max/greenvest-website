@@ -52,7 +52,6 @@ import { calcDeliveryFee, STORE_LOCATION } from '../lib/delivery'
 import { getStoredKhataEntries, recordKhataTransaction, calculateUserKhataBalance, fetchKhataEntriesApi, saveKhataEntryApi } from '../lib/khata'
 import { getStoredPromotionalDeals, saveStoredPromotionalDeals } from '../lib/deals'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { SEED_REVIEWS } from '../data/seedReviews'
 import {
   ensureSeeded,
   getCart,
@@ -194,21 +193,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem('greenvest_all_reviews')
       if (saved) return JSON.parse(saved)
     } catch {}
-    return SEED_REVIEWS
+    return []
   })
 
   // Hydrate reviews from Supabase if connected (public catalog data — safe for all)
   useEffect(() => {
     if (!cloud) return
     fetchProductReviewsApi().then((data) => {
-      if (data && data.length > 0) {
+      if (Array.isArray(data)) {
         setReviews(data)
       }
     })
 
     // Hydrate promotional deals from Supabase if connected (public marketing data — safe for all)
     fetchPromotionalDealsApi().then((deals) => {
-      if (deals && Array.isArray(deals) && deals.length > 0) {
+      if (Array.isArray(deals)) {
         setPromotionalDeals(deals)
       }
     })

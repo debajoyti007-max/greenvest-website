@@ -1,9 +1,9 @@
-﻿import { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
 import { showToast } from '../../lib/toast'
-import { DEAL_GRADIENTS, DEFAULT_PROMOTIONAL_DEALS, isDealExpired, formatDealTimeRemaining } from '../../lib/deals'
+import { DEAL_GRADIENTS, SAMPLE_PROMOTIONAL_TEMPLATES, isDealExpired, formatDealTimeRemaining } from '../../lib/deals'
 import type { PromotionalDeal } from '../../types'
 
 const EMOJI_OPTIONS = ['🔥', '🥬', '🍅', '🥔', '🎁', '🎉', '⚡', '🏷️', '🌟', '🌾']
@@ -192,7 +192,7 @@ export default function SellerDeals() {
     if (!window.confirm(lang === 'bn' ? 'ডিফল্ট অফারগুলো পুনরায় লোড করবেন?' : 'Reset to default promotional offers?')) {
       return
     }
-    for (const d of DEFAULT_PROMOTIONAL_DEALS) {
+    for (const d of SAMPLE_PROMOTIONAL_TEMPLATES) {
       if (!promotionalDeals.some((p) => p.id === d.id)) {
         await addPromotionalDeal(d)
       }

@@ -1671,7 +1671,9 @@ export async function sendOrderMessageApi(
 
 export async function fetchProductReviewsApi(productId?: string): Promise<ProductReview[]> {
   const localKey = productId ? `greenvest_reviews_${productId}` : 'greenvest_all_reviews'
-  const fallback = JSON.parse(localStorage.getItem(localKey) || '[]')
+  const fallbackRaw: ProductReview[] = JSON.parse(localStorage.getItem(localKey) || '[]')
+  // Filter out any legacy seed reviews from localStorage cache
+  const fallback = fallbackRaw.filter((r) => !r.id.startsWith('rev-seed-'))
 
   if (!supabase) return fallback
 
@@ -1741,7 +1743,11 @@ export async function saveProductReviewApi(review: Omit<ProductReview, 'id' | 'c
 
 export async function fetchPromotionalDealsApi(): Promise<PromotionalDeal[]> {
   const localKey = 'gv_promotional_deals_v1'
-  const fallback = JSON.parse(localStorage.getItem(localKey) || '[]')
+  const fallbackRaw: PromotionalDeal[] = JSON.parse(localStorage.getItem(localKey) || '[]')
+  // Filter out any legacy demo deals from localStorage cache
+  const fallback = fallbackRaw.filter(
+    (d) => d.id !== 'deal-first50' && d.id !== 'deal-fresh10' && d.id !== 'deal-mandi20'
+  )
 
   if (!supabase) return fallback
 

@@ -11,7 +11,11 @@ export const DEAL_GRADIENTS = [
   { label: 'Deep Indigo', value: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)' },
 ]
 
-export const DEFAULT_PROMOTIONAL_DEALS: PromotionalDeal[] = [
+// Default promotional deals for customer storefront: empty by default so no fake/demo offers show up
+export const DEFAULT_PROMOTIONAL_DEALS: PromotionalDeal[] = []
+
+// Optional sample templates available in Seller Hub for one-click deal creation
+export const SAMPLE_PROMOTIONAL_TEMPLATES: PromotionalDeal[] = [
   {
     id: 'deal-first50',
     badgeBn: 'নতুন কাস্টমার স্পেশাল',
@@ -105,15 +109,17 @@ export function filterActivePromotionalDeals(deals: PromotionalDeal[]): Promotio
 export function getStoredPromotionalDeals(): PromotionalDeal[] {
   try {
     const raw = localStorage.getItem(DEALS_STORAGE_KEY)
-    if (raw === null) return DEFAULT_PROMOTIONAL_DEALS
+    if (raw === null) return []
     const parsed = JSON.parse(raw)
     if (Array.isArray(parsed)) {
-      return parsed as PromotionalDeal[]
+      // Filter out legacy hardcoded demo deals
+      return (parsed as PromotionalDeal[]).filter(
+        (d) => d.id !== 'deal-first50' && d.id !== 'deal-fresh10' && d.id !== 'deal-mandi20'
+      )
     }
-    return DEFAULT_PROMOTIONAL_DEALS
+    return []
   } catch (e) {
-    console.error('Failed to load promotional deals from localStorage', e)
-    return DEFAULT_PROMOTIONAL_DEALS
+    return []
   }
 }
 
