@@ -25,7 +25,7 @@
 
   <!-- Order Tracking (public) -->
   <url>
-    <loc>https://greenvest.shop/track-order</loc>
+    <loc>https://greenvest.shop/track</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>

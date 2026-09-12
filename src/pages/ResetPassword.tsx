@@ -1,4 +1,4 @@
-﻿import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
@@ -27,7 +27,7 @@ export default function ResetPassword() {
   if (!user && !done) {
     return (
       <div className="page narrow auth-page">
-        <h1 className="brand-hero compact">GreenVest</h1>
+        <h1 className="brand-hero compact">MS Vegetable Center</h1>
         <p className="form-error">
           {lang === 'bn'
             ? 'রিসেট নির্দেশ চেক করা হচ্ছে। নতুন পিন লিখুন।'
@@ -72,7 +72,7 @@ export default function ResetPassword() {
 
   return (
     <div className="page narrow auth-page">
-      <h1 className="brand-hero compact">GreenVest</h1>
+      <h1 className="brand-hero compact">MS Vegetable Center</h1>
       <p className="lede center">
         {lang === 'bn' ? '🔑 আপনার নতুন ৪-সংখ্যার পিন সেভ করুন' : '🔑 Set Your New 4-Digit Security PIN'}
       </p>

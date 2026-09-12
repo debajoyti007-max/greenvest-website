@@ -904,6 +904,7 @@ export async function createOrder(order: Order): Promise<Order> {
         weightMultiplier: it.weightMultiplier || 1,
         weightLabel: it.weightLabel || '1 kg',
       })),
+      p_delivery_date: order.deliveryDate || 'standard',
     })
 
     if (!rpcErr && atomicRes && (atomicRes as any).success) {
@@ -1580,7 +1581,7 @@ export async function fetchNotificationsApi(userId?: string): Promise<AppNotific
         userId: n.user_id || 'all',
         title: n.title || '',
         message: n.message || '',
-        sender: n.sender || 'GreenVest',
+        sender: n.sender || 'MS Vegetable Center',
         createdAt: n.created_at || new Date().toISOString(),
       }))
   } catch {

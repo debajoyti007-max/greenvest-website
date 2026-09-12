@@ -77,7 +77,7 @@ export default function SellerCustomers() {
       await createCoupon({ code, discount_type: couponType, discount_value: couponDiscount, min_order: couponMinOrder, valid: true, expires_at: expires })
       const discountText = couponType === 'flat' ? `₹${couponDiscount}` : `${couponDiscount}%`
       if (couponModal.userId) {
-        await sendNotification(couponModal.userId, lang === 'bn' ? '🎉 বিশেষ কুপন অফার!' : '🎉 Special Coupon Offer!', lang === 'bn' ? `কুপন কোড: ${code} — ${discountText} ছাড় পান!` : `Use code ${code} for ${discountText} off your next order!`, 'GreenVest')
+        await sendNotification(couponModal.userId, lang === 'bn' ? '🎉 বিশেষ কুপন অফার!' : '🎉 Special Coupon Offer!', lang === 'bn' ? `কুপন কোড: ${code} — ${discountText} ছাড় পান!` : `Use code ${code} for ${discountText} off your next order!`, 'MS Vegetable Center')
       }
       try {
         await navigator.clipboard.writeText(code)
@@ -191,7 +191,7 @@ export default function SellerCustomers() {
         resetModalUser.id,
         lang === 'bn' ? '🔐 অ্যাকাউন্ট পিন রিসেট' : '🔐 Account PIN Reset',
         lang === 'bn' ? `আপনার নতুন পিন: ${newPin}` : `Your new login PIN is: ${newPin}`,
-        'GreenVest Security'
+        'MS Vegetable Center Security'
       )
     }
     try {
@@ -216,7 +216,7 @@ export default function SellerCustomers() {
               targetId,
               notifTitle.trim() || (lang === 'bn' ? 'স্টোর মেসেজ' : 'Store Update'),
               notifMessage.trim(),
-              user.name || 'GreenVest Seller'
+              user.name || 'MS Vegetable Center Seller'
             )
           }
         }
@@ -231,7 +231,7 @@ export default function SellerCustomers() {
           notifModalTarget.id,
           notifTitle.trim() || (lang === 'bn' ? 'স্টোর মেসেজ' : 'Store Update'),
           notifMessage.trim(),
-          user.name || 'GreenVest Seller'
+          user.name || 'MS Vegetable Center Seller'
         )
       }
       setNotifModalTarget(null)

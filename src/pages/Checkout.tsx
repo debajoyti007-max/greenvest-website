@@ -137,7 +137,7 @@ export default function Checkout() {
   useEffect(() => {
     let active = true
     if (payableAmount > 0) {
-      generateDynamicUpiQr(payableAmount, `GreenVest Order ₹${payableAmount}`).then((dataUri) => {
+      generateDynamicUpiQr(payableAmount, `MS Vegetable Center Order ₹${payableAmount}`).then((dataUri) => {
         if (active && dataUri) setDynamicQr(dataUri)
       })
     }
@@ -636,28 +636,28 @@ export default function Checkout() {
                   </span>
                   <div className="upi-app-grid">
                     <a
-                      href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
+                      href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
                       className="upi-app-btn"
                       style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                     >
                       <span style={{ color: '#0f9d58' }}>●</span> GPay
                     </a>
                     <a
-                      href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
+                      href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
                       className="upi-app-btn"
                       style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                     >
                       <span style={{ color: '#5f259f' }}>●</span> PhonePe
                     </a>
                     <a
-                      href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
+                      href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
                       className="upi-app-btn"
                       style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                     >
                       <span style={{ color: '#00baf2' }}>●</span> Paytm
                     </a>
                     <a
-                      href={buildUpiPayUri(payableAmount, 'GreenVest Order')}
+                      href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
                       className="upi-app-btn"
                       style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
                     >
@@ -873,6 +873,7 @@ export default function Checkout() {
                     if (addr) {
                       setHouse(addr.address)
                       setPhone(addr.phone)
+                      if (addr.pin) setPin(addr.pin)
                       setPrefilled(true)
                     }
                   }}>

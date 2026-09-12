@@ -204,7 +204,7 @@ export default function Auth() {
 
   return (
     <div className="page narrow auth-page">
-      <h1 className="brand-hero compact">GreenVest</h1>
+      <h1 className="brand-hero compact">MS Vegetable Center</h1>
       <p className="lede center">
         {mode === 'mfa' && (lang === 'bn' ? 'সুপার অ্যাডমিন ওটিপি ভেরিফিকেশন' : 'Super Admin 2-Step Verification')}
         {mode === 'login' && (lang === 'bn' ? 'লগইন করুন (মোবাইল/জিমেইল ও ৪-সংখ্যার পিন)' : 'Login with Mobile / Gmail & 4-Digit PIN')}

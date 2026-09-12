@@ -49,7 +49,7 @@ export default function OrderSuccess() {
 
   const copySummary = async () => {
     if (!order) return
-    const text = `GreenVest Order: ${order.id}\nCustomer: ${order.userName} (${order.phone})\nTotal: ₹${order.total} (Advance ₹${order.advanceAmount})\nAddress: ${order.address} (PIN ${order.pin})`
+    const text = `MS Vegetable Center Order: ${order.id}\nCustomer: ${order.userName} (${order.phone})\nTotal: ₹${order.total} (Advance ₹${order.advanceAmount})\nAddress: ${order.address} (PIN ${order.pin})`
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -62,11 +62,11 @@ export default function OrderSuccess() {
   const handleShareOrder = async () => {
     if (!order) return
     const trackUrl = `${window.location.origin}/track?id=${order.id}`
-    const text = `GreenVest Order #${order.id}\nTotal: ₹${order.total}\nAdvance: ₹${order.advanceAmount}\nStatus: ${order.status}\nTrack: ${trackUrl}`
+    const text = `MS Vegetable Center Order #${order.id}\nTotal: ₹${order.total}\nAdvance: ₹${order.advanceAmount}\nStatus: ${order.status}\nTrack: ${trackUrl}`
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `GreenVest Order #${order.id}`,
+          title: `MS Vegetable Center Order #${order.id}`,
           text,
           url: trackUrl,
         })
@@ -229,7 +229,7 @@ export default function OrderSuccess() {
             : `Your referral code: ${order.phone ? `GV-${order.phone.replace(/\D/g, '').slice(-4)}` : 'GV-2026'}. Friends get ₹50 OFF!`}
         </p>
         <a
-          href={`https://wa.me/?text=${encodeURIComponent(`🌿 GreenVest থেকে টাটকা সবজি কিনুন! আমার রেফার কোড ${order.phone ? `GV-${order.phone.replace(/\D/g, '').slice(-4)}` : 'GV-2026'} ব্যবহার করলে পাবেন ₹৫০ ছাড়: https://greenvest.shop/?ref=${order.phone ? `GV-${order.phone.replace(/\D/g, '').slice(-4)}` : 'GV-2026'}`)}`}
+          href={`https://wa.me/?text=${encodeURIComponent(`🌿 MS Vegetable Center থেকে টাটকা সবজি কিনুন! আমার রেফার কোড ${order.phone ? `GV-${order.phone.replace(/\D/g, '').slice(-4)}` : 'GV-2026'} ব্যবহার করলে পাবেন ₹৫০ ছাড়: https://greenvest.shop/?ref=${order.phone ? `GV-${order.phone.replace(/\D/g, '').slice(-4)}` : 'GV-2026'}`)}`}
           target="_blank"
           rel="noopener noreferrer"
           style={{

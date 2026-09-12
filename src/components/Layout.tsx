@@ -73,7 +73,7 @@ export default function Layout() {
 
   useEffect(() => {
     if (!isPrivileged || openAlertsCount === 0) {
-      document.title = 'MS Vegetable Center – তাজা সবজি ও বাজার'
+      document.title = 'GreenVest (MS Vegetable Center) – তাজা সবজি ও বাজার'
       return
     }
 

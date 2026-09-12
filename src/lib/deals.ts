@@ -118,7 +118,7 @@ export function getStoredPromotionalDeals(): PromotionalDeal[] {
       )
     }
     return []
-  } catch (e) {
+  } catch {
     return []
   }
 }

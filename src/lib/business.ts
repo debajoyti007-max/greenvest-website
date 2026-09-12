@@ -7,6 +7,7 @@ const env = (key: string, fallback: string) => {
 }
 
 export const MIN_ORDER_AMOUNT = 500
+export const STORE_NAME = env('VITE_STORE_NAME', 'MS Vegetable Center')
 export const MAX_VEGETABLE_QTY_KG = 10
 export const DELIVERY_WINDOW = '12–24 hours'
 export const DELIVERY_WINDOW_BN = '১২–২৪ ঘণ্টা'

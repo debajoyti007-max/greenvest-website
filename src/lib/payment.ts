@@ -8,9 +8,9 @@ export { UPI_BANK, UPI_ID, UPI_QR_SRC } from './business'
  * Builds a standard NPCI UPI URI with exact amount and store name.
  * e.g. upi://pay?pa=8170859653-2@ybl&pn=GreenVest&am=340.00&cu=INR&tn=GreenVest_Fresh_Order
  */
-export function buildUpiPayUri(amount: number, note = 'GreenVest Fresh Order'): string {
+export function buildUpiPayUri(amount: number, note = 'MS Vegetable Center Order'): string {
   const cleanPa = (UPI_ID || '').trim()
-  const cleanPn = encodeURIComponent('GreenVest Fresh')
+  const cleanPn = encodeURIComponent('MS Vegetable Center')
   const cleanAm = Math.max(1, amount).toFixed(2)
   const cleanTn = encodeURIComponent(note)
   return `upi://pay?pa=${cleanPa}&pn=${cleanPn}&am=${cleanAm}&cu=INR&tn=${cleanTn}`

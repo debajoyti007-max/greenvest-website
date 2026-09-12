@@ -15,9 +15,11 @@ import { formatAuthIdentifier } from '../lib/authUtils'
 import { cleanDigits } from '../lib/phone'
 import {
   ensureSeeded,
+  getCurrentUser,
   getOrders,
   getSessionUserId,
   getUsers,
+  saveCurrentUser,
   saveUsers,
   setSessionUserId,
   storePin,
@@ -106,6 +108,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
   const [user, setUser] = useState<User | null>(() => {
     ensureSeeded()
+    const cached = getCurrentUser()
+    if (cached) return cached
     const sessionUserId = getSessionUserId()
     if (!sessionUserId) return null
     const all = getUsers()
@@ -122,6 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Use a ref so applyCloudSession can read the latest user without being recreated every render.
   // Must be initialized lazily to match whatever user useState resolved to.
   const userRef = useRef<User | null>((() => {
+    const cached = getCurrentUser()
+    if (cached) return cached
     const sessionUserId = getSessionUserId()
     if (!sessionUserId) return null
     const all = getUsers()
@@ -234,8 +240,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('Supabase session check error:', err)
       }
 
-      // 2. Restore session from localStorage userId if no active Supabase Auth session
+      // 2. Restore session from localStorage userId or cached profile
       const localId = getSessionUserId()
+      const cachedProfile = getCurrentUser()
+
       if (localId) {
         try {
           const { data: profileRow } = await supabase
@@ -246,17 +254,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (profileRow) {
             const profile = mapProfile(profileRow as any)
             if (profile) {
-              setUser(profile)
-              userRef.current = profile
-              await loadUsersIfStaff(profile)
+              if (profile.isBlocked) {
+                saveCurrentUser(null)
+                setUser(null)
+                userRef.current = null
+              } else {
+                setUser(profile)
+                userRef.current = profile
+                saveCurrentUser(profile)
+                await loadUsersIfStaff(profile)
+              }
             }
-          } else {
-            // Session ID in localStorage but no matching profile — clear stale session
+          } else if (!cachedProfile) {
+            // Only clear session if no local profile cache exists at all
             setSessionUserId(null)
           }
         } catch {
-          // Network error — keep existing in-memory user if any
+          // Network error — keep existing in-memory / cached user
+          if (cachedProfile && !userRef.current) {
+            setUser(cachedProfile)
+            userRef.current = cachedProfile
+          }
         }
+      } else if (cachedProfile) {
+        setUser(cachedProfile)
+        userRef.current = cachedProfile
+        setSessionUserId(cachedProfile.id)
       }
       setLoading(false)
       initializedRef.current = true
@@ -484,7 +507,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           const profile = mapProfile(profileRow as any)
           if (!profile) return { ok: false, error: 'Profile error. Please contact support.' }
-          if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Contact GreenVest Admin.' }
+          if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Contact MS Vegetable Center Admin.' }
 
           // 🔐 Super Admin 2FA: Send magic link to Gmail
           if (profile.isSuperAdmin && supabase) {
@@ -511,7 +534,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           setUser(profile)
           userRef.current = profile
-          setSessionUserId(profile.id)
+          saveCurrentUser(profile)
           await loadUsersIfStaff(profile)
           return { ok: true, user: profile }
         }
@@ -529,7 +552,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           (u.password === password),
       )
       if (!found) return { ok: false, error: 'Invalid phone/email or PIN' }
-      if (found.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by GreenVest Admin.' }
+      if (found.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by MS Vegetable Center Admin.' }
       setSessionUserId(found.id)
       setUser(found)
       userRef.current = found
@@ -565,7 +588,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         mfaProfileRef.current = null
         setUser(pendingProfile)
         userRef.current = pendingProfile
-        setSessionUserId(pendingProfile.id)
+        saveCurrentUser(pendingProfile)
         await loadUsersIfStaff(pendingProfile)
         return { ok: true, user: pendingProfile }
       } catch (err: unknown) {
@@ -617,7 +640,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setUser(profile)
         userRef.current = profile
-        setSessionUserId(profile.id)
+        saveCurrentUser(profile)
         return { ok: true, user: profile }
       }
 
@@ -658,7 +681,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         /* ignore */
       }
     }
-    setSessionUserId(null)
+    saveCurrentUser(null)
     setUser(null)
     userRef.current = null
     setUsers([])

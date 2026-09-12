@@ -107,7 +107,7 @@ export default function Privacy() {
         <div style={{ background: '#ffffff', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '0.85rem 1rem', fontSize: '0.85rem', lineHeight: '1.6', color: '#1e293b' }}>
           <div><strong>{lang === 'bn' ? 'কর্মকর্তার নাম:' : 'Officer Name:'}</strong> Debajoyti Barman</div>
           <div><strong>{lang === 'bn' ? 'পদবী:' : 'Designation:'}</strong> Store Administrator & Grievance Officer</div>
-          <div><strong>{lang === 'bn' ? 'কোম্পানি / শপ:' : 'Entity Name:'}</strong> GreenVest Fresh Groceries</div>
+          <div><strong>{lang === 'bn' ? 'কোম্পানি / শপ:' : 'Entity Name:'}</strong> MS Vegetable Center</div>
           <div><strong>{lang === 'bn' ? 'ঠিকানা:' : 'Physical Address:'}</strong> {STORE_LOCATION.address}, West Bengal, PIN 721632</div>
           <div><strong>{lang === 'bn' ? 'ইমেইল:' : 'Official Email:'}</strong> support@greenvest.shop / debajoyti007@gmail.com</div>
           <div><strong>{lang === 'bn' ? 'হেল্পলাইন:' : 'Helpline:'}</strong> {SUPPORT_PHONE}</div>

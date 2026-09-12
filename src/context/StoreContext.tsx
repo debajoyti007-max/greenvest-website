@@ -931,7 +931,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       notes?: string,
       orderId?: string,
     ) => {
-      const res = recordKhataTransaction(userId, type, amount, notes, orderId, user?.name || 'GreenVest Staff')
+      const res = recordKhataTransaction(userId, type, amount, notes, orderId, user?.name || 'MS Vegetable Center Staff')
       setKhataEntries(getStoredKhataEntries())
       if (cloud && res?.entry) {
         void saveKhataEntryApi(res.entry)
@@ -1323,7 +1323,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [cloud])
 
   const sendNotification = useCallback(
-    async (targetUserId: string | 'all', title: string, message: string, senderName = 'GreenVest Seller') => {
+    async (targetUserId: string | 'all', title: string, message: string, senderName = 'MS Vegetable Center Seller') => {
       const newNotif: AppNotification = {
         id: uid('notif'),
         userId: targetUserId,

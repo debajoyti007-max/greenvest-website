@@ -11,6 +11,6 @@ Disallow: /checkout
 # Allow public shopping pages explicitly
 Allow: /shop
 Allow: /cart
-Allow: /track-order
+Allow: /track
 
 Sitemap: https://greenvest.shop/sitemap.xml

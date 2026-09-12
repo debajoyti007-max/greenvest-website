@@ -59,7 +59,7 @@ const dict = {
   },
   tipMin: {
     en: 'Tip: Add items until cart reaches ₹500 minimum.',
-    bn: 'টিপ: কার্ট কমপক্ষে ৳৫০০ হওয়া পর্যন্ত সবজি যোগ করুন।',
+    bn: 'টিপ: কার্ট কমপক্ষে ₹৫০০ হওয়া পর্যন্ত সবজি যোগ করুন।',
   },
   name: { en: 'Your name', bn: 'আপনার নাম' },
   email: { en: 'Email', bn: 'ইমেইল' },

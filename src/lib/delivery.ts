@@ -1,5 +1,5 @@
 import type { DeliveryZone as DbDeliveryZone } from '../types'
-import { SERVICEABLE_PINCODES } from './business'
+import { SERVICEABLE_PINCODES, SUPPORT_PHONE } from './business'
 
 export const STORE_LOCATION = {
   name: 'MS Vegetable Center',
@@ -10,7 +10,7 @@ export const STORE_LOCATION = {
   lng: 87.9106158,
   mapsUrl: 'https://maps.app.goo.gl/pdafSPpPPBymCDgDA',
   pin: '721648',
-  phone: (import.meta.env.VITE_SUPPORT_PHONE ?? '').replace(/\D/g, '').slice(-10),
+  phone: (import.meta.env.VITE_SUPPORT_PHONE || SUPPORT_PHONE).replace(/\D/g, '').slice(-10),
   hours: '7:00 AM – 12:00 PM & 4:00 PM – 9:00 PM',
   hoursBn: 'সকাল ৭:০০ – ১২:০০ ও বিকাল ৪:০০ – রাত ৯:০০',
   maxDeliveryRadiusKm: 15,
@@ -70,8 +70,8 @@ export function calcDeliveryFee(
       distanceKm: 0,
       isPickup: true,
       isOutOfRange: false,
-      noticeEn: 'Self-Pickup from GreenVest Store (₹0 Delivery Charge)',
-      noticeBn: 'সরাসরি গ্রীনভেস্ট দোকান থেকে সংগ্রহ (₹০ ডেলিভারি চার্জ)',
+      noticeEn: 'Self-Pickup from MS Vegetable Center (₹0 Delivery Charge)',
+      noticeBn: 'সরাসরি এম.এস ভেজিটেবল সেন্টার থেকে সংগ্রহ (₹০ ডেলিভারি চার্জ)',
     }
   }
 

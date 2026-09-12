@@ -148,14 +148,14 @@ export default function Cart() {
 
       <div className="cart-summary">
         <div style={{ marginBottom: '1rem', textAlign: 'left' }}>
-          <button type="button" onClick={() => setShowGrades(!showGrades)} style={{ background: 'none', border: 'none', color: '#16a34a', cursor: 'pointer', padding: 0, fontWeight: 500 }}>
-            ℹ️ What is Grade A/B/C?
+          <button type="button" onClick={() => setShowGrades(!showGrades)} style={{ background: 'none', border: 'none', color: '#16a34a', cursor: 'pointer', padding: 0, fontWeight: 600, fontSize: '0.85rem' }}>
+            {lang === 'bn' ? 'ℹ️ গ্রেড A/B/C কী?' : 'ℹ️ What is Grade A/B/C?'}
           </button>
           {showGrades && (
-            <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: '#4b5563', lineHeight: 1.5 }}>
-              <div><strong>A</strong> = Premium quality</div>
-              <div><strong>B</strong> = Good daily use</div>
-              <div><strong>C</strong> = Budget friendly</div>
+            <div style={{ fontSize: '0.84rem', marginTop: '0.5rem', color: '#4b5563', lineHeight: 1.5, background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <div><strong>A</strong> = {lang === 'bn' ? 'প্রিমিয়াম সেরা মান' : 'Premium quality'}</div>
+              <div><strong>B</strong> = {lang === 'bn' ? 'দৈনন্দিন ভালো মান (স্ট্যান্ডার্ড)' : 'Good daily use (Standard)'}</div>
+              <div><strong>C</strong> = {lang === 'bn' ? 'সাশ্রয়ী বাজেট মান' : 'Budget friendly'}</div>
             </div>
           )}
         </div>
@@ -227,7 +227,7 @@ export default function Cart() {
               const wLbl = c.weightLabel ? ` [${c.weightLabel}]` : ''
               return `• ${name}${wLbl} (Grade ${c.grade}) × ${c.qty} = ₹${price}`
             })
-            const text = `নমস্কার GreenVest, আমি আমার কার্টের সামগ্রীগুলো নিয়ে সহায়তা চাই:\n\n${lines.join('\n')}\n\nমোট মূল্য: ₹${cartTotal}`
+            const text = `নমস্কার MS Vegetable Center, আমি আমার কার্টের সামগ্রীগুলো নিয়ে সহায়তা চাই:\n\n${lines.join('\n')}\n\nমোট মূল্য: ₹${cartTotal}`
             if (user) {
               try {
                 await sendSupportMessage({

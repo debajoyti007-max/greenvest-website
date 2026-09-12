@@ -22,11 +22,11 @@ export default function Orders() {
       .map((it) => `• ${it.name} (${it.grade}) × ${it.qty} = ₹${it.unitPrice * it.qty}`)
       .join('\n')
     const trackUrl = `${window.location.origin}/track?id=${o.id}`
-    const text = `🌿 GreenVest Order #${o.id}\n📅 Date: ${new Date(o.createdAt).toLocaleDateString()}\n\nItems:\n${itemsText}\n\nTotal: ₹${o.total}\nAdvance Paid: ₹${o.advanceAmount}\nBalance Due: ₹${Math.max(0, o.total - o.advanceAmount)}\nAddress: ${o.address} (PIN ${o.pin})\n\nTrack: ${trackUrl}`
+    const text = `🌿 MS Vegetable Center Order #${o.id}\n📅 Date: ${new Date(o.createdAt).toLocaleDateString()}\n\nItems:\n${itemsText}\n\nTotal: ₹${o.total}\nAdvance Paid: ₹${o.advanceAmount}\nBalance Due: ₹${Math.max(0, o.total - o.advanceAmount)}\nAddress: ${o.address} (PIN ${o.pin})\n\nTrack: ${trackUrl}`
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `GreenVest Order #${o.id}`,
+          title: `MS Vegetable Center Order #${o.id}`,
           text,
           url: trackUrl,
         })

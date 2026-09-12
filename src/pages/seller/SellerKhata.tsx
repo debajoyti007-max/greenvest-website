@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
@@ -155,7 +155,7 @@ export default function SellerKhata() {
   }
 
   const handleSendInAppKhataReminder = async (customerUser: User, bal: number) => {
-    const text = `📋 [GreenVest Khata Reminder]\nনমস্কার ${customerUser.name}, গ্রীনভেস্টে আপনার বর্তমান বকেয়া খাতা ব্যালেন্স: ₹${bal}। অনুগ্রহ করে সুবিধা মতো পরিশোধ করুন। ধন্যবাদ! 🌱`
+    const text = `📋 [MS Vegetable Center Khata Reminder]\nনমস্কার ${customerUser.name}, এম.এস ভেজিটেবল সেন্টারে আপনার বর্তমান বকেয়া খাতা ব্যালেন্স: ₹${bal}। অনুগ্রহ করে সুবিধা মতো পরিশোধ করুন। ধন্যবাদ! 🌱`
     try {
       await sendSupportMessage({
         userId: customerUser.id,

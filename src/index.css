@@ -2277,7 +2277,7 @@ button.linkish {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 9980;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2287,6 +2287,12 @@ button.linkish {
   color: #fff;
   box-shadow: 0 -4px 24px rgba(14,83,45,0.25);
   animation: cartBarUp 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+@media (max-width: 800px) {
+  .cart-bar {
+    bottom: calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .cart-bar-info {
@@ -2313,8 +2319,8 @@ button.linkish {
   transform: scale(1.04);
 }
 
-/* Push footer up when cart bar is visible */
-.site-footer { padding-bottom: 4.5rem; }
+/* Push footer up when cart bar or bottom nav is visible */
+.site-footer { padding-bottom: calc(var(--bottom-nav-h, 68px) + 5rem); }
 
 /* ── Toast Notifications ─────────────────────────── */
 @keyframes toastIn {

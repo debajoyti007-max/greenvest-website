@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import { saveDelivery } from '../lib/storage'
 import { showToast } from '../lib/toast'
 import { validatePhoneStrict } from '../lib/validation'
-import { UPI_ID } from '../lib/business'
+import { UPI_ID, SERVICEABLE_PINCODES } from '../lib/business'
 import type { Address } from '../types'
 
 export default function Profile() {
@@ -25,6 +25,7 @@ export default function Profile() {
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [addrInput, setAddrInput] = useState('')
+  const [addrPin, setAddrPin] = useState<string>(SERVICEABLE_PINCODES[0])
 
   const [showPinForm, setShowPinForm] = useState(false)
   const [newPinVal, setNewPinVal] = useState('')
@@ -51,8 +52,8 @@ export default function Profile() {
 
   const referralShareUrl = `https://greenvest.shop/?ref=${referralCode}`
   const referralMsg = lang === 'bn'
-    ? `🌿 GreenVest থেকে তাজা সবজি ও আলু-পটল কিনুন! আমার রেফার কোড ${referralCode} ব্যবহার করলে পাবেন ₹৫০ ছাড়! এখনই অর্ডার করুন: ${referralShareUrl}`
-    : `🌿 Buy fresh vegetables & essentials on GreenVest! Use my referral code ${referralCode} to get ₹50 OFF your first order: ${referralShareUrl}`
+    ? `🌿 MS Vegetable Center থেকে তাজা সবজি ও আলু-পটল কিনুন! আমার রেফার কোড ${referralCode} ব্যবহার করলে পাবেন ₹৫০ ছাড়! এখনই অর্ডার করুন: ${referralShareUrl}`
+    : `🌿 Buy fresh vegetables & essentials on MS Vegetable Center! Use my referral code ${referralCode} to get ₹50 OFF your first order: ${referralShareUrl}`
   const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(referralMsg)}`
 
   useEffect(() => {
@@ -123,16 +124,17 @@ export default function Profile() {
   const handleSaveAddress = async () => {
     if (!user || !addrInput.trim()) return
     setSaving(true)
+    const pin = addrPin.trim() || SERVICEABLE_PINCODES[0]
     try {
       await saveAddress({
         user_id: user.id,
         label: 'Home Delivery',
         address: addrInput.trim(),
         phone: phoneVal || user.phone || '',
-        pin: '721632',
+        pin,
         is_default: true,
       })
-      saveDelivery(user.id, { address: addrInput.trim(), phone: phoneVal || user.phone || '', pin: '721632' })
+      saveDelivery(user.id, { address: addrInput.trim(), phone: phoneVal || user.phone || '', pin })
       const updated = await fetchAddresses(user.id)
       setAddresses(updated)
       setAddrInput('')
@@ -160,7 +162,7 @@ export default function Profile() {
       showToast(
         lang === 'bn'
           ? '✅ ক্লাউড সিঙ্ক সম্পন্ন! তাজা দাম ও অর্ডার আপডেট হয়েছে।'
-          : '✅ Synced with GreenVest Cloud! Latest data updated.',
+          : '✅ Synced with MS Vegetable Center Cloud! Latest data updated.',
         '🔄',
       )
     } catch {
@@ -315,8 +317,8 @@ export default function Profile() {
           </div>
           <p style={{ margin: '0 0 0.85rem', fontSize: '0.84rem', color: '#166534', lineHeight: 1.4 }}>
             {lang === 'bn'
-              ? 'আপনার বন্ধু বা প্রতিবেশীকে GreenVest-এ আমন্ত্রণ জানান। তারা প্রথম অর্ডারে পাবেন ₹৫০ ছাড়, আর তাদের ডেলিভারির পর আপনার অ্যাকাউন্টেও মিলবে ₹৫০ ছাড়ের কুপন!'
-              : 'Invite friends or neighbors to GreenVest. They get ₹50 OFF their first order, and you get ₹50 OFF after their delivery!'}
+              ? 'আপনার বন্ধু বা প্রতিবেশীকে MS Vegetable Center-এ আমন্ত্রণ জানান। তারা প্রথম অর্ডারে পাবেন ₹৫০ ছাড়, আর তাদের ডেলিভারির পর আপনার অ্যাকাউন্টেও মিলবে ₹৫০ ছাড়ের কুপন!'
+              : 'Invite friends or neighbors to MS Vegetable Center. They get ₹50 OFF their first order, and you get ₹50 OFF after their delivery!'}
           </p>
 
           <div style={{
@@ -428,7 +430,7 @@ export default function Profile() {
             {getUserKhataBalance(user.id) > 0 && (
               <div style={{ marginTop: '0.85rem' }}>
                 <a
-                  href={`upi://pay?pa=${UPI_ID}&pn=GreenVest&am=${getUserKhataBalance(user.id)}&cu=INR&tn=${encodeURIComponent('Khata Dues ' + user.name)}`}
+                  href={`upi://pay?pa=${UPI_ID}&pn=MS+Vegetable+Center&am=${getUserKhataBalance(user.id)}&cu=INR&tn=${encodeURIComponent('Khata Dues ' + user.name)}`}
                   className="btn btn-primary"
                   style={{
                     display: 'flex',
@@ -531,13 +533,24 @@ export default function Profile() {
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
               {lang === 'bn' ? 'নতুন ডেলিভারি ঠিকানা লিখুন:' : 'Enter Delivery Address:'}
             </label>
-            <input
-              type="text"
-              value={addrInput}
-              onChange={(e) => setAddrInput(e.target.value)}
-              placeholder={lang === 'bn' ? 'বাড়ি, পারা, ল্যান্ডমার্ক, এলাকা' : 'House, Para, Landmark, Area'}
-              style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '0.5rem' }}
-            />
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <input
+                type="text"
+                value={addrInput}
+                onChange={(e) => setAddrInput(e.target.value)}
+                placeholder={lang === 'bn' ? 'বাড়ি, পাড়া, ল্যান্ডমার্ক, এলাকা' : 'House, Para, Landmark, Area'}
+                style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #d1d5db', width: '100%' }}
+              />
+              <select
+                value={addrPin}
+                onChange={(e) => setAddrPin(e.target.value)}
+                style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #d1d5db', background: '#ffffff', fontWeight: 600 }}
+              >
+                {SERVICEABLE_PINCODES.map((p) => (
+                  <option key={p} value={p}>PIN {p}</option>
+                ))}
+              </select>
+            </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 type="button"
@@ -571,7 +584,7 @@ export default function Profile() {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{addr.label} {addr.is_default && '⭐'}</div>
                   <div style={{ color: 'var(--text-light)', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={addr.address}>{addr.address}</div>
-                  <div style={{ color: 'var(--text-light)', fontSize: '0.8rem' }}>📱 {addr.phone}</div>
+                  <div style={{ color: 'var(--text-light)', fontSize: '0.8rem' }}>📱 {addr.phone} {addr.pin ? `· 📮 PIN ${addr.pin}` : ''}</div>
                 </div>
                 <button onClick={() => handleDeleteAddress(addr.id)} style={{ background: '#fef2f2', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#dc2626', padding: '0.4rem 0.6rem', borderRadius: '8px', flexShrink: 0 }}>
                   🗑️

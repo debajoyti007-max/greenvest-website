@@ -10,7 +10,6 @@ import { showToast } from '../lib/toast'
 const WeeklyBasketModal = lazy(() => import('../components/WeeklyBasketModal'))
 const MyUsualBasketModal = lazy(() => import('../components/MyUsualBasketModal'))
 const ProductReviewsModal = lazy(() => import('../components/ProductReviewsModal'))
-const PincodeCheckerModal = lazy(() => import('../components/PincodeCheckerModal'))
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, computeMarketMrp, SERVICEABLE_PINCODES, toBnDigits } from '../lib/business'
@@ -386,7 +385,6 @@ export default function Shop() {
   const [heroSlide, setHeroSlide] = useState(0)
   const [showBasketModal, setShowBasketModal] = useState(false)
   const [showUsualBasketModal, setShowUsualBasketModal] = useState(false)
-  const [showPinModal, setShowPinModal] = useState(false)
   const [reviewProduct, setReviewProduct] = useState<Product | null>(null)
 
   // Auto-slide hero banner every 5 seconds
@@ -764,10 +762,8 @@ export default function Shop() {
         {/* ⏰ Live Shift Hours Badge */}
         <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           <ShiftBadge lang={lang} />
-          <button
-            type="button"
+          <div
             className="pincode-check-chip"
-            onClick={() => setShowPinModal(true)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -779,12 +775,10 @@ export default function Shop() {
               padding: '5px 12px',
               fontSize: '0.82rem',
               fontWeight: 600,
-              cursor: 'pointer',
             }}
           >
-            <span>📍 {lang === 'bn' ? 'পিন কোড চেক' : 'Check PIN'}: <strong>{SERVICEABLE_PINCODES.join(', ')}</strong></span>
-            <span style={{ fontSize: '0.75rem', textDecoration: 'underline' }}>{lang === 'bn' ? 'পরিবর্তন' : 'Verify'}</span>
-          </button>
+            <span>📍 {lang === 'bn' ? 'ডেলিভারি এলাকা (পিন)' : 'Delivery PINs'}: <strong>{SERVICEABLE_PINCODES.join(', ')}</strong></span>
+          </div>
         </div>
 
         {/* 🎟️ Promotional Deals & Offers Hero Banner */}
@@ -878,8 +872,8 @@ export default function Shop() {
                       ? '🎉 মিনিমাম পূরণ হয়েছে!'
                       : '🎉 Minimum reached!'
                     : lang === 'bn'
-                      ? `আর মাত্র ₹${shortfall} যোগ করুন — বিনামূল্যে ডেলিভারি পান!`
-                      : `Add ₹${shortfall} more for free delivery!`}
+                      ? `আর মাত্র ₹${shortfall} যোগ করুন — ন্যূনতম অর্ডারে পৌঁছাতে!`
+                      : `Add ₹${shortfall} more to reach minimum order!`}
               </span>
               <span className="cart-progress-view-hint">{lang === 'bn' ? 'কার্ট দেখুন ➔' : 'View Cart ➔'}</span>
             </Link>
@@ -1089,16 +1083,6 @@ export default function Shop() {
         </Suspense>
       )}
 
-      {/* 📍 Pincode Checker Modal */}
-      {showPinModal && (
-        <Suspense fallback={null}>
-          <PincodeCheckerModal
-            isOpen={showPinModal}
-            onClose={() => setShowPinModal(false)}
-            lang={lang}
-          />
-        </Suspense>
-      )}
     </div>
   )
 }

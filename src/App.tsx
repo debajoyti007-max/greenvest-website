@@ -68,6 +68,8 @@ function AppRoutes() {
           <Route path="privacy" element={<Privacy />} />
           <Route path="terms" element={<Terms />} />
           <Route path="support" element={<Support />} />
+          <Route path="shop" element={<Navigate to="/" replace />} />
+          <Route path="track-order" element={<Navigate to="/track" replace />} />
           <Route path="refund" element={<Navigate to="/" replace />} />
           <Route
             path="seller"

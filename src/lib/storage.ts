@@ -192,6 +192,24 @@ export function saveCart(cart: CartItem[], userId?: string | null) {
   write(key, cart)
 }
 
+const CURRENT_USER_KEY = 'gv_current_user'
+
+export function getCurrentUser(): User | null {
+  return read<User | null>(CURRENT_USER_KEY, null)
+}
+
+export function saveCurrentUser(user: User | null): void {
+  if (user) {
+    write(CURRENT_USER_KEY, user)
+    setSessionUserId(user.id)
+  } else {
+    try {
+      localStorage.removeItem(CURRENT_USER_KEY)
+    } catch {}
+    setSessionUserId(null)
+  }
+}
+
 export function getSessionUserId(): string | null {
   return localStorage.getItem(KEYS.session)
 }
