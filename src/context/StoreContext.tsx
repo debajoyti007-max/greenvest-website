@@ -416,10 +416,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const isStaff = user && (user.role === 'seller' || user.role === 'admin' || user.role === 'rider')
 
     if (!isStaff) {
-      // Smart refresh on window focus / tab visibility for regular customers
+      // Smart refresh on window focus / tab visibility / mobile unlock for regular customers
       const onFocus = () => {
         if (document.visibilityState === 'visible') {
           void fetchProducts(true).then((p) => setProducts(p)).catch(() => {})
+          if (user) {
+            void refreshOrdersOnly()
+          }
         }
       }
       window.addEventListener('visibilitychange', onFocus)

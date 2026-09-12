@@ -1,12 +1,13 @@
-﻿import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
+import { subscribeSupportMessages } from '../lib/api'
 import { formatOrderId } from '../lib/business'
 import { showToast } from '../lib/toast'
 
 export default function SupportChatWidget() {
-  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, cartCount } = useStore()
+  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, cartCount, refreshSupportMessages } = useStore()
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [inputMsg, setInputMsg] = useState('')
@@ -28,6 +29,17 @@ export default function SupportChatWidget() {
   }, [orders, user])
 
   const khataBal = user ? getUserKhataBalance(user.id) : 0
+
+  // ⚡ Free-tier on-demand realtime: opens connection ONLY when chat widget is active
+  useEffect(() => {
+    if (!open || !user?.id) return
+    const unsub = subscribeSupportMessages(user.id, () => {
+      void refreshSupportMessages()
+    })
+    return () => {
+      unsub()
+    }
+  }, [open, user?.id, refreshSupportMessages])
 
   useEffect(() => {
     if (open) {

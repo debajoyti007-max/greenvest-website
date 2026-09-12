@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { ChatMessage } from '../types'
-import { fetchOrderMessagesApi, sendOrderMessageApi, subscribeOrderMessages } from '../lib/api'
+import { fetchOrderMessagesApi, sendOrderMessageApi } from '../lib/api'
 import { supabase } from '../lib/supabase'
 
 interface OrderChatProps {
@@ -23,10 +23,9 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
   const boxRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<any>(null)
 
-  // ── Dual Realtime Strategy ──────────────────────────────────────────────────
-  // 1. Broadcast (instant): fires immediately when both sides are online
-  // 2. postgres_changes (reliable): fires from DB, catches missed broadcasts
-  //    when the recipient was offline or navigated away during send
+  // ── Unified Free-Tier Optimized Channel ─────────────────────────────────────
+  // Chains both Broadcast (instant P2P) and postgres_changes (persistent DB fallback)
+  // on a single channel to reduce WebSocket connection overhead by 50%.
   useEffect(() => {
     if (!orderId) return
 
@@ -42,7 +41,6 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
 
     if (!supabase) return
 
-    // A) Broadcast channel — instant delivery when recipient is live on the page
     const channelName = `order-chat-${orderId}`
     const ch = supabase
       .channel(channelName)
@@ -59,32 +57,32 @@ export default function OrderChat({ orderId, role, lang }: OrderChatProps) {
           })
         }
       })
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'order_messages', filter: `order_id=eq.${orderId}` },
+        () => {
+          void fetchOrderMessagesApi(orderId).then((freshMsgs) => {
+            if (freshMsgs.length === 0) return
+            setMessages((prev) => {
+              const ids = new Set(prev.map((m) => m.id))
+              const newOnes = freshMsgs.filter((m) => !ids.has(m.id))
+              if (newOnes.length === 0) return prev
+              const next = [...prev, ...newOnes]
+              try {
+                localStorage.setItem(storageKey, JSON.stringify(next))
+              } catch {}
+              return next
+            })
+          })
+        }
+      )
       .subscribe()
-    channelRef.current = ch
 
-    // B) postgres_changes — DB-level guarantee: re-fetch if broadcast was missed
-    // Fires on INSERT of any row where order_id = this orderId
-    const unsubDb = subscribeOrderMessages(orderId, () => {
-      void fetchOrderMessagesApi(orderId).then((freshMsgs) => {
-        if (freshMsgs.length === 0) return
-        setMessages((prev) => {
-          // Merge: keep all current messages, add any new ones not already present
-          const ids = new Set(prev.map((m) => m.id))
-          const newOnes = freshMsgs.filter((m) => !ids.has(m.id))
-          if (newOnes.length === 0) return prev
-          const next = [...prev, ...newOnes]
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(next))
-          } catch {}
-          return next
-        })
-      })
-    })
+    channelRef.current = ch
 
     return () => {
       channelRef.current = null
       if (supabase) void supabase.removeChannel(ch)
-      unsubDb()
     }
   }, [orderId, storageKey])
 
