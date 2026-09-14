@@ -7,6 +7,7 @@ import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
 import { isOrderStalePending, formatItemWeightDetail, getOrderDeliveryOtp } from '../../lib/business'
 import OrderChat from '../../components/OrderChat'
 import ItemPackingManifest from '../../components/seller/ItemPackingManifest'
+import { resolveNavDestination, createLocationRequestWhatsAppUrl } from '../../lib/delivery'
 import type { Order, OrderStatus } from '../../types'
 
 const STATUSES: OrderStatus[] = ['pending', 'advance_paid', 'confirmed', 'delivered', 'cancelled', 'refunded']
@@ -819,55 +820,72 @@ export default function SellerOrders() {
                 )}
 
                 {/* 📍 Location Inspection Card (Before Acceptance) */}
-                {(o.status === 'pending' || o.status === 'advance_paid') && (
-                  <div style={{ margin: '0 1rem 0.6rem', padding: '0.65rem 0.85rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                      <strong style={{ fontSize: '0.84rem', color: '#166534' }}>
-                        📍 {lang === 'bn' ? 'ডেলিভারি লোকেশন যাচাই:' : 'Delivery Location Check:'}
-                      </strong>
-                      <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
-                        PIN: {o.pin}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.82rem', color: '#1f2937', marginBottom: '0.45rem', lineHeight: 1.4 }}>
-                      🏡 {o.address}
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <a
-                        href={
-                          o.geoLat && o.geoLng
-                            ? `https://www.google.com/maps?q=${o.geoLat},${o.geoLng}`
-                            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address + ' ' + o.pin)}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          background: '#166534',
-                          color: '#ffffff',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          fontSize: '0.78rem',
-                          fontWeight: 700,
-                          textDecoration: 'none',
-                        }}
-                      >
-                        🗺️ {lang === 'bn' ? 'Google Maps-এ অবস্থান দেখুন' : 'View on Google Maps'}
-                      </a>
-                      {o.geoLat && o.geoLng ? (
-                        <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 600 }}>
-                          ✓ GPS Verified ({o.geoLat.toFixed(4)}, {o.geoLng.toFixed(4)})
+                {(o.status === 'pending' || o.status === 'advance_paid') && (() => {
+                  const navDest = resolveNavDestination(o)
+                  const locWaUrl = createLocationRequestWhatsAppUrl(o, lang)
+                  return (
+                    <div style={{ margin: '0 1rem 0.6rem', padding: '0.65rem 0.85rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                        <strong style={{ fontSize: '0.84rem', color: '#166534' }}>
+                          📍 {lang === 'bn' ? 'ডেলিভারি লোকেশন যাচাই:' : 'Delivery Location Check:'}
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                          PIN: {o.pin}
                         </span>
-                      ) : (
-                        <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
-                          (Text Address)
+                      </div>
+                      <div style={{ fontSize: '0.82rem', color: '#1f2937', marginBottom: '0.45rem', lineHeight: 1.4 }}>
+                        🏡 {o.address}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <a
+                          href={navDest.navUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: navDest.isExact ? '#166534' : '#1d4ed8',
+                            color: '#ffffff',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          🗺️ {lang === 'bn' ? 'Google Maps-এ দেখুন' : 'View on Google Maps'}
+                        </a>
+                        {locWaUrl && (
+                          <a
+                            href={locWaUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              background: '#ffffff',
+                              border: '1.5px solid #86efac',
+                              color: '#166534',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.76rem',
+                              fontWeight: 700,
+                              textDecoration: 'none',
+                            }}
+                            title={lang === 'bn' ? 'কাস্টমারের কাছে লাইভ লোকেশন চেয়ে বার্তা পাঠান' : 'Ask customer for WhatsApp location'}
+                          >
+                            📲 {lang === 'bn' ? 'WhatsApp লোকেশন চান' : 'Ask Location'}
+                          </a>
+                        )}
+                        <span style={{ fontSize: '0.72rem', color: navDest.isExact ? '#15803d' : '#6b7280', fontWeight: 600 }}>
+                          {navDest.isExact ? '✓ ' : '📍 '}{lang === 'bn' ? navDest.labelBn : navDest.labelEn}
                         </span>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
 
                 {/* Quick action buttons - available for all orders */}
                 <div style={{ padding: '0 1rem 0.6rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
@@ -989,10 +1007,64 @@ export default function SellerOrders() {
                       })}
                     </div>
 
-                    {/* Address */}
-                    <div style={{ fontSize: '0.85rem', color: '#374151', marginBottom: '0.4rem', padding: '0.5rem', background: '#f9fafb', borderRadius: '8px' }}>
-                      📍 {o.address} · PIN {o.pin || '—'}
-                    </div>
+                    {/* Address with 1-Tap Maps & WhatsApp Location */}
+                    {(() => {
+                      const navDest = resolveNavDestination(o)
+                      const locWaUrl = createLocationRequestWhatsAppUrl(o, lang)
+                      return (
+                        <div style={{ fontSize: '0.85rem', color: '#374151', marginBottom: '0.65rem', padding: '0.6rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                          <div style={{ marginBottom: '0.4rem', fontWeight: 600 }}>
+                            📍 {o.address} · PIN {o.pin || '—'}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <a
+                              href={navDest.navUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: navDest.isExact ? '#166534' : '#1d4ed8',
+                                color: '#ffffff',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontSize: '0.74rem',
+                                fontWeight: 700,
+                                textDecoration: 'none',
+                              }}
+                            >
+                              🗺️ {lang === 'bn' ? 'ম্যাপে রুট' : 'Map Route'} ({navDest.isExact ? 'GPS' : 'Area'})
+                            </a>
+                            {locWaUrl && (
+                              <a
+                                href={locWaUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  background: '#ffffff',
+                                  border: '1px solid #86efac',
+                                  color: '#166534',
+                                  padding: '2px 7px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 700,
+                                  textDecoration: 'none',
+                                }}
+                              >
+                                📲 {lang === 'bn' ? 'লোকেশন চান' : 'Ask Location'}
+                              </a>
+                            )}
+                            <span style={{ fontSize: '0.7rem', color: navDest.isExact ? '#15803d' : '#64748b' }}>
+                              ({navDest.destinationQuery})
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                     {/* 📅 Delivery Date Scheduling Bar (Seller can view and mark/update) */}
                     <div style={{

@@ -6,7 +6,7 @@ import { showToast } from '../lib/toast'
 import { verifyDeliveryOtpApi } from '../lib/api'
 import { generateDynamicUpiQr } from '../lib/payment'
 import { formatItemWeightDetail } from '../lib/business'
-import { STORE_LOCATION, calculateDistanceKm } from '../lib/delivery'
+import { STORE_LOCATION, calculateDistanceKm, resolveNavDestination, createLocationRequestWhatsAppUrl } from '../lib/delivery'
 import type { Order } from '../types'
 
 type RiderTab = 'active' | 'upcoming' | 'done' | 'all'
@@ -391,10 +391,8 @@ export default function RiderView() {
         <div className="rider-orders-list">
           {displayedOrders.map((o, idx) => {
             const balance = Math.max(0, o.total - o.advanceAmount)
-            const destParam = (o.geoLat && o.geoLng)
-              ? `${o.geoLat},${o.geoLng}`
-              : encodeURIComponent(`${o.address}, ${o.pin || ''}, West Bengal`)
-            const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${destParam}&travelmode=driving`
+            const navDest = resolveNavDestination(o)
+            const whatsAppLocUrl = createLocationRequestWhatsAppUrl(o, lang)
 
             return (
               <div key={o.id} className="rider-order-card">
@@ -414,21 +412,35 @@ export default function RiderView() {
 
                 <div className="rider-cust-info">
                   <h2>{o.userName}</h2>
-                  <p className="rider-address">📍 {o.address} (PIN {o.pin})</p>
+                  <p className="rider-address" style={{ margin: '0.2rem 0' }}>📍 {o.address} (PIN {o.pin})</p>
                   {o.deliveryNotes && (
                     <div style={{
                       marginTop: '0.35rem',
-                      padding: '0.35rem 0.65rem',
+                      padding: '0.45rem 0.75rem',
                       background: '#fefce8',
-                      border: '1px solid #fde047',
+                      border: '1.5px solid #fde047',
                       borderRadius: '8px',
-                      fontSize: '0.82rem',
+                      fontSize: '0.84rem',
                       color: '#854d0e',
-                      fontWeight: 600,
+                      fontWeight: 700,
                     }}>
-                      🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক / নির্দেশ:' : 'Landmark / Note:'} {o.deliveryNotes}
+                      🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক ও গেট নির্দেশ:' : 'Landmark & House Note:'} {o.deliveryNotes}
                     </div>
                   )}
+                  {/* Map Pin Precision Badge */}
+                  <div style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      background: navDest.isExact ? '#dcfce7' : '#eff6ff',
+                      color: navDest.isExact ? '#15803d' : '#1e40af',
+                      border: `1px solid ${navDest.isExact ? '#86efac' : '#bfdbfe'}`,
+                    }}>
+                      {navDest.isExact ? '✓ ' : '📍 '}{lang === 'bn' ? navDest.labelBn : navDest.labelEn}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="rider-items-summary">
@@ -466,23 +478,40 @@ export default function RiderView() {
                   )}
                 </div>
 
-                {/* Actions: Call, Notice, GPS Navigation */}
-                <div className="rider-actions-grid" style={{ flexWrap: 'wrap' }}>
+                {/* Actions: Call, WhatsApp Live Location Request, GPS Navigation */}
+                <div className="rider-actions-grid" style={{ flexWrap: 'wrap', gap: '0.4rem' }}>
                   <a href={`tel:${o.phone}`} className="btn btn-secondary rider-btn">
                     📞 {lang === 'bn' ? 'ফোন' : 'Call'}
                   </a>
+                  {whatsAppLocUrl && (
+                    <a
+                      href={whatsAppLocUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary rider-btn"
+                      style={{ background: '#f0fdf4', borderColor: '#86efac', color: '#166534', fontWeight: 700 }}
+                      title={lang === 'bn' ? 'কাস্টমারের কাছে লাইভ লোকেশন চেয়ে বার্তা পাঠান' : 'Request customer to share live location on WhatsApp'}
+                    >
+                      📲 {lang === 'bn' ? 'লোকেশন চান' : 'Ask Location'}
+                    </a>
+                  )}
                   <button type="button" onClick={() => void copyDeliveryNotice(o.userName, o.id)} className="btn btn-secondary rider-btn">
                     📋 {lang === 'bn' ? 'বার্তা কপি' : 'Notice'}
                   </button>
                   <a
-                    href={navUrl}
+                    href={navDest.navUrl}
                     className="btn btn-primary rider-btn rider-nav-btn"
                     target="_blank"
                     rel="noopener noreferrer"
+                    style={{
+                      background: navDest.isExact ? '#166534' : '#1d4ed8',
+                      borderColor: navDest.isExact ? '#166534' : '#1d4ed8',
+                      fontWeight: 700,
+                    }}
                   >
-                    🧭 {o.geoLat && o.geoLng
-                      ? (lang === 'bn' ? 'GPS ম্যাপ ➔' : 'GPS Nav ➔')
-                      : (lang === 'bn' ? 'ম্যাপে চলুন ➔' : 'Navigate ➔')}
+                    🧭 {navDest.isExact
+                      ? (lang === 'bn' ? 'GPS সঠিক পিন ➔' : 'Exact GPS Nav ➔')
+                      : (lang === 'bn' ? 'এলাকা ম্যাপ ➔' : 'Area Map ➔')}
                   </a>
                 </div>
 

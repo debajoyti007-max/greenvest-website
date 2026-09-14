@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES } from '../lib/business'
@@ -236,9 +236,23 @@ export default function Checkout() {
       .filter((o) => o.userId === user.id && o.status !== 'cancelled')
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
     if (last) {
-      setHouse(last.address)
+      // Clean legacy recursive compounding in last.address
+      const cleaned = last.address
+        .replace(/Store Pickup.*?\)/gi, '')
+        .replace(/Pickup - .*?\)/gi, '')
+        .replace(/\(Near:.*?\)/gi, '')
+        .replace(/\[Maps:.*?\]/gi, '')
+        .replace(/GPS অবস্থান.*/gi, '')
+        .trim()
+      setHouse(cleaned || last.address)
       setPhone(last.phone)
       setPin(last.pin || '')
+      if (last.deliveryNotes) setLandmark(last.deliveryNotes)
+      if (last.geoLat && last.geoLng) {
+        setGeoLat(last.geoLat)
+        setGeoLng(last.geoLng)
+        setGeoCoords(`https://www.google.com/maps/search/?api=1&query=${last.geoLat},${last.geoLng}`)
+      }
       setPrefilled(true)
       return
     }
@@ -253,10 +267,16 @@ export default function Checkout() {
     return (
       <div className="page narrow">
         <h1>{lang === 'bn' ? 'চেকআউট' : 'Checkout'}</h1>
-        <p className="empty">{lang === 'bn' ? 'কার্ট খালি।' : 'Nothing to checkout.'}</p>
-        <Link to="/" className="btn btn-primary">
-          {lang === 'bn' ? 'দোকানে যান' : 'Go to shop'}
-        </Link>
+        <p className="empty text-center">{t(lang, 'emptyCart')}</p>
+        <div className="text-center" style={{ marginTop: '1rem' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate('/')}
+          >
+            {lang === 'bn' ? 'দোকানে ফিরে যান' : 'Back to Shop'}
+          </button>
+        </div>
       </div>
     )
   }
@@ -291,9 +311,15 @@ export default function Checkout() {
         if (!area) setArea(lang === 'bn' ? 'GPS অবস্থান সংরক্ষিত' : 'GPS Location Saved')
         setDetectingGps(false)
       },
-      () => {
+      (err) => {
         setDetectingGps(false)
-        setError(lang === 'bn' ? 'GPS অবস্থান পাওয়া যায়নি' : 'Unable to detect GPS position')
+        console.warn('Geolocation error:', err)
+        setError(lang === 'bn' ? 'GPS অবস্থান পাওয়া যায়নি — ডিভাইসের লোকেশন অন রাখুন' : 'Unable to detect GPS — please turn on device location')
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
       },
     )
   }
@@ -309,7 +335,7 @@ export default function Checkout() {
     const isPickup = fulfillmentMode === 'pickup'
     const fullAddress = isPickup
       ? `Store Pickup - ${STORE_LOCATION.name} (${STORE_LOCATION.address})`
-      : `${house.trim()} ${landmark.trim() ? `(Near: ${landmark.trim()})` : ''} ${area.trim()} ${geoCoords ? `[Maps: ${geoCoords}]` : ''}`.trim()
+      : [house.trim(), landmark.trim() ? `(Near: ${landmark.trim()})` : '', area.trim()].filter(Boolean).join(', ')
 
     if (!isPickup && (!house.trim() || !area.trim())) {
       setError(lang === 'bn' ? 'বাড়ি ও এলাকার নাম দিন' : 'Please enter your House name and Area/Village')
@@ -957,7 +983,21 @@ export default function Checkout() {
                 >
                   📍 {detectingGps ? (lang === 'bn' ? '⏳ অবস্থান চিহ্নিত করা হচ্ছে...' : '⏳ Detecting GPS...') : (lang === 'bn' ? 'আমার বর্তমান অবস্থান চিহ্নিত করুন (GPS)' : 'Auto-Fill My Location (GPS)')}
                 </button>
-                {geoCoords && <p className="hint" style={{ color: '#166534', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>✓ {lang === 'bn' ? 'GPS অবস্থান সফলভাবে পিন করা হয়েছে!' : 'GPS coordinates linked for delivery rider!'}</p>}
+                {geoCoords && (
+                  <div style={{ marginTop: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                    <p className="hint" style={{ color: '#166534', margin: 0, fontWeight: 700, fontSize: '0.82rem' }}>
+                      ✓ {lang === 'bn' ? 'সঠিক GPS অবস্থান পিন করা হয়েছে!' : 'Exact GPS linked for delivery rider!'}
+                    </p>
+                    <a
+                      href={geoCoords}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 700, textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                    >
+                      🗺️ {lang === 'bn' ? 'ম্যাপে বাড়ি যাচাই করুন' : 'Verify on Map'} ❯
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* Address Form Inputs */}

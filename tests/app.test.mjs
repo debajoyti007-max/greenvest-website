@@ -1486,3 +1486,166 @@ describe('Rider Scheduled Delivery Isolation, OTP, Route Optimizer & UPI Collect
     assert.match(uri, /tn=GreenVest%20Order%20%23ABC123/)
   })
 })
+
+describe('Smart 4-Tier Navigation Destination Resolver & WhatsApp Location Request', () => {
+  const PIN_DISTANCE_MAP = {
+    '721632': { name: 'Nandakumar' },
+    '721633': { name: 'Kumarchak / Narghat' },
+    '721643': { name: 'Mahishadal Bazar' },
+  }
+
+  function resolveNavDestination(order) {
+    const address = order.address || ''
+    const notes = order.deliveryNotes || ''
+    const pin = order.pin ? order.pin.replace(/\D/g, '') : ''
+    const combined = `${address} ${notes}`
+
+    if (order.geoLat != null && order.geoLng != null && !isNaN(order.geoLat) && !isNaN(order.geoLng)) {
+      const latLng = `${order.geoLat},${order.geoLng}`
+      return {
+        navUrl: `https://www.google.com/maps/dir/?api=1&destination=${latLng}&travelmode=driving`,
+        isExact: true,
+        destinationQuery: latLng,
+        labelEn: `GPS Pin (${order.geoLat.toFixed(4)}, ${order.geoLng.toFixed(4)})`,
+      }
+    }
+
+    const coordRegex = /(?:query=|@|\bq=)?(-?\d{1,2}\.\d{4,}),\s*(-?\d{1,3}\.\d{4,})/
+    const coordMatch = combined.match(coordRegex)
+    if (coordMatch) {
+      const lat = coordMatch[1]
+      const lng = coordMatch[2]
+      const latLng = `${lat},${lng}`
+      return {
+        navUrl: `https://www.google.com/maps/dir/?api=1&destination=${latLng}&travelmode=driving`,
+        isExact: true,
+        destinationQuery: latLng,
+        labelEn: `Map Pin (${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)})`,
+      }
+    }
+
+    const plusCodeRegex = /\b([2-9CFGHJMPQRVWX]{4,8}\+[2-9CFGHJMPQRVWX]{2,})(?:\s*([A-Za-z]+))?/i
+    const plusMatch = combined.match(plusCodeRegex)
+    if (plusMatch) {
+      const code = plusMatch[1]
+      const town = plusMatch[2] ? ` ${plusMatch[2]}` : ''
+      const fullCode = `${code}${town}, West Bengal`
+      return {
+        navUrl: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(fullCode)}&travelmode=driving`,
+        isExact: true,
+        destinationQuery: fullCode,
+        labelEn: `Plus Code (${plusMatch[1]})`,
+      }
+    }
+
+    const sanitized = address
+      .replace(/Store Pickup.*?\)/gi, '')
+      .replace(/Pickup - .*?\)/gi, '')
+      .replace(/\[Maps:.*?\]/gi, '')
+      .replace(/GPS অবস্থান.*/gi, '')
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/[()[\]{}]/g, ',')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    const tokens = sanitized
+      .split(/[,/·\n;-]|(?:\s+(?:near|opposite|beside)\s+)/i)
+      .map((t) => t.replace(/\b(?:house|bari|gate|yellow|green|white|floor|building)\b/gi, '').trim())
+      .filter((t) => t.length >= 3)
+
+    let cleanLocality = tokens[0] || ''
+    if (pin && pin in PIN_DISTANCE_MAP) {
+      const known = tokens.find((t) => t.toLowerCase().includes(PIN_DISTANCE_MAP[pin].name.toLowerCase()))
+      if (known) cleanLocality = known
+    }
+    if (!cleanLocality || cleanLocality.length < 3) {
+      cleanLocality = (tokens.find((t) => t.length >= 3) || '').trim()
+    }
+
+    if (!cleanLocality || cleanLocality.length < 3 || /^(house|bari|para|near)$/i.test(cleanLocality)) {
+      if (pin && pin in PIN_DISTANCE_MAP) {
+        cleanLocality = PIN_DISTANCE_MAP[pin].name
+      } else {
+        cleanLocality = 'Purba Medinipur'
+      }
+    }
+
+    const safeQuery = `${cleanLocality}, ${pin ? `${pin}, ` : ''}West Bengal`.trim()
+    return {
+      navUrl: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(safeQuery)}&travelmode=driving`,
+      isExact: false,
+      destinationQuery: safeQuery,
+      labelEn: `${cleanLocality} (PIN ${pin || 'Local'})`,
+    }
+  }
+
+  function createLocationRequestWhatsAppUrl(order, lang = 'bn') {
+    const cleanPhone = order.phone.replace(/\D/g, '').slice(-10)
+    if (!cleanPhone) return ''
+    const shortId = order.id.slice(0, 8).toUpperCase()
+    const msg =
+      lang === 'bn'
+        ? `নমস্কার ${order.userName} বাবু/দিদি, এম.এস ভেজিটেবল সেন্টারের রাইডার আপনার অর্ডার (#${shortId}) নিয়ে বের হচ্ছে। 🛵\n\nঅনুগ্রহ করে এই চ্যাটে পেপারক্লিপ (📎) আইকন চেপে আপনার লাইভ লোকেশন (Share Live Location / Current Location pin) পাঠিয়ে দিন, যাতে রাইডার সরাসরি আপনার বাড়ির দরজায় পৌঁছে যেতে পারে। ধন্যবাদ!`
+        : `Hello ${order.userName}, GreenVest delivery rider is on the way with your order (#${shortId}). 🛵\n\nPlease share your Live Location or Current Pin in this WhatsApp chat using the attachment (📎) icon so the rider can reach your exact doorstep without delay. Thank you!`
+    return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`
+  }
+
+  test('Tier 1: Explicit geoLat/geoLng yields exact GPS coordinates navigation', () => {
+    const order = {
+      address: 'Biswas Bari, Near Shiv Mandir, Bhabanipur',
+      pin: '721632',
+      geoLat: 22.1746,
+      geoLng: 87.9106,
+    }
+    const res = resolveNavDestination(order)
+    assert.strictEqual(res.isExact, true)
+    assert.strictEqual(res.destinationQuery, '22.1746,87.9106')
+    assert.ok(res.navUrl.includes('destination=22.1746,87.9106'))
+  })
+
+  test('Tier 2: Embedded Google Maps URL in dirty address extracts exact coordinates', () => {
+    const order = {
+      address: 'Pickup - MS Vegetable Center (Near: ভবানীপুর) ভবানীপুর GPS অবস্থান সংরক্ষিত [Maps: https://www.google.com/maps/search/?api=1&query=22.1741483,87.9040483]',
+      pin: '721632',
+    }
+    const res = resolveNavDestination(order)
+    assert.strictEqual(res.isExact, true)
+    assert.strictEqual(res.destinationQuery, '22.1741483,87.9040483')
+    assert.ok(res.navUrl.includes('destination=22.1741483,87.9040483'))
+  })
+
+  test('Tier 3: Google Plus Code in delivery notes extracts cleanly', () => {
+    const order = {
+      address: 'Mondal Bari, Bhabanipur',
+      pin: '721632',
+      deliveryNotes: 'Plus Code: 8MX2+4R Tamluk',
+    }
+    const res = resolveNavDestination(order)
+    assert.strictEqual(res.isExact, true)
+    assert.ok(res.destinationQuery.includes('8MX2+4R'))
+    assert.ok(res.navUrl.includes('8MX2%2B4R'))
+  })
+
+  test('Tier 4: Dirty Bengali address without GPS falls back safely without failing Maps', () => {
+    const order = {
+      address: 'Bhabanipur (Near: Kali Mandir) yellow house with green gate',
+      pin: '721632',
+    }
+    const res = resolveNavDestination(order)
+    assert.strictEqual(res.isExact, false)
+    assert.strictEqual(res.destinationQuery, 'Bhabanipur, 721632, West Bengal')
+    assert.ok(!res.navUrl.includes('Kali%20Mandir'))
+  })
+
+  test('WhatsApp Location Request generates valid WhatsApp link with short order ID', () => {
+    const order = {
+      id: 'ord-99887766-5544',
+      userName: 'Subrata',
+      phone: '9876543210',
+    }
+    const waUrl = createLocationRequestWhatsAppUrl(order, 'bn')
+    assert.ok(waUrl.startsWith('https://wa.me/919876543210?text='))
+    assert.ok(waUrl.includes('ORD-9988'))
+    assert.ok(waUrl.includes('Subrata'))
+  })
+})
