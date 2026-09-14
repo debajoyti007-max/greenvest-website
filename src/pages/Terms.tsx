@@ -235,7 +235,7 @@ export default function Terms() {
             <li>
               <strong>{lang === 'bn' ? 'সার্ভিস এরিয়া ও সেলফ পিকআপ:' : 'Serviceable Hubs & Pickup:'}</strong>{' '}
               {lang === 'bn'
-                ? `পিনকোড: ৭২১৬৩২ (নন্দকুমার), ৭২১৬৩৩ (নারঘাট), ৭২১৬৪৩ (মহিষাদল)। আমাদের আউটলেট (${STORE_LOCATION.addressBn}) থেকে সেলফ-পিকআপ সম্পূর্ণ ফ্রি (₹০ চার্জ)।`
+                ? `পিনকোড: ৭২১৬৩২, ৭২১৬৩৩, ৭২১৬৪৩। আমাদের আউটলেট (${STORE_LOCATION.addressBn}) থেকে সেলফ-পিকআপ সম্পূর্ণ ফ্রি (₹০ চার্জ)।`
                 : `Serviceable PINs: 721632, 721633, 721643. Store pickup from our outlet (${STORE_LOCATION.address}) is completely free (₹0 charge).`}
             </li>
           </ul>

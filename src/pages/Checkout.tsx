@@ -38,7 +38,7 @@ export default function Checkout() {
   const [house, setHouse] = useState('')
   const [landmark, setLandmark] = useState('')
   const [area, setArea] = useState('')
-  const [pin, setPin] = useState('')
+  const [pin, setPin] = useState('721632')
   const [geoCoords, setGeoCoords] = useState('')
   const [geoLat, setGeoLat] = useState<number | undefined>(undefined)
   const [geoLng, setGeoLng] = useState<number | undefined>(undefined)
@@ -360,8 +360,8 @@ export default function Checkout() {
     if (!isPickup && !isServiceablePin(pin.trim())) {
       setError(
         lang === 'bn'
-          ? `বর্তমানে হোম ডেলিভারি শুধুমাত্র ${SERVICEABLE_PINCODES.join(', ')} পিন কোডে চালু রয়েছে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন।`
-          : `Home delivery is currently available only in PIN codes: ${SERVICEABLE_PINCODES.join(', ')}. Please select Store Pickup.`,
+          ? `বর্তমানে হোম ডেলিভারি শুধুমাত্র ${SERVICEABLE_PINCODES.join(', ')} পিন কোডে চালু রয়েছে।`
+          : `Home delivery is currently available only in PIN codes: ${SERVICEABLE_PINCODES.join(', ')}.`,
       )
       submitLockRef.current = false
       return
@@ -370,8 +370,8 @@ export default function Checkout() {
     if (!isPickup && delivery.isOutOfRange) {
       setError(
         lang === 'bn'
-          ? `আপনার পিন কোড বা অবস্থান আমাদের ডেলিভারি সীমার বাইরে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন বা ইন-অ্যাপ সাপোর্টে যোগাযোগ করুন।`
-          : `Location is beyond our delivery service area. Please select "Store Pickup" or contact in-app support.`,
+          ? `আপনার পিন কোড আমাদের ডেলিভারি সীমার বাইরে (অনুমোদিত পিন: ${SERVICEABLE_PINCODES.join(', ')})।`
+          : `Your location is outside our delivery service area (Serviceable PINs: ${SERVICEABLE_PINCODES.join(', ')}).`,
       )
       submitLockRef.current = false
       return
@@ -874,8 +874,8 @@ export default function Checkout() {
                 <div style={{ fontWeight: 700, fontSize: '0.88rem', color: fulfillmentMode === 'delivery' ? '#166534' : '#1e293b' }}>
                   🚚 {lang === 'bn' ? 'হোম ডেলিভারি' : 'Home Delivery'}
                 </div>
-                <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '0.15rem' }}>
-                  {lang === 'bn' ? '০-৫কিমি ₹৩০ · ৫-১৫কিমি ₹৫০' : '0-5km ₹30 · 5-15km ₹50'}
+                <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 600, marginTop: '0.15rem' }}>
+                  {lang === 'bn' ? 'চার্জ: ₹৩০' : 'Delivery Fee: ₹30'}
                 </div>
               </button>
 
@@ -1026,12 +1026,48 @@ export default function Checkout() {
                   value={area}
                   onChange={(e) => { setArea(e.target.value); userEditedAddress.current = true }}
                   required={fulfillmentMode === 'delivery'}
-                  placeholder={lang === 'bn' ? 'যেমন: সুতাহাটা / মহিষাদল' : 'e.g. Sutahata / Mahishadal'}
+                  placeholder={lang === 'bn' ? 'যেমন: গ্রাম / পাড়া / রোড' : 'e.g. Village / Para / Road'}
                 />
               </label>
 
-              <label>
-                📮 {lang === 'bn' ? 'পিন কোড (PIN)' : 'PIN Code'}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label style={{ margin: 0, fontWeight: 600 }}>📮 {lang === 'bn' ? 'পিন কোড (PIN)' : 'PIN Code'}</label>
+                  <span style={{ fontSize: '0.75rem', color: '#166534', fontWeight: 600 }}>
+                    {lang === 'bn' ? '১-ট্যাপে নির্বাচন করুন:' : '1-Tap Select:'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '0.45rem' }}>
+                  {SERVICEABLE_PINCODES.map((p) => {
+                    const isSelected = pin === p
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => {
+                          setPin(p)
+                          userEditedAddress.current = true
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '0.45rem 0.25rem',
+                          borderRadius: '8px',
+                          border: isSelected ? '2px solid #166534' : '1px solid #cbd5e1',
+                          background: isSelected ? '#dcfce7' : '#ffffff',
+                          color: isSelected ? '#166534' : '#334155',
+                          fontWeight: 700,
+                          fontSize: '0.86rem',
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          transition: 'all 0.15s ease',
+                          boxShadow: isSelected ? '0 1px 3px rgba(22,101,52,0.2)' : 'none',
+                        }}
+                      >
+                        {p} {isSelected ? '✓' : ''}
+                      </button>
+                    )
+                  })}
+                </div>
                 <input
                   type="text"
                   maxLength={6}
@@ -1041,9 +1077,10 @@ export default function Checkout() {
                     userEditedAddress.current = true
                   }}
                   required={fulfillmentMode === 'delivery'}
-                  placeholder={lang === 'bn' ? '৭২১৬৩২' : '721632'}
+                  placeholder="721632"
+                  style={{ width: '100%' }}
                 />
-              </label>
+              </div>
 
               <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '-0.25rem' }}>
                 <input type="checkbox" checked={saveAddressToDb} onChange={e => setSaveAddressToDb(e.target.checked)} />

@@ -1,4 +1,4 @@
-﻿import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useStore } from '../context/useStore'
 import { SUPPORT_PHONE } from '../lib/business'
 import { STORE_LOCATION } from '../lib/delivery'
@@ -130,7 +130,7 @@ export default function Contact() {
           <div>
             <p className="contact-card-label">{lang === 'bn' ? 'ডেলিভারি চার্জ' : 'Delivery Charges'}</p>
             <p className="contact-card-value" style={{ fontSize: '0.85rem' }}>
-              {lang === 'bn' ? '০-৫ কিমি: ₹৩০ · ৫-১৫ কিমি: ₹৫০' : '0-5km: ₹30 · 5-15km: ₹50'}
+              {lang === 'bn' ? 'হোম ডেলিভারি: ₹৩০ (পিন: ৭২১৬৩২, ৭২১৬৩৩, ৭২১৬৪৩)' : 'Home Delivery: ₹30 (PINs: 721632, 721633, 721643)'}
             </p>
           </div>
         </div>

@@ -34,11 +34,11 @@ export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lo
   return Math.round(R * c * 10) / 10 // 1 decimal place
 }
 
-/** Known PIN distances and delivery fees from Store Hub */
-const PIN_DISTANCE_MAP: Record<string, { distanceKm: number; fee: number; name: string; nameBn: string }> = {
-  '721632': { distanceKm: 3.5, fee: 30, name: 'Nandakumar', nameBn: 'নন্দকুমার' },
-  '721633': { distanceKm: 4.2, fee: 30, name: 'Kumarchak / Narghat', nameBn: 'কুমারচক / নারঘাট' },
-  '721643': { distanceKm: 4.8, fee: 30, name: 'Mahishadal Bazar', nameBn: 'মহিষাদল বাজার' },
+/** Known PIN distances and delivery fees from Store Hub (pure PIN codes, zero town names) */
+const PIN_DISTANCE_MAP: Record<string, { distanceKm: number; fee: number }> = {
+  '721632': { distanceKm: 3.5, fee: 30 },
+  '721633': { distanceKm: 4.2, fee: 30 },
+  '721643': { distanceKm: 4.8, fee: 30 },
 }
 
 export function isServiceablePin(pin?: string): boolean {
@@ -59,7 +59,7 @@ export interface DeliveryCalculationResult {
 
 export function calcDeliveryFee(
   pin?: string,
-  coordsOrZones?: { lat: number; lng: number } | DbDeliveryZone[] | null,
+  _coordsOrZones?: { lat: number; lng: number } | DbDeliveryZone[] | null,
   fulfillmentMode: 'delivery' | 'pickup' = 'delivery',
 ): DeliveryCalculationResult {
   // Store Pickup is always 100% Free (₹0)
@@ -77,7 +77,7 @@ export function calcDeliveryFee(
 
   const cleanPin = pin ? pin.replace(/\D/g, '') : ''
 
-  // Strict check: if a PIN is entered and it is NOT in the 3 whitelisted PINs, reject delivery
+  // 1. Strict check: if a 6-digit PIN is entered and it is NOT in serviceable PINs
   if (cleanPin.length === 6 && !isServiceablePin(cleanPin)) {
     return {
       fee: 0,
@@ -85,60 +85,36 @@ export function calcDeliveryFee(
       distanceKm: 25,
       isPickup: false,
       isOutOfRange: true,
-      noticeEn: `Delivery is currently available only in PIN codes: ${SERVICEABLE_PINCODES.join(', ')}. Please select Store Pickup or contact in-app support.`,
-      noticeBn: `বর্তমানে হোম ডেলিভারি শুধুমাত্র ${SERVICEABLE_PINCODES.join(', ')} পিন কোডে চালু রয়েছে। অনুগ্রহ করে "দোকান থেকে সংগ্রহ" বেছে নিন বা ইন-অ্যাপ সাপোর্টে যোগাযোগ করুন।`,
+      noticeEn: `Home delivery is currently available only in PIN codes: ${SERVICEABLE_PINCODES.join(', ')}.`,
+      noticeBn: `বর্তমানে হোম ডেলিভারি শুধুমাত্র ${SERVICEABLE_PINCODES.join(', ')} পিন কোডে চালু রয়েছে।`,
     }
   }
 
-  // Calculate distance
-  let distanceKm: number | undefined
-  if (coordsOrZones && typeof coordsOrZones === 'object' && !Array.isArray(coordsOrZones) && 'lat' in coordsOrZones && 'lng' in coordsOrZones) {
-    distanceKm = calculateDistanceKm(STORE_LOCATION.lat, STORE_LOCATION.lng, coordsOrZones.lat, coordsOrZones.lng)
-  } else if (cleanPin && cleanPin in PIN_DISTANCE_MAP) {
-    distanceKm = PIN_DISTANCE_MAP[cleanPin].distanceKm
-  } else {
-    distanceKm = 3.5 // default local
-  }
-
-  // Whitelisted PIN fee logic
-  if (cleanPin in PIN_DISTANCE_MAP) {
+  // 2. Serviceable PIN delivery
+  if (isServiceablePin(cleanPin)) {
     const pinInfo = PIN_DISTANCE_MAP[cleanPin]
     return {
-      fee: pinInfo.fee,
-      zone: `${pinInfo.name} (${cleanPin})`,
-      distanceKm: pinInfo.distanceKm,
+      fee: pinInfo ? pinInfo.fee : 30,
+      zone: `PIN ${cleanPin}`,
+      distanceKm: pinInfo ? pinInfo.distanceKm : 3.5,
       isPickup: false,
       isOutOfRange: false,
-      noticeEn: `Delivery to ${pinInfo.name} (${cleanPin}): ₹${pinInfo.fee} (~${pinInfo.distanceKm} km)`,
-      noticeBn: `${pinInfo.nameBn} (${cleanPin})-এ ডেলিভারি চার্জ: ₹${pinInfo.fee} (~${pinInfo.distanceKm} কিমি)`,
+      noticeEn: 'Home Delivery Available: ₹30',
+      noticeBn: 'হোম ডেলিভারি চার্জ: ₹৩০',
     }
   }
 
-  // Under 5 km fallback for GPS
-  if (distanceKm <= 5) {
-    return {
-      fee: 30,
-      zone: 'Local (0–5 km)',
-      distanceKm,
-      isPickup: false,
-      isOutOfRange: false,
-      noticeEn: `Delivery within 5 km: ₹30 (~${distanceKm} km)`,
-      noticeBn: `৫ কিমির মধ্যে ডেলিভারি চার্জ: ₹৩০ (~${distanceKm} কিমি)`,
-    }
-  }
-
-  // Beyond serviceable boundary
+  // 3. Default for local delivery
   return {
-    fee: 50,
-    zone: 'Out of Delivery Area',
-    distanceKm,
+    fee: 30,
+    zone: 'Local PIN Area',
+    distanceKm: 3.5,
     isPickup: false,
-    isOutOfRange: true,
-    noticeEn: `Distance is ${distanceKm} km. Home delivery is restricted to PIN codes ${SERVICEABLE_PINCODES.join(', ')}.`,
-    noticeBn: `দূরত্ব ${distanceKm} কিমি। হোম ডেলিভারি শুধুমাত্র ${SERVICEABLE_PINCODES.join(', ')} পিন কোডে সীমাবদ্ধ।`,
+    isOutOfRange: false,
+    noticeEn: `Home Delivery Available: ₹30 (PINs: ${SERVICEABLE_PINCODES.join(', ')})`,
+    noticeBn: `হোম ডেলিভারি উপলব্ধ: ₹৩০ (পিন: ${SERVICEABLE_PINCODES.join(', ')})`,
   }
 }
-
 export function isValidPinCode(pin?: string): boolean {
   if (!pin) return false
   const cleaned = pin.replace(/\D/g, '')
@@ -237,21 +213,8 @@ export function resolveNavDestination(order: {
     .filter((t) => t.length >= 3)
 
   let cleanLocality = tokens[0] || ''
-  if (pin && pin in PIN_DISTANCE_MAP) {
-    const known = tokens.find((t) => t.toLowerCase().includes(PIN_DISTANCE_MAP[pin].name.toLowerCase()))
-    if (known) cleanLocality = known
-  }
-  if (!cleanLocality || cleanLocality.length < 3) {
-    cleanLocality = (tokens.find((t) => t.length >= 3) || '').trim()
-  }
-
-  // If still empty or generic, check PIN distance map
   if (!cleanLocality || cleanLocality.length < 3 || /^(house|bari|para|near)$/i.test(cleanLocality)) {
-    if (pin && pin in PIN_DISTANCE_MAP) {
-      cleanLocality = PIN_DISTANCE_MAP[pin].name
-    } else {
-      cleanLocality = 'Purba Medinipur'
-    }
+    cleanLocality = tokens.find((t) => t.length >= 3 && !/^(house|bari|para|near)$/i.test(t)) || 'Purba Medinipur'
   }
 
   const safeQuery = `${cleanLocality}, ${pin ? `${pin}, ` : ''}West Bengal`.trim()

@@ -387,6 +387,7 @@ export default function Shop() {
   const [showUsualBasketModal, setShowUsualBasketModal] = useState(false)
   const [reviewProduct, setReviewProduct] = useState<Product | null>(null)
 
+
   // Auto-slide hero banner every 5 seconds
   useEffect(() => {
     const timer = setInterval(() => {
@@ -690,12 +691,20 @@ export default function Shop() {
               border: '1px solid #bbf7d0',
               color: '#166534',
               borderRadius: '20px',
-              padding: '5px 12px',
+              padding: '5px 14px',
               fontSize: '0.82rem',
               fontWeight: 600,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
             }}
           >
-            <span>📍 {lang === 'bn' ? 'ডেলিভারি এলাকা (পিন)' : 'Delivery PINs'}: <strong>{SERVICEABLE_PINCODES.join(', ')}</strong></span>
+            <span>
+              📍 {lang === 'bn' ? 'ডেলিভারি পিন কোড:' : 'Delivery PINs:'}{' '}
+              <strong style={{ letterSpacing: '0.5px' }}>{SERVICEABLE_PINCODES.join(', ')}</strong>
+              {' · '}
+              <span style={{ color: '#15803d', fontWeight: 700 }}>
+                {lang === 'bn' ? 'চার্জ ₹৩০' : 'Fee ₹30'}
+              </span>
+            </span>
           </div>
         </div>
 
