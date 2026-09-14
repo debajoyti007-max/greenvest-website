@@ -4,7 +4,7 @@ import OrderTimeline from '../components/OrderTimeline'
 import OrderChat from '../components/OrderChat'
 import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
-import { formatOrderId } from '../lib/business'
+import { formatOrderId, SUPPORT_PHONE } from '../lib/business'
 import { fetchOrderByIdAndPhone, subscribeSingleOrder } from '../lib/api'
 import { showToast } from '../lib/toast'
 import { t } from '../lib/i18n'
@@ -276,6 +276,80 @@ export default function TrackOrder() {
               </li>
             ))}
           </ul>
+
+          {/* 🛵 Out for Delivery Rider Contact Card */}
+          {matched.status === 'out_for_delivery' && (
+            <div
+              style={{
+                margin: '0.85rem 0',
+                padding: '0.85rem 1rem',
+                background: '#f0fdf4',
+                border: '1.5px solid #86efac',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.75rem',
+                boxShadow: '0 2px 8px rgba(22,101,52,0.1)',
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🛵</span>
+                  <span>{lang === 'bn' ? 'রাইডার আপনার অর্ডারের পথে রয়েছে!' : 'Rider is on the way!'}</span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#15803d', marginTop: '3px' }}>
+                  {lang === 'bn' ? 'দরজায় তাজা সামগ্রী পৌঁছাতে প্রস্তুত' : 'Fresh produce arriving shortly at your door'}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <a
+                  href={`tel:${SUPPORT_PHONE}`}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    background: '#ffffff',
+                    color: '#166534',
+                    border: '1.5px solid #86efac',
+                    fontWeight: 700,
+                    padding: '0.4rem 0.75rem',
+                    fontSize: '0.82rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    textDecoration: 'none',
+                  }}
+                >
+                  📞 {lang === 'bn' ? 'রাইডার / হেল্পলাইন' : 'Call Dispatch'}
+                </a>
+                <a
+                  href={`https://wa.me/91${SUPPORT_PHONE.replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(
+                    lang === 'bn'
+                      ? `নমস্কার, আমি অর্ডার #${formatOrderId(matched.id)}-এর কাস্টমার (${matched.userName})। ডেলিভারি লোকেশন/নির্দেশ:`
+                      : `Hello, I am the customer for Order #${formatOrderId(matched.id)} (${matched.userName}). Delivery location/notes:`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    background: '#25d366',
+                    color: '#ffffff',
+                    border: '1.5px solid #22c55e',
+                    fontWeight: 700,
+                    padding: '0.4rem 0.75rem',
+                    fontSize: '0.82rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    textDecoration: 'none',
+                  }}
+                >
+                  💬 WhatsApp
+                </a>
+              </div>
+            </div>
+          )}
 
           {/* Address & phone are masked for privacy — only the owner (logged in) sees full details */}
           <p className="muted" style={{ fontSize: '0.85rem' }}>

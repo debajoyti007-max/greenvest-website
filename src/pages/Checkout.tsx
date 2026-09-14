@@ -6,7 +6,7 @@ import { DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES } from '../l
 import { calcDeliveryFee, isServiceablePin, STORE_LOCATION } from '../lib/delivery'
 import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC, generateDynamicUpiQr, buildUpiPayUri } from '../lib/payment'
-import { getSavedDelivery } from '../lib/storage'
+import { getSavedDelivery, saveDelivery } from '../lib/storage'
 import {
   validatePhoneStrict,
   getOrCreateCartIdempotencyKey,
@@ -228,7 +228,13 @@ export default function Checkout() {
     if (saved?.address) {
       setHouse(saved.address)
       setPhone(saved.phone || '')
-      setPin(saved.pin || '')
+      setPin(saved.pin || '721632')
+      if (saved.landmark) setLandmark(saved.landmark)
+      if (saved.geoLat && saved.geoLng) {
+        setGeoLat(saved.geoLat)
+        setGeoLng(saved.geoLng)
+        setGeoCoords(`https://www.google.com/maps/search/?api=1&query=${saved.geoLat},${saved.geoLng}`)
+      }
       setPrefilled(true)
       return
     }
@@ -246,7 +252,7 @@ export default function Checkout() {
         .trim()
       setHouse(cleaned || last.address)
       setPhone(last.phone)
-      setPin(last.pin || '')
+      setPin(last.pin || '721632')
       if (last.deliveryNotes) setLandmark(last.deliveryNotes)
       if (last.geoLat && last.geoLng) {
         setGeoLat(last.geoLat)
@@ -256,6 +262,19 @@ export default function Checkout() {
       setPrefilled(true)
       return
     }
+    try {
+      const devLat = localStorage.getItem('gv_user_lat')
+      const devLng = localStorage.getItem('gv_user_lng')
+      if (devLat && devLng) {
+        const pLat = parseFloat(devLat)
+        const pLng = parseFloat(devLng)
+        if (!isNaN(pLat) && !isNaN(pLng)) {
+          setGeoLat(pLat)
+          setGeoLng(pLng)
+          setGeoCoords(`https://www.google.com/maps/search/?api=1&query=${pLat},${pLng}`)
+        }
+      }
+    } catch {}
     if (user.email.endsWith('@greenvest.shop')) {
       const raw = user.email.replace('@greenvest.shop', '')
       if (/^\d{10}$/.test(raw)) setPhone(raw)
@@ -308,6 +327,10 @@ export default function Checkout() {
         setGeoCoords(mapUrl)
         setGeoLat(lat)
         setGeoLng(lng)
+        try {
+          localStorage.setItem('gv_user_lat', String(lat))
+          localStorage.setItem('gv_user_lng', String(lng))
+        } catch {}
         if (!area) setArea(lang === 'bn' ? 'GPS অবস্থান সংরক্ষিত' : 'GPS Location Saved')
         setDetectingGps(false)
       },
@@ -423,6 +446,9 @@ export default function Checkout() {
             phone: phoneVal.cleanedValue,
             pin: pin.trim(),
             is_default: savedAddresses.length === 0,
+            geoLat,
+            geoLng,
+            landmark: landmark.trim() || undefined,
           })
         } catch (addrErr) {
           console.warn('Address save failed:', addrErr)
@@ -454,6 +480,22 @@ export default function Checkout() {
       clearCartIdempotencyKey(user.id)
 
       if (order) {
+        if (!isPickup) {
+          saveDelivery(user.id, {
+            address: house.trim(),
+            phone: phoneVal.cleanedValue,
+            pin: pin.trim(),
+            geoLat,
+            geoLng,
+            landmark: landmark.trim() || undefined,
+          })
+          if (geoLat && geoLng) {
+            try {
+              localStorage.setItem('gv_user_lat', String(geoLat))
+              localStorage.setItem('gv_user_lng', String(geoLng))
+            } catch {}
+          }
+        }
         if (user && phoneVal.cleanedValue) {
           updateUserProfile({ phone: phoneVal.cleanedValue }).catch(() => {})
         }
@@ -961,6 +1003,12 @@ export default function Checkout() {
                       setHouse(addr.address)
                       setPhone(addr.phone)
                       if (addr.pin) setPin(addr.pin)
+                      if (addr.landmark) setLandmark(addr.landmark)
+                      if (addr.geoLat && addr.geoLng) {
+                        setGeoLat(addr.geoLat)
+                        setGeoLng(addr.geoLng)
+                        setGeoCoords(`https://www.google.com/maps/search/?api=1&query=${addr.geoLat},${addr.geoLng}`)
+                      }
                       setPrefilled(true)
                     }
                   }}>
@@ -973,20 +1021,64 @@ export default function Checkout() {
               )}
 
               {/* Option 2: GPS Auto-Location Button */}
-              <div className="gps-detector-box" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.85rem 1rem', borderRadius: '12px', marginBottom: '0.5rem' }}>
+              <div
+                className="gps-detector-box"
+                style={{
+                  background: '#f0fdf4',
+                  border: geoCoords ? '1px solid #bbf7d0' : '1.5px solid #86efac',
+                  padding: '0.85rem 1rem',
+                  borderRadius: '12px',
+                  marginBottom: '0.65rem',
+                  boxShadow: !geoCoords ? '0 2px 8px rgba(34,197,94,0.12)' : 'none',
+                }}
+              >
+                {!geoCoords && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginBottom: '0.45rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      color: '#166534',
+                    }}
+                  >
+                    <span>💡</span>
+                    <span>
+                      {lang === 'bn'
+                        ? 'সরাসরি আপনার বাড়ির দরজায় ডেলিভারি পেতে এই বোতামটি ১-বার চাপুন:'
+                        : 'Tap once so the rider reaches your doorstep without calling for directions:'}
+                    </span>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={handleDetectGps}
                   disabled={detectingGps}
-                  style={{ width: '100%', background: '#166534' }}
+                  style={{
+                    width: '100%',
+                    background: '#166534',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    fontWeight: 700,
+                    boxShadow: !geoCoords ? '0 2px 6px rgba(22,101,52,0.2)' : 'none',
+                  }}
                 >
-                  📍 {detectingGps ? (lang === 'bn' ? '⏳ অবস্থান চিহ্নিত করা হচ্ছে...' : '⏳ Detecting GPS...') : (lang === 'bn' ? 'আমার বর্তমান অবস্থান চিহ্নিত করুন (GPS)' : 'Auto-Fill My Location (GPS)')}
+                  <span>📍</span>
+                  <span>
+                    {detectingGps
+                      ? (lang === 'bn' ? '⏳ অবস্থান চিহ্নিত করা হচ্ছে...' : '⏳ Detecting GPS...')
+                      : (lang === 'bn' ? 'আমার বর্তমান অবস্থান চিহ্নিত করুন (GPS)' : 'Auto-Fill My Location (GPS)')}
+                  </span>
                 </button>
                 {geoCoords && (
                   <div style={{ marginTop: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
                     <p className="hint" style={{ color: '#166534', margin: 0, fontWeight: 700, fontSize: '0.82rem' }}>
-                      ✓ {lang === 'bn' ? 'সঠিক GPS অবস্থান পিন করা হয়েছে!' : 'Exact GPS linked for delivery rider!'}
+                      ✓ {lang === 'bn' ? 'সঠিক GPS অবস্থান সংরক্ষিত হয়েছে!' : 'Exact GPS linked for delivery rider!'}
                     </p>
                     <a
                       href={geoCoords}
@@ -1012,11 +1104,11 @@ export default function Checkout() {
               </label>
 
               <label>
-                🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক ও রাইডারের নির্দেশ (ঐচ্ছিক)' : 'Landmark & Delivery Note (Optional)'}
+                🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক ও বাড়ির চেনার উপায় (ঐচ্ছিক)' : 'Landmark & Visual Cue (Optional)'}
                 <input
                   value={landmark}
                   onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
-                  placeholder={lang === 'bn' ? 'যেমন: শিব মন্দিরের কাছে হলুদ বাড়ি / গেটে রেখে কল করবেন' : 'e.g. Yellow house near temple / Leave at gate & call'}
+                  placeholder={lang === 'bn' ? 'যেমন: শিব মন্দিরের পাশে হলুদ দোতলা বাড়ি / প্রাইমারি স্কুলের উল্টোদিকে' : 'e.g. Yellow 2-storey house near Shiv temple / opposite primary school'}
                 />
               </label>
 

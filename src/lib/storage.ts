@@ -71,6 +71,9 @@ export type SavedDelivery = {
   phone: string
   pin: string
   deliverySlot?: DeliverySlot
+  geoLat?: number
+  geoLng?: number
+  landmark?: string
 }
 
 import { idbSet, idbGet } from './indexedDb'
@@ -243,6 +246,9 @@ export function saveDelivery(userId: string, data: SavedDelivery) {
     phone: data.phone.trim(),
     pin: data.pin.replace(/\D/g, ''),
     deliverySlot: data.deliverySlot,
+    geoLat: data.geoLat,
+    geoLng: data.geoLng,
+    landmark: data.landmark?.trim(),
   })
 }
 

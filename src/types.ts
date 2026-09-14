@@ -133,7 +133,18 @@ export interface ShiftInfo {
 
 export type Lang = 'en' | 'bn'
 
-export interface Address { id?: number; user_id?: string; label: string; address: string; phone: string; pin: string; is_default: boolean }
+export interface Address {
+  id?: number
+  user_id?: string
+  label: string
+  address: string
+  phone: string
+  pin: string
+  is_default: boolean
+  geoLat?: number
+  geoLng?: number
+  landmark?: string
+}
 export interface Coupon {
   code: string
   discount_type: 'flat' | 'percent'
