@@ -1283,7 +1283,18 @@ export async function fetchAddresses(userId: string): Promise<Address[]> {
   try {
     const { data, error } = await supabase.from('addresses').select('*').eq('user_id', userId)
     if (error) return []
-    return data || []
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      user_id: r.user_id,
+      label: r.label,
+      address: r.address,
+      phone: r.phone,
+      pin: r.pin,
+      is_default: r.is_default,
+      geoLat: r.geo_lat != null ? Number(r.geo_lat) : undefined,
+      geoLng: r.geo_lng != null ? Number(r.geo_lng) : undefined,
+      landmark: r.landmark || undefined,
+    }))
   } catch { return [] }
 }
 
@@ -1298,6 +1309,9 @@ export async function saveAddress(addr: Address): Promise<void> {
     }
     if (addr.pin) payload.pin = addr.pin
     if (addr.is_default !== undefined) payload.is_default = addr.is_default
+    if (addr.geoLat != null) payload.geo_lat = addr.geoLat
+    if (addr.geoLng != null) payload.geo_lng = addr.geoLng
+    if (addr.landmark) payload.landmark = addr.landmark
 
     if (addr.id) {
       payload.id = addr.id
@@ -1306,6 +1320,9 @@ export async function saveAddress(addr: Address): Promise<void> {
         // Fallback without extended columns in case database columns aren't migrated yet
         delete payload.pin
         delete payload.is_default
+        delete payload.geo_lat
+        delete payload.geo_lng
+        delete payload.landmark
         await supabase.from('addresses').upsert(payload)
       }
     } else {
@@ -1314,6 +1331,9 @@ export async function saveAddress(addr: Address): Promise<void> {
         // Fallback without extended columns
         delete payload.pin
         delete payload.is_default
+        delete payload.geo_lat
+        delete payload.geo_lng
+        delete payload.landmark
         await supabase.from('addresses').insert(payload)
       }
     }
