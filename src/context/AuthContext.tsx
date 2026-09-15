@@ -8,7 +8,18 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfiles, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, deleteUserProfileApi, mapProfile } from '../lib/api'
+import {
+  fetchProfiles,
+  updateProfileRole,
+  updateOwnPin,
+  updateProfilePinAdmin,
+  updateProfileBlocked,
+  updateProfileDetails,
+  updateProfileTier,
+  deleteUserProfileApi,
+  mapProfile,
+} from '../lib/api'
+import { getStaffCredentials } from '../lib/staffAuth'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { formatAuthIdentifier } from '../lib/authUtils'
 import { cleanDigits } from '../lib/phone'
@@ -23,6 +34,7 @@ import {
   setSessionUserId,
   storePin,
   getActiveUserPin,
+  clearStoredPins,
   uid,
 } from '../lib/storage'
 import type { Role, User } from '../types'
@@ -147,24 +159,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cloudUsers = []
       }
 
-      // Preserve local promotions in case of background sync lag
-      const storedUsers = getUsers()
-      const roleMap = new Map<string, Role>()
-      storedUsers.forEach((su) => {
-        if (su.role && su.role !== 'customer') {
-          if (su.id) roleMap.set(su.id, su.role)
-          if (su.email) roleMap.set(su.email.toLowerCase(), su.role)
-        }
-      })
-
       const map = new Map<string, User>()
       cloudUsers.forEach((u) => {
-        const overrideRole =
-          roleMap.get(u.id) ||
-          (u.email && roleMap.get(u.email.toLowerCase()))
-
-        const finalUser = overrideRole ? { ...u, role: overrideRole } : u
-        if (finalUser.id) map.set(finalUser.id, finalUser)
+        if (u.id) map.set(u.id, u)
       })
       if (profile && profile.id) {
         map.set(profile.id, profile)
@@ -243,36 +240,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cachedProfile = getCurrentUser()
 
       if (localId) {
-        try {
-          const { data: profileRow } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', localId)
-            .maybeSingle()
-          if (profileRow) {
-            const profile = mapProfile(profileRow as any)
-            if (profile) {
-              if (profile.isBlocked) {
-                saveCurrentUser(null)
-                setUser(null)
-                userRef.current = null
-              } else {
-                setUser(profile)
-                userRef.current = profile
-                saveCurrentUser(profile)
-                await loadUsersIfStaff(profile)
-              }
-            }
-          } else if (!cachedProfile) {
-            // Only clear session if no local profile cache exists at all
-            setSessionUserId(null)
-          }
-        } catch {
-          // Network error — keep existing in-memory / cached user
-          if (cachedProfile && !userRef.current) {
+        // PIN-auth users have no JWT — restore from local cache (RLS blocks anon profile reads)
+        if (cachedProfile && cachedProfile.id === localId) {
+          if (cachedProfile.isBlocked) {
+            saveCurrentUser(null)
+            setUser(null)
+            userRef.current = null
+            clearStoredPins()
+          } else {
             setUser(cachedProfile)
             userRef.current = cachedProfile
+            await loadUsersIfStaff(cachedProfile)
           }
+        } else if (!cachedProfile) {
+          setSessionUserId(null)
         }
       } else if (cachedProfile) {
         setUser(cachedProfile)
@@ -681,6 +662,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     userRef.current = null
     setUsers([])
+    clearStoredPins()
   }, [cloud])
 
   const resetPassword = useCallback(
@@ -738,23 +720,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (newPin.length !== 4 || /\D/.test(newPin)) {
         return { ok: false, error: 'PIN must be exactly 4 digits.' }
       }
-      storePin(user.email, newPin)
-      if (user.phone) {
-        storePin(user.phone, newPin)
-        storePin(formatAuthIdentifier(user.phone), newPin)
-      }
+      const oldPin = getActiveUserPin(user)
       if (cloud && supabase) {
         try {
-          await updateProfilePin(user.id, newPin, user.email, user.phone)
-          const cloudUsers = await fetchProfiles()
-          if (cloudUsers && cloudUsers.length > 0) {
-            setUsers(cloudUsers)
-            saveUsers(cloudUsers)
+          if (!oldPin) {
+            return { ok: false, error: 'Session expired. Please log in again before changing your PIN.' }
           }
-        } catch (err: any) {
+          await updateOwnPin(user.id, oldPin, newPin)
+          storePin(user.email, newPin)
+          if (user.phone) {
+            storePin(user.phone, newPin)
+            storePin(formatAuthIdentifier(user.phone), newPin)
+          }
+          if (user.id) storePin(user.id, newPin)
+          const staffCreds = getStaffCredentials(user)
+          if (staffCreds && (user.role === 'admin' || user.role === 'seller')) {
+            const cloudUsers = await fetchProfiles(staffCreds.callerId, staffCreds.callerPin)
+            if (cloudUsers.length > 0) {
+              setUsers(cloudUsers)
+              saveUsers(cloudUsers)
+            }
+          }
+        } catch (err: unknown) {
           console.error('updatePassword error:', err)
-          return { ok: false, error: err.message || 'Failed to update PIN in database' }
+          const msg = err instanceof Error ? err.message : String(err)
+          return { ok: false, error: msg || 'Failed to update PIN in database' }
         }
+      } else {
+        storePin(user.email, newPin)
+        if (user.phone) {
+          storePin(user.phone, newPin)
+          storePin(formatAuthIdentifier(user.phone), newPin)
+        }
+        if (user.id) storePin(user.id, newPin)
       }
       return { ok: true }
     },
@@ -804,11 +802,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
       saveUsers(updatedStored)
 
-      // 3. Persist to Supabase Cloud
       if (cloud && supabase) {
         try {
-          await updateProfileRole(actualId, role, targetEmail, targetPhone)
-          const cloudUsers = await fetchProfiles()
+          const staff = getStaffCredentials(user)
+          if (!staff) {
+            return { ok: false, error: 'Staff session expired. Please log in again.' }
+          }
+          await updateProfileRole(actualId, role, staff, targetEmail, targetPhone)
+          const cloudUsers = await fetchProfiles(staff.callerId, staff.callerPin)
           if (cloudUsers && cloudUsers.length > 0) {
             // Verify if cloud actually accepted the new role
             const updatedCloudUser = cloudUsers.find(
@@ -867,9 +868,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
       saveUsers(updatedStored)
 
-      if (cloud) {
+      if (cloud && user) {
         try {
-          await updateProfileTier(actualId, tier, targetEmail, targetUser?.phone)
+          const staff = getStaffCredentials(user)
+          if (staff) {
+            await updateProfileTier(actualId, tier, staff)
+          }
         } catch (err) {
           console.warn('Failed to sync tier to Supabase:', err)
         }
@@ -901,23 +905,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         storePin(formatAuthIdentifier(targetPhone), newPin)
       }
 
-      if (cloud && supabase) {
+      if (cloud && supabase && user) {
         try {
-          await updateProfilePin(actualId, newPin, targetEmail, targetPhone)
-          const cloudUsers = await fetchProfiles()
-          if (cloudUsers && cloudUsers.length > 0) {
+          const staff = getStaffCredentials(user)
+          if (!staff) {
+            return { ok: false, error: 'Staff session expired. Please log in again.' }
+          }
+          await updateProfilePinAdmin(actualId, newPin, staff)
+          const cloudUsers = await fetchProfiles(staff.callerId, staff.callerPin)
+          if (cloudUsers.length > 0) {
             setUsers(cloudUsers)
             saveUsers(cloudUsers)
           }
           return { ok: true }
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error('adminResetUserPin error:', err)
-          return { ok: false, error: err.message || 'Failed to update PIN in database' }
+          const msg = err instanceof Error ? err.message : String(err)
+          return { ok: false, error: msg || 'Failed to update PIN in database' }
         }
       }
       return { ok: true }
     },
-    [cloud, users],
+    [cloud, user, users],
   )
 
   const toggleBlockUser = useCallback(
@@ -934,10 +943,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : u,
         ),
       )
-      if (cloud && supabase) {
+      if (cloud && supabase && user) {
         try {
-          await updateProfileBlocked(actualId, isBlocked, targetEmail, targetPhone)
-          const cloudUsers = await fetchProfiles()
+          const staff = getStaffCredentials(user)
+          if (!staff) {
+            return { ok: false, error: 'Staff session expired. Please log in again.' }
+          }
+          await updateProfileBlocked(actualId, isBlocked, staff, targetEmail, targetPhone)
+          const cloudUsers = await fetchProfiles(staff.callerId, staff.callerPin)
           if (cloudUsers && cloudUsers.length > 0) {
             const merged = cloudUsers.map((cu) => {
               if (cu.id === actualId || cu.id === userId || (targetEmail && cu.email === targetEmail)) {
@@ -1010,10 +1023,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveUsers(getUsers().filter((u) => u.id !== actualId && (!targetEmail || u.email !== targetEmail)))
 
       // 2. Cloud delete
-      if (cloud && supabase) {
+      if (cloud && supabase && user) {
         try {
-          await deleteUserProfileApi(actualId, targetEmail, targetPhone)
-          const cloudUsers = await fetchProfiles()
+          const staff = getStaffCredentials(user)
+          if (!staff) {
+            return { ok: false, error: 'Staff session expired. Please log in again.' }
+          }
+          await deleteUserProfileApi(actualId, staff, targetEmail, targetPhone)
+          const cloudUsers = await fetchProfiles(staff.callerId, staff.callerPin)
           setUsers(cloudUsers)
           saveUsers(cloudUsers)
           return { ok: true }
@@ -1046,13 +1063,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (cloud && supabase) {
         try {
-          await updateProfileDetails(user.id, patch, user.email, cleanPhone || user.phone)
-          const cloudUsers = await fetchProfiles()
-          if (cloudUsers && cloudUsers.length > 0) {
-            setUsers(cloudUsers)
-            saveUsers(cloudUsers)
-          }
-        } catch (err: any) {
+          const callerPin = getActiveUserPin(user)
+          if (!callerPin) return
+          await updateProfileDetails(user.id, patch, callerPin)
+        } catch (err: unknown) {
           console.error('updateUserProfile error:', err)
         }
       }

@@ -18,25 +18,40 @@ const KEYS = {
 
 export const STORE_EVENT = 'greenvest-store-update'
 
-// ── PIN Storage (no Supabase schema change needed) ─────────────────────────
-// PINs are stored in localStorage keyed by lowercase email.
-// This works independently of the Supabase profiles table schema.
+// ── PIN Storage (session-only — cleared when browser tab closes) ───────────
 const PINS_KEY = 'gv_pins'
+
+function readPinStore(): Record<string, string> {
+  try {
+    return safeJsonParse<Record<string, string>>(sessionStorage.getItem(PINS_KEY), {})
+  } catch {
+    return {}
+  }
+}
+
+function writePinStore(pins: Record<string, string>): void {
+  try {
+    sessionStorage.setItem(PINS_KEY, JSON.stringify(pins))
+  } catch {}
+}
 
 export function getStoredPin(identifier: string): string {
   if (!identifier) return ''
-  try {
-    const pins = safeJsonParse<Record<string, string>>(localStorage.getItem(PINS_KEY), {})
-    return pins[identifier.toLowerCase()] || ''
-  } catch { return '' }
+  const pins = readPinStore()
+  return pins[identifier.toLowerCase()] || ''
 }
 
 export function storePin(identifier: string, pin: string): void {
   if (!identifier || !pin) return
+  const pins = readPinStore()
+  pins[identifier.toLowerCase()] = pin
+  writePinStore(pins)
+}
+
+/** Clear all cached PINs (call on logout). */
+export function clearStoredPins(): void {
   try {
-    const pins = safeJsonParse<Record<string, string>>(localStorage.getItem(PINS_KEY), {})
-    pins[identifier.toLowerCase()] = pin
-    localStorage.setItem(PINS_KEY, JSON.stringify(pins))
+    sessionStorage.removeItem(PINS_KEY)
   } catch {}
 }
 

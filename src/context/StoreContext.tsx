@@ -10,6 +10,7 @@ import {
 } from 'react'
 import {
   bulkUpdateOrderStatusApi,
+  cancelOwnOrderApi,
   checkDuplicateUtrApi,
   findRecentOrderByUtrApi,
   createOrder,
@@ -72,6 +73,7 @@ import {
 } from '../lib/storage'
 import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, CustomerTier, ShiftInfo, PromotionalDeal, SupportMessage } from '../types'
 import { showToast } from '../lib/toast'
+import { requireStaffCredentials } from '../lib/staffAuth'
 import { useAuth } from './useAuth'
 
 interface PlaceOrderOpts {
@@ -707,7 +709,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         try {
-          const saved = await upsertProduct(product)
+          const staff = requireStaffCredentials(user)
+          const saved = await upsertProduct(product, staff)
           setProducts((prev) => {
             const updated = prev.map((p) => (p.id === saved.id ? saved : p))
             saveProducts(updated)
@@ -724,14 +727,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setProducts(localNext)
     },
-    [cloud],
+    [cloud, user],
   )
 
   const addProduct = useCallback(
     async (product: Omit<Product, 'id'>) => {
       if (cloud) {
         try {
-          const saved = await insertProduct(product)
+          const staff = requireStaffCredentials(user)
+          const saved = await insertProduct(product, staff)
           setProducts((prev) => [...prev, saved])
         } catch (err: any) {
           console.error('addProduct failed:', err)
@@ -744,7 +748,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveProducts(next)
       setProducts(next)
     },
-    [cloud],
+    [cloud, user],
   )
 
   const deleteProduct = useCallback(
@@ -757,7 +761,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         try {
-          await deleteProductApi(id)
+          const staff = requireStaffCredentials(user)
+          await deleteProductApi(id, staff)
         } catch (err: any) {
           console.error('deleteProduct failed, reverting UI:', err)
           setProducts(prevSnapshot)
@@ -770,7 +775,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveProducts(next)
       setProducts(next)
     },
-    [cloud],
+    [cloud, user],
   )
 
   const toggleStock = useCallback(
@@ -784,14 +789,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const morningReset = useCallback(async () => {
     if (cloud) {
-      await setAllProductsInStock()
+      const staff = requireStaffCredentials(user)
+      await setAllProductsInStock(staff)
       await refreshCloud()
       return
     }
     const next = getProducts().map((p) => (p.archived ? p : { ...p, inStock: true }))
     saveProducts(next)
     setProducts(next)
-  }, [cloud, refreshCloud])
+  }, [cloud, refreshCloud, user])
 
   const checkDuplicateUtr = useCallback(
     async (utr: string): Promise<boolean> => {
@@ -835,7 +841,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         if (cloud) {
           try {
-            await updateOrderStatusApi(id, status, rejectionReason)
+            if (status === 'cancelled' && user?.role === 'customer') {
+              const pin = getActiveUserPin(user)
+              if (!pin || !user.id) throw new Error('Please log in again to cancel this order.')
+              await cancelOwnOrderApi(user.id, pin, id)
+            } else {
+              const staff = requireStaffCredentials(user)
+              await updateOrderStatusApi(id, status, staff, rejectionReason)
+            }
             const next = getOrders().map((o) =>
               o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o,
             )
@@ -856,7 +869,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         inFlightStatusRef.current.delete(id)
       }
     },
-    [cloud],
+    [cloud, user],
   )
 
   const updateOrderDeliveryDate = useCallback(
@@ -866,7 +879,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       )
       if (cloud) {
         try {
-          await updateOrderDeliveryDateApi(id, deliveryDate)
+          const staff = requireStaffCredentials(user)
+          await updateOrderDeliveryDateApi(id, deliveryDate, staff)
         } catch (err) {
           console.error('updateOrderDeliveryDate failed:', err)
         }
@@ -877,7 +891,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveOrders(next)
       }
     },
-    [cloud],
+    [cloud, user],
   )
 
   const addPromotionalDeal = useCallback(
@@ -977,7 +991,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         try {
-          await bulkUpdateOrderStatusApi(staleIds, 'cancelled', reason)
+          const staff = requireStaffCredentials(user)
+          await bulkUpdateOrderStatusApi(staleIds, 'cancelled', staff, reason)
         } catch (err) {
           console.error('Failed to cloud sync auto-cancelled stale orders', err)
         }
@@ -992,7 +1007,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       return staleOrders.length
     },
-    [orders, cloud],
+    [orders, cloud, user],
   )
 
   const sendSupportMessage = useCallback(
@@ -1128,7 +1143,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         try {
-          await bulkUpdateOrderStatusApi(ids, status)
+          const staff = requireStaffCredentials(user)
+          await bulkUpdateOrderStatusApi(ids, status, staff)
         } catch (err: any) {
           console.error('bulkUpdateOrderStatus failed, reverting UI:', err)
           setOrders(prevSnapshot)
@@ -1142,7 +1158,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveOrders(next)
       }
     },
-    [cloud],
+    [cloud, user],
   )
 
   // verifyUtr: UTR verification was removed from the product.
@@ -1192,7 +1208,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (cloud) {
         try {
-          await deleteOrderApi(id)
+          const staff = requireStaffCredentials(user)
+          await deleteOrderApi(id, staff)
         } catch (err: any) {
           console.error('deleteOrder failed, reverting UI:', err)
           setOrders(prevSnapshot)
@@ -1204,7 +1221,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         saveOrders(next)
       }
     },
-    [cloud],
+    [cloud, user],
   )
 
   const fetchAddresses = useCallback(async (userId: string) => {
@@ -1229,8 +1246,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const createCoupon = useCallback(async (coupon: { code: string; discount_type: 'flat' | 'percent'; discount_value: number; min_order: number; valid: boolean; expires_at?: string }) => {
     if (!cloud) return false
-    return createCouponApi(coupon)
-  }, [cloud])
+    const staff = requireStaffCredentials(user)
+    return createCouponApi(coupon, staff)
+  }, [cloud, user])
 
   const saveDailyReport = useCallback(async (report: DailyReport) => {
     if (!cloud) return

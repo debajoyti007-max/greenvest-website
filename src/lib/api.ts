@@ -20,6 +20,7 @@ import type {
 } from '../types'
 import { SEED_PRODUCTS } from '../data/seed'
 import { isSupabaseConfigured, supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase'
+import type { StaffCredentials } from './staffAuth'
 
 type ProductRow = {
   id: string
@@ -161,29 +162,6 @@ function mapProduct(row: ProductRow): Product {
   }
 }
 
-function productToRow(p: Product | (Omit<Product, 'id'> & { id: string })) {
-  return {
-    id: p.id,
-    emoji: p.emoji,
-    name: p.name,
-    bn_name: p.bnName,
-    p_a: p.pA,
-    p_b: p.pB,
-    p_c: p.pC,
-    mrp: p.mrp || null,
-    available_grades: p.availableGrades && p.availableGrades.length > 0 ? p.availableGrades : ['A', 'B', 'C'],
-    in_stock: p.inStock,
-    archived: Boolean(p.archived),
-    stock_qty: p.stockQty ?? null,
-    season: p.season || 'all',
-    category: p.category,
-    unit: p.unit,
-    image_url: p.imageUrl || null,
-    sold_as: p.soldAs || null,
-    gram_options: p.gramOptions || null,
-  }
-}
-
 function mapDeal(row: PromotionalDealRow): PromotionalDeal {
   return {
     id: row.id,
@@ -304,153 +282,126 @@ export async function fetchProfile(userId: string): Promise<User | null> {
   return data ? mapProfile(data as ProfileRow) : null
 }
 
-export async function fetchProfiles(callerId?: string, callerPin?: string): Promise<User[]> {
+export async function fetchProfiles(callerId: string, callerPin: string): Promise<User[]> {
   const client = requireClient()
-
-  // 1. If caller credentials provided (Staff PIN login), query through secure Gateway RPC
-  if (callerId) {
-    try {
-      const { data: rpcData, error: rpcErr } = await client.rpc('get_staff_customers', {
-        p_caller_id: callerId,
-        p_caller_pin: callerPin || '',
-      })
-      if (!rpcErr && rpcData && Array.isArray(rpcData)) {
-        return (rpcData as ProfileRow[]).map(mapProfile)
-      }
-      if (rpcErr) {
-        console.warn('get_staff_customers RPC fallback notice:', rpcErr.message)
-      }
-    } catch (err) {
-      console.warn('get_staff_customers RPC exception:', err)
-    }
-  }
-
-  // 2. Fallback to direct profiles query (e.g. for Super Admin with active Supabase session)
-  const { data, error } = await client.from('profiles').select('*').order('created_at', { ascending: true })
-  if (error) throw error
-  return (data as ProfileRow[]).map(mapProfile)
+  const { data: rpcData, error: rpcErr } = await client.rpc('get_staff_customers', {
+    p_caller_id: callerId,
+    p_caller_pin: callerPin,
+  })
+  if (rpcErr) throw new Error(rpcErr.message || 'Failed to load customer list')
+  if (!rpcData || !Array.isArray(rpcData)) return []
+  return (rpcData as ProfileRow[]).map(mapProfile)
 }
 
-export async function checkAccountExistsByEmail(email: string): Promise<User | null> {
+export async function checkAccountExistsByEmail(email: string): Promise<boolean> {
   const client = requireClient()
-  const { data, error } = await client.from('profiles').select('*').eq('email', email.toLowerCase()).maybeSingle()
-  if (error) return null
-  return data ? mapProfile(data as ProfileRow) : null
+  const { data, error } = await client.rpc('check_account_exists', { p_identifier: email.trim() })
+  if (error) return false
+  const row = data as { exists?: boolean } | null
+  return Boolean(row?.exists)
 }
 
-async function updateProfileField(
+export async function updateProfileRole(
   userId: string,
-  email: string | undefined,
-  phone: string | undefined,
-  fields: Record<string, unknown>
+  role: Role,
+  staff: StaffCredentials,
+  email?: string,
+  phone?: string,
 ): Promise<void> {
   const client = requireClient()
-  const normalizedFields: Record<string, unknown> = { ...fields }
-  if ('isBlocked' in fields) {
-    normalizedFields.is_blocked = fields.isBlocked
-    delete normalizedFields.isBlocked
-  }
-
-  // 1. Try atomic SECURITY DEFINER RPC (bypasses all RLS restrictions)
-  if (normalizedFields.role && typeof normalizedFields.role === 'string') {
-    const lookupId = userId || email || phone || ''
-    if (lookupId) {
-      try {
-        const { data: rpcData, error: rpcErr } = await client.rpc('update_user_role_admin', {
-          p_user_id: lookupId,
-          p_role: normalizedFields.role,
-        })
-        if (!rpcErr && rpcData) return
-        if (rpcErr) {
-          console.warn('update_user_role_admin RPC failed, falling back to table update:', rpcErr)
-        }
-      } catch (err) {
-        console.warn('update_user_role_admin RPC exception:', err)
-      }
-    }
-  }
-
-  // 2. Try by exact ID
-  if (userId) {
-    const { data: idRows, error: errId } = await client.from('profiles').update(normalizedFields).eq('id', userId).select()
-    if (!errId && idRows && idRows.length > 0) return
-  }
-
-  // 3. Try by email if provided
-  if (email && email.trim()) {
-    const { data: emailRows, error: errEmail } = await client.from('profiles').update(normalizedFields).eq('email', email.trim().toLowerCase()).select()
-    if (!errEmail && emailRows && emailRows.length > 0) return
-  }
-
-  // 4. Try by phone or formatted phone email (e.g. 8350087877@greenvest.shop)
-  const rawIdentifier = phone || email || userId
-  if (rawIdentifier) {
-    const digits = rawIdentifier.replace(/\D/g, '')
-    if (digits.length >= 10) {
-      const phoneEmail = `${digits.slice(-10)}@greenvest.shop`
-      const { data: peRows, error: errPhoneEmail } = await client.from('profiles').update(normalizedFields).eq('email', phoneEmail).select()
-      if (!errPhoneEmail && peRows && peRows.length > 0) return
-
-      const { data: pRows, error: errPhone } = await client.from('profiles').update(normalizedFields).eq('phone', digits.slice(-10)).select()
-      if (!errPhone && pRows && pRows.length > 0) return
-    }
-  }
-
-  // 5. Fallback: auto-create/upsert missing profile row in database
-  const targetEmail = (email && email.trim()) ? email.trim().toLowerCase() : (phone ? `${phone.replace(/\D/g, '').slice(-10)}@greenvest.shop` : `${userId}@greenvest.shop`)
-  const targetPhone = phone ? phone.replace(/\D/g, '').slice(-10) : (userId.replace(/\D/g, '').length >= 10 ? userId.replace(/\D/g, '').slice(-10) : undefined)
-
-  const payload: Record<string, unknown> = {
-    id: userId || crypto.randomUUID(),
-    email: targetEmail,
-    name: targetEmail.split('@')[0],
-    role: 'customer',
-    created_at: new Date().toISOString(),
-    ...normalizedFields,
-  }
-  if (targetPhone) payload.phone = targetPhone
-
-  const { error: upsertErr } = await client.from('profiles').upsert(payload, { onConflict: 'id' })
-  if (upsertErr) {
-    console.error('updateProfileField upsert error:', upsertErr)
-    throw new Error(upsertErr.message || 'Failed to save profile to database')
-  }
+  const lookupId = userId || email || phone || ''
+  const { data, error } = await client.rpc('update_user_role_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_user_id: lookupId,
+    p_role: role,
+  })
+  if (error) throw new Error(error.message || 'Failed to update role')
+  const result = data as { success?: boolean; error?: string } | null
+  if (result?.success === false) throw new Error(result.error || 'Failed to update role')
 }
 
-export async function updateProfileRole(userId: string, role: Role, email?: string, phone?: string): Promise<void> {
-  return updateProfileField(userId, email, phone, { role })
+export async function updateOwnPin(callerId: string, oldPin: string, newPin: string): Promise<void> {
+  const client = requireClient()
+  const { data, error } = await client.rpc('update_own_pin', {
+    p_caller_id: callerId,
+    p_old_pin: oldPin,
+    p_new_pin: newPin,
+  })
+  if (error) throw new Error(error.message || 'Failed to update PIN')
+  const result = data as { ok?: boolean; error?: string } | null
+  if (!result?.ok) throw new Error(result?.error || 'Failed to update PIN')
 }
 
-export async function updateProfilePin(userId: string, pin: string, email?: string, phone?: string): Promise<void> {
-  return updateProfileField(userId, email, phone, { pin })
+export async function updateProfilePinAdmin(
+  userId: string,
+  pin: string,
+  staff: StaffCredentials,
+): Promise<void> {
+  const client = requireClient()
+  const { data, error } = await client.rpc('update_user_pin_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_user_id: userId,
+    p_new_pin: pin,
+  })
+  if (error) throw new Error(error.message || 'Failed to reset PIN')
+  const result = data as { ok?: boolean; error?: string } | null
+  if (!result?.ok) throw new Error(result?.error || 'Failed to reset PIN')
 }
 
-export async function updateProfileBlocked(userId: string, isBlocked: boolean, email?: string, phone?: string): Promise<void> {
+export async function updateProfileBlocked(
+  userId: string,
+  isBlocked: boolean,
+  staff: StaffCredentials,
+  email?: string,
+  phone?: string,
+): Promise<void> {
   const client = requireClient()
   const lookupId = userId || email || phone || ''
-  if (lookupId) {
-    try {
-      const { data: rpcData, error: rpcErr } = await client.rpc('update_user_block_admin', {
-        p_user_id: lookupId,
-        p_is_blocked: isBlocked,
-      })
-      if (!rpcErr && rpcData) return
-      if (rpcErr) {
-        console.warn('update_user_block_admin RPC failed, falling back:', rpcErr)
-      }
-    } catch (err) {
-      console.warn('update_user_block_admin RPC exception:', err)
-    }
-  }
-  return updateProfileField(userId, email, phone, { isBlocked })
+  const { data, error } = await client.rpc('update_user_block_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_user_id: lookupId,
+    p_is_blocked: isBlocked,
+  })
+  if (error) throw new Error(error.message || 'Failed to update block status')
+  const result = data as { success?: boolean; error?: string } | null
+  if (result?.success === false) throw new Error(result.error || 'Failed to update block status')
 }
 
-export async function updateProfileDetails(userId: string, details: { name?: string; phone?: string }, email?: string, phone?: string): Promise<void> {
-  return updateProfileField(userId, email, phone, details)
+export async function updateProfileDetails(
+  userId: string,
+  details: { name?: string; phone?: string },
+  callerPin: string,
+): Promise<void> {
+  const client = requireClient()
+  const { data, error } = await client.rpc('update_own_profile', {
+    p_caller_id: userId,
+    p_caller_pin: callerPin,
+    p_name: details.name ?? null,
+    p_phone: details.phone ?? null,
+  })
+  if (error) throw new Error(error.message || 'Failed to update profile')
+  const result = data as { ok?: boolean; error?: string } | null
+  if (!result?.ok) throw new Error(result?.error || 'Failed to update profile')
 }
 
-export async function updateProfileTier(userId: string, tier: CustomerTier, email?: string, phone?: string): Promise<void> {
-  return updateProfileField(userId, email, phone, { tier })
+export async function updateProfileTier(
+  userId: string,
+  tier: CustomerTier,
+  staff: StaffCredentials,
+): Promise<void> {
+  const client = requireClient()
+  const { data, error } = await client.rpc('update_user_tier_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_user_id: userId,
+    p_tier: tier,
+  })
+  if (error) throw new Error(error.message || 'Failed to update tier')
+  const result = data as { success?: boolean; error?: string } | null
+  if (result?.success === false) throw new Error(result.error || 'Failed to update tier')
 }
 
 // ── SWR Product In-Memory & LocalStorage Cache ─────────────────────────
@@ -522,110 +473,73 @@ export async function fetchProducts(forceRefresh = false): Promise<Product[]> {
   }
 }
 
-export async function upsertProduct(product: Product): Promise<Product> {
+export async function upsertProduct(product: Product, staff: StaffCredentials): Promise<Product> {
   invalidateProductCache()
   const client = requireClient()
-  const row = productToRow(product)
 
-  // 1. Direct update for existing products (preserves all columns including available_grades & mrp)
-  if (product.id) {
-    let { data: updated, error: updateErr } = await client
-      .from('products')
-      .update(row)
-      .eq('id', product.id)
-      .select('*')
-      .maybeSingle()
-
-    if (updateErr && /(archived|stock_qty|season|sold_as|gram_options|mrp|available_grades)/i.test(updateErr.message)) {
-      const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
-      ;({ data: updated, error: updateErr } = await client
-        .from('products')
-        .update(rest)
-        .eq('id', product.id)
-        .select('*')
-        .maybeSingle())
-    }
-
-    if (!updateErr && updated) {
-      return mapProduct(updated as ProductRow)
-    }
-  }
-
-  // 2. Direct upsert
-  let { data, error } = await client.from('products').upsert(row).select('*').maybeSingle()
-  if (error && /(archived|stock_qty|season|sold_as|gram_options|mrp|available_grades)/i.test(error.message)) {
-    const { archived: _a, stock_qty: _s, season: _se, sold_as: _so, gram_options: _go, ...rest } = row
-    ;({ data, error } = await client.from('products').upsert(rest).select('*').maybeSingle())
-  }
-  if (!error && data) {
-    return mapProduct(data as ProductRow)
-  }
-
-  // 3. Fallback to RPC if RLS blocks standard write
-  try {
-    const { data: rpcData, error: rpcErr } = await client.rpc('save_product_admin', {
-      p_id: product.id,
-      p_name: product.name,
-      p_bn_name: product.bnName || '',
-      p_p_a: product.pA,
-      p_p_b: product.pB,
-      p_p_c: product.pC,
-      p_in_stock: product.inStock,
-      p_category: product.category,
-      p_unit: product.unit,
-      p_image_url: product.imageUrl || null,
-      p_emoji: product.emoji || '🥬',
-      p_archived: Boolean(product.archived),
-      // C3 Fix: pass new product columns that were previously dropped on RPC fallback path
-      p_mrp: product.mrp ?? null,
-      p_available_grades: product.availableGrades && product.availableGrades.length > 0 ? product.availableGrades : ['A', 'B', 'C'],
-      p_sold_as: product.soldAs || 'loose',
-      p_gram_options: product.gramOptions || null,
-      p_stock_qty: product.stockQty ?? null,
-    })
-    if (!rpcErr && rpcData) {
-      const mapped = mapProduct(rpcData as ProductRow)
-      return {
-        ...mapped,
-        mrp: product.mrp ?? mapped.mrp,
-        availableGrades: product.availableGrades && product.availableGrades.length > 0 ? product.availableGrades : mapped.availableGrades,
-      }
-    }
-  } catch {}
-
-  if (error) throw error
-  return product
+  const { data: rpcData, error: rpcErr } = await client.rpc('save_product_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_id: product.id,
+    p_name: product.name,
+    p_bn_name: product.bnName || '',
+    p_p_a: product.pA,
+    p_p_b: product.pB,
+    p_p_c: product.pC,
+    p_in_stock: product.inStock,
+    p_category: product.category,
+    p_unit: product.unit,
+    p_image_url: product.imageUrl || null,
+    p_emoji: product.emoji || '🥬',
+    p_archived: Boolean(product.archived),
+    p_mrp: product.mrp ?? null,
+    p_available_grades: product.availableGrades?.length ? product.availableGrades : ['A', 'B', 'C'],
+    p_sold_as: product.soldAs || 'loose',
+    p_gram_options: product.gramOptions || null,
+    p_stock_qty: product.stockQty ?? null,
+  })
+  if (rpcErr) throw new Error(rpcErr.message || 'Failed to save product')
+  if (!rpcData) throw new Error('Failed to save product')
+  return mapProduct(rpcData as ProductRow)
 }
 
-export async function insertProduct(product: Omit<Product, 'id'>): Promise<Product> {
+export async function insertProduct(product: Omit<Product, 'id'>, staff: StaffCredentials): Promise<Product> {
   invalidateProductCache()
   const id = `p-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-  return upsertProduct({ ...product, id })
+  return upsertProduct({ ...product, id }, staff)
 }
 
-export async function deleteProductApi(id: string): Promise<void> {
+export async function deleteProductApi(id: string, staff: StaffCredentials): Promise<void> {
   invalidateProductCache()
   const client = requireClient()
-  const { error } = await client.from('products').delete().eq('id', id)
-  if (error) {
-    console.error('deleteProductApi error:', error)
-    throw new Error(error.message || 'Failed to delete product from database')
-  }
+  const { data, error } = await client.rpc('delete_product_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_product_id: id,
+  })
+  if (error) throw new Error(error.message || 'Failed to delete product')
+  const result = data as { success?: boolean } | null
+  if (result?.success === false) throw new Error('Failed to delete product')
 }
 
-export async function setAllProductsInStock(): Promise<void> {
+export async function setAllProductsInStock(staff: StaffCredentials): Promise<void> {
   invalidateProductCache()
   const client = requireClient()
-  const { error } = await client.from('products').update({ in_stock: true }).neq('archived', true)
-  if (error) throw error
+  const { data, error } = await client.rpc('set_all_products_in_stock_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+  })
+  if (error) throw new Error(error.message || 'Failed to reset stock')
+  const result = data as { success?: boolean } | null
+  if (result?.success === false) throw new Error('Failed to reset stock')
 }
 
 
 export async function fetchOrders(
   userRole?: string,
   userId?: string,
-  userEmail?: string,
-  userPhone?: string,
+  _userEmail?: string,
+  _userPhone?: string,
   limitCount = 100,
   userPin?: string,
 ): Promise<Order[]> {
@@ -650,85 +564,27 @@ export async function fetchOrders(
     }
   }
 
-  // Privacy isolation: non-staff users must provide an identifier
-  if (!isStaff && !userId && !userEmail && !userPhone) {
-    return []
-  }
-
-  let ordersData: OrderRow[] = []
-  let itemsData: OrderItemRow[] = []
-
-  try {
-    let query = client
-      .from('orders')
-      .select('*, order_items(*)')
-      .order('created_at', { ascending: false })
-      .limit(limitCount)
-
-    if (!isStaff) {
-      const filters: string[] = []
-      if (userId) filters.push(`user_id.eq.${userId}`)
-      if (userEmail) filters.push(`user_email.eq.${userEmail.toLowerCase()}`)
-      if (userPhone) filters.push(`phone.eq.${userPhone.replace(/\D/g, '')}`)
-      if (filters.length > 0) {
-        query = query.or(filters.join(','))
+  // Customer gateway: requires PIN-verified RPC
+  if (!isStaff && userId && userPin) {
+    try {
+      const { data: rpcData, error: rpcErr } = await client.rpc('get_customer_orders', {
+        p_caller_id: userId,
+        p_caller_pin: userPin,
+        p_limit: limitCount,
+      })
+      if (!rpcErr && rpcData) {
+        const payload = rpcData as { ok?: boolean; orders?: OrderRow[] }
+        if (payload.ok && Array.isArray(payload.orders)) {
+          return payload.orders.map(mapOrder)
+        }
       }
+    } catch (err) {
+      console.warn('get_customer_orders RPC error:', err)
     }
-    const { data, error } = await query
-    if (!error && data) {
-      return (data as OrderRow[]).map(mapOrder)
-    }
-  } catch (err) {
-    console.warn('Nested orders query fallback triggered:', err)
   }
 
-  // Fallback: 2-step separate query if nested select failed
-  try {
-    let ordersQuery = client
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limitCount)
-
-    if (!isStaff) {
-      const filters: string[] = []
-      if (userId) filters.push(`user_id.eq.${userId}`)
-      if (userEmail) filters.push(`user_email.eq.${userEmail.toLowerCase()}`)
-      if (userPhone) filters.push(`phone.eq.${userPhone.replace(/\D/g, '')}`)
-      if (filters.length > 0) {
-        ordersQuery = ordersQuery.or(filters.join(','))
-      }
-    }
-    const { data: ords, error: ordErr } = await ordersQuery
-    if (ordErr || !ords) throw ordErr || new Error('No orders found')
-    ordersData = ords as OrderRow[]
-
-    const orderIds = ordersData.map((o) => o.id)
-    if (orderIds.length > 0) {
-      const { data: itms } = await client.from('order_items').select('*').in('order_id', orderIds)
-      if (itms) itemsData = itms as OrderItemRow[]
-    }
-  } catch (err) {
-    console.error('fetchOrders fallback error:', err)
-    return []
-  }
-
-  const itemsByOrderId = new Map<string, OrderItemRow[]>()
-  itemsData.forEach((it) => {
-    if (it.order_id) {
-      const arr = itemsByOrderId.get(it.order_id) || []
-      arr.push(it)
-      itemsByOrderId.set(it.order_id, arr)
-    }
-  })
-
-  return ordersData.map((ord) => {
-    const rowWithItems: OrderRow = {
-      ...ord,
-      order_items: itemsByOrderId.get(ord.id) || [],
-    }
-    return mapOrder(rowWithItems)
-  })
+  if (!isStaff) return []
+  return []
 }
 
 /**
@@ -777,36 +633,35 @@ export async function fetchOrderByIdAndPhone(
   if (!cleanId || cleanPhone.length < 10) return null
 
   try {
-    const idLower = cleanId.toLowerCase()
-    // Try exact ID match first
-    let { data, error } = await supabase
-      .from('orders')
-      .select('*, order_items(*)')
-      .eq('phone', cleanPhone)
-      .or(`id.eq.${cleanId},id.ilike.%${idLower}`)
-      .limit(1)
-      .maybeSingle()
-
-    if (error || !data) {
-      // Try suffix match: user typed last 4-6 digits of order ID
-      if (cleanId.length >= 4 && cleanId.length <= 6) {
-        ;({ data, error } = await supabase
-          .from('orders')
-          .select('*, order_items(*)')
-          .eq('phone', cleanPhone)
-          .ilike('id', `%${cleanId}`)
-          .limit(1)
-          .maybeSingle())
-      }
-    }
-
-    if (!error && data) {
-      return mapOrder(data as OrderRow)
+    const { data, error } = await supabase.rpc('track_order_public', {
+      p_order_id: cleanId,
+      p_phone: cleanPhone,
+    })
+    if (error) return null
+    const payload = data as { ok?: boolean; order?: OrderRow } | null
+    if (payload?.ok && payload.order) {
+      return mapOrder(payload.order)
     }
   } catch (err) {
     console.debug('fetchOrderByIdAndPhone error:', err)
   }
   return null
+}
+
+export async function cancelOwnOrderApi(
+  callerId: string,
+  callerPin: string,
+  orderId: string,
+): Promise<void> {
+  const client = requireClient()
+  const { data, error } = await client.rpc('cancel_own_order', {
+    p_caller_id: callerId,
+    p_caller_pin: callerPin,
+    p_order_id: orderId,
+  })
+  if (error) throw new Error(error.message || 'Failed to cancel order')
+  const result = data as { ok?: boolean; error?: string } | null
+  if (!result?.ok) throw new Error(result?.error || 'Failed to cancel order')
 }
 
 // Re-export internal function for admin/seller staff code that uses the old name
@@ -1046,57 +901,51 @@ export async function verifyDeliveryOtpApi(
   }
 }
 
-export async function updateOrderStatusApi(id: string, status: OrderStatus, rejectionReason?: string): Promise<void> {
+export async function updateOrderStatusApi(
+  id: string,
+  status: OrderStatus,
+  staff: StaffCredentials,
+  rejectionReason?: string,
+): Promise<void> {
   const client = requireClient()
-
-  // 1. Try atomic SECURITY DEFINER RPC first (guarantees persistence even if RLS/triggers exist)
-  try {
-    const { data: rpcData, error: rpcErr } = await client.rpc('update_order_status_admin', {
-      p_order_id: id,
-      p_status: status,
-      p_reason: rejectionReason || null,
-    })
-    if (!rpcErr && rpcData && (rpcData as any).success) {
-      return
-    }
-  } catch (rpcEx) {
-    console.debug('update_order_status_admin RPC fallback to direct update:', rpcEx)
-  }
-
-  // 2. Fallback to direct table update
-  const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
-  if (rejectionReason !== undefined) patch.rejection_reason = rejectionReason
-  let { error } = await client.from('orders').update(patch).eq('id', id)
-  if (error && error.message && error.message.includes('rejection_reason')) {
-    delete patch.rejection_reason
-    ;({ error } = await client.from('orders').update(patch).eq('id', id))
-  }
-  if (error) throw error
+  const { data, error } = await client.rpc('update_order_status_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_order_id: id,
+    p_status: status,
+    p_reason: rejectionReason || null,
+  })
+  if (error) throw new Error(error.message || 'Failed to update order status')
+  const result = data as { success?: boolean; error?: string } | null
+  if (result?.success === false) throw new Error(result.error || 'Failed to update order status')
 }
 
-export async function bulkUpdateOrderStatusApi(ids: string[], status: OrderStatus, rejectionReason?: string): Promise<void> {
-  if (ids.length === 0) return
-  const client = requireClient()
-  const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
-  if (rejectionReason !== undefined) patch.rejection_reason = rejectionReason
-  let { error } = await client.from('orders').update(patch).in('id', ids)
-  if (error && error.message && error.message.includes('rejection_reason')) {
-    delete patch.rejection_reason
-    ;({ error } = await client.from('orders').update(patch).in('id', ids))
+export async function bulkUpdateOrderStatusApi(
+  ids: string[],
+  status: OrderStatus,
+  staff: StaffCredentials,
+  rejectionReason?: string,
+): Promise<void> {
+  for (const id of ids) {
+    await updateOrderStatusApi(id, status, staff, rejectionReason)
   }
-  if (error) throw error
 }
 
-export async function updateOrderDeliveryDateApi(id: string, deliveryDate: string): Promise<void> {
+export async function updateOrderDeliveryDateApi(
+  id: string,
+  deliveryDate: string,
+  staff: StaffCredentials,
+): Promise<void> {
   const client = requireClient()
-  const { error } = await client
-    .from('orders')
-    .update({ delivery_date: deliveryDate, updated_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) {
-    console.error('updateOrderDeliveryDateApi error:', error)
-    throw error
-  }
+  const { data, error } = await client.rpc('update_order_delivery_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_order_id: id,
+    p_delivery_date: deliveryDate,
+  })
+  if (error) throw new Error(error.message || 'Failed to update delivery date')
+  const result = data as { success?: boolean } | null
+  if (result?.success === false) throw new Error('Failed to update delivery date')
 }
 
 export async function checkDuplicateUtrApi(utr: string): Promise<boolean> {
@@ -1137,31 +986,16 @@ export async function findRecentOrderByUtrApi(userId: string, utr: string): Prom
 // verifyUtrApi removed — UTR verification feature was removed.
 // Sellers now use 1-tap Accept Order only (no UTR entry required).
 
-export async function deleteOrderApi(id: string): Promise<void> {
+export async function deleteOrderApi(id: string, staff: StaffCredentials): Promise<void> {
   const client = requireClient()
-
-  // 1. Primary path: SECURITY DEFINER RPC — handles cascaded cleanup at DB level
-  try {
-    const { data: rpcData, error: rpcErr } = await client.rpc('delete_order_admin', { p_order_id: id })
-    if (!rpcErr) {
-      const result = rpcData as { success?: boolean } | null
-      if (result?.success !== false) return // Success via RPC
-    }
-    console.warn('delete_order_admin RPC failed, falling back to direct delete:', rpcErr)
-  } catch (rpcEx) {
-    console.warn('delete_order_admin RPC exception, falling back:', rpcEx)
-  }
-
-  // 2. Fallback: direct delete (cascade order_messages, order_items first)
-  try {
-    await client.from('order_messages').delete().eq('order_id', id)
-  } catch {}
-  await client.from('order_items').delete().eq('order_id', id)
-  const { error } = await client.from('orders').delete().eq('id', id)
-  if (error) {
-    console.error('deleteOrderApi error:', error)
-    throw new Error(error.message || 'Failed to delete order from database')
-  }
+  const { data, error } = await client.rpc('delete_order_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_order_id: id,
+  })
+  if (error) throw new Error(error.message || 'Failed to delete order')
+  const result = data as { success?: boolean } | null
+  if (result?.success === false) throw new Error('Failed to delete order')
 }
 
 
@@ -1445,16 +1279,19 @@ export async function validateCoupon(code: string, orderTotal: number): Promise<
   return null
 }
 
-export async function createCoupon(coupon: {
-  code: string
-  discount_type: 'flat' | 'percent'
-  discount_value: number
-  min_order: number
-  valid: boolean
-  expires_at?: string
-}): Promise<boolean> {
+export async function createCoupon(
+  coupon: {
+    code: string
+    discount_type: 'flat' | 'percent'
+    discount_value: number
+    min_order: number
+    valid: boolean
+    expires_at?: string
+  },
+  staff: StaffCredentials,
+): Promise<boolean> {
   const cleanCode = coupon.code.trim().toUpperCase()
-  const payload: any = {
+  const payload: Record<string, unknown> = {
     ...coupon,
     code: cleanCode,
     valid: coupon.valid ?? true,
@@ -1464,7 +1301,6 @@ export async function createCoupon(coupon: {
     created_at: new Date().toISOString(),
   }
 
-  // 1. Cache locally immediately (guarantees offline/client validation)
   try {
     const localCoupons = JSON.parse(localStorage.getItem('gv_coupons') || '{}')
     localCoupons[cleanCode] = payload
@@ -1473,38 +1309,19 @@ export async function createCoupon(coupon: {
 
   if (!supabase) return true
 
-  // 2. Try SECURITY DEFINER RPC (bypasses all client RLS restrictions)
-  try {
-    const { error: rpcErr } = await supabase.rpc('save_coupon_admin', {
-      p_code: cleanCode,
-      p_discount_type: coupon.discount_type,
-      p_discount_value: coupon.discount_value,
-      p_min_order: coupon.min_order,
-      p_valid: coupon.valid ?? true,
-      p_expires_at: coupon.expires_at || null,
-    })
-    if (!rpcErr) return true
-  } catch {}
-
-  // 3. Fallback to direct table upsert
-  try {
-    let { error } = await supabase.from('coupons').upsert(payload)
-    if (error) {
-      // Retry with alternative column mapping
-      const altPayload = {
-        code: cleanCode,
-        discount_type: coupon.discount_type,
-        discount_value: coupon.discount_value,
-        min_order: coupon.min_order,
-        active: coupon.valid,
-        valid_until: coupon.expires_at || null,
-      }
-      ;({ error } = await supabase.from('coupons').upsert(altPayload))
-    }
-    return !error
-  } catch {
-    return true // Local cache succeeded
-  }
+  const { data, error } = await supabase.rpc('save_coupon_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_code: cleanCode,
+    p_discount_type: coupon.discount_type,
+    p_discount_value: coupon.discount_value,
+    p_min_order: coupon.min_order,
+    p_valid: coupon.valid ?? true,
+    p_expires_at: coupon.expires_at || null,
+  })
+  if (error) throw new Error(error.message || 'Failed to save coupon')
+  const result = data as { success?: boolean } | null
+  return result?.success !== false
 }
 
 export async function saveDailyReport(report: DailyReport): Promise<void> {
@@ -1969,53 +1786,20 @@ export async function cleanupOldSupportMessagesApi(daysOld = 7): Promise<number>
   return purgedCount
 }
 
-export async function deleteUserProfileApi(userId: string, email?: string, phone?: string): Promise<void> {
+export async function deleteUserProfileApi(
+  userId: string,
+  staff: StaffCredentials,
+  _email?: string,
+  _phone?: string,
+): Promise<void> {
   const client = requireClient()
-
-  // 1. Primary path: SECURITY DEFINER RPC — has built-in safety guards:
-  //    (a) Super Admin Shield, (b) Active orders check,
-  //    (c) Cascaded cleanup of addresses + notifications
-  if (userId) {
-    try {
-      const { data: rpcData, error: rpcErr } = await client.rpc('delete_user_admin', { p_user_id: userId })
-      if (!rpcErr) {
-        const result = rpcData as { ok?: boolean; error?: string } | null
-        if (result?.ok === false && result?.error) {
-          // RPC explicitly rejected (e.g. active orders, super admin shield)
-          throw new Error(result.error)
-        }
-        return // Success via RPC
-      }
-      console.warn('delete_user_admin RPC failed, falling back to direct delete:', rpcErr)
-    } catch (rpcEx: any) {
-      // Re-throw only if it's a business-logic rejection (not a DB/grant error)
-      if (rpcEx?.message && !rpcEx.message.includes('permission') && !rpcEx.message.includes('grant')) {
-        throw rpcEx
-      }
-    }
-  }
-
-  // 2. Fallback: direct table delete (requires profiles_delete_admin_only RLS policy)
-  const cleanPhone = phone ? phone.replace(/\D/g, '').slice(-10) : ''
-  if (userId) {
-    await client.from('profiles').delete().eq('id', userId)
-  }
-  if (email && email.trim()) {
-    await client.from('profiles').delete().eq('email', email.trim().toLowerCase())
-  }
-  if (cleanPhone) {
-    await client.from('profiles').delete().eq('phone', cleanPhone)
-    await client.from('profiles').delete().eq('email', `${cleanPhone}@greenvest.shop`)
-  }
-
-  // 3. Clean associated data
-  try {
-    if (userId) {
-      await client.from('addresses').delete().eq('user_id', userId)
-      await client.from('notifications').delete().eq('user_id', userId)
-    }
-  } catch (cleanErr) {
-    console.warn('cleanup on user delete warning:', cleanErr)
-  }
+  const { data, error } = await client.rpc('delete_user_admin', {
+    p_caller_id: staff.callerId,
+    p_caller_pin: staff.callerPin,
+    p_user_id: userId,
+  })
+  if (error) throw new Error(error.message || 'Failed to delete user')
+  const result = data as { ok?: boolean; error?: string } | null
+  if (result?.ok === false) throw new Error(result.error || 'Failed to delete user')
 }
 
