@@ -18,12 +18,16 @@ const KEYS = {
 
 export const STORE_EVENT = 'greenvest-store-update'
 
-// ── PIN Storage (session-only — cleared when browser tab closes) ───────────
+// ── PIN Storage (sessionStorage + localStorage fallback for seamless persistent auth) ──
 const PINS_KEY = 'gv_pins'
 
 function readPinStore(): Record<string, string> {
   try {
-    return safeJsonParse<Record<string, string>>(sessionStorage.getItem(PINS_KEY), {})
+    const sessionPins = safeJsonParse<Record<string, string>>(sessionStorage.getItem(PINS_KEY), {})
+    if (sessionPins && Object.keys(sessionPins).length > 0) {
+      return sessionPins
+    }
+    return safeJsonParse<Record<string, string>>(localStorage.getItem(PINS_KEY), {})
   } catch {
     return {}
   }
@@ -31,7 +35,9 @@ function readPinStore(): Record<string, string> {
 
 function writePinStore(pins: Record<string, string>): void {
   try {
-    sessionStorage.setItem(PINS_KEY, JSON.stringify(pins))
+    const json = JSON.stringify(pins)
+    sessionStorage.setItem(PINS_KEY, json)
+    localStorage.setItem(PINS_KEY, json)
   } catch {}
 }
 
@@ -44,7 +50,20 @@ export function getStoredPin(identifier: string): string {
 export function storePin(identifier: string, pin: string): void {
   if (!identifier || !pin) return
   const pins = readPinStore()
-  pins[identifier.toLowerCase()] = pin
+  const lower = identifier.toLowerCase()
+  pins[lower] = pin
+
+  // If identifier is a 10-digit phone, also alias greenvest.shop email
+  const digits = identifier.replace(/\D/g, '').slice(-10)
+  if (digits.length === 10) {
+    pins[digits] = pin
+    pins[`${digits}@greenvest.shop`] = pin
+  }
+  if (lower.endsWith('@greenvest.shop')) {
+    const p = lower.replace('@greenvest.shop', '').replace(/\D/g, '').slice(-10)
+    if (p.length === 10) pins[p] = pin
+  }
+
   writePinStore(pins)
 }
 
@@ -52,6 +71,7 @@ export function storePin(identifier: string, pin: string): void {
 export function clearStoredPins(): void {
   try {
     sessionStorage.removeItem(PINS_KEY)
+    localStorage.removeItem(PINS_KEY)
   } catch {}
 }
 
