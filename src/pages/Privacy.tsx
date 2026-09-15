@@ -52,8 +52,8 @@ export default function Privacy() {
           <li>
             <strong>{lang === 'bn' ? 'পেমেন্ট ও লেনদেন ডেটা:' : 'Payment & Transaction Records:'}</strong>{' '}
             {lang === 'bn'
-              ? 'অর্ডার ট্রানজ্যাকশন আইডি, পেমেন্ট রেফারেন্স ও ডিজিটাল খাতা ব্যালেন্স। আমরা কোনো ডেবিট/ক্রেডিট কার্ড বা নেট ব্যাংকিং পাসওয়ার্ড সংগ্রহ বা সংরক্ষণ করি না।'
-              : 'Order IDs, payment reference details, and digital Khata ledger records. We DO NOT collect, process, or store credit/debit card numbers or bank passwords.'}
+              ? 'অর্ডার ট্রানজ্যাকশন আইডি ও UPI পেমেন্ট রেফারেন্স বিবরণ। আমরা কোনো ডেবিট/ক্রেডিট কার্ড বা নেট ব্যাংকিং পাসওয়ার্ড সংগ্রহ বা সংরক্ষণ করি না।'
+              : 'Order IDs and UPI payment reference details. We DO NOT collect, process, or store credit/debit card numbers or bank passwords.'}
           </li>
         </ul>
       </section>
@@ -66,7 +66,7 @@ export default function Privacy() {
         <ul style={{ fontSize: '0.88rem', lineHeight: '1.6', color: '#334155', paddingLeft: '1.2rem' }}>
           <li>{lang === 'bn' ? 'আপনার তাজা শাকসবজি ও মাছের অর্ডার নির্ভুলভাবে প্যাক ও হোম ডেলিভারি নিশ্চিত করতে।' : 'To process, prepare, pack, and fulfill doorstep delivery of fresh groceries and fish.'}</li>
           <li>{lang === 'bn' ? 'অর্ডার স্ট্যাটাস, কনফার্মেশন ও ডেলিভারি আপডেট প্রদান করতে (ওয়েবসাইট নোটিফিকেশন ও ইন-অ্যাপ লাইভ চ্যাট)।' : 'To send order confirmations, live delivery tracking updates, and in-app invoices.'}</li>
-          <li>{lang === 'bn' ? 'ডিজিটাল খাতা পাসবুক পরিচালনা ও কাস্টমার সাপোর্ট সরবরাহ করতে।' : 'To maintain accurate digital Khata credit passbooks and provide responsive customer support.'}</li>
+          <li>{lang === 'bn' ? 'গ্রাহক সহায়তা ও দ্রুত কাস্টমার কেয়ার সার্ভিস সরবরাহ করতে।' : 'To provide dedicated customer care and order resolution support.'}</li>
           <li>{lang === 'bn' ? 'আমরা কখনোই আপনার ব্যক্তিগত তথ্য কোনো বিজ্ঞাপনদাতা বা তৃতীয় পক্ষের কাছে বিক্রি, লিজ বা হস্তান্তর করি না।' : 'We NEVER sell, trade, or rent your personal information to third-party marketing companies.'}</li>
         </ul>
       </section>

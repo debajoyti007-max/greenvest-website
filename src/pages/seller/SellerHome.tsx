@@ -19,8 +19,7 @@ export default function SellerHome() {
   const [showCouponModal, setShowCouponModal] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
 
-  // 🧹 Quiet Free-Tier Storage Optimizer: safely cleans old notifications and resolved tickets (>30 days)
-  // Orders, customers, khata balances, and inventory are 100% permanent and NEVER touched.
+  // Orders, customers, and inventory are 100% permanent and NEVER touched.
   useEffect(() => {
     const lastPrune = localStorage.getItem('gv_last_storage_prune')
     const now = Date.now()
@@ -153,8 +152,8 @@ export default function SellerHome() {
           </h1>
           <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.9rem' }}>
             {lang === 'bn'
-              ? 'দৈনিক কর্মপ্রবাহ: সকালের স্টক → মন্ডি শিট → পেমেন্ট যাচাই → ডেলিভারি ও খাতা বুক।'
-              : 'Daily workflow: morning stock → mandi sheet → verify payment → deliver & khata.'}
+              ? 'দৈনিক কর্মপ্রবাহ: সকালের স্টক → মন্ডি শিট → পেমেন্ট যাচাই → ডেলিভারি।'
+              : 'Daily workflow: morning stock → mandi sheet → verify payment → deliver.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -612,7 +611,7 @@ export default function SellerHome() {
           </div>
         </div>
 
-        {/* Suite 3: Digital Khata & Customer Tiers */}
+        {/* Suite 3: Customer Tiers & Management */}
         <div
           style={{
             background: '#ffffff',
@@ -625,36 +624,21 @@ export default function SellerHome() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '1.3rem' }}>📒</span>
+            <span style={{ fontSize: '1.3rem' }}>👥</span>
             <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>
-              {lang === 'bn' ? 'খাতা বুক ও কাস্টমার' : 'Khata Ledger & Customers'}
+              {lang === 'bn' ? 'কাস্টমার ও টায়ার' : 'Customers & Pricing Tiers'}
             </h3>
           </div>
           <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 1rem', flex: 1 }}>
             {lang === 'bn'
-              ? 'বাকি খাতা হিসাব, ১-ট্যাপ ইন-অ্যাপ পেমেন্ট রিমাইন্ডার এবং VIP/পাইকারি টায়ার।'
-              : 'Track customer dues, send 1-tap in-app payment reminders, and assign VIP tiers.'}
+              ? 'কাস্টমার লিস্ট দেখুন এবং VIP ও পাইকারি টায়ার মূল্য ম্যানেজ করুন।'
+              : 'View customer directory, reset PINs, and assign VIP/Wholesale pricing tiers.'}
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            <Link
-              to="/seller/khata"
-              style={{
-                background: '#fef2f2',
-                border: '1px solid #fca5a5',
-                color: '#991b1b',
-                textAlign: 'center',
-                padding: '9px',
-                borderRadius: '8px',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                textDecoration: 'none',
-              }}
-            >
-              📒 {lang === 'bn' ? 'খাতা বুক' : 'Khata Book'}
-            </Link>
+          <div>
             <Link
               to="/seller/customers"
               style={{
+                display: 'block',
                 background: '#f8fafc',
                 border: '1px solid #cbd5e1',
                 color: '#334155',
@@ -666,7 +650,7 @@ export default function SellerHome() {
                 textDecoration: 'none',
               }}
             >
-              👥 {lang === 'bn' ? 'কাস্টমার টায়ার' : 'Customers'}
+              👥 {lang === 'bn' ? 'কাস্টমার পরিচালনা' : 'Manage Customers'}
             </Link>
           </div>
         </div>

@@ -374,9 +374,7 @@ export default function TrackOrder() {
             <span style={{ fontSize: '0.85rem' }}>
               {lang === 'bn' ? 'পেমেন্ট মোড:' : 'Payment Mode:'}{' '}
               <strong style={{ color: '#166534' }}>
-                {matched.isKhataOrder
-                  ? 'Khata'
-                  : matched.paymentType === 'full'
+                {matched.paymentType === 'full'
                   ? (lang === 'bn' ? 'সম্পূর্ণ (১০০%)' : 'Full (100%)')
                   : (lang === 'bn' ? `১০% অগ্রিম (₹${matched.advanceAmount})` : `10% Advance (₹${matched.advanceAmount})`)}
               </strong>

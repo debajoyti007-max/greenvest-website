@@ -331,7 +331,6 @@ export default function Layout() {
               { path: '/seller', label: lang === 'bn' ? '📊 ড্যাশবোর্ড' : '📊 Dashboard', end: true },
               { path: '/seller/orders', label: lang === 'bn' ? '📦 অর্ডার' : '📦 Orders' },
               { path: '/seller/deals', label: lang === 'bn' ? '🎟️ অফার ব্যানার' : '🎟️ Deals Banner' },
-              { path: '/seller/khata', label: lang === 'bn' ? '📒 খাতা বুক' : '📒 Khata Book' },
               { path: '/seller/products', label: lang === 'bn' ? '🥬 প্রোডাক্ট ও দাম' : '🥬 Products & Rates' },
               { path: '/seller/customers', label: lang === 'bn' ? '👥 কাস্টমার' : '👥 Customers' },
               { path: '/seller/support', label: lang === 'bn' ? '💬 সাপোর্ট ডেস্ক' : '💬 Support Desk' },

@@ -49,7 +49,6 @@ import {
 } from '../lib/api'
 import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, ADVANCE_PERCENT, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
 import { calcDeliveryFee, STORE_LOCATION } from '../lib/delivery'
-import { getStoredKhataEntries, recordKhataTransaction, calculateUserKhataBalance, fetchKhataEntriesApi, saveKhataEntryApi } from '../lib/khata'
 import { getStoredPromotionalDeals, saveStoredPromotionalDeals } from '../lib/deals'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
@@ -71,7 +70,7 @@ import {
   getActiveUserPin,
   uid,
 } from '../lib/storage'
-import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, KhataEntry, CustomerTier, ShiftInfo, PromotionalDeal, SupportMessage } from '../types'
+import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, CustomerTier, ShiftInfo, PromotionalDeal, SupportMessage } from '../types'
 import { showToast } from '../lib/toast'
 import { useAuth } from './useAuth'
 
@@ -87,9 +86,8 @@ interface PlaceOrderOpts {
   zones?: DeliveryZone[]
   geoLat?: number
   geoLng?: number
-  paymentType?: 'full' | 'advance' | 'khata'
+  paymentType?: 'full' | 'advance'
   advanceAmount?: number
-  isKhataOrder?: boolean
   deliveryNotes?: string
 }
 
@@ -139,9 +137,6 @@ interface StoreContextValue {
   addReview: (review: Omit<ProductReview, 'id' | 'createdAt'>) => Promise<ProductReview>
   getProductRating: (productId: string) => { avg: number; count: number }
   getReviewsForProduct: (productId: string) => ProductReview[]
-  khataEntries: KhataEntry[]
-  getUserKhataBalance: (userId?: string) => number
-  addKhataTransaction: (userId: string, type: 'order_debit' | 'payment_credit' | 'adjustment', amount: number, notes?: string, orderId?: string) => void
   shiftStatus: ShiftInfo
   extendedDeliveryNotice: string | null
   setExtendedDeliveryNotice: (notice: string | null) => void
@@ -175,7 +170,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => getLang())
   const [loading, setLoading] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>(() => getAppNotifications())
-  const [khataEntries, setKhataEntries] = useState<KhataEntry[]>(() => getStoredKhataEntries())
   const [promotionalDeals, setPromotionalDeals] = useState<PromotionalDeal[]>(() => getStoredPromotionalDeals())
   const [supportMessages, setSupportMessages] = useState<SupportMessage[]>(() => getStoredSupportMessages())
   const [extendedDeliveryNotice, setExtendedDeliveryNotice] = useState<string | null>(() => {
@@ -213,22 +207,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
   }, [cloud])
 
-  // ── 🔒 Security Guard: Khata & Support Hydration ONLY for authenticated users ──
-  // Never hydrate private financial or support data for anonymous guests.
+  // ── 🔒 Security Guard: Support Hydration ONLY for authenticated users ──
+  // Never hydrate private support data for anonymous guests.
   const userRole = user?.role
   const userId = user?.id
   useEffect(() => {
     if (!cloud || !userId) return // ⛔ Anonymous guests — skip entirely
 
     const isStaff = userRole === 'admin' || userRole === 'seller'
-
-    // Khata: staff sees all entries; customers see only their own ledger
-    const callerPin = getActiveUserPin(user)
-    fetchKhataEntriesApi(isStaff ? undefined : userId, user?.id, callerPin).then((entries) => {
-      if (entries && Array.isArray(entries) && entries.length > 0) {
-        setKhataEntries(entries)
-      }
-    })
 
     // Support messages: only staff or the active user's own ticket thread
     fetchSupportMessagesApi(isStaff ? undefined : userId).then((msgs) => {
@@ -602,9 +588,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const safeDiscount = Math.min(subtotal, Math.max(0, opts.discountAmount || 0))
       const total = Math.max(0, subtotal + deliveryFee - safeDiscount)
       
-      const isKhata = opts.paymentType === 'khata'
       const isFull = opts.paymentType === 'full'
-      const advanceAmount = isKhata ? 0 : isFull ? total : opts.advanceAmount != null ? opts.advanceAmount : (total > 0 ? Math.max(1, Math.ceil(total * (ADVANCE_PERCENT / 100))) : 0)
+      const advanceAmount = isFull ? total : opts.advanceAmount != null ? opts.advanceAmount : (total > 0 ? Math.max(1, Math.ceil(total * (ADVANCE_PERCENT / 100))) : 0)
 
       const now = new Date().toISOString()
       const order: Order = {
@@ -619,11 +604,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         total,
         advanceAmount,
         paymentType: opts.paymentType || (isFull ? 'full' : 'advance'),
-        isKhataOrder: isKhata,
-        utr: isKhata ? 'KHATA-DEBIT' : opts.utr.trim().toUpperCase(),
+        utr: opts.utr.trim().toUpperCase(),
         payerUpiName: opts.payerUpiName?.trim() || undefined,
-        utrVerified: isKhata,
-        status: isKhata ? 'confirmed' : 'pending',
+        utrVerified: false,
+        status: 'pending',
         address: opts.address.trim(),
         phone: opts.phone.trim(),
         pin: opts.pin.replace(/\D/g, ''),
@@ -634,11 +618,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         geoLng: opts.geoLng,
         createdAt: now,
         updatedAt: now,
-      }
-
-      if (isKhata) {
-        recordKhataTransaction(user.id, 'order_debit', total, `Order #${order.id.slice(-6)}`, order.id, 'Khata Checkout')
-        setKhataEntries(getStoredKhataEntries())
       }
 
       if (cloud) {
@@ -854,22 +833,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return prev.map((o) => (o.id === id ? { ...o, status, rejectionReason, updatedAt: new Date().toISOString() } : o))
         })
 
-        // 🛡️ Financial Ledger Integrity: Auto-revert Khata debit if a Khata order is cancelled
-        if (status === 'cancelled') {
-          const targetOrder = prevSnapshot.find((o) => o.id === id) || orders.find((o) => o.id === id)
-          if (targetOrder?.isKhataOrder && targetOrder.status !== 'cancelled') {
-            recordKhataTransaction(
-              targetOrder.userId,
-              'payment_credit',
-              targetOrder.total,
-              `Khata Reversal: Order #${targetOrder.id.slice(-6)} Cancelled`,
-              targetOrder.id,
-              user?.name || 'System Reversal',
-            )
-            setKhataEntries(getStoredKhataEntries())
-          }
-        }
-
         if (cloud) {
           try {
             await updateOrderStatusApi(id, status, rejectionReason)
@@ -893,7 +856,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         inFlightStatusRef.current.delete(id)
       }
     },
-    [cloud, user?.name, orders],
+    [cloud],
   )
 
   const updateOrderDeliveryDate = useCallback(
@@ -915,32 +878,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     },
     [cloud],
-  )
-
-  const getUserKhataBalance = useCallback(
-    (userId?: string) => {
-      const target = userId || user?.id
-      if (!target) return 0
-      return calculateUserKhataBalance(target, khataEntries)
-    },
-    [user?.id, khataEntries],
-  )
-
-  const addKhataTransaction = useCallback(
-    (
-      userId: string,
-      type: 'order_debit' | 'payment_credit' | 'adjustment',
-      amount: number,
-      notes?: string,
-      orderId?: string,
-    ) => {
-      const res = recordKhataTransaction(userId, type, amount, notes, orderId, user?.name || 'MS Vegetable Center Staff')
-      setKhataEntries(getStoredKhataEntries())
-      if (cloud && res?.entry) {
-        void saveKhataEntryApi(res.entry)
-      }
-    },
-    [cloud, user?.name],
   )
 
   const addPromotionalDeal = useCallback(
@@ -1029,21 +966,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       const staleIds = staleOrders.map((o) => o.id)
       const reason = `Auto-cancelled: Payment unverified after ${timeoutHours} hours`
-
-      // 🛡️ Financial Ledger Integrity: Auto-revert Khata debits for stale orders
-      staleOrders.forEach((o) => {
-        if (o.isKhataOrder && o.status !== 'cancelled') {
-          recordKhataTransaction(
-            o.userId,
-            'payment_credit',
-            o.total,
-            `Auto-Reversal: Order #${o.id.slice(-6)} Stale Cancelled`,
-            o.id,
-            'System Auto-Cancel',
-          )
-        }
-      })
-      setKhataEntries(getStoredKhataEntries())
 
       setOrders((prev) =>
         prev.map((o) =>
@@ -1439,9 +1361,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addReview,
       getProductRating,
       getReviewsForProduct,
-      khataEntries,
-      getUserKhataBalance,
-      addKhataTransaction,
       shiftStatus,
       extendedDeliveryNotice,
       setExtendedDeliveryNotice: (notice: string | null) => {
@@ -1511,9 +1430,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addReview,
       getProductRating,
       getReviewsForProduct,
-      khataEntries,
-      getUserKhataBalance,
-      addKhataTransaction,
       shiftStatus,
       extendedDeliveryNotice,
       promotionalDeals,

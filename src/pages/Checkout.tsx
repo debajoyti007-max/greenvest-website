@@ -17,7 +17,7 @@ import { queueOfflineOrder } from '../lib/offlineQueue'
 import type { Address } from '../types'
 
 export default function Checkout() {
-  const { user, users, updateUserProfile, refresh } = useAuth()
+  const { user, updateUserProfile, refresh } = useAuth()
   const {
     cart,
     cartTotal,
@@ -29,7 +29,6 @@ export default function Checkout() {
     fetchAddresses,
     saveAddress,
     validateCoupon,
-    getUserKhataBalance,
   } = useStore()
   const navigate = useNavigate()
 
@@ -64,18 +63,6 @@ export default function Checkout() {
   const [deliveryDateChoice, setDeliveryDateChoice] = useState<'standard' | 'custom'>('standard')
   const [customDate, setCustomDate] = useState('')
   const [showDeliveryModal, setShowDeliveryModal] = useState(false)
-
-  const isKhataPermitted = useMemo(() => {
-    if (user?.khataApproved) return true
-    if (!user) return false
-    const match = users.find(
-      (u) =>
-        u.id === user.id ||
-        (user.email && u.email?.toLowerCase() === user.email.toLowerCase()) ||
-        (user.phone && u.phone === user.phone),
-    )
-    return Boolean(match?.khataApproved)
-  }, [user, users])
 
   const quickDates = useMemo(() => {
     const today = new Date()
@@ -180,10 +167,10 @@ export default function Checkout() {
   const coords = useMemo(() => (geoLat && geoLng ? { lat: geoLat, lng: geoLng } : null), [geoLat, geoLng])
   const delivery = useMemo(() => calcDeliveryFee(pin, coords, fulfillmentMode), [pin, coords, fulfillmentMode])
   const grandTotal = Math.max(0, cartTotal + delivery.fee - (couponApplied?.discount || 0))
-  const [paymentMode, setPaymentMode] = useState<'advance' | 'full' | 'khata'>('advance')
+  const [paymentMode, setPaymentMode] = useState<'advance' | 'full'>('advance')
   const advance = grandTotal > 0 ? Math.max(1, Math.ceil(grandTotal * 0.1)) : 0
-  const payableAmount = paymentMode === 'khata' ? 0 : paymentMode === 'full' ? grandTotal : advance
-  const balanceDue = paymentMode === 'khata' ? grandTotal : grandTotal - payableAmount
+  const payableAmount = paymentMode === 'full' ? grandTotal : advance
+  const balanceDue = grandTotal - payableAmount
   const [dynamicQr, setDynamicQr] = useState<string>('')
 
   // Generate in-memory Dynamic UPI QR Code whenever payable amount changes
@@ -402,7 +389,7 @@ export default function Checkout() {
 
     // 2. UPI Payer Name Handling
     const finalPayerName = payerUpiName.trim() || user?.name || ''
-    const cleanedUtr = paymentMode === 'khata' ? 'KHATA-DEBIT' : 'ONLINE-PAY'
+    const cleanedUtr = 'ONLINE-PAY'
 
     if (cartTotal < MIN_ORDER_AMOUNT) {
       setError(
@@ -412,21 +399,6 @@ export default function Checkout() {
       )
       submitLockRef.current = false
       return
-    }
-
-    // 2.5 Khata Credit Limit Safety Check
-    if (paymentMode === 'khata' && user) {
-      const currentKhataBal = getUserKhataBalance(user.id)
-      const creditLimit = user.khataCreditLimit || 2000
-      if (currentKhataBal + grandTotal > creditLimit) {
-        setError(
-          lang === 'bn'
-            ? `আপনার খাতার বকেয়া সীমা (₹${creditLimit}) অতিক্রম করছে। বর্তমান বকেয়া: ₹${currentKhataBal}। অনুগ্রহ করে বকেয়া পরিশোধ করুন বা ১০% অগ্রিম পেমেন্ট বেছে নিন।`
-            : `Order exceeds your approved Khata credit limit of ₹${creditLimit}. Current dues: ₹${currentKhataBal}. Please clear dues or select UPI Advance.`,
-        )
-        submitLockRef.current = false
-        return
-      }
     }
 
     setSubmitting(true)
@@ -473,7 +445,6 @@ export default function Checkout() {
         geoLng,
         paymentType: paymentMode,
         advanceAmount: payableAmount,
-        isKhataOrder: paymentMode === 'khata',
       })
 
       clearTimeout(slowTimer)
@@ -555,7 +526,6 @@ export default function Checkout() {
           geoLng,
           paymentType: paymentMode,
           advanceAmount: payableAmount,
-          isKhataOrder: paymentMode === 'khata',
         }
         await queueOfflineOrder(offlineId, orderPayload)
         clearCartIdempotencyKey(user.id)
@@ -644,12 +614,12 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* 💳 Payment Mode Switch (Advance, Full, Khata) */}
+          {/* 💳 Payment Mode Switch (Advance, Full) */}
           <div style={{ margin: '0.85rem 0', background: '#f8fafc', border: '1.5px solid #cbd5e1', borderRadius: '14px', padding: '0.75rem' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: '0.45rem' }}>
               💳 {lang === 'bn' ? 'পেমেন্ট মোড বেছে নিন:' : 'Choose Payment Option:'}
             </span>
-            <div style={{ display: 'grid', gridTemplateColumns: isKhataPermitted ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
               <button
                 type="button"
                 onClick={() => setPaymentMode('advance')}
@@ -691,104 +661,68 @@ export default function Checkout() {
                   {lang === 'bn' ? '✓ ক্যাশলেস' : '✓ Zero cash'}
                 </div>
               </button>
-
-              {isKhataPermitted && (
-                <button
-                  type="button"
-                  onClick={() => setPaymentMode('khata')}
-                  style={{
-                    padding: '0.65rem 0.5rem',
-                    borderRadius: '10px',
-                    border: paymentMode === 'khata' ? '2px solid #7c3aed' : '1px solid #c4b5fd',
-                    background: paymentMode === 'khata' ? '#f5f3ff' : '#ffffff',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: paymentMode === 'khata' ? '#7c3aed' : '#5b21b6' }}>
-                    📒 {lang === 'bn' ? 'খাতা পে (বাকি)' : 'Khata Pay'}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: '#7c3aed', fontWeight: 600, marginTop: '0.15rem' }}>
-                    {lang === 'bn' ? '✓ পরে পেমেন্ট' : '✓ Pay Later'}
-                  </div>
-                </button>
-              )}
             </div>
           </div>
 
-          {paymentMode === 'khata' ? (
-            <div style={{ background: '#f5f3ff', border: '1.5px solid #c4b5fd', borderRadius: '12px', padding: '1rem', color: '#5b21b6', margin: '1rem 0' }}>
-              <strong style={{ display: 'block', fontSize: '1rem', marginBottom: '4px' }}>
-                📒 {lang === 'bn' ? 'খাতা বুক পে সক্রিয়' : 'Khata Book Credit Active'}
-              </strong>
-              <p style={{ margin: 0, fontSize: '0.86rem', lineHeight: 1.5 }}>
-                {lang === 'bn'
-                  ? `আপনার এই অর্ডারের মোট ₹${grandTotal} আপনার ডিজিটাল খাতা বুকে যোগ করা হবে। এখনই কোনো অগ্রিম পেমেন্ট দিতে হবে না।`
-                  : `Total ₹${grandTotal} for this order will be debited to your digital Khata ledger. No advance payment required right now.`}
-              </p>
+          <div className="upi-pay">
+            <div className="dynamic-qr-wrapper">
+              <img
+                src={dynamicQr || UPI_QR_SRC}
+                alt={`Dynamic UPI QR for ₹${payableAmount}`}
+                className="upi-qr"
+                width={220}
+                height={220}
+              />
+              <span className="dynamic-qr-badge">
+                🔒 {lang === 'bn' ? `₹${payableAmount} অটো-লক করা QR` : `₹${payableAmount} Auto-Locked QR`}
+              </span>
             </div>
-          ) : (
-            <div className="upi-pay">
-              <div className="dynamic-qr-wrapper">
-                <img
-                  src={dynamicQr || UPI_QR_SRC}
-                  alt={`Dynamic UPI QR for ₹${payableAmount}`}
-                  className="upi-qr"
-                  width={220}
-                  height={220}
-                />
-                <span className="dynamic-qr-badge">
-                  🔒 {lang === 'bn' ? `₹${payableAmount} অটো-লক করা QR` : `₹${payableAmount} Auto-Locked QR`}
-                </span>
-              </div>
 
-              <div className="upi-details">
-                <p className="upi-label">UPI ID</p>
-                <code className="upi-id">{UPI_ID}</code>
-                <button type="button" className="btn btn-secondary" onClick={copyUpi}>
-                  {copied ? t(lang, 'copied') : t(lang, 'copyUpi')}
-                </button>
-                <p className="muted upi-bank">{UPI_BANK}</p>
-                {/* ⚡ 1-Tap UPI Intent Apps */}
-                <div style={{ marginTop: '0.6rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', display: 'block', marginBottom: '0.35rem' }}>
-                    {lang === 'bn' ? `⚡ ১-ট্যাপে ₹${payableAmount} সরাসরি পেমেন্ট করুন:` : `⚡ 1-Tap Quick Pay ₹${payableAmount}:`}
-                  </span>
-                  <div className="upi-app-grid">
-                    <a
-                      href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
-                      className="upi-app-btn"
-                      style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
-                    >
-                      <span style={{ color: '#0f9d58' }}>●</span> GPay
-                    </a>
-                    <a
-                      href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
-                      className="upi-app-btn"
-                      style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
-                    >
-                      <span style={{ color: '#5f259f' }}>●</span> PhonePe
-                    </a>
-                    <a
-                      href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
-                      className="upi-app-btn"
-                      style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
-                    >
-                      <span style={{ color: '#00baf2' }}>●</span> Paytm
-                    </a>
-                    <a
-                      href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
-                      className="upi-app-btn"
-                      style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
-                    >
-                      ⚡ Pay ₹{payableAmount}
-                    </a>
-                  </div>
+            <div className="upi-details">
+              <p className="upi-label">UPI ID</p>
+              <code className="upi-id">{UPI_ID}</code>
+              <button type="button" className="btn btn-secondary" onClick={copyUpi}>
+                {copied ? t(lang, 'copied') : t(lang, 'copyUpi')}
+              </button>
+              <p className="muted upi-bank">{UPI_BANK}</p>
+              {/* ⚡ 1-Tap UPI Intent Apps */}
+              <div style={{ marginTop: '0.6rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', display: 'block', marginBottom: '0.35rem' }}>
+                  {lang === 'bn' ? `⚡ ১-ট্যাপে ₹${payableAmount} সরাসরি পেমেন্ট করুন:` : `⚡ 1-Tap Quick Pay ₹${payableAmount}:`}
+                </span>
+                <div className="upi-app-grid">
+                  <a
+                    href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
+                    className="upi-app-btn"
+                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
+                  >
+                    <span style={{ color: '#0f9d58' }}>●</span> GPay
+                  </a>
+                  <a
+                    href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
+                    className="upi-app-btn"
+                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
+                  >
+                    <span style={{ color: '#5f259f' }}>●</span> PhonePe
+                  </a>
+                  <a
+                    href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
+                    className="upi-app-btn"
+                    style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
+                  >
+                    <span style={{ color: '#00baf2' }}>●</span> Paytm
+                  </a>
+                  <a
+                    href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
+                    className="upi-app-btn"
+                    style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
+                  >
+                    ⚡ Pay ₹{payableAmount}
+                  </a>
                 </div>
               </div>
             </div>
-          )}
+          </div>
 
           <dl className="totals">
             <div>
@@ -1233,21 +1167,19 @@ export default function Checkout() {
               placeholder={lang === 'bn' ? '১০ সংখ্যার মোবাইল (যেমন 9876543210)' : '10-digit mobile (e.g. 9876543210)'}
             />
           </label>
-          {paymentMode !== 'khata' && (
-            <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem', marginTop: '0.5rem' }}>
-              <label style={{ margin: 0 }}>
-                <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  👤 {lang === 'bn' ? 'PhonePe / GPay প্রেরকের নাম (ঐচ্ছিক)' : 'UPI Payer Name (Optional)'}
-                </span>
-                <input
-                  value={payerUpiName}
-                  onChange={(e) => setPayerUpiName(e.target.value)}
-                  placeholder={lang === 'bn' ? `যেমন: ${user?.name || 'Rahul'}` : `e.g. ${user?.name || 'Rahul'}`}
-                  style={{ marginTop: '0.35rem', background: '#ffffff' }}
-                />
-              </label>
-            </div>
-          )}
+          <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem', marginTop: '0.5rem' }}>
+            <label style={{ margin: 0 }}>
+              <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                👤 {lang === 'bn' ? 'PhonePe / GPay প্রেরকের নাম (ঐচ্ছিক)' : 'UPI Payer Name (Optional)'}
+              </span>
+              <input
+                value={payerUpiName}
+                onChange={(e) => setPayerUpiName(e.target.value)}
+                placeholder={lang === 'bn' ? `যেমন: ${user?.name || 'Rahul'}` : `e.g. ${user?.name || 'Rahul'}`}
+                style={{ marginTop: '0.35rem', background: '#ffffff' }}
+              />
+            </label>
+          </div>
           {error && <p className="form-error">{error}</p>}
 
           {/* ⏳ Slow Network Status Box */}
@@ -1284,9 +1216,7 @@ export default function Checkout() {
           <button type="submit" className="btn btn-primary" disabled={submitting || !isOnline} style={{ fontSize: '1.05rem', padding: '0.9rem', fontWeight: 800 }}>
             {submitting
               ? (lang === 'bn' ? '⏳ অর্ডার হচ্ছে...' : '⏳ Placing order...')
-              : paymentMode === 'khata'
-                ? (lang === 'bn' ? '📒 খাতা অর্ডারে কনফার্ম করুন' : '📒 Confirm Khata Order')
-                : (lang === 'bn' ? '✅ পেমেন্ট সম্পন্ন করেছি · অর্ডার জমা দিন' : '✅ I Have Paid · Place Order')}
+              : (lang === 'bn' ? '✅ পেমেন্ট সম্পন্ন করেছি · অর্ডার জমা দিন' : '✅ I Have Paid · Place Order')}
           </button>
         </form>
       </div>

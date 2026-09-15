@@ -8,9 +8,8 @@ import {
   type ReactNode,
 } from 'react'
 import { ALLOW_LOCAL_FALLBACK } from '../lib/business'
-import { fetchProfiles, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, updateProfileKhata, deleteUserProfileApi, mapProfile } from '../lib/api'
+import { fetchProfiles, updateProfileRole, updateProfilePin, updateProfileBlocked, updateProfileDetails, updateProfileTier, deleteUserProfileApi, mapProfile } from '../lib/api'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { calculateUserKhataBalance, getStoredKhataEntries } from '../lib/khata'
 import { formatAuthIdentifier } from '../lib/authUtils'
 import { cleanDigits } from '../lib/phone'
 import {
@@ -47,7 +46,6 @@ interface AuthContextValue {
   updatePassword: (password: string) => Promise<AuthResult>
   setUserRole: (userId: string, role: Role) => Promise<AuthResult>
   setUserTier: (userId: string, tier: import('../types').CustomerTier) => Promise<AuthResult>
-  setUserKhataApproval: (userId: string, approved: boolean, creditLimit?: number) => Promise<AuthResult>
   updateUserProfile: (data: { name?: string; phone?: string }) => Promise<void>
   adminResetUserPin: (userId: string, newPin: string) => Promise<AuthResult>
   toggleBlockUser: (userId: string, isBlocked: boolean) => Promise<AuthResult>
@@ -434,7 +432,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Fallback: try padded pin
         }
 
-        const rpcData = rpcResult as { ok: boolean; error?: string; id?: string; email?: string; name?: string; role?: string; phone?: string; is_super_admin?: boolean; is_blocked?: boolean; tier?: string; khata_approved?: boolean; khata_credit_limit?: number } | null
+        const rpcData = rpcResult as { ok: boolean; error?: string; id?: string; email?: string; name?: string; role?: string; phone?: string; is_super_admin?: boolean; is_blocked?: boolean; tier?: string } | null
 
         if (rpcErr && !rpcData) {
           // True infrastructure failure — RPC call didn't execute at all
@@ -501,8 +499,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             is_super_admin: data.is_super_admin,
             is_blocked: data.is_blocked,
             tier: data.tier,
-            khata_approved: data.khata_approved,
-            khata_credit_limit: data.khata_credit_limit,
             created_at: undefined,
           }
           const profile = mapProfile(profileRow as any)
@@ -884,44 +880,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [cloud, user, users],
   )
 
-  const setUserKhataApproval = useCallback(
-    async (userId: string, khataApproved: boolean, creditLimit = 2000): Promise<AuthResult> => {
-      const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
-      const targetEmail = targetUser?.email || ''
-      const actualId = targetUser?.id || userId
-
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
-            ? { ...u, khataApproved, khataCreditLimit: creditLimit }
-            : u,
-        ),
-      )
-      if (user && (user.id === actualId || user.id === userId || (targetEmail && user.email === targetEmail))) {
-        setUser({ ...user, khataApproved, khataCreditLimit: creditLimit })
-      }
-
-      const currentStored = getUsers()
-      const updatedStored = currentStored.map((u) =>
-        u.id === actualId || u.id === userId || (targetEmail && u.email === targetEmail)
-          ? { ...u, khataApproved, khataCreditLimit: creditLimit }
-          : u,
-      )
-      saveUsers(updatedStored)
-
-      if (cloud) {
-        try {
-          await updateProfileKhata(actualId, khataApproved, creditLimit, targetEmail, targetUser?.phone)
-        } catch (err) {
-          console.warn('Failed to sync khata approval to Supabase:', err)
-        }
-      }
-
-      return { ok: true }
-    },
-    [cloud, user, users],
-  )
-
   const adminResetUserPin = useCallback(
     async (userId: string, newPin: string): Promise<AuthResult> => {
       const targetUser = users.find((u) => u.id === userId || u.email === userId || u.phone === userId)
@@ -1032,18 +990,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Safety Check 1: Unpaid Khata balance
-      try {
-        const balance = calculateUserKhataBalance(actualId, getStoredKhataEntries())
-        if (balance > 0) {
-          return {
-            ok: false,
-            error: `⚠️ Cannot delete: Customer has an unpaid Khata balance of ₹${balance}. Settle all dues to ₹0 before deleting or block the account instead.`,
-          }
-        }
-      } catch {}
-
-      // Safety Check 2: Active orders in transit
+      // Safety Check: Active orders in transit
       try {
         const activeOrders = getOrders().filter(
           (o) =>
@@ -1175,7 +1122,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updatePassword,
       setUserRole,
       setUserTier,
-      setUserKhataApproval,
       updateUserProfile,
       adminResetUserPin,
       toggleBlockUser,
@@ -1199,7 +1145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updatePassword,
       setUserRole,
       setUserTier,
-      setUserKhataApproval,
       updateUserProfile,
       adminResetUserPin,
       toggleBlockUser,

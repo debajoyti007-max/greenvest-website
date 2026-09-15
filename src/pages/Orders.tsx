@@ -303,7 +303,7 @@ export default function Orders() {
                 <span>
                   {lang === 'bn' ? 'মোড:' : 'Mode:'}{' '}
                   <b style={{ color: '#166534' }}>
-                    {o.isKhataOrder ? 'Khata' : o.paymentType === 'full' ? 'Full' : '10% Adv'}
+                    {o.paymentType === 'full' ? 'Full' : '10% Adv'}
                   </b>
                 </span>
               </footer>

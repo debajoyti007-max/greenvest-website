@@ -6,12 +6,12 @@ import { supabase } from '../lib/supabase'
 import { saveDelivery } from '../lib/storage'
 import { showToast } from '../lib/toast'
 import { validatePhoneStrict } from '../lib/validation'
-import { UPI_ID, SERVICEABLE_PINCODES } from '../lib/business'
+import { SERVICEABLE_PINCODES } from '../lib/business'
 import type { Address } from '../types'
 
 export default function Profile() {
   const { user, logout, updateUserProfile, updatePassword } = useAuth()
-  const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang, getUserKhataBalance, khataEntries, safeCloudSync } = useStore()
+  const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang, safeCloudSync } = useStore()
 
   const [addresses, setAddresses] = useState<Address[]>([])
   const [loadingAddrs, setLoadingAddrs] = useState(true)
@@ -277,12 +277,12 @@ export default function Profile() {
 
 
 
-      {/* 📒 Digital Khata Passbook & Customer Tier */}
+      {/* ⭐ Customer Tier & Membership */}
       {user && (
         <section>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              📒 {lang === 'bn' ? 'আমার ডিজিটাল খাতা বুক' : 'My Digital Khata Book'}
+              ⭐ {lang === 'bn' ? 'মেম্বারশিপ সুবিধা' : 'Membership Tier'}
             </h3>
             <span
               style={{
@@ -302,73 +302,24 @@ export default function Profile() {
             </span>
           </div>
 
-          <div style={{ ...cardStyle, background: getUserKhataBalance(user.id) > 0 ? '#fef2f2' : '#f0fdf4', border: getUserKhataBalance(user.id) > 0 ? '1.5px solid #fecaca' : '1.5px solid #bbf7d0', padding: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <div style={{ ...cardStyle, background: '#f0fdf4', border: '1.5px solid #bbf7d0', padding: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
-                  {lang === 'bn' ? 'বর্তমান বকেয়া দেনা' : 'Current Outstanding Dues'}
+                  {lang === 'bn' ? 'সদস্যপদ স্ট্যাটাস' : 'Customer Status'}
                 </span>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: getUserKhataBalance(user.id) > 0 ? '#dc2626' : '#16a34a' }}>
-                  ₹{getUserKhataBalance(user.id)}
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#16a34a', marginTop: '0.25rem' }}>
+                  {user.tier === 'wholesale'
+                    ? (lang === 'bn' ? 'হোলসেল পার্টনার (১২% ছাড়)' : 'Wholesale Partner (12% OFF)')
+                    : user.tier === 'vip'
+                    ? (lang === 'bn' ? 'ভিআইপি গ্রাহক (৫% ছাড়)' : 'VIP Customer (5% OFF)')
+                    : (lang === 'bn' ? 'নিয়মিত গ্রাহক' : 'Regular Customer')}
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block' }}>
-                  {lang === 'bn' ? 'খাতা সুবিধা:' : 'Khata Credit:'}
-                </span>
-                <strong style={{ fontSize: '0.85rem', color: user.khataApproved ? '#15803d' : '#991b1b' }}>
-                  {user.khataApproved ? `✓ ${lang === 'bn' ? 'অনুমোদিত' : 'Approved'} (₹${user.khataCreditLimit || 2000})` : `✕ ${lang === 'bn' ? 'অনুমোদন প্রক্রিয়াধীন' : 'Pending Approval'}`}
-                </strong>
+              <div style={{ fontSize: '2rem' }}>
+                {user.tier === 'wholesale' ? '🏬' : user.tier === 'vip' ? '🌟' : '🛒'}
               </div>
             </div>
-
-            {getUserKhataBalance(user.id) > 0 && (
-              <div style={{ marginTop: '0.85rem' }}>
-                <a
-                  href={`upi://pay?pa=${UPI_ID}&pn=MS+Vegetable+Center&am=${getUserKhataBalance(user.id)}&cu=INR&tn=${encodeURIComponent('Khata Dues ' + user.name)}`}
-                  className="btn btn-primary"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.5rem',
-                    width: '100%',
-                    padding: '0.55rem 1rem',
-                    fontSize: '0.9rem',
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #166534 0%, #15803d 100%)',
-                    color: '#ffffff',
-                  }}
-                >
-                  ⚡ {lang === 'bn' ? `১-ক্লিকে বকেয়া পরিশোধ করুন (₹${getUserKhataBalance(user.id)})` : `Pay Dues Online (₹${getUserKhataBalance(user.id)})`}
-                </a>
-              </div>
-            )}
-
-            {/* User transactions */}
-            {khataEntries.filter((e) => e.userId === user.id).length > 0 && (
-              <div style={{ marginTop: '0.75rem', borderTop: '1px dashed #cbd5e1', paddingTop: '0.75rem' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>
-                  {lang === 'bn' ? 'সাম্প্রতিক খাতা বিবরণী:' : 'Recent Khata Transactions:'}
-                </span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  {khataEntries
-                    .filter((e) => e.userId === user.id)
-                    .slice(-3)
-                    .reverse()
-                    .map((e) => (
-                      <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', background: '#ffffff', padding: '4px 8px', borderRadius: '6px' }}>
-                        <span>{e.type === 'payment_credit' ? '🟢 Payment Received' : '🔴 Debit / Order'} · {new Date(e.createdAt).toLocaleDateString()}</span>
-                        <strong style={{ color: e.type === 'payment_credit' ? '#16a34a' : '#dc2626' }}>
-                          {e.type === 'payment_credit' ? `-₹${e.amount}` : `+₹${e.amount}`}
-                        </strong>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
           </div>
         </section>
       )}

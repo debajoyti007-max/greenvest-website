@@ -110,8 +110,6 @@ type ProfileRow = {
   name: string
   role: Role
   tier?: CustomerTier | null
-  khata_approved?: boolean | null
-  khata_credit_limit?: number | null
   phone?: string | null
   // isBlocked column was dropped from DB in migration 014 — only is_blocked remains
   is_blocked?: boolean | null
@@ -256,9 +254,8 @@ function mapOrder(row: OrderRow): Order {
     discountAmount: row.discount != null ? Number(row.discount) : undefined,
     total: Number(row.total),
     advanceAmount: Number(row.advance_amount),
-    paymentType: (row.payment_type as 'full' | 'advance' | 'khata') || 'advance',
-    paymentMode: (row.payment_mode as 'online' | 'khata' | undefined) || undefined,
-    isKhataOrder: row.payment_mode === 'khata' || row.payment_type === 'khata',
+    paymentType: (row.payment_type as 'full' | 'advance') || 'advance',
+    paymentMode: (row.payment_mode as 'online' | undefined) || undefined,
     rejectionReason: row.rejection_reason || undefined,
     utr: row.utr,
     payerUpiName: (row as any).payer_upi_name || undefined,
@@ -292,8 +289,6 @@ export function mapProfile(row: ProfileRow): User {
     name: row.name,
     role: row.role,
     tier: row.tier || 'regular',
-    khataApproved: Boolean(row.khata_approved),
-    khataCreditLimit: row.khata_credit_limit != null ? Number(row.khata_credit_limit) : 2000,
     phone: derivedPhone || undefined,
     isBlocked: Boolean(row.is_blocked),
     // 🔒 Security: isSuperAdmin is set ONLY by the database, never by env vars in frontend code
@@ -456,27 +451,6 @@ export async function updateProfileDetails(userId: string, details: { name?: str
 
 export async function updateProfileTier(userId: string, tier: CustomerTier, email?: string, phone?: string): Promise<void> {
   return updateProfileField(userId, email, phone, { tier })
-}
-
-export async function updateProfileKhata(userId: string, khataApproved: boolean, khataCreditLimit: number, email?: string, phone?: string): Promise<void> {
-  const client = requireClient()
-  const lookupId = userId || email || phone || ''
-  if (lookupId) {
-    try {
-      const { data: rpcData, error: rpcErr } = await client.rpc('update_user_khata_admin', {
-        p_user_id: lookupId,
-        p_approved: khataApproved,
-        p_credit_limit: khataCreditLimit,
-      })
-      if (!rpcErr && rpcData) return
-      if (rpcErr) {
-        console.warn('update_user_khata_admin RPC failed, falling back:', rpcErr)
-      }
-    } catch (err) {
-      console.warn('update_user_khata_admin RPC exception:', err)
-    }
-  }
-  return updateProfileField(userId, email, phone, { khata_approved: khataApproved, khata_credit_limit: khataCreditLimit })
 }
 
 // ── SWR Product In-Memory & LocalStorage Cache ─────────────────────────
@@ -943,7 +917,7 @@ export async function createOrder(order: Order): Promise<Order> {
     total: order.total,
     advance_amount: order.advanceAmount,
     payment_type: order.paymentType || 'advance',
-    payment_mode: order.paymentMode || (order.isKhataOrder ? 'khata' : 'online'),
+    payment_mode: order.paymentMode || 'online',
     rejection_reason: order.rejectionReason || null,
     utr: order.utr,
     utr_verified: order.utrVerified,
@@ -1977,16 +1951,16 @@ export async function cleanupOldSupportMessagesApi(daysOld = 7): Promise<number>
 export async function deleteUserProfileApi(userId: string, email?: string, phone?: string): Promise<void> {
   const client = requireClient()
 
-  // 1. Primary path: SECURITY DEFINER RPC — has 4 built-in safety guards:
-  //    (a) Super Admin Shield, (b) Khata balance check,
-  //    (c) Active orders check, (d) Cascaded cleanup of addresses + notifications
+  // 1. Primary path: SECURITY DEFINER RPC — has built-in safety guards:
+  //    (a) Super Admin Shield, (b) Active orders check,
+  //    (c) Cascaded cleanup of addresses + notifications
   if (userId) {
     try {
       const { data: rpcData, error: rpcErr } = await client.rpc('delete_user_admin', { p_user_id: userId })
       if (!rpcErr) {
         const result = rpcData as { ok?: boolean; error?: string } | null
         if (result?.ok === false && result?.error) {
-          // RPC explicitly rejected (e.g. khata due, active orders, super admin shield)
+          // RPC explicitly rejected (e.g. active orders, super admin shield)
           throw new Error(result.error)
         }
         return // Success via RPC

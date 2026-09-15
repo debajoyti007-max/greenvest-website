@@ -1,7 +1,7 @@
 # 🥬 GreenVest – Fresh Farm Produce & Fish (Production)
 
 Hyperlocal Mandi-Fresh Daily Vegetables & Fish E-Commerce Platform.  
-**10% Advance UPI** · **Min order ₹500** · **Delivery 12–24 hours** · **Digital Khata Ledger**  
+**10% Advance UPI** · **Min order ₹500** · **Delivery 12–24 hours** · **Doorstep Delivery**  
 Live database via **Supabase**. Hosted on **GitHub Pages** with custom domain.
 
 **Live URL:** [https://greenvest.shop](https://greenvest.shop/)
@@ -14,7 +14,7 @@ Users authenticate with a **10-digit Mobile Number** or **Email** + **4-digit PI
 
 | Role | Access | Purpose |
 | :--- | :--- | :--- |
-| **Customer** | Sign up on website | Browse catalog, weekly staples basket, live order tracking, Khata passbook |
+| **Customer** | Sign up on website | Browse catalog, weekly staples basket, live order tracking, membership tiers |
 | **Rider** | Assigned by Admin | **/rider** — Delivery manifest, route optimizer, 4-digit OTP handover, UPI balance collection |
 | **Seller** | Assigned by Admin | **/seller** — Mandi procurement, inventory, Grade A/B/C pricing, UTR verification, deals |
 | **Admin** | Supabase SQL / Master | **/admin** — User roles, customer blocklist, shadow cloaking, system telemetry cleaner |
@@ -38,7 +38,6 @@ update public.profiles set role = 'admin' where email = 'YOUR_EMAIL@gmail.com';
 - **Order Confirmation**: 1-tap accept with double-tap lock and in-flight idempotency guards.
 - **Rider Handover**: Customer provides their unique 4-digit delivery handover OTP upon receiving produce.
 - **Promotional Deals & Announcements**: Realtime WebSocket broadcast over `gv-broadcasts` with 1-tap `[ 🎟️ CODE ]` claim and customer `[ ✕ Ignore ]` permanent dismissal.
-- **Khata Credit Ledger**: 1-tap in-app statement reminders and debt settlements.
 
 ---
 

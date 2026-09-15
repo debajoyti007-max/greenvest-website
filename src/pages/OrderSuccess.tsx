@@ -202,9 +202,7 @@ export default function OrderSuccess() {
         <p>
           {lang === 'bn' ? 'পেমেন্ট মোড:' : 'Payment Mode:'}{' '}
           <strong style={{ color: '#166534' }}>
-            {order.isKhataOrder
-              ? (lang === 'bn' ? 'খাতা পে (বাকি)' : 'Khata Pay (Pay Later)')
-              : order.paymentType === 'full'
+            {order.paymentType === 'full'
               ? (lang === 'bn' ? '১০০% সম্পন্ন' : '100% Full Paid')
               : (lang === 'bn' ? `১০% অগ্রিম (₹${order.advanceAmount})` : `10% Advance Paid (₹${order.advanceAmount})`)}
           </strong>

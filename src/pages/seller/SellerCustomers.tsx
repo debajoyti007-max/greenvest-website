@@ -19,14 +19,12 @@ type CustomerRow = {
   lastAddress: string
   role: string
   tier?: CustomerTier
-  khataApproved?: boolean
-  khataCreditLimit?: number
   isBlocked?: boolean
   isSuperAdmin?: boolean
 }
 
 export default function SellerCustomers() {
-  const { user, users, adminResetUserPin, toggleBlockUser, refreshUsers, setUserTier, setUserKhataApproval } = useAuth()
+  const { user, users, adminResetUserPin, toggleBlockUser, refreshUsers, setUserTier } = useAuth()
   const { orders, lang, sendNotification, createCoupon, refresh } = useStore()
 
   useEffect(() => {
@@ -113,8 +111,6 @@ export default function SellerCustomers() {
         lastAddress: 'No address saved yet',
         role: u.role,
         tier: u.tier || 'regular',
-        khataApproved: u.khataApproved,
-        khataCreditLimit: u.khataCreditLimit,
         isBlocked: u.isBlocked,
         isSuperAdmin: u.isSuperAdmin,
       }
@@ -343,7 +339,7 @@ export default function SellerCustomers() {
                 </th>
                 <th>{lang === 'bn' ? 'নাম' : 'Name'}</th>
                 <th>{lang === 'bn' ? 'যোগাযোগ' : 'Contact'}</th>
-                <th>{lang === 'bn' ? 'টায়ার / খাতা' : 'Tier & Khata'}</th>
+                <th>{lang === 'bn' ? 'টায়ার' : 'Tier'}</th>
                 <th>{lang === 'bn' ? 'অর্ডার' : 'Orders'}</th>
                 <th>{lang === 'bn' ? 'কিনেছে' : 'Spent'}</th>
                 <th>{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
@@ -382,7 +378,7 @@ export default function SellerCustomers() {
                     {(() => {
                       const identifier = c.userId || c.phone || c.email || c.key
                       return (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '130px' }}>
+                        <div style={{ minWidth: '110px' }}>
                           <select
                             value={c.tier || 'regular'}
                             onChange={async (e) => {
@@ -393,40 +389,20 @@ export default function SellerCustomers() {
                             style={{
                               fontSize: '0.78rem',
                               fontWeight: 700,
-                              padding: '2px 6px',
+                              padding: '4px 6px',
                               borderRadius: '6px',
                               border: '1.5px solid',
                               borderColor: c.tier === 'wholesale' ? '#7c3aed' : c.tier === 'vip' ? '#d97706' : '#cbd5e1',
                               background: c.tier === 'wholesale' ? '#f5f3ff' : c.tier === 'vip' ? '#fffbeb' : '#f8fafc',
                               color: c.tier === 'wholesale' ? '#6d28d9' : c.tier === 'vip' ? '#b45309' : '#475569',
                               cursor: 'pointer',
+                              width: '100%',
                             }}
                           >
                             <option value="regular">⭐ Regular (0%)</option>
                             <option value="vip">🥈 VIP (5% OFF)</option>
                             <option value="wholesale">👑 Wholesale (12% OFF)</option>
                           </select>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const nextState = !c.khataApproved
-                              await setUserKhataApproval(identifier, nextState, c.khataCreditLimit || 2000)
-                              showToast(nextState ? '📒 Khata Approved (₹2000 limit)' : '📒 Khata Disabled', '📒')
-                            }}
-                            style={{
-                              fontSize: '0.72rem',
-                              padding: '2px 5px',
-                              borderRadius: '4px',
-                              border: '1px solid',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              background: c.khataApproved ? '#dcfce7' : '#f1f5f9',
-                              color: c.khataApproved ? '#15803d' : '#64748b',
-                              borderColor: c.khataApproved ? '#86efac' : '#cbd5e1',
-                            }}
-                          >
-                            {c.khataApproved ? '📒 Khata: ON' : '📒 Khata: OFF'}
-                          </button>
                         </div>
                       )
                     })()}
@@ -609,29 +585,6 @@ export default function SellerCustomers() {
               <option value="vip">🥈 VIP (5% OFF)</option>
               <option value="wholesale">👑 Wholesale (12% OFF)</option>
             </select>
-
-            {/* 📒 Bulk Khata Toggle */}
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={bulkActionBusy}
-              style={{ background: '#15803d', color: 'white', border: 'none', fontSize: '0.8rem', fontWeight: 600 }}
-              onClick={async () => {
-                if (!window.confirm(lang === 'bn' ? `নির্বাচিত ${selectedCustomerKeys.size} জনের জন্য খাতা চালু করবেন?` : `Enable Khata credit for all ${selectedCustomerKeys.size} selected customers?`)) return
-                setBulkActionBusy(true)
-                for (const key of Array.from(selectedCustomerKeys)) {
-                  const row = customerList.find(c => c.key === key)
-                  const targetId = row?.userId || row?.phone || row?.email
-                  if (targetId) {
-                    await setUserKhataApproval(targetId, true, 2000)
-                  }
-                }
-                setBulkActionBusy(false)
-                showToast(lang === 'bn' ? 'খাতা চালু করা হয়েছে' : 'Khata approved for selected customers', '📒')
-              }}
-            >
-              📒 {lang === 'bn' ? 'খাতা অন' : 'Khata ON'}
-            </button>
 
             {/* 🚫 Bulk Block */}
             <button

@@ -7,7 +7,7 @@ import { formatOrderId } from '../lib/business'
 import { showToast } from '../lib/toast'
 
 export default function SupportChatWidget() {
-  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, cartCount, refreshSupportMessages } = useStore()
+  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, cartCount, refreshSupportMessages } = useStore()
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [inputMsg, setInputMsg] = useState('')
@@ -27,8 +27,6 @@ export default function SupportChatWidget() {
       .filter((o) => o.userId === user.id && o.status !== 'delivered' && o.status !== 'cancelled')
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null
   }, [orders, user])
-
-  const khataBal = user ? getUserKhataBalance(user.id) : 0
 
   // ⚡ Free-tier on-demand realtime: opens connection ONLY when chat widget is active
   useEffect(() => {
@@ -245,24 +243,6 @@ export default function SupportChatWidget() {
             >
               🥬 {lang === 'bn' ? 'কোয়ালিটি অভিযোগ' : 'Quality Issue'}
             </button>
-            {khataBal > 0 && (
-              <button
-                type="button"
-                onClick={() => handleSend(lang === 'bn' ? `আমার খাতা বাকি ₹${khataBal} সংক্রান্ত তথ্য দিন।` : `Information regarding my Khata dues of ₹${khataBal}.`)}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: '12px',
-                  border: '1px solid #cbd5e1',
-                  background: '#ffffff',
-                  fontSize: '0.74rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  color: '#1e293b',
-                }}
-              >
-                📒 {lang === 'bn' ? 'খাতা বাকি' : 'Khata Dues'}
-              </button>
-            )}
             <button
               type="button"
               onClick={() => handleSend(lang === 'bn' ? 'আজকের ডেলিভারি শিফট ও সময় কখন?' : 'What are today delivery shift hours?')}

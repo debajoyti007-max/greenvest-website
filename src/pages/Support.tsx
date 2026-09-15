@@ -7,7 +7,7 @@ import { showToast } from '../lib/toast'
 import { subscribeSupportMessages } from '../lib/api'
 
 export default function Support() {
-  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, getUserKhataBalance, shiftStatus, refreshSupportMessages } = useStore()
+  const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, shiftStatus, refreshSupportMessages } = useStore()
   const { user } = useAuth()
   const [inputMsg, setInputMsg] = useState('')
   const [sending, setSending] = useState(false)
@@ -24,8 +24,6 @@ export default function Support() {
       .filter((o) => o.userId === user.id && o.status !== 'delivered' && o.status !== 'cancelled')
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null
   }, [orders, user])
-
-  const khataBal = user ? getUserKhataBalance(user.id) : 0
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -142,18 +140,23 @@ export default function Support() {
           </button>
         </div>
 
-        {/* Card 3: Khata Balance */}
+        {/* Card 3: Payment & Refund Support */}
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem' }}>
-          <div style={{ fontSize: '1.2rem', marginBottom: '0.25rem' }}>📒</div>
+          <div style={{ fontSize: '1.2rem', marginBottom: '0.25rem' }}>💳</div>
           <strong style={{ fontSize: '0.9rem', color: '#1e293b', display: 'block' }}>
-            {lang === 'bn' ? 'ডিজিটাল খাতা' : 'Digital Khata'}
+            {lang === 'bn' ? 'পেমেন্ট ও রিফান্ড' : 'Payment & Refund'}
           </strong>
           <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', margin: '4px 0 8px' }}>
-            {lang === 'bn' ? `বর্তমান বকেয়া: ₹${khataBal}` : `Current Balance: ₹${khataBal}`}
+            {lang === 'bn' ? 'UPI ট্রানজাকশন সাহায্য' : 'UPI Transaction Help'}
           </span>
-          <Link to="/profile" className="btn btn-secondary btn-sm" style={{ fontSize: '0.75rem', padding: '3px 8px' }}>
-            {lang === 'bn' ? 'খাতা দেখুন' : 'View Passbook'}
-          </Link>
+          <button
+            type="button"
+            onClick={() => handleSend(lang === 'bn' ? 'আমার UPI পেমেন্ট বা রিফান্ড সংক্রান্ত সাহায্য প্রয়োজন।' : 'I need assistance regarding my UPI payment or refund.')}
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: '0.75rem', padding: '3px 8px' }}
+          >
+            {lang === 'bn' ? 'সাহায্য চান' : 'Get Help'}
+          </button>
         </div>
 
         {/* Card 4: Shift Hours */}

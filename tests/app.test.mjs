@@ -714,28 +714,6 @@ describe('9 Client Requirements & Features Validation', () => {
     assert.deepEqual(filterAvailableGrades(productDefault), ['A', 'B', 'C'])
   })
 
-  // Feature 6: Digital Ledger / Khata Book
-  const calculateUserKhataBalance = (userId, entries) => {
-    return entries
-      .filter((e) => e.userId === userId)
-      .reduce((sum, e) => {
-        if (e.type === 'order_debit') return sum + e.amount
-        if (e.type === 'payment_credit') return sum - e.amount
-        return sum
-      }, 0)
-  }
-
-  test('Khata ledger correctly aggregates debits and payment credits', () => {
-    const userId = 'usr-123'
-    const ledger = [
-      { userId, type: 'order_debit', amount: 500 },
-      { userId, type: 'order_debit', amount: 300 },
-      { userId, type: 'payment_credit', amount: 400 },
-    ]
-    const balance = calculateUserKhataBalance(userId, ledger)
-    assert.equal(balance, 400) // 500 + 300 - 400 = 400
-  })
-
   // Feature 8: Operating Hours Shifts
   const isShiftOpen = (hour) => {
     // Morning: 7-12, Evening: 16-21
@@ -795,7 +773,7 @@ describe('9 Client Requirements & Features Validation', () => {
   })
 })
 
-// 19. Auto Smart Remove System (Deals Expiry, Stale Orders, Zero-Balance Khata)
+// 19. Auto Smart Remove System (Deals Expiry, Stale Orders)
 describe('Auto Smart Remove Engine', () => {
   // Feature 1: Deal Expiry and Auto-Removal
   const isDealExpired = (deal) => {
@@ -851,24 +829,6 @@ describe('Auto Smart Remove Engine', () => {
     assert.equal(isOrderStalePending(verifiedOrder, 2), false, 'Verified UTR order must not be stale')
     assert.equal(isOrderStalePending(confirmedOrder, 2), false, 'Confirmed order must not be stale')
   })
-
-  // Feature 5: Zero-Balance Khata Smart Filter
-  test('Filters Khata accounts to only display active debtors with outstanding dues (>0)', () => {
-    const customers = [
-      { id: 'c1', name: 'Rahim', balance: 450 },
-      { id: 'c2', name: 'Karim', balance: 0 },
-      { id: 'c3', name: 'Bijoy', balance: 1200 },
-      { id: 'c4', name: 'Shyamal', balance: 0 },
-    ]
-
-    const duesOnly = customers.filter((c) => c.balance > 0)
-    const settledOnly = customers.filter((c) => c.balance === 0)
-
-    assert.equal(duesOnly.length, 2)
-    assert.deepEqual(duesOnly.map((c) => c.id), ['c1', 'c3'])
-    assert.equal(settledOnly.length, 2)
-    assert.deepEqual(settledOnly.map((c) => c.id), ['c2', 'c4'])
-  })
 })
 
 // 20. Universal Database Persistence & Field Mapping
@@ -910,15 +870,13 @@ describe('Universal Database Persistence & Field Mapping', () => {
     assert.equal(row.p_c, 20)
   })
 
-  test('ProfileRow maps tier, khata_approved, and credit limits correctly', () => {
+  test('ProfileRow maps customer tier correctly', () => {
     const profileRow = {
       id: 'usr-123',
       email: 'customer@greenvest.shop',
       name: 'Rohan',
       role: 'customer',
       tier: 'vip',
-      khata_approved: true,
-      khata_credit_limit: 5000,
       phone: '9876543210',
       created_at: new Date().toISOString(),
     }
@@ -929,14 +887,10 @@ describe('Universal Database Persistence & Field Mapping', () => {
       name: profileRow.name,
       role: profileRow.role,
       tier: profileRow.tier || 'regular',
-      khataApproved: Boolean(profileRow.khata_approved),
-      khataCreditLimit: Number(profileRow.khata_credit_limit),
       phone: profileRow.phone,
     }
 
     assert.equal(mappedUser.tier, 'vip')
-    assert.equal(mappedUser.khataApproved, true)
-    assert.equal(mappedUser.khataCreditLimit, 5000)
   })
 
   test('PromotionalDeal preserves empty list after all deals are deleted', () => {
@@ -1011,26 +965,8 @@ describe('In-App Customer Support & Live Chat Desk', () => {
   })
 })
 
-// 22. Financial Ledger Integrity & Security Safeguards
-describe('Financial Ledger Integrity & Security Safeguards', () => {
-  test('Blocks Khata checkout if current balance + order total exceeds credit limit', () => {
-    const userKhataBalance = 1800
-    const creditLimit = 2000
-    const orderTotal = 350
-
-    const isExceeded = userKhataBalance + orderTotal > creditLimit
-    assert.equal(isExceeded, true, 'Must flag credit limit violation')
-  })
-
-  test('Permits Khata checkout if current balance + order total is within limit', () => {
-    const userKhataBalance = 500
-    const creditLimit = 2000
-    const orderTotal = 350
-
-    const isExceeded = userKhataBalance + orderTotal > creditLimit
-    assert.equal(isExceeded, false, 'Must permit checkout within credit limit')
-  })
-
+// 22. Financial Calculation Integrity & Security Safeguards
+describe('Financial Calculation Integrity & Security Safeguards', () => {
   test('Safe discount capping ensures grand total never drops below zero', () => {
     const subtotal = 200
     const deliveryFee = 30
@@ -1041,26 +977,6 @@ describe('Financial Ledger Integrity & Security Safeguards', () => {
 
     assert.equal(safeDiscount, 200, 'Discount must be capped to subtotal')
     assert.equal(total, 30, 'Customer must still pay delivery fee')
-  })
-
-  test('Cancelling a Khata order triggers an offsetting payment credit in the ledger', () => {
-    const order = { id: 'ord-123', userId: 'u1', total: 450, isKhataOrder: true, status: 'confirmed' }
-    
-    // Simulate cancellation
-    const isCancelled = true
-    let ledger = [{ userId: 'u1', type: 'order_debit', amount: 450 }]
-
-    if (isCancelled && order.isKhataOrder) {
-      ledger.push({ userId: 'u1', type: 'payment_credit', amount: order.total })
-    }
-
-    const currentBalance = ledger.reduce((sum, entry) => {
-      if (entry.type === 'order_debit') return sum + entry.amount
-      if (entry.type === 'payment_credit') return sum - entry.amount
-      return sum
-    }, 0)
-
-    assert.equal(currentBalance, 0, 'Cancelled Khata order dues must return to zero')
   })
 })
 
@@ -1160,38 +1076,10 @@ describe('Shadow Super Admin Cloaking & Customer Lists', () => {
   })
 })
 
-describe('Khata 1-Tap Settlement & Debt Clearing', () => {
-  const calculateBalance = (entries) => {
-    let bal = 0
-    entries.forEach(e => {
-      if (e.type === 'debit') bal += Number(e.amount)
-      else if (e.type === 'payment_credit' || e.type === 'adjustment_credit') bal -= Number(e.amount)
-    })
-    return Math.max(0, bal)
-  }
-
-  test('Recording offsetting payment_credit brings outstanding balance to exactly ₹0', () => {
-    const history = [
-      { id: '1', type: 'debit', amount: 500 },
-      { id: '2', type: 'debit', amount: 350 },
-    ]
-    const initialDue = calculateBalance(history)
-    assert.equal(initialDue, 850)
-
-    // 1-Tap Settlement
-    history.push({ id: '3', type: 'payment_credit', amount: initialDue, note: 'Full Settlement by Staff' })
-    const settledDue = calculateBalance(history)
-    assert.equal(settledDue, 0, 'Balance must be 0 after settlement')
-  })
-})
-
 describe('Safe Customer Delete Guard', () => {
-  const canDeleteCustomer = (user, khataBalance, customerOrders) => {
+  const canDeleteCustomer = (user, customerOrders) => {
     if (user.email === 'debajoyti007@gmail.com' || user.phone === '8170859653') {
       return { canDelete: false, reason: 'Super Admin Shield' }
-    }
-    if (khataBalance > 0) {
-      return { canDelete: false, reason: `Unpaid dues of ₹${khataBalance}` }
     }
     const hasActiveOrder = customerOrders.some(o => ['pending', 'confirmed', 'out_for_delivery'].includes(o.status))
     if (hasActiveOrder) {
@@ -1200,22 +1088,22 @@ describe('Safe Customer Delete Guard', () => {
     return { canDelete: true }
   }
 
-  test('Blocks deletion if customer has an unpaid Khata balance', () => {
-    const res = canDeleteCustomer({ id: 'c1', name: 'Amit' }, 450, [])
+  test('Blocks deletion if user is protected by Super Admin Shield', () => {
+    const res = canDeleteCustomer({ id: 'sa-1', email: 'debajoyti007@gmail.com' }, [])
     assert.strictEqual(res.canDelete, false)
-    assert.ok(res.reason.includes('Unpaid dues'))
+    assert.ok(res.reason.includes('Super Admin Shield'))
   })
 
   test('Blocks deletion if customer has an active order in transit', () => {
     const orders = [{ id: 'ORD-1', status: 'out_for_delivery' }]
-    const res = canDeleteCustomer({ id: 'c2', name: 'Suman' }, 0, orders)
+    const res = canDeleteCustomer({ id: 'c2', name: 'Suman' }, orders)
     assert.strictEqual(res.canDelete, false)
     assert.ok(res.reason.includes('Active in-transit order'))
   })
 
-  test('Allows deletion if customer has 0 dues and only delivered/cancelled orders', () => {
+  test('Allows deletion if customer has only delivered/cancelled orders', () => {
     const orders = [{ id: 'ORD-2', status: 'delivered' }, { id: 'ORD-3', status: 'cancelled' }]
-    const res = canDeleteCustomer({ id: 'c3', name: 'Test Junk User' }, 0, orders)
+    const res = canDeleteCustomer({ id: 'c3', name: 'Test Junk User' }, orders)
     assert.strictEqual(res.canDelete, true)
   })
 })

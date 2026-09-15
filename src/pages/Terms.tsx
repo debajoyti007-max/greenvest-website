@@ -184,7 +184,7 @@ export default function Terms() {
         {/* Section 3 */}
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
           <h2 style={{ fontSize: '1.18rem', fontWeight: 800, color: '#166534', margin: '0 0 0.8rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>🛒</span> {lang === 'bn' ? '৩. অর্ডার বুকিং, অগ্রিম পেমেন্ট ও খাতা পে' : '3. Ordering, 10% Advance & Khata Credit Facility'}
+            <span>🛒</span> {lang === 'bn' ? '৩. অর্ডার বুকিং ও UPI পেমেন্ট পলিসি' : '3. Ordering & UPI Payment Policy'}
           </h2>
           <ul style={{ fontSize: '0.88rem', lineHeight: '1.65', color: '#334155', margin: 0, paddingLeft: '1.25rem' }}>
             <li style={{ marginBottom: '0.5rem' }}>
@@ -193,17 +193,11 @@ export default function Terms() {
                 ? `হোম ডেলিভারির জন্য কার্টের মোট মূল্য সর্বনিম্ন ₹${MIN_ORDER_AMOUNT} হতে হবে।`
                 : `A minimum basket value of ₹${MIN_ORDER_AMOUNT} is required for home doorstep delivery.`}
             </li>
-            <li style={{ marginBottom: '0.5rem' }}>
+            <li>
               <strong>{lang === 'bn' ? '১০% অগ্রিম পেমেন্ট (UPI Advance):' : '10% Commitment Advance:'}</strong>{' '}
               {lang === 'bn'
                 ? 'পচনশীল খাদ্যসামগ্রীর অপচয় রোধ ও ভুয়ো অর্ডার প্রতিরোধে অর্ডার নিশ্চিত করতে মাত্র ১০% অগ্রিম UPI পেমেন্ট গ্রহণ করা হয়। বাকি ৯০% অর্থ পণ্য গ্রহণের সময় ক্যাশ বা কিউআর কোডে প্রদেয়।'
                 : 'To prevent produce spoilage and unauthorized bookings, orders require a 10% UPI advance. The remaining 90% is settled at the doorstep upon physical verification.'}
-            </li>
-            <li>
-              <strong>{lang === 'bn' ? 'ডিজিটাল খাতা সুবিধা (Khata Credit):' : 'Digital Khata Pay:'}</strong>{' '}
-              {lang === 'bn'
-                ? 'পূর্ব মেদিনীপুরের বিশ্বস্ত নিয়মিত ক্রেতাদের জন্য ৭ থেকে ১৫ দিনের শূন্য-সুদ খাতা বাকির সুবিধা রয়েছে। খাতার নির্ধারিত সময়সীমার মধ্যে বকেয়া পরিশোধ না করা হলে অ্যাকাউন্ট সাময়িক স্থগিত থাকবে।'
-                : 'Verified local repeat patrons may access interest-free 7–15 day Khata credit. Unpaid balances past the settlement period will automatically suspend credit ordering.'}
             </li>
           </ul>
         </div>

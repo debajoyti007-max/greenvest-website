@@ -80,11 +80,7 @@ export default function OrderTimeline({
           const current = i === active
           const label =
             i === 0
-              ? order.isKhataOrder
-                ? lang === 'bn'
-                  ? 'অর্ডার জমা (খাতা)'
-                  : 'Order Placed (Khata)'
-                : order.paymentType === 'full'
+              ? order.paymentType === 'full'
                 ? lang === 'bn'
                   ? 'ফুল পেমেন্ট জমা'
                   : 'Full Payment'

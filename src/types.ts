@@ -14,8 +14,6 @@ export interface User {
   tier?: CustomerTier
   phone?: string
   isBlocked?: boolean
-  khataApproved?: boolean
-  khataCreditLimit?: number
   /** True only when the database has is_super_admin=true for this profile. Never set from env vars. */
   isSuperAdmin?: boolean
   createdAt: string
@@ -79,9 +77,8 @@ export interface Order {
   discountAmount?: number
   total: number
   advanceAmount: number
-  paymentType?: 'full' | 'advance' | 'khata'
-  paymentMode?: 'online' | 'khata'
-  isKhataOrder?: boolean
+  paymentType?: 'full' | 'advance'
+  paymentMode?: 'online'
   utr: string
   payerUpiName?: string
   utrVerified: boolean
@@ -102,24 +99,6 @@ export interface Order {
   rejectionReason?: string
   createdAt: string
   updatedAt: string
-}
-
-export interface KhataEntry {
-  id: string
-  userId: string
-  userName?: string
-  userPhone?: string
-  orderId?: string
-  type: 'order_debit' | 'payment_credit' | 'adjustment'
-  amount: number
-  balanceAfter?: number
-  notes?: string
-  /** Maps to khata_ledger.description DB column */
-  description?: string
-  paymentMethod?: 'upi' | 'cash'
-  recordedBy?: string
-  createdBy?: string
-  createdAt: string
 }
 
 export interface ShiftInfo {

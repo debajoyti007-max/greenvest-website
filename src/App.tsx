@@ -24,7 +24,6 @@ const SellerHome = lazy(() => import('./pages/seller/SellerHome'))
 const SellerProducts = lazy(() => import('./pages/seller/SellerProducts'))
 const SellerOrders = lazy(() => import('./pages/seller/SellerOrders'))
 const SellerCustomers = lazy(() => import('./pages/seller/SellerCustomers'))
-const SellerKhata = lazy(() => import('./pages/seller/SellerKhata'))
 const SellerDeals = lazy(() => import('./pages/seller/SellerDeals'))
 const RiderView = lazy(() => import('./pages/RiderView'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
@@ -108,14 +107,6 @@ function AppRoutes() {
             element={
               <RequireRole roles={['seller', 'admin']}>
                 <SellerCustomers />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="seller/khata"
-            element={
-              <RequireRole roles={['seller', 'admin']}>
-                <SellerKhata />
               </RequireRole>
             }
           />

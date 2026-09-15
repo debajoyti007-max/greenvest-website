@@ -787,12 +787,10 @@ export default function SellerOrders() {
                     </span>
                     <span style={{
                       fontSize: '0.68rem', padding: '1px 6px', borderRadius: '6px', fontWeight: 700,
-                      background: o.isKhataOrder ? '#f5f3ff' : o.paymentType === 'full' ? '#ecfdf5' : '#eff6ff',
-                      color: o.isKhataOrder ? '#6d28d9' : o.paymentType === 'full' ? '#047857' : '#1d4ed8',
+                      background: o.paymentType === 'full' ? '#ecfdf5' : '#eff6ff',
+                      color: o.paymentType === 'full' ? '#047857' : '#1d4ed8',
                     }}>
-                      {o.isKhataOrder
-                        ? (lang === 'bn' ? '📒 খাতা পে' : '📒 Khata')
-                        : o.paymentType === 'full'
+                      {o.paymentType === 'full'
                         ? (lang === 'bn' ? '💎 ফুল পে' : '💎 Full Pay')
                         : (lang === 'bn' ? `💳 অগ্রিম ₹${o.advanceAmount}` : `💳 10% Adv ₹${o.advanceAmount}`)}
                     </span>
@@ -801,7 +799,7 @@ export default function SellerOrders() {
                 </div>
 
                 {/* 💳 Payment Info Box */}
-                {!o.isKhataOrder && o.status !== 'cancelled' && (
+                {o.status !== 'cancelled' && (
                   <div style={{ margin: '0 1rem 0.6rem', padding: '0.6rem 0.85rem', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.84rem', color: '#334155' }}>
@@ -978,10 +976,8 @@ export default function SellerOrders() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.85rem' }}>
                         {lang === 'bn' ? 'পেমেন্ট মোড:' : 'Payment Mode:'}{' '}
-                        <b style={{ color: o.isKhataOrder ? '#7c3aed' : '#16a34a' }}>
-                          {o.isKhataOrder
-                            ? (lang === 'bn' ? '📒 খাতা ক্রেডিট (বাকি)' : '📒 Khata Credit (Pay Later)')
-                            : o.paymentType === 'full'
+                        <b style={{ color: '#16a34a' }}>
+                          {o.paymentType === 'full'
                             ? (lang === 'bn' ? '💎 সম্পূর্ণ পেমেন্ট (১০০%)' : '💎 100% Full Payment')
                             : (lang === 'bn' ? `⚡ ১০% অগ্রিম (₹${o.advanceAmount})` : `⚡ 10% Advance (₹${o.advanceAmount})`)}
                         </b>

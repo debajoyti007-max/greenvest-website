@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
@@ -69,8 +69,6 @@ export default function NotificationBell() {
           text = lang === 'bn' ? `🎉 অর্ডার #${shortId} কনফার্ম হয়েছে! প্যাক করা হচ্ছে।` : `🎉 Order #${shortId} confirmed! Fresh items packing.`
         } else if (o.status === 'cancelled') {
           text = lang === 'bn' ? `❌ অর্ডার #${shortId} বাতিল করা হয়েছে।` : `❌ Order #${shortId} was cancelled.`
-        } else if (o.isKhataOrder) {
-          text = lang === 'bn' ? `📒 খাতা অর্ডার #${shortId} গৃহীত হয়েছে!` : `📒 Khata Order #${shortId} placed successfully!`
         } else {
           text = lang === 'bn' ? `⚡ অর্ডার #${shortId} জমা হয়েছে! কনফার্মেশনের অপেক্ষায়।` : `⚡ Order #${shortId} placed! Waiting for seller confirmation.`
         }
