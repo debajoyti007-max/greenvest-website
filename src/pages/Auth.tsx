@@ -95,8 +95,8 @@ export default function Auth() {
 
     // ───── LOGIN MODE ─────
     if (mode === 'login') {
-      if (password.length !== 4) {
-        setError(lang === 'bn' ? '৪-সংখ্যার পিন দিন' : 'Please enter a 4-digit PIN')
+      if (password.trim().length < 4) {
+        setError(lang === 'bn' ? 'কমপক্ষে ৪ সংখ্যার পিন বা স্টাফ পাসওয়ার্ড দিন' : 'Please enter your 4-digit PIN or staff password')
         return
       }
       setBusy(true)
@@ -390,22 +390,44 @@ export default function Auth() {
 
             <label style={{ position: 'relative' }}>
               <span style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>{mode === 'forgot' ? (lang === 'bn' ? 'নতুন ৪-সংখ্যার সিকিউরিটি পিন (PIN)' : 'New 4-Digit Security PIN') : (lang === 'bn' ? '🔑 ৪-সংখ্যার সিকিউরিটি পিন (PIN)' : '🔑 4-Digit Quick PIN')}</span>
+                <span>
+                  {mode === 'forgot'
+                    ? (lang === 'bn' ? 'নতুন ৪-সংখ্যার সিকিউরিটি পিন (PIN)' : 'New 4-Digit Security PIN')
+                    : mode === 'signup'
+                    ? (lang === 'bn' ? '🔑 ৪-সংখ্যার সিকিউরিটি পিন (PIN)' : '🔑 4-Digit Quick PIN')
+                    : (lang === 'bn' ? '🔑 পিন / স্টাফ পাসওয়ার্ড' : '🔑 PIN / Staff Password')}
+                </span>
                 <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>
-                  {lang === 'bn' ? 'সহজ ৪ সংখ্যা' : 'Easy 4 digits'}
+                  {mode === 'login'
+                    ? (lang === 'bn' ? 'গ্রাহক ৪ সংখ্যা / স্টাফ ৮+ অক্ষর' : 'Customer 4-digit / Staff 8+ chars')
+                    : (lang === 'bn' ? 'সহজ ৪ সংখ্যা' : 'Easy 4 digits')}
                 </span>
               </span>
               <input
                 name="password"
                 type={showPass ? 'text' : 'password'}
-                inputMode="numeric"
-                maxLength={4}
+                inputMode={mode === 'login' ? 'text' : 'numeric'}
+                maxLength={mode === 'login' ? 32 : 4}
                 value={password}
-                onChange={(e) => setPassword(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                placeholder={lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234'}
+                onChange={(e) =>
+                  setPassword(
+                    mode === 'login'
+                      ? e.target.value
+                      : e.target.value.replace(/\D/g, '').slice(0, 4)
+                  )
+                }
+                placeholder={
+                  mode === 'login'
+                    ? (lang === 'bn' ? 'যেমন ১২৩৪ বা স্টাফ পাসওয়ার্ড' : 'e.g. 1234 or staff password')
+                    : (lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234')
+                }
                 required
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                style={{ paddingRight: '40px', letterSpacing: '0.2rem', fontWeight: 'bold' }}
+                style={{
+                  paddingRight: '40px',
+                  letterSpacing: mode === 'login' && password.length > 4 ? 'normal' : '0.2rem',
+                  fontWeight: 'bold',
+                }}
               />
               <button
                 type="button"

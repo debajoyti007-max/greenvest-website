@@ -47,55 +47,82 @@ export default function AdminUsers() {
 
   const isProtectedAdmin = (u: any) => isSuperAdmin(u)
 
-  const handleResetPin = async (u: { id: string; name: string; phone?: string; email: string }) => {
-    const inputPin = window.prompt(
-      lang === 'bn'
-        ? `${u.name}-এর জন্য নতুন ৪-সংখ্যার সিকিউরিটি পিন দিন:`
-        : `Enter new 4-digit security PIN for ${u.name}:`,
-      '1234'
-    )
-    if (!inputPin) return
-    const cleanPin = inputPin.replace(/\D/g, '').slice(0, 4)
-    if (cleanPin.length !== 4) {
-      showToast(
-        lang === 'bn' ? 'পিন অবশ্যই ৪ সংখ্যার হতে হবে' : 'PIN must be exactly 4 digits',
-        '⚠️',
-        'error'
+  const handleResetPin = async (u: { id: string; name: string; phone?: string; email: string; role?: string }) => {
+    const isTargetStaff = u.role === 'admin' || u.role === 'seller' || u.role === 'rider'
+    let cleanSecret = ''
+
+    if (isTargetStaff) {
+      const inputPass = window.prompt(
+        lang === 'bn'
+          ? `${u.name}-এর জন্য নতুন স্টাফ পাসওয়ার্ড দিন (কমপক্ষে ৮ অক্ষর):`
+          : `Enter new staff password for ${u.name} (minimum 8 characters):`,
+        ''
       )
-      return
+      if (!inputPass) return
+      cleanSecret = inputPass.trim()
+      if (cleanSecret.length < 8) {
+        showToast(
+          lang === 'bn' ? 'স্টাফ পাসওয়ার্ড অবশ্যই কমপক্ষে ৮ অক্ষরের হতে হবে' : 'Staff password must be at least 8 characters',
+          '⚠️',
+          'error'
+        )
+        return
+      }
+    } else {
+      const inputPin = window.prompt(
+        lang === 'bn'
+          ? `${u.name}-এর জন্য নতুন ৪-সংখ্যার সিকিউরিটি পিন দিন:`
+          : `Enter new 4-digit security PIN for ${u.name}:`,
+        '1234'
+      )
+      if (!inputPin) return
+      cleanSecret = inputPin.replace(/\D/g, '').slice(0, 4)
+      if (cleanSecret.length !== 4) {
+        showToast(
+          lang === 'bn' ? 'পিন অবশ্যই ৪ সংখ্যার হতে হবে' : 'PIN must be exactly 4 digits',
+          '⚠️',
+          'error'
+        )
+        return
+      }
     }
 
     setResettingPinId(u.id)
     try {
-      await adminResetUserPin(u.id, cleanPin)
+      const res = await adminResetUserPin(u.id, cleanSecret)
+      if (res && !res.ok) {
+        showToast(res.error || (lang === 'bn' ? 'রিসেট ব্যর্থ হয়েছে' : 'Reset failed'), '❌', 'error')
+        return
+      }
 
       // Send in-app notification to user
       sendNotification(
         u.id,
-        lang === 'bn' ? '🔑 নতুন সিকিউরিটি পিন সেট করা হয়েছে' : '🔑 Security PIN Updated',
-        lang === 'bn'
-          ? `আপনার অ্যাকাউন্ট সিকিউরিটি পিন আপডেট করা হয়েছে। আপনার পিন: ${cleanPin}`
-          : `Your account security PIN has been updated to: ${cleanPin}`
+        isTargetStaff
+          ? (lang === 'bn' ? '🔑 নতুন স্টাফ পাসওয়ার্ড সেট করা হয়েছে' : '🔑 Staff Password Updated')
+          : (lang === 'bn' ? '🔑 নতুন সিকিউরিটি পিন সেট করা হয়েছে' : '🔑 Security PIN Updated'),
+        isTargetStaff
+          ? (lang === 'bn'
+              ? `আপনার স্টাফ অ্যাকাউন্ট পাসওয়ার্ড আপডেট করা হয়েছে। আপনার নতুন পাসওয়ার্ড: ${cleanSecret}`
+              : `Your staff account password has been updated to: ${cleanSecret}`)
+          : (lang === 'bn'
+              ? `আপনার অ্যাকাউন্ট সিকিউরিটি পিন আপডেট করা হয়েছে। আপনার পিন: ${cleanSecret}`
+              : `Your account security PIN has been updated to: ${cleanSecret}`)
       )
 
       showToast(
-        lang === 'bn'
-          ? `✅ ${u.name}-এর পিন আপডেট করা হয়েছে: ${cleanPin}`
-          : `✅ PIN for ${u.name} updated to: ${cleanPin}`,
+        isTargetStaff
+          ? (lang === 'bn'
+              ? `✅ ${u.name}-এর স্টাফ পাসওয়ার্ড আপডেট হয়েছে!`
+              : `✅ Password for ${u.name} updated!`)
+          : (lang === 'bn'
+              ? `✅ ${u.name}-এর পিন আপডেট করা হয়েছে: ${cleanSecret}`
+              : `✅ PIN for ${u.name} updated to: ${cleanSecret}`),
         '🔑'
       )
 
-      // Send In-App Notification & Copy PIN
-      if (u.id) {
-        await sendNotification(
-          u.id,
-          lang === 'bn' ? '🔐 অ্যাকাউন্ট পিন আপডেট' : '🔐 Account PIN Updated',
-          lang === 'bn' ? `আপনার নতুন পিন: ${cleanPin}` : `Your new login PIN is: ${cleanPin}`,
-          'Security'
-        )
-      }
       try {
-        await navigator.clipboard.writeText(`Customer: ${u.name} | PIN: ${cleanPin}`)
+        await navigator.clipboard.writeText(`${u.role || 'User'}: ${u.name} | Secret: ${cleanSecret}`)
       } catch {}
     } finally {
       setResettingPinId(null)

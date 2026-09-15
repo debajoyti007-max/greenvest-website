@@ -75,23 +75,38 @@ export default function Profile() {
     setSaving(false)
   }
 
+  const isStaff = user?.role === 'admin' || user?.role === 'seller' || user?.role === 'rider' || user?.isSuperAdmin
+
   const handleUpdateMyPin = async () => {
-    if (!user || newPinVal.length !== 4 || /\D/.test(newPinVal)) {
-      showToast(lang === 'bn' ? '৪ সংখ্যার পিন দিন' : 'PIN must be 4 digits', '⚠️', 'error')
-      return
+    if (!user) return
+    if (isStaff) {
+      if (newPinVal.trim().length < 8) {
+        showToast(lang === 'bn' ? 'স্টাফ পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে' : 'Staff password must be at least 8 characters', '⚠️', 'error')
+        return
+      }
+    } else {
+      if (newPinVal.length !== 4 || /\D/.test(newPinVal)) {
+        showToast(lang === 'bn' ? '৪ সংখ্যার পিন দিন' : 'PIN must be 4 digits', '⚠️', 'error')
+        return
+      }
     }
     setSaving(true)
     try {
       const res = await updatePassword(newPinVal)
       if (res.ok) {
-        showToast(lang === 'bn' ? '🔑 আপনার নতুন ৪-সংখ্যার পিন সেভ হয়েছে!' : '🔑 New 4-digit PIN saved!', '🎉')
+        showToast(
+          isStaff
+            ? (lang === 'bn' ? '🔑 আপনার নতুন স্টাফ পাসওয়ার্ড সেভ হয়েছে!' : '🔑 New staff password saved!')
+            : (lang === 'bn' ? '🔑 আপনার নতুন ৪-সংখ্যার পিন সেভ হয়েছে!' : '🔑 New 4-digit PIN saved!'),
+          '🎉'
+        )
         setNewPinVal('')
         setShowPinForm(false)
       } else {
-        showToast(res.error || (lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed'), '❌', 'error')
+        showToast(res.error || (lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed'), '❌', 'error')
       }
     } catch (err: any) {
-      showToast(err?.message || (lang === 'bn' ? 'পিন আপডেট ব্যর্থ হয়েছে' : 'PIN update failed'), '❌', 'error')
+      showToast(err?.message || (lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed'), '❌', 'error')
     }
     setSaving(false)
   }
@@ -463,35 +478,65 @@ export default function Profile() {
       <section style={{ display: 'flex', gap: '0.75rem', flexDirection: 'column' }}>
         <h3 style={{ margin: 0 }}>{lang === 'bn' ? '⚙️ সেটিংস ও অ্যাকাউন্ট সিকিউরিটি' : '⚙️ Settings & Security'}</h3>
 
-        {/* Change PIN Option */}
+        {/* Change PIN / Staff Password Option */}
         <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <strong>🔑 {lang === 'bn' ? 'আমার সিকিউরিটি পিন পরিবর্তন করুন' : 'Change My Security PIN'}</strong>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>{lang === 'bn' ? 'নতুন পছন্দসই ৪-সংখ্যার পিন সেভ করুন' : 'Set your own preferred 4-digit PIN'}</div>
+              <strong>
+                🔑{' '}
+                {isStaff
+                  ? (lang === 'bn' ? 'আমার স্টাফ পাসওয়ার্ড পরিবর্তন করুন' : 'Change My Staff Password')
+                  : (lang === 'bn' ? 'আমার সিকিউরিটি পিন পরিবর্তন করুন' : 'Change My Security PIN')}
+              </strong>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>
+                {isStaff
+                  ? (lang === 'bn' ? 'কমপক্ষে ৮ অক্ষরের শক্তিশালী পাসওয়ার্ড দিন' : 'Set a strong password (min 8 characters)')
+                  : (lang === 'bn' ? 'নতুন পছন্দসই ৪-সংখ্যার পিন সেভ করুন' : 'Set your own preferred 4-digit PIN')}
+              </div>
             </div>
             <button
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => setShowPinForm(!showPinForm)}
             >
-              {showPinForm ? '✕' : (lang === 'bn' ? '🔑 পরিবর্তন করুন' : '🔑 Change PIN')}
+              {showPinForm
+                ? '✕'
+                : isStaff
+                ? (lang === 'bn' ? '🔑 পাসওয়ার্ড পরিবর্তন' : '🔑 Change Password')
+                : (lang === 'bn' ? '🔑 পরিবর্তন করুন' : '🔑 Change PIN')}
             </button>
           </div>
 
           {showPinForm && (
             <div style={{ marginTop: '0.5rem', background: '#f0fdf4', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
-                {lang === 'bn' ? 'নতুন ৪-সংখ্যার সিকিউরিটি পিন (PIN) লিখুন:' : 'Enter New 4-Digit Security PIN:'}
+                {isStaff
+                  ? (lang === 'bn' ? 'নতুন স্টাফ পাসওয়ার্ড (কমপক্ষে ৮ অক্ষর):' : 'Enter New Staff Password (min 8 chars):')
+                  : (lang === 'bn' ? 'নতুন ৪-সংখ্যার সিকিউরিটি পিন (PIN) লিখুন:' : 'Enter New 4-Digit Security PIN:')}
               </label>
               <input
                 type="password"
-                inputMode="numeric"
-                maxLength={4}
+                inputMode={isStaff ? 'text' : 'numeric'}
+                maxLength={isStaff ? 32 : 4}
                 value={newPinVal}
-                onChange={(e) => setNewPinVal(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                placeholder={lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234'}
-                style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '0.5rem', fontSize: '1.2rem', fontWeight: 'bold', letterSpacing: '0.2rem' }}
+                onChange={(e) =>
+                  setNewPinVal(isStaff ? e.target.value : e.target.value.replace(/\D/g, '').slice(0, 4))
+                }
+                placeholder={
+                  isStaff
+                    ? (lang === 'bn' ? 'কমপক্ষে ৮ অক্ষর' : 'Minimum 8 characters')
+                    : (lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234')
+                }
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  borderRadius: '8px',
+                  border: '1px solid #d1d5db',
+                  marginBottom: '0.5rem',
+                  fontSize: isStaff ? '1rem' : '1.2rem',
+                  fontWeight: 'bold',
+                  letterSpacing: isStaff ? 'normal' : '0.2rem',
+                }}
               />
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
@@ -500,7 +545,11 @@ export default function Profile() {
                   onClick={handleUpdateMyPin}
                   disabled={saving}
                 >
-                  {saving ? '...' : (lang === 'bn' ? 'নতুন পিন সেভ করুন' : 'Save New PIN')}
+                  {saving
+                    ? '...'
+                    : isStaff
+                    ? (lang === 'bn' ? 'পাসওয়ার্ড সেভ করুন' : 'Save Password')
+                    : (lang === 'bn' ? 'নতুন পিন সেভ করুন' : 'Save New PIN')}
                 </button>
                 <button
                   type="button"

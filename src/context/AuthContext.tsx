@@ -717,8 +717,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updatePassword = useCallback(
     async (newPin: string): Promise<AuthResult> => {
       if (!user) return { ok: false, error: 'Not logged in.' }
-      if (newPin.length !== 4 || /\D/.test(newPin)) {
-        return { ok: false, error: 'PIN must be exactly 4 digits.' }
+      const isStaff = user.role === 'admin' || user.role === 'seller' || user.role === 'rider' || user.isSuperAdmin
+      if (isStaff) {
+        if (newPin.trim().length < 8) {
+          return { ok: false, error: 'Staff password must be at least 8 characters long.' }
+        }
+      } else {
+        if (newPin.length !== 4 || /\D/.test(newPin)) {
+          return { ok: false, error: 'Customer PIN must be exactly 4 digits.' }
+        }
       }
       const oldPin = getActiveUserPin(user)
       if (cloud && supabase) {
@@ -890,6 +897,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const targetEmail = targetUser?.email || ''
       const targetPhone = targetUser?.phone || ''
       const actualId = targetUser?.id || userId
+
+      const isTargetStaff = targetUser?.isSuperAdmin || targetUser?.role === 'admin' || targetUser?.role === 'seller' || targetUser?.role === 'rider'
+      if (isTargetStaff) {
+        if (newPin.trim().length < 8) {
+          return { ok: false, error: 'Staff password must be at least 8 characters long.' }
+        }
+      } else {
+        if (newPin.length !== 4 || /\D/.test(newPin)) {
+          return { ok: false, error: 'Customer PIN must be exactly 4 digits.' }
+        }
+      }
 
       setUsers((prev) =>
         prev.map((u) =>
