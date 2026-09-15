@@ -479,22 +479,27 @@ export default function Checkout() {
       // 4. Track idempotency session
       getOrCreateCartIdempotencyKey(user.id, grandTotal)
 
-      // 5. Execute order placement
-      const order = await placeOrder({
-        address: fullAddress,
-        phone: phoneVal.cleanedValue,
-        pin: isPickup ? STORE_LOCATION.pin : pin.trim(),
-        utr: cleanedUtr,
-        payerUpiName: finalPayerName,
-        deliverySlot: 'morning',
-        deliveryDate: effectiveDeliveryDate === 'standard' ? undefined : effectiveDeliveryDate,
-        deliveryNotes: landmark.trim() || undefined,
-        discountAmount: couponApplied?.discount || 0,
-        geoLat,
-        geoLng,
-        paymentType: paymentMode,
-        advanceAmount: payableAmount,
-      })
+      // 5. Execute order placement with strict 10s timeout guard
+      const order = await Promise.race([
+        placeOrder({
+          address: fullAddress,
+          phone: phoneVal.cleanedValue,
+          pin: isPickup ? STORE_LOCATION.pin : pin.trim(),
+          utr: cleanedUtr,
+          payerUpiName: finalPayerName,
+          deliverySlot: 'morning',
+          deliveryDate: effectiveDeliveryDate === 'standard' ? undefined : effectiveDeliveryDate,
+          deliveryNotes: landmark.trim() || undefined,
+          discountAmount: couponApplied?.discount || 0,
+          geoLat,
+          geoLng,
+          paymentType: paymentMode,
+          advanceAmount: payableAmount,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Network timeout: order placement took too long. Please retry.')), 10000),
+        ),
+      ])
 
       clearTimeout(slowTimer)
       clearCartIdempotencyKey(user.id)
@@ -580,20 +585,21 @@ export default function Checkout() {
         clearCartIdempotencyKey(user.id)
         setError(
           lang === 'bn'
-            ? '💾 ইন্টারনেট না থাকায় অর্ডারটি ডিভাইসে সেভ করা হয়েছে। সংযোগ পেলেই স্বয়ংক্রিয়ভাবে জমা হবে।'
-            : '💾 Weak connection. Order saved offline and will automatically submit once online.',
+            ? '💾 দুর্বল ইন্টারনেট সংযোগ। অর্ডারটি আপনার ডিভাইসে সুরক্ষিতভাবে সংরক্ষিত হয়েছে এবং সংযোগ স্থিতিশীল হলেই জমা হবে।'
+            : '💾 Weak connection detected. Your order is safely preserved offline and will submit automatically.',
         )
       } else {
         setError(
           lang === 'bn'
-            ? `অর্ডার ব্যর্থ হয়েছে: ${raw}`
-            : `Order failed: ${raw}`,
+            ? `অর্ডার জমা দেওয়া যায়নি: ${raw}`
+            : `Order submission error: ${raw}`,
         )
       }
     } finally {
       clearTimeout(slowTimer)
       setSubmitting(false)
       setSlowNetwork(false)
+      submitLockRef.current = false
     }
   }
 
@@ -957,19 +963,6 @@ export default function Checkout() {
           {/* 🚚 Home Delivery Distance & Address Section */}
           {fulfillmentMode === 'delivery' && (
             <>
-              <div style={{
-                background: delivery.isOutOfRange ? '#fef2f2' : '#f0fdf4',
-                border: delivery.isOutOfRange ? '1.5px solid #fca5a5' : '1px solid #bbf7d0',
-                padding: '0.65rem 0.85rem',
-                borderRadius: '10px',
-                fontSize: '0.84rem',
-                color: delivery.isOutOfRange ? '#dc2626' : '#166534',
-                marginBottom: '0.75rem',
-                fontWeight: 600,
-              }}>
-                {lang === 'bn' ? delivery.noticeBn : delivery.noticeEn}
-              </div>
-
               {prefilled && (
                 <div style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 600, marginBottom: '0.4rem' }}>
                   ✓ {lang === 'bn' ? 'ঠিকানা স্বয়ংক্রিয়ভাবে লোড হয়েছে' : 'Address auto-loaded from profile'}
@@ -1218,12 +1211,12 @@ export default function Checkout() {
           <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem', marginTop: '0.5rem' }}>
             <label style={{ margin: 0 }}>
               <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                👤 {lang === 'bn' ? 'PhonePe / GPay প্রেরকের নাম (ঐচ্ছিক)' : 'UPI Payer Name (Optional)'}
+                👤 {lang === 'bn' ? 'UPI প্রেরকের নাম (ঐচ্ছিক)' : 'UPI Payer Name (Optional)'}
               </span>
               <input
                 value={payerUpiName}
                 onChange={(e) => setPayerUpiName(e.target.value)}
-                placeholder={lang === 'bn' ? 'যেমন: রাহুল সেন (UPI নাম)' : 'e.g. Rahul Sen (Name in UPI App)'}
+                placeholder={lang === 'bn' ? 'ব্যাঙ্ক বা অ্যাপে থাকা নাম (যদি আলাদা হয়)' : 'Account holder name in UPI app (if different)'}
                 style={{ marginTop: '0.35rem', background: '#ffffff' }}
               />
             </label>

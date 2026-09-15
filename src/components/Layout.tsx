@@ -420,7 +420,7 @@ export default function Layout() {
               <h4 className="footer-col-title">{lang === 'bn' ? 'আউটলেট' : 'Our Outlet'}</h4>
               <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '0 0 0.5rem', lineHeight: 1.4 }}>
                 <strong>MS Vegetable Center Outlet</strong><br />
-                {lang === 'bn' ? 'পূর্ব মেদিনীপুর, পিন: ৭২১৬৪৮' : 'Purba Medinipur, PIN 721648'}
+                {lang === 'bn' ? 'পূর্ব মেদিনীপুর, পিন: ৭২১৬৩২' : 'Purba Medinipur, PIN 721632'}
               </p>
               <a
                 href={STORE_LOCATION.mapsUrl}

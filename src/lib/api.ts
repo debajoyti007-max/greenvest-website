@@ -19,7 +19,7 @@ import type {
   User,
 } from '../types'
 import { SEED_PRODUCTS } from '../data/seed'
-import { isSupabaseConfigured, supabase } from './supabase'
+import { isSupabaseConfigured, supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase'
 
 type ProductRow = {
   id: string
@@ -828,25 +828,22 @@ export async function updateOrderUtrApi(orderId: string, utr: string): Promise<b
   return true
 }
 
+async function withTimeout<T>(promiseLike: PromiseLike<T>, ms: number, errorMsg = 'Request timed out'): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(errorMsg)), ms)
+  })
+  try {
+    return await Promise.race([Promise.resolve(promiseLike), timeoutPromise])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export async function createOrder(order: Order): Promise<Order> {
   const client = requireClient()
 
-  // Auto-ensure user profile exists — use INSERT with ignoreDuplicates so we
-  // NEVER overwrite an existing role (rider/seller would get reset to 'customer'!)
-  try {
-    await client.from('profiles').insert({
-      id: order.userId,
-      email: order.userEmail || `${order.userId}@greenvest.shop`,
-      name: order.userName || 'Customer',
-      role: 'customer',
-      phone: order.phone ? order.phone.replace(/\D/g, '').slice(-10) : undefined,
-      created_at: new Date().toISOString(),
-    })
-  } catch (profErr) {
-    console.debug('Profile already exists, role preserved:', profErr)
-  }
-
-  // Also backfill phone on existing profile if provided in order
+  // Backfill phone on existing profile if provided in order (non-blocking)
   if (order.phone && order.userId) {
     const cleanPh = order.phone.replace(/\D/g, '').slice(-10)
     if (cleanPh.length >= 10) {
@@ -854,45 +851,44 @@ export async function createOrder(order: Order): Promise<Order> {
     }
   }
 
-  // Attempt atomic server-side RPC transaction first
+  const rpcPayload = {
+    p_id: order.id,
+    p_user_id: order.userId,
+    p_user_name: order.userName,
+    p_user_email: order.userEmail || `${order.userId}@greenvest.shop`,
+    p_address: order.address,
+    p_phone: order.phone,
+    p_pin: order.pin,
+    p_delivery_slot: order.deliverySlot || 'morning',
+    p_utr: order.utr,
+    p_delivery_fee: order.deliveryFee,
+    p_discount: order.discountAmount || 0,
+    p_payment_type: order.paymentType || 'advance',
+    p_items: order.items.map((it) => ({
+      productId: it.productId,
+      name: it.name,
+      emoji: it.emoji,
+      grade: it.grade,
+      qty: it.qty,
+      weightMultiplier: it.weightMultiplier || 1,
+      weightLabel: it.weightLabel || '1 kg',
+    })),
+    p_delivery_date: order.deliveryDate || 'standard',
+    p_geo_lat: order.geoLat ?? null,
+    p_geo_lng: order.geoLng ?? null,
+    p_payer_upi_name: order.payerUpiName ?? null,
+    p_delivery_notes: order.deliveryNotes ?? null,
+  }
+
+  // Attempt 1: Atomic server-side RPC transaction with strict 7s timeout
   try {
-    const { data: atomicRes, error: rpcErr } = await client.rpc('create_order_atomic', {
-      p_id: order.id,
-      p_user_id: order.userId,
-      p_user_name: order.userName,
-      p_user_email: order.userEmail || `${order.userId}@greenvest.shop`,
-      p_address: order.address,
-      p_phone: order.phone,
-      p_pin: order.pin,
-      p_delivery_slot: order.deliverySlot || 'morning',
-      p_utr: order.utr,
-      p_delivery_fee: order.deliveryFee,
-      p_discount: order.discountAmount || 0,
-      p_payment_type: order.paymentType || 'advance',
-      p_items: order.items.map((it) => ({
-        productId: it.productId,
-        name: it.name,
-        emoji: it.emoji,
-        grade: it.grade,
-        qty: it.qty,
-        weightMultiplier: it.weightMultiplier || 1,
-        weightLabel: it.weightLabel || '1 kg',
-      })),
-      p_delivery_date: order.deliveryDate || 'standard',
-    })
+    const { data: atomicRes, error: rpcErr } = await withTimeout(
+      client.rpc('create_order_atomic', rpcPayload),
+      7000,
+      'Atomic RPC client timed out',
+    )
 
     if (!rpcErr && atomicRes && (atomicRes as any).success) {
-      // Patch fields the RPC doesn't accept as parameters — done as a single UPDATE
-      const patch: Record<string, unknown> = {}
-      if (order.deliveryDate && order.deliveryDate !== 'standard') patch.delivery_date = order.deliveryDate
-      if (order.deliveryNotes) patch.delivery_notes = order.deliveryNotes
-      // M1 Fix: geo coords and payer UPI name were previously silently lost on RPC path
-      if (order.geoLat != null) patch.geo_lat = order.geoLat
-      if (order.geoLng != null) patch.geo_lng = order.geoLng
-      if (order.payerUpiName) patch.payer_upi_name = order.payerUpiName
-      if (Object.keys(patch).length > 0) {
-        void client.from('orders').update(patch).eq('id', order.id)
-      }
       return order
     }
     if (rpcErr && rpcErr.message && /already been used/i.test(rpcErr.message)) {
@@ -902,7 +898,32 @@ export async function createOrder(order: Order): Promise<Order> {
     if (rpcEx?.message && /already been used/i.test(rpcEx.message)) {
       throw rpcEx
     }
-    console.debug('Atomic RPC fallback to direct insert:', rpcEx)
+    console.debug('Atomic RPC client call failed or timed out:', rpcEx)
+  }
+
+  // Attempt 2: Direct REST RPC fallback (bypasses any frozen client auth refresh queue)
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 6000)
+    const restRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/create_order_atomic`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(rpcPayload),
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+    if (restRes.ok) {
+      const data = await restRes.json()
+      if (data && (data.success || data.order_id)) {
+        return order
+      }
+    }
+  } catch (restErr) {
+    console.debug('Direct REST RPC fallback failed or timed out:', restErr)
   }
 
   // Step 1: Insert order row
@@ -938,7 +959,7 @@ export async function createOrder(order: Order): Promise<Order> {
   if (order.deliveryDate) (payload as any).delivery_date = order.deliveryDate
   if (order.deliveryNotes) (payload as any).delivery_notes = order.deliveryNotes
 
-  let { error: orderError } = await client.from('orders').insert(payload)
+  let { error: orderError } = await withTimeout(client.from('orders').insert(payload), 6000, 'Orders insert timed out')
   if (orderError) {
     // Retry with essential core columns in case of unmigrated schema extensions
     const cleanPayload = {
@@ -959,7 +980,7 @@ export async function createOrder(order: Order): Promise<Order> {
       created_at: order.createdAt,
       updated_at: order.updatedAt,
     }
-    ;({ error: orderError } = await client.from('orders').insert(cleanPayload))
+    ;({ error: orderError } = await withTimeout(client.from('orders').insert(cleanPayload), 5000, 'Orders fallback insert timed out'))
   }
   if (orderError) {
     console.error('createOrder → orders insert failed:', orderError)
@@ -978,11 +999,11 @@ export async function createOrder(order: Order): Promise<Order> {
     weight_multiplier: it.weightMultiplier || 1,
     weight_label: it.weightLabel || '1 kg',
   }))
-  let { error: itemsError } = await client.from('order_items').insert(items)
+  let { error: itemsError } = await withTimeout(client.from('order_items').insert(items), 6000, 'Order items insert timed out')
   if (itemsError) {
     // Fallback without weight columns if old schema
     const fallbackItems = items.map(({ weight_multiplier: _wm, weight_label: _wl, ...rest }) => rest)
-    ;({ error: itemsError } = await client.from('order_items').insert(fallbackItems))
+    ;({ error: itemsError } = await withTimeout(client.from('order_items').insert(fallbackItems), 5000, 'Order items fallback insert timed out'))
   }
   if (itemsError) {
     console.error('createOrder → order_items insert failed:', itemsError)

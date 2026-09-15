@@ -17,7 +17,7 @@ function maskPhone(phone: string): string {
   return `******${digits.slice(-4)}`
 }
 
-/** Masks an address: shows only the PIN code area. e.g. "...PIN 721648" */
+/** Masks an address: shows only the PIN code area. e.g. "...PIN 721632" */
 function maskAddress(address: string): string {
   if (!address) return '**hidden**'
   // Show only the PIN code if present, or just show first word + "..."
