@@ -1537,3 +1537,61 @@ describe('Smart 4-Tier Navigation Destination Resolver & WhatsApp Location Reque
     assert.ok(waUrl.includes('Subrata'))
   })
 })
+
+// 32. Order Card Address Sanitizer & Clean Display Engine
+describe('Order Card Address Sanitizer & Clean Display Engine', () => {
+  function cleanDisplayAddress(raw) {
+    if (!raw) return ''
+    const cleaned = raw
+      .replace(/\[\s*Maps:\s*https?:\/\/[^\]]+\]/gi, '')
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/GPS\s*অবস্থান\s*সংরক্ষিত/gi, '')
+      .replace(/GPS\s*Location\s*Saved/gi, '')
+      .replace(/\[\s*-?\d+\.\d+\s*,\s*-?\d+\.\d+\s*\]/g, '')
+      .trim()
+
+    const nearMatch = cleaned.match(/\(Near:\s*([^)]+)\)/i)
+    const landmark = nearMatch ? nearMatch[1].trim() : ''
+    const base = cleaned.replace(/\(Near:[^)]+\)/gi, '').trim()
+
+    const tokens = base.split(/\s+/).filter(Boolean)
+    const uniqueTokens = []
+    for (const t of tokens) {
+      if (uniqueTokens.length === 0 || uniqueTokens[uniqueTokens.length - 1] !== t) {
+        uniqueTokens.push(t)
+      }
+    }
+    const cleanBase = uniqueTokens.join(' ').replace(/^[,\s-]+|[,\s-]+$/g, '')
+
+    if (landmark && cleanBase) {
+      if (cleanBase.toLowerCase().includes(landmark.toLowerCase())) {
+        return cleanBase
+      }
+      return `${cleanBase} (Near: ${landmark})`
+    }
+
+    return cleanBase || landmark || raw
+  }
+
+  test('Completely strips markdown Maps search URLs and Bengali GPS tags', () => {
+    const raw = '[Maps: https://www.google.com/maps/search/?api=1&query=22.1741403,87.9040403] (Near: ভবানীপুর) ভবানীপুর (Near: ভবানীপুর) ভবানীপুর GPS অবস্থান সংরক্ষিত'
+    const cleaned = cleanDisplayAddress(raw)
+    assert.strictEqual(cleaned, 'ভবানীপুর')
+    assert.ok(!cleaned.includes('http'))
+    assert.ok(!cleaned.includes('Maps'))
+    assert.ok(!cleaned.includes('GPS'))
+  })
+
+  test('Preserves distinct landmarks while eliminating raw links', () => {
+    const raw = 'Vill: Ramnagar, PO: Ghatal (Near: Bus Stand) [Maps: https://google.com/maps] GPS Location Saved'
+    const cleaned = cleanDisplayAddress(raw)
+    assert.strictEqual(cleaned, 'Vill: Ramnagar, PO: Ghatal (Near: Bus Stand)')
+  })
+
+  test('Gracefully handles empty, null or undefined input', () => {
+    assert.strictEqual(cleanDisplayAddress(''), '')
+    assert.strictEqual(cleanDisplayAddress(null), '')
+    assert.strictEqual(cleanDisplayAddress(undefined), '')
+  })
+})
+

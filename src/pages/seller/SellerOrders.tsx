@@ -210,6 +210,47 @@ const statusIcon: Record<OrderStatus, string> = {
   refunded: '💸',
 }
 
+function cleanDisplayAddress(raw: string): string {
+  if (!raw) return ''
+  const cleaned = raw
+    // Remove markdown or bracketed map search URLs
+    .replace(/\[\s*Maps:\s*https?:\/\/[^\]]+\]/gi, '')
+    // Remove standalone web links
+    .replace(/https?:\/\/\S+/gi, '')
+    // Remove GPS location saved text markers in Bengali & English
+    .replace(/GPS\s*অবস্থান\s*সংরক্ষিত/gi, '')
+    .replace(/GPS\s*Location\s*Saved/gi, '')
+    // Remove bracketed coordinate strings like [22.1741403, 87.9040403]
+    .replace(/\[\s*-?\d+\.\d+\s*,\s*-?\d+\.\d+\s*\]/g, '')
+    .trim()
+
+  // Extract landmark if present
+  const nearMatch = cleaned.match(/\(Near:\s*([^)]+)\)/i)
+  const landmark = nearMatch ? nearMatch[1].trim() : ''
+
+  // Strip all (Near: ...) markers
+  const base = cleaned.replace(/\(Near:[^)]+\)/gi, '').trim()
+
+  // Deduplicate consecutive words (handles Unicode/Bengali properly)
+  const tokens = base.split(/\s+/).filter(Boolean)
+  const uniqueTokens: string[] = []
+  for (const t of tokens) {
+    if (uniqueTokens.length === 0 || uniqueTokens[uniqueTokens.length - 1] !== t) {
+      uniqueTokens.push(t)
+    }
+  }
+  const cleanBase = uniqueTokens.join(' ').replace(/^[,\s-]+|[,\s-]+$/g, '')
+
+  if (landmark && cleanBase) {
+    if (cleanBase.toLowerCase().includes(landmark.toLowerCase())) {
+      return cleanBase
+    }
+    return `${cleanBase} (Near: ${landmark})`
+  }
+
+  return cleanBase || landmark || raw
+}
+
 export default function SellerOrders() {
   const { user } = useAuth()
   const { orders, products, lang, updateOrderStatus, updateOrderDeliveryDate, bulkUpdateOrderStatus, deleteOrder, autoCancelStaleOrders } = useStore()
@@ -223,6 +264,7 @@ export default function SellerOrders() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingDateOrderId, setEditingDateOrderId] = useState<string | null>(null)
+  const [openChatOrderId, setOpenChatOrderId] = useState<string | null>(null)
   const [purging, setPurging] = useState(false)
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null)
   const [soundEnabled, setSoundEnabled] = useState(true)
@@ -798,143 +840,127 @@ export default function SellerOrders() {
                   <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{expanded ? '▲' : '▼'}</span>
                 </div>
 
-                {/* 💳 Payment Info Box */}
+                {/* 💳 Unified Financial Summary Banner */}
                 {o.status !== 'cancelled' && (
-                  <div style={{ margin: '0 1rem 0.6rem', padding: '0.6rem 0.85rem', background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.84rem', color: '#334155' }}>
-                        💳 {o.paymentType === 'full' ? (lang === 'bn' ? '১০০% সম্পূর্ণ পেমেন্ট:' : '100% Full Payment:') : (lang === 'bn' ? '১০% অগ্রিম পেমেন্ট:' : '10% Advance Paid:')}
-                      </span>
-                      <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#166534' }}>
-                        ₹{o.advanceAmount}
-                      </span>
-                    </div>
-                    {o.payerUpiName && (
-                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>
-                        👤 {lang === 'bn' ? 'প্রেরক:' : 'Payer:'} <b>{o.payerUpiName}</b>
+                  <div style={{
+                    margin: '0 1rem 0.65rem',
+                    padding: '0.65rem 0.85rem',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                    gap: '0.6rem',
+                    alignItems: 'center',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                        {lang === 'bn' ? 'মোট অর্ডার' : 'Total Order'}
                       </div>
-                    )}
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                        ₹{o.total}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                        {o.paymentType === 'full' 
+                          ? (lang === 'bn' ? '💎 সম্পূর্ণ পেইড' : '💎 100% Paid') 
+                          : (lang === 'bn' ? '💳 ১০% অনলাইন পেইড' : '💳 10% Online Paid')}
+                      </div>
+                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#166534' }}>
+                        ₹{o.advanceAmount}
+                        {o.payerUpiName && (
+                          <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 500, marginLeft: '4px' }}>
+                            ({o.payerUpiName})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: balance > 0 ? '#b45309' : '#15803d', fontWeight: 700 }}>
+                        {lang === 'bn' ? 'দরজায় বাকি সংগ্রহ' : 'Due on Doorstep'}
+                      </div>
+                      <div style={{
+                        fontSize: '0.92rem',
+                        fontWeight: 800,
+                        color: balance > 0 ? '#dc2626' : '#166534',
+                      }}>
+                        {balance > 0 ? `₹${balance}` : (lang === 'bn' ? '✅ পরিশোধিত' : '✅ Paid in Full')}
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {/* 📍 Location Inspection Card (Before Acceptance) */}
-                {(o.status === 'pending' || o.status === 'advance_paid') && (() => {
-                  const navDest = resolveNavDestination(o)
-                  const locWaUrl = createLocationRequestWhatsAppUrl(o, lang)
-                  return (
-                    <div style={{ margin: '0 1rem 0.6rem', padding: '0.65rem 0.85rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '10px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                        <strong style={{ fontSize: '0.84rem', color: '#166534' }}>
-                          📍 {lang === 'bn' ? 'ডেলিভারি লোকেশন যাচাই:' : 'Delivery Location Check:'}
-                        </strong>
-                        <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
-                          PIN: {o.pin}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.82rem', color: '#1f2937', marginBottom: '0.45rem', lineHeight: 1.4 }}>
-                        🏡 {o.address}
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <a
-                          href={navDest.navUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            background: navDest.isExact ? '#166534' : '#1d4ed8',
-                            color: '#ffffff',
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            fontSize: '0.78rem',
-                            fontWeight: 700,
-                            textDecoration: 'none',
-                          }}
-                        >
-                          🗺️ {lang === 'bn' ? 'Google Maps-এ দেখুন' : 'View on Google Maps'}
-                        </a>
-                        {locWaUrl && (
-                          <a
-                            href={locWaUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              background: '#ffffff',
-                              border: '1.5px solid #86efac',
-                              color: '#166534',
-                              padding: '3px 8px',
-                              borderRadius: '6px',
-                              fontSize: '0.76rem',
-                              fontWeight: 700,
-                              textDecoration: 'none',
-                            }}
-                            title={lang === 'bn' ? 'কাস্টমারের কাছে লাইভ লোকেশন চেয়ে বার্তা পাঠান' : 'Ask customer for WhatsApp location'}
-                          >
-                            📲 {lang === 'bn' ? 'WhatsApp লোকেশন চান' : 'Ask Location'}
-                          </a>
-                        )}
-                        <span style={{ fontSize: '0.72rem', color: navDest.isExact ? '#15803d' : '#6b7280', fontWeight: 600 }}>
-                          {navDest.isExact ? '✓ ' : '📍 '}{lang === 'bn' ? navDest.labelBn : navDest.labelEn}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                {/* Quick action buttons - available for all orders */}
-                <div style={{ padding: '0 1rem 0.6rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {/* Primary Action Row */}
+                <div style={{ padding: '0 1rem 0.65rem', display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   {(o.status === 'pending' || o.status === 'advance_paid') && (
-                    <button type="button"
+                    <button
+                      type="button"
                       disabled={processingOrderId === o.id}
                       onClick={() => void handleAcceptOrder(o)}
-                      style={{ 
-                        flex: 1, 
-                        padding: '0.5rem', 
-                        borderRadius: '8px', 
-                        border: 'none', 
-                        cursor: processingOrderId === o.id ? 'not-allowed' : 'pointer', 
-                        fontWeight: 700, 
-                        fontSize: '0.85rem', 
-                        background: processingOrderId === o.id ? '#86efac' : '#22c55e', 
-                        color: 'white',
+                      style={{
+                        flex: 1,
+                        minWidth: '130px',
+                        padding: '0.55rem 0.85rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        cursor: processingOrderId === o.id ? 'not-allowed' : 'pointer',
+                        fontWeight: 700,
+                        fontSize: '0.86rem',
+                        background: processingOrderId === o.id ? '#86efac' : '#16a34a',
+                        color: '#ffffff',
                         opacity: processingOrderId === o.id ? 0.7 : 1,
-                        transition: 'all 0.15s ease'
-                      }}>
+                        boxShadow: '0 1px 2px rgba(22, 163, 74, 0.25)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
                       {processingOrderId === o.id 
                         ? (lang === 'bn' ? '⏳ কনফার্ম হচ্ছে...' : '⏳ Confirming...')
-                        : `✅ ${lang === 'bn' ? 'অর্ডার গ্রহণ' : 'Accept Order'}`}
+                        : `✅ ${lang === 'bn' ? 'অর্ডার গ্রহণ করুন' : 'Accept Order'}`}
                     </button>
                   )}
                   {o.status === 'confirmed' && (
-                    <button type="button"
+                    <button
+                      type="button"
                       disabled={processingOrderId === o.id}
                       onClick={() => void handleMarkDelivered(o)}
-                      style={{ 
-                        flex: 1, 
-                        padding: '0.5rem', 
-                        borderRadius: '8px', 
-                        border: 'none', 
-                        cursor: processingOrderId === o.id ? 'not-allowed' : 'pointer', 
-                        fontWeight: 700, 
-                        fontSize: '0.85rem', 
-                        background: processingOrderId === o.id ? '#93c5fd' : '#3b82f6', 
-                        color: 'white',
+                      style={{
+                        flex: 1,
+                        minWidth: '130px',
+                        padding: '0.55rem 0.85rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        cursor: processingOrderId === o.id ? 'not-allowed' : 'pointer',
+                        fontWeight: 700,
+                        fontSize: '0.86rem',
+                        background: processingOrderId === o.id ? '#93c5fd' : '#2563eb',
+                        color: '#ffffff',
                         opacity: processingOrderId === o.id ? 0.7 : 1,
-                        transition: 'all 0.15s ease'
-                      }}>
+                        boxShadow: '0 1px 2px rgba(37, 99, 235, 0.25)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
                       {processingOrderId === o.id 
                         ? (lang === 'bn' ? '⏳ আপডেট হচ্ছে...' : '⏳ Updating...')
-                        : `🚚 ${lang === 'bn' ? 'ডেলিভারড' : 'Mark Delivered'}`}
+                        : `🚚 ${lang === 'bn' ? 'ডেলিভারি সম্পন্ন করুন' : 'Mark Delivered'}`}
                     </button>
                   )}
                   {o.status !== 'cancelled' && (
-                    <button type="button" onClick={() => void handleCancel(o)}
+                    <button
+                      type="button"
+                      onClick={() => void handleCancel(o)}
                       title={lang === 'bn' ? 'অর্ডার বাতিল করুন' : 'Cancel order'}
-                      style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #fca5a5', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', background: '#fef2f2', color: '#dc2626' }}>
+                      style={{
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '8px',
+                        border: '1px solid #fca5a5',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '0.82rem',
+                        background: '#fef2f2',
+                        color: '#dc2626',
+                      }}
+                    >
                       ✕ {lang === 'bn' ? 'বাতিল' : 'Cancel'}
                     </button>
                   )}
@@ -943,76 +969,74 @@ export default function SellerOrders() {
                     onClick={() => sendOrderWhatsApp(o, lang)}
                     title={lang === 'bn' ? 'কাস্টমারকে WhatsApp-এ বিল ও লাইভ ট্র্যাকিং পাঠান' : 'Send WhatsApp invoice & tracking to customer'}
                     style={{
-                      padding: '0.5rem 0.75rem',
+                      padding: '0.55rem 0.85rem',
                       borderRadius: '8px',
                       border: '1px solid #86efac',
                       cursor: 'pointer',
                       fontWeight: 700,
-                      fontSize: '0.85rem',
+                      fontSize: '0.82rem',
                       background: '#f0fdf4',
                       color: '#15803d',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      gap: '5px',
                     }}
                   >
                     💬 WhatsApp
                   </button>
                 </div>
 
-                {/* S4: Balance due for delivered orders */}
-                {o.status === 'delivered' && balance > 0 && (
-                  <div style={{ padding: '0 1rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '0.3rem 0.75rem', borderRadius: '8px' }}>
-                      💰 {lang === 'bn' ? `বাকি: ₹${balance}` : `Balance: ₹${balance}`}
-                    </span>
-                  </div>
-                )}
-
                 {/* Expanded details */}
                 {expanded && (
-                  <div style={{ borderTop: '1px solid var(--line, #e5e7eb)', padding: '0.75rem 1rem' }}>
-                    {/* Payment Mode Info */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.85rem' }}>
-                        {lang === 'bn' ? 'পেমেন্ট মোড:' : 'Payment Mode:'}{' '}
-                        <b style={{ color: '#16a34a' }}>
-                          {o.paymentType === 'full'
-                            ? (lang === 'bn' ? '💎 সম্পূর্ণ পেমেন্ট (১০০%)' : '💎 100% Full Payment')
-                            : (lang === 'bn' ? `⚡ ১০% অগ্রিম (₹${o.advanceAmount})` : `⚡ 10% Advance (₹${o.advanceAmount})`)}
-                        </b>
-                      </span>
-                    </div>
-                    {/* Items */}
-                    <div style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ borderTop: '1px solid var(--line, #e5e7eb)', padding: '0.85rem 1rem', background: '#fafbfc' }}>
+                    {/* Ordered Items Breakdown */}
+                    <div style={{ marginBottom: '0.85rem', background: '#ffffff', padding: '0.65rem 0.85rem', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.45rem' }}>
+                        📦 {lang === 'bn' ? 'অর্ডারের পণ্যসমূহ' : 'Ordered Items'}
+                      </div>
                       {o.items.map(it => {
                         const wd = formatItemWeightDetail(it.qty, it.weightMultiplier, it.weightLabel, 'kg', lang)
                         return (
-                          <div key={`${it.productId}-${it.grade}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', padding: '0.2rem 0' }}>
-                            <span>
-                              {it.emoji} {it.name} · Grade {it.grade} × {it.qty}
+                          <div key={`${it.productId}-${it.grade}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem', padding: '0.3rem 0', borderBottom: '1px dashed #f1f5f9' }}>
+                            <span style={{ color: '#1f2937' }}>
+                              {it.emoji} <strong style={{ fontWeight: 600 }}>{it.name}</strong> · Grade {it.grade} × {it.qty}
                               {it.qty > 1 && (
                                 <span style={{ marginLeft: '6px', fontSize: '0.72rem', color: '#166534', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
                                   {wd.totalWeightText}
                                 </span>
                               )}
                             </span>
-                            <span style={{ fontWeight: 600 }}>₹{it.unitPrice * it.qty}</span>
+                            <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{it.unitPrice * it.qty}</span>
                           </div>
                         )
                       })}
                     </div>
 
-                    {/* Address with 1-Tap Maps & WhatsApp Location */}
+                    {/* Delivery Destination & Navigation */}
                     {(() => {
                       const navDest = resolveNavDestination(o)
                       const locWaUrl = createLocationRequestWhatsAppUrl(o, lang)
+                      const cleanAddr = cleanDisplayAddress(o.address)
                       return (
-                        <div style={{ fontSize: '0.85rem', color: '#374151', marginBottom: '0.65rem', padding: '0.6rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                          <div style={{ marginBottom: '0.4rem', fontWeight: 600 }}>
-                            📍 {o.address} · PIN {o.pin || '—'}
+                        <div style={{
+                          marginBottom: '0.85rem',
+                          background: '#ffffff',
+                          padding: '0.65rem 0.85rem',
+                          borderRadius: '10px',
+                          border: '1px solid #e5e7eb',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              📍 {lang === 'bn' ? 'ডেলিভারি ঠিকানা' : 'Delivery Destination'}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                              PIN: {o.pin || '—'}
+                            </span>
                           </div>
-                          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <div style={{ fontSize: '0.85rem', color: '#1f2937', fontWeight: 500, marginBottom: '0.55rem', lineHeight: 1.45 }}>
+                            🏡 {cleanAddr}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                             <a
                               href={navDest.navUrl}
                               target="_blank"
@@ -1020,17 +1044,20 @@ export default function SellerOrders() {
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '4px',
+                                gap: '5px',
                                 background: navDest.isExact ? '#166534' : '#1d4ed8',
                                 color: '#ffffff',
-                                padding: '3px 8px',
-                                borderRadius: '6px',
-                                fontSize: '0.74rem',
+                                padding: '5px 11px',
+                                borderRadius: '7px',
+                                fontSize: '0.78rem',
                                 fontWeight: 700,
                                 textDecoration: 'none',
                               }}
                             >
-                              🗺️ {lang === 'bn' ? 'ম্যাপে রুট' : 'Map Route'} ({navDest.isExact ? 'GPS' : 'Area'})
+                              🗺️ {lang === 'bn' ? 'Google Maps-এ রুট দেখুন' : 'Open in Google Maps'}
+                              <span style={{ opacity: 0.85, fontSize: '0.72rem', fontWeight: 600 }}>
+                                ({navDest.isExact ? 'Exact GPS' : 'Area PIN'})
+                              </span>
                             </a>
                             {locWaUrl && (
                               <a
@@ -1042,45 +1069,43 @@ export default function SellerOrders() {
                                   alignItems: 'center',
                                   gap: '4px',
                                   background: '#ffffff',
-                                  border: '1px solid #86efac',
+                                  border: '1.5px solid #86efac',
                                   color: '#166534',
-                                  padding: '2px 7px',
-                                  borderRadius: '6px',
-                                  fontSize: '0.74rem',
+                                  padding: '4px 10px',
+                                  borderRadius: '7px',
+                                  fontSize: '0.78rem',
                                   fontWeight: 700,
                                   textDecoration: 'none',
                                 }}
+                                title={lang === 'bn' ? 'কাস্টমারের কাছে WhatsApp-এ লাইভ লোকেশন চেয়ে বার্তা পাঠান' : 'Request exact WhatsApp location from customer'}
                               >
-                                📲 {lang === 'bn' ? 'লোকেশন চান' : 'Ask Location'}
+                                📲 {lang === 'bn' ? 'WhatsApp লোকেশন চান' : 'Request GPS Location'}
                               </a>
                             )}
-                            <span style={{ fontSize: '0.7rem', color: navDest.isExact ? '#15803d' : '#64748b' }}>
-                              ({navDest.destinationQuery})
-                            </span>
                           </div>
                         </div>
                       )
                     })()}
 
-                    {/* 📅 Delivery Date Scheduling Bar (Seller can view and mark/update) */}
+                    {/* Delivery Date Scheduling Bar */}
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       gap: '0.5rem',
                       flexWrap: 'wrap',
-                      padding: '0.45rem 0.65rem',
-                      background: '#f0fdf4',
-                      border: '1px solid #bbf7d0',
-                      borderRadius: '8px',
-                      marginBottom: '0.65rem',
+                      padding: '0.55rem 0.85rem',
+                      background: '#ffffff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      marginBottom: '0.85rem',
                       fontSize: '0.82rem',
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontWeight: 700, color: '#166534' }}>
-                          📅 {lang === 'bn' ? 'ডেলিভারি তারিখ:' : 'Delivery Date:'}
+                        <span style={{ fontWeight: 700, color: '#374151' }}>
+                          📅 {lang === 'bn' ? 'ডেলিভারি সময়সূচী:' : 'Delivery Schedule:'}
                         </span>
-                        <span style={{ fontWeight: 600, color: '#14532d', background: '#dcfce7', padding: '1px 8px', borderRadius: '10px' }}>
+                        <span style={{ fontWeight: 600, color: '#14532d', background: '#dcfce7', padding: '2px 8px', borderRadius: '10px' }}>
                           {o.deliveryDate && o.deliveryDate !== 'standard' ? o.deliveryDate : (lang === 'bn' ? '⚡ স্ট্যান্ডার্ড (১২–২৪ ঘণ্টা)' : '⚡ Standard (12–24h)')}
                         </span>
                       </div>
@@ -1098,7 +1123,7 @@ export default function SellerOrders() {
                                   showToast(lang === 'bn' ? '✅ ডেলিভারি তারিখ আপডেট হয়েছে' : '✅ Delivery date updated', '📅')
                                 }
                               }}
-                              style={{ fontSize: '0.78rem', padding: '2px 5px', borderRadius: '6px', border: '1px solid #86efac' }}
+                              style={{ fontSize: '0.78rem', padding: '3px 6px', borderRadius: '6px', border: '1px solid #86efac' }}
                             />
                             <button
                               type="button"
@@ -1107,14 +1132,14 @@ export default function SellerOrders() {
                                 setEditingDateOrderId(null)
                                 showToast(lang === 'bn' ? '✅ স্ট্যান্ডার্ড ১২–২৪ ঘণ্টা সেট হয়েছে' : '✅ Set to standard 12-24h', '⚡')
                               }}
-                              style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '6px', background: '#dcfce7', border: '1px solid #86efac', color: '#166534', cursor: 'pointer', fontWeight: 600 }}
+                              style={{ fontSize: '0.74rem', padding: '3px 8px', borderRadius: '6px', background: '#dcfce7', border: '1px solid #86efac', color: '#166534', cursor: 'pointer', fontWeight: 600 }}
                             >
                               {lang === 'bn' ? 'স্ট্যান্ডার্ড' : 'Standard'}
                             </button>
                             <button
                               type="button"
                               onClick={() => setEditingDateOrderId(null)}
-                              style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '6px', background: '#fee2e2', border: 'none', color: '#991b1b', cursor: 'pointer' }}
+                              style={{ fontSize: '0.74rem', padding: '3px 8px', borderRadius: '6px', background: '#fee2e2', border: 'none', color: '#991b1b', cursor: 'pointer' }}
                             >
                               ✕
                             </button>
@@ -1124,17 +1149,17 @@ export default function SellerOrders() {
                             type="button"
                             onClick={() => setEditingDateOrderId(o.id)}
                             style={{
-                              fontSize: '0.75rem',
+                              fontSize: '0.76rem',
                               fontWeight: 700,
-                              padding: '3px 8px',
+                              padding: '3px 9px',
                               borderRadius: '6px',
-                              background: '#ffffff',
-                              border: '1px solid #86efac',
-                              color: '#15803d',
+                              background: '#f8fafc',
+                              border: '1px solid #cbd5e1',
+                              color: '#334155',
                               cursor: 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '3px',
+                              gap: '4px',
                             }}
                           >
                             ✏️ {lang === 'bn' ? 'তারিখ পরিবর্তন' : 'Change Date'}
@@ -1143,40 +1168,111 @@ export default function SellerOrders() {
                       </div>
                     </div>
 
-                    {/* Money */}
-                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-                      <span>{lang === 'bn' ? 'মোট' : 'Total'}: <b>₹{o.total}</b></span>
-                      <span>{lang === 'bn' ? 'অগ্রিম' : 'Advance'}: ₹{o.advanceAmount}</span>
-                      <span style={{ color: balance > 0 ? '#dc2626' : '#22c55e', fontWeight: 600 }}>
-                        {lang === 'bn' ? 'বাকি' : 'Balance'}: ₹{balance}
-                      </span>
+                    {/* Operations & Utility Actions */}
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem',
+                      marginBottom: '0.85rem',
+                      background: '#ffffff',
+                      padding: '0.65rem 0.85rem',
+                      borderRadius: '10px',
+                      border: '1px solid #e5e7eb',
+                    }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        🛠️ {lang === 'bn' ? 'অর্ডার টুলস ও ডকুমেন্টস' : 'Order Actions & Tools'}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {/* Customer Comms */}
+                        <a href={`tel:${o.phone}`} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          📞 {lang === 'bn' ? 'কল করুন' : 'Call'}
+                        </a>
+                        <Link to={o.userId ? `/seller/support?userId=${o.userId}` : '/seller/support'} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          💬 {lang === 'bn' ? 'গ্রাহক সহায়তা' : 'Support Chat'}
+                        </Link>
+
+                        {/* Delivery Ops */}
+                        <Link to={`/orders/success/${o.id}`} target="_blank" style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#e0e7ff', border: '1px solid #c7d2fe', fontSize: '0.8rem', textDecoration: 'none', color: '#3730a3', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          📲 {lang === 'bn' ? 'লাইভ ট্র্যাকিং' : 'Live Tracking'}
+                        </Link>
+                        <Link to="/rider" style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: '0.8rem', textDecoration: 'none', color: '#1e40af', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          🛵 {lang === 'bn' ? 'রাইডার পোর্টাল' : 'Rider Portal'}
+                        </Link>
+
+                        {/* Printing */}
+                        <button type="button" onClick={() => printOrderInvoice(o)} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '0.8rem', cursor: 'pointer', color: '#334155', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }} title={lang === 'bn' ? 'A4 সাইজ ইনভয়েস প্রিন্ট' : 'Print A4 Tax Invoice'}>
+                          🧾 {lang === 'bn' ? 'ইনভয়েস' : 'A4 Invoice'}
+                        </button>
+                        <button type="button" onClick={() => printThermalReceipt(o)} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '0.8rem', cursor: 'pointer', color: '#334155', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }} title={lang === 'bn' ? 'থার্মাল পিওএস রসিদ প্রিন্ট (৫৮/৮০ মিমি)' : 'Print Thermal POS Receipt (58/80mm)'}>
+                          🖨️ {lang === 'bn' ? 'থার্মাল স্লিপ' : 'POS Slip'}
+                        </button>
+
+                        {/* Delete DB */}
+                        <button type="button" onClick={() => void handleDeleteOrder(o.id)} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#fef2f2', border: '1px solid #fca5a5', fontSize: '0.8rem', cursor: 'pointer', color: '#dc2626', fontWeight: 600, marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          🗑️ {lang === 'bn' ? 'মুছে ফেলুন' : 'Delete'}
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Action buttons */}
-                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                      <a href={`tel:${o.phone}`} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534' }}>📞 Call</a>
-                      <button type="button" onClick={() => sendOrderWhatsApp(o, lang)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#dcfce7', border: '1px solid #86efac', fontSize: '0.8rem', cursor: 'pointer', color: '#15803d', fontWeight: 600 }}>💬 WhatsApp</button>
-                      <Link to={o.userId ? `/seller/support?userId=${o.userId}` : '/seller/support'} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8rem', textDecoration: 'none', color: '#166534' }}>💬 {lang === 'bn' ? 'সাপোর্ট' : 'Support'}</Link>
-                      <Link to={`/orders/success/${o.id}`} target="_blank" style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#e0e7ff', border: '1px solid #c7d2fe', fontSize: '0.8rem', textDecoration: 'none', color: '#3730a3', fontWeight: 600 }}>📲 Live Track</Link>
-                      <Link to="/rider" style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: '0.8rem', textDecoration: 'none', color: '#1e40af' }}>🛵 {lang === 'bn' ? 'রাইডার' : 'Rider'}</Link>
-                      <button type="button" onClick={() => openMaps(o.address, o.pin || '')} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🗺️ Maps</button>
-                      <button type="button" onClick={() => printOrderInvoice(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🧾</button>
-                      <button type="button" onClick={() => printThermalReceipt(o)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: '0.8rem', cursor: 'pointer', color: '#374151' }}>🖨️</button>
-                      <button type="button" onClick={() => void handleDeleteOrder(o.id)} style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: '#fef2f2', border: '1px solid #fca5a5', fontSize: '0.8rem', cursor: 'pointer', color: '#dc2626', marginLeft: 'auto' }}>🗑️ {lang === 'bn' ? 'মুছে ফেলুন' : 'Delete DB'}</button>
+                    {/* Customer Chat / Notes Collapsible Accordion */}
+                    <div style={{
+                      marginBottom: '0.85rem',
+                      background: '#ffffff',
+                      borderRadius: '10px',
+                      border: '1px solid #e5e7eb',
+                      overflow: 'hidden',
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenChatOrderId(openChatOrderId === o.id ? null : o.id)}
+                        style={{
+                          width: '100%',
+                          padding: '0.6rem 0.85rem',
+                          background: openChatOrderId === o.id ? '#f1f5f9' : '#ffffff',
+                          border: 'none',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          color: '#334155',
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          💬 {lang === 'bn' ? 'কাস্টমার নোট ও চ্যাট হিস্ট্রি' : 'Customer Notes & Messages'}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          {openChatOrderId === o.id ? '▲ ' + (lang === 'bn' ? 'লুকান' : 'Hide') : '▼ ' + (lang === 'bn' ? 'দেখুন' : 'View')}
+                        </span>
+                      </button>
+
+                      {openChatOrderId === o.id && (
+                        <div style={{ padding: '0.65rem 0.85rem', borderTop: '1px solid #e5e7eb', background: '#f8fafc' }}>
+                          <OrderChat orderId={o.id} role="seller" lang={lang} />
+                        </div>
+                      )}
                     </div>
 
-                    {/* Order Chat */}
-                    <div style={{ marginTop: '0.75rem' }}>
-                      <OrderChat orderId={o.id} role="seller" lang={lang} />
-                    </div>
-
-                    {/* Status dropdown (advanced) */}
-                    <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{lang === 'bn' ? 'স্ট্যাটাস:' : 'Status:'}</span>
-                      <select value={o.status} onChange={e => {
-                        const s = e.target.value as OrderStatus
-                        void updateOrderStatus(o.id, s)
-                      }} style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                    {/* Status dropdown (advanced manual override) */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', fontSize: '0.8rem', color: '#6b7280' }}>
+                      <span>{lang === 'bn' ? 'ম্যানুয়াল স্ট্যাটাস পরিবর্তন:' : 'Override Status:'}</span>
+                      <select
+                        value={o.status}
+                        onChange={e => {
+                          const s = e.target.value as OrderStatus
+                          void updateOrderStatus(o.id, s)
+                        }}
+                        style={{
+                          padding: '0.35rem 0.6rem',
+                          borderRadius: '7px',
+                          border: '1px solid #cbd5e1',
+                          background: '#ffffff',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          color: '#1f2937',
+                        }}
+                      >
                         {STATUSES.map(s => <option key={s} value={s}>{statusIcon[s]} {lang === 'bn' ? statusBn[s] : s}</option>)}
                       </select>
                     </div>
@@ -1193,10 +1289,6 @@ export default function SellerOrders() {
 )
 }
 
-function openMaps(address: string, pin: string) {
-  const q = encodeURIComponent(`${address} ${pin}`.trim())
-  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, '_blank', 'noopener,noreferrer')
-}
 
 function sendOrderWhatsApp(o: Order, lang: string) {
   const cleanPhone = o.phone.replace(/\D/g, '').slice(-10)
