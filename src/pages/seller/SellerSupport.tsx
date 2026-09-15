@@ -62,6 +62,9 @@ export default function SellerSupport() {
     const map = new Map<string, { userId: string; userName: string; userPhone?: string; messages: SupportMessage[]; lastMsg: SupportMessage; status: 'open' | 'resolved' }>()
 
     ;(supportMessages || []).forEach((m) => {
+      if (m.senderRole === 'bot' || m.userId === 'guest' || m.message.startsWith('[SYSTEM ALERT:')) {
+        return
+      }
       if (!map.has(m.userId)) {
         map.set(m.userId, {
           userId: m.userId,
@@ -401,7 +404,7 @@ export default function SellerSupport() {
                     </Link>
                   )}
 
-                  {/* Close / Reopen buttons */}
+                  {/* Close / Reopen / Delete buttons */}
                   {currentThread.status === 'open' ? (
                     <button
                       type="button"
@@ -413,26 +416,24 @@ export default function SellerSupport() {
                       ✓ {lang === 'bn' ? 'টিকিট বন্ধ করুন' : 'Close Ticket'}
                     </button>
                   ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleReopen}
-                        className="btn btn-secondary btn-sm"
-                        style={{ fontSize: '0.75rem', padding: '4px 10px' }}
-                      >
-                        🔄 {lang === 'bn' ? 'পুনরায় খুলুন' : 'Reopen'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDeleteThread}
-                        title="Delete from database"
-                        className="btn btn-ghost btn-sm"
-                        style={{ fontSize: '0.75rem', padding: '4px 8px', color: '#ef4444' }}
-                      >
-                        🗑️
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      onClick={handleReopen}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                    >
+                      🔄 {lang === 'bn' ? 'পুনরায় খুলুন' : 'Reopen'}
+                    </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={handleDeleteThread}
+                    title="Permanently delete from database"
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: '0.75rem', padding: '4px 8px', color: '#ef4444', border: '1px solid #fee2e2', borderRadius: '6px' }}
+                  >
+                    🗑️ {lang === 'bn' ? 'মুছুন' : 'Delete'}
+                  </button>
                 </div>
               </div>
 

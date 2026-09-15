@@ -1,5 +1,4 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { reportSystemAlert } from '../lib/telemetry'
 
 interface Props {
   children: ReactNode
@@ -22,12 +21,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('GreenVest Caught Error in ErrorBoundary:', error, errorInfo)
-    void reportSystemAlert({
-      type: 'CRASH',
-      error,
-      details: errorInfo.componentStack || undefined,
-    })
+    console.error('Caught Error in ErrorBoundary:', error, errorInfo)
   }
 
   private handleReset = () => {

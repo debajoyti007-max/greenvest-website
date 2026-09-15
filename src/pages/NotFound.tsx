@@ -1,19 +1,8 @@
-﻿import { useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { reportSystemAlert } from '../lib/telemetry'
+import { Link } from 'react-router-dom'
 import { useStore } from '../context/useStore'
 
 export default function NotFound() {
-  const location = useLocation()
   const { lang } = useStore()
-
-  useEffect(() => {
-    // Automatically record the 404 error into the in-app support stream
-    void reportSystemAlert({
-      type: '404',
-      path: location.pathname + location.search,
-    })
-  }, [location.pathname, location.search])
 
   return (
     <div
