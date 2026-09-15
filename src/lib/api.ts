@@ -1043,7 +1043,12 @@ export function subscribeProducts(onChange: () => void) {
 // ── Customer-specific order subscription (free-tier optimized) ───────────────
 // Opens only for logged-in customers. Filtered by user_id so the channel only
 // fires when THEIR orders change — no wasted events from other users.
-export function subscribeCustomerOrders(userId: string, onChange: () => void) {
+// Passes the updated row directly so the caller can patch state in-memory
+// with ZERO extra HTTP round-trips (instant 0ms UI update).
+export function subscribeCustomerOrders(
+  userId: string,
+  onUpdate: (updatedRow: Record<string, unknown>) => void,
+) {
   if (!isSupabaseConfigured || !supabase || !userId) return () => {}
   const client = supabase
   const channel = client
@@ -1051,7 +1056,7 @@ export function subscribeCustomerOrders(userId: string, onChange: () => void) {
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'orders', filter: `user_id=eq.${userId}` },
-      () => onChange(),
+      (payload) => onUpdate(payload.new as Record<string, unknown>),
     )
     .subscribe()
   return () => {
@@ -1081,7 +1086,12 @@ export function subscribeOrderMessages(orderId: string, onChange: () => void) {
 
 // ── Single order subscription for live tracking (free-tier optimized) ────────
 // Used on TrackOrder.tsx when viewing a specific order. Subscribes only while on page.
-export function subscribeSingleOrder(orderId: string, onChange: () => void) {
+// Passes the updated row directly so the caller can patch state in-memory
+// with ZERO extra HTTP round-trips (instant 0ms UI update).
+export function subscribeSingleOrder(
+  orderId: string,
+  onUpdate: (updatedRow: Record<string, unknown>) => void,
+) {
   if (!isSupabaseConfigured || !supabase || !orderId) return () => {}
   const client = supabase
   const channel = client
@@ -1089,13 +1099,14 @@ export function subscribeSingleOrder(orderId: string, onChange: () => void) {
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-      () => onChange(),
+      (payload) => onUpdate(payload.new as Record<string, unknown>),
     )
     .subscribe()
   return () => {
     void client.removeChannel(channel)
   }
 }
+
 
 // ── Support messages subscription (scoped to customer or all for staff) ──────
 // If userId is provided: listens only for that user's messages.

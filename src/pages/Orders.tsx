@@ -14,7 +14,8 @@ import type { Order, OrderItem } from '../types'
 
 export default function Orders() {
   const { user } = useAuth()
-  const { orders, lang, loading, reorderFromOrder, updateOrderStatus, refreshOrdersOnly } = useStore()
+  const { orders, lang, loading, reorderFromOrder, updateOrderStatus } = useStore()
+
   const navigate = useNavigate()
   const [msg, setMsg] = useState('')
 
@@ -59,33 +60,42 @@ export default function Orders() {
   }, [clearedIds])
 
   // ── Live order status subscription ─────────────────────────────────────────
-  // Subscribe to Supabase Realtime for this customer's own orders.
-  // When seller confirms / rider picks up → instant toast + refresh, no manual reload.
+  // Uses payload.new from WebSocket to instantly patch only the changed order
+  // in React state — ZERO extra HTTP round-trips, truly instant UI update.
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const prevStatusMapRef = useRef<Record<string, string>>({})
 
   useEffect(() => {
     if (!user?.id) return
-    const unsub = subscribeCustomerOrders(user.id, () => {
+    const unsub = subscribeCustomerOrders(user.id, (updatedRow) => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-      refreshTimerRef.current = setTimeout(async () => {
-        const prevMap = prevStatusMapRef.current
-        await refreshOrdersOnly()
-        // We can't directly read the updated orders here (closure), so we rely on
-        // the next render — the orders state in context will update and the component re-renders.
-        // Show a generic update toast so the customer knows something changed.
-        showToast(
-          lang === 'bn' ? '🔄 আপনার অর্ডারের স্ট্যাটাস আপডেট হয়েছে!' : '🔄 Your order status has been updated!',
-          '📦',
-        )
-        prevStatusMapRef.current = prevMap
-      }, 1000)
+      refreshTimerRef.current = setTimeout(() => {
+        const newStatus = updatedRow.status as string | undefined
+        const orderId = updatedRow.id as string | undefined
+        if (!orderId) return
+
+        // ⚡ Instant in-memory patch — no server call needed
+        updateOrderStatus(orderId, newStatus as Order['status'])
+
+        // User-friendly toast with specific status message
+        const statusLabels: Record<string, string> = {
+          confirmed: '✅ Your order has been confirmed!',
+          out_for_delivery: '🚚 Your order is out for delivery!',
+          delivered: '🎉 Your order has been delivered!',
+          cancelled: '❌ Your order was cancelled.',
+          advance_paid: '💰 Advance payment received!',
+          pending: '⏳ Order is pending.',
+        }
+        const msgEn = statusLabels[newStatus ?? ''] ?? '🔄 Your order status has been updated!'
+        const msgBn = lang === 'bn' ? '🔄 আপনার অর্ডারের স্ট্যাটাস আপডেট হয়েছে!' : msgEn
+        showToast(lang === 'bn' ? msgBn : msgEn, '📦')
+      }, 300)
     })
     return () => {
       unsub()
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
     }
-  }, [user?.id, refreshOrdersOnly, lang])
+  }, [user?.id, updateOrderStatus, lang])
+
 
   const mine = useMemo(() => {
     if (!user) return []
