@@ -39,6 +39,7 @@ import {
   uid,
 } from '../lib/storage'
 import type { Role, User } from '../types'
+import { showToast } from '../lib/toast'
 
 type AuthResult = { ok: boolean; error?: string; user?: User; mfaPending?: boolean }
 
@@ -330,10 +331,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [cloud, refresh, loadUsersIfStaff])
 
-  // ── Realtime: auto-update role/status when admin changes this user's profile ──
+  // ── Realtime: auto-logout/update when admin changes this user's profile ──────
+  // Rules:
+  //  1. is_blocked = true  → immediate logout with suspension message.
+  //  2. role changed       → auto-logout so they get a clean fresh session
+  //     (if promoted to staff: they'll hit the 8-char password gate on next login).
+  //  3. Same role, not blocked → normal state update (name, phone, tier, etc).
   const currentUserId = user?.id
+  const currentUserRole = user?.role
   useEffect(() => {
     if (!cloud || !supabase || !currentUserId) return
+
     const channel = supabase
       .channel(`profile-${currentUserId}`)
       .on(
@@ -342,21 +350,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (payload) => {
           const row = payload.new as any
           if (!row) return
-          const updated = mapProfile(row)
-          if (updated) {
-            setUser(updated)
-            userRef.current = updated
-            if (updated.role === 'admin' || updated.role === 'seller') {
-              void loadUsersIfStaff(updated)
-            }
+
+          // ── Case 1: Account was BLOCKED by admin ────────────────────────────
+          if (row.is_blocked === true) {
+            showToast(
+              '🚫 Your account has been suspended by administration. You have been logged out.',
+              '🚫',
+              'error',
+            )
+            // Small delay so the toast is visible before redirect
+            setTimeout(() => {
+              saveCurrentUser(null)
+              setUser(null)
+              userRef.current = null
+              setUsers([])
+              clearStoredPins()
+              if (supabase) void supabase.auth.signOut().catch(() => {})
+              // Navigate to /auth — use location.replace so back button doesn't bring them back
+              window.location.replace(window.location.origin + (import.meta.env.BASE_URL || '/') + 'auth')
+            }, 1800)
+            return
           }
-        }
+
+          const updated = mapProfile(row)
+          if (!updated) return
+
+          // ── Case 2: ROLE was changed by admin ──────────────────────────────
+          if (updated.role !== currentUserRole) {
+            const wasStaff = ['admin', 'seller', 'rider'].includes(currentUserRole ?? '')
+            const isNowStaff = ['admin', 'seller', 'rider'].includes(updated.role)
+
+            let message: string
+            if (isNowStaff && !wasStaff) {
+              // Promoted: customer → staff
+              message = `🎉 Congratulations! You have been promoted to ${updated.role}. Please log in again to access your new dashboard.`
+            } else if (!isNowStaff && wasStaff) {
+              // Demoted: staff → customer
+              message = `ℹ️ Your role has been changed to ${updated.role} by the administrator. Please log in again.`
+            } else {
+              // Role swap within staff tiers (e.g. seller → rider)
+              message = `🔄 Your account role was updated to ${updated.role}. Please log in again to continue.`
+            }
+
+            showToast(message, '🔔', 'info')
+
+            setTimeout(() => {
+              saveCurrentUser(null)
+              setUser(null)
+              userRef.current = null
+              setUsers([])
+              clearStoredPins()
+              if (supabase) void supabase.auth.signOut().catch(() => {})
+              window.location.replace(window.location.origin + (import.meta.env.BASE_URL || '/') + 'auth')
+            }, 2500)
+            return
+          }
+
+          // ── Case 3: Normal profile update (name, phone, tier, unblocked) ───
+          setUser(updated)
+          userRef.current = updated
+          saveCurrentUser(updated)
+          if (updated.role === 'admin' || updated.role === 'seller') {
+            void loadUsersIfStaff(updated)
+          }
+        },
       )
       .subscribe()
+
     return () => {
       if (supabase) void supabase.removeChannel(channel)
     }
-  }, [cloud, currentUserId, loadUsersIfStaff])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloud, currentUserId, currentUserRole, loadUsersIfStaff])
+
+
 
   // ── Staff Realtime: auto-sync newly registered customers and live profile edits ──
   useEffect(() => {
