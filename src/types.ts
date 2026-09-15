@@ -16,6 +16,8 @@ export interface User {
   isBlocked?: boolean
   /** True only when the database has is_super_admin=true for this profile. Never set from env vars. */
   isSuperAdmin?: boolean
+  /** Set to true if a staff member still has an old 4-digit PIN and must upgrade to an 8+ char password */
+  needsPasswordUpgrade?: boolean
   createdAt: string
 }
 

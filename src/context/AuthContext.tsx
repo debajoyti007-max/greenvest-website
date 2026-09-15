@@ -17,6 +17,7 @@ import {
   updateProfileDetails,
   updateProfileTier,
   deleteUserProfileApi,
+  upgradeStaffPasswordApi,
   mapProfile,
 } from '../lib/api'
 import { getStaffCredentials, promptForStaffPin, type StaffCredentials } from '../lib/staffAuth'
@@ -56,6 +57,7 @@ interface AuthContextValue {
   logout: () => Promise<void>
   resetPassword: (name: string, email: string, newPin: string) => Promise<AuthResult>
   updatePassword: (password: string) => Promise<AuthResult>
+  upgradeStaffPassword: (newPassword: string, oldSecret?: string) => Promise<AuthResult>
   setUserRole: (userId: string, role: Role) => Promise<AuthResult>
   setUserTier: (userId: string, tier: import('../types').CustomerTier) => Promise<AuthResult>
   updateUserProfile: (data: { name?: string; phone?: string }) => Promise<void>
@@ -487,6 +489,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const profile = mapProfile(profileRow as any)
           if (!profile) return { ok: false, error: 'Profile error. Please contact support.' }
           if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Please contact support.' }
+          if ((data as any).needs_password_upgrade || (profile.role !== 'customer' && usedPin && usedPin.length < 8)) {
+            profile.needsPasswordUpgrade = true
+          }
 
           // 🔐 Super Admin 2FA: Send magic link to Gmail
           if (profile.isSuperAdmin && supabase) {
@@ -775,6 +780,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (user.id) storePin(user.id, newPin)
       }
       return { ok: true }
+    },
+    [user, cloud],
+  )
+
+  const upgradeStaffPassword = useCallback(
+    async (newPassword: string, oldSecret?: string): Promise<AuthResult> => {
+      if (!user) return { ok: false, error: 'Not logged in.' }
+      if (newPassword.trim().length < 8) {
+        return { ok: false, error: 'Staff password must be at least 8 characters long.' }
+      }
+      const callerPin = oldSecret?.trim() || getActiveUserPin(user)
+      if (cloud && supabase) {
+        try {
+          await upgradeStaffPasswordApi(user.id, callerPin, newPassword.trim())
+          storePin(user.id, newPassword.trim())
+          if (user.email) storePin(user.email, newPassword.trim())
+          if (user.phone) storePin(user.phone, newPassword.trim())
+          const updatedUser = { ...user, needsPasswordUpgrade: false }
+          setUser(updatedUser)
+          userRef.current = updatedUser
+          saveCurrentUser(updatedUser)
+          return { ok: true }
+        } catch (err: any) {
+          return { ok: false, error: err?.message || 'Failed to upgrade staff password.' }
+        }
+      } else {
+        storePin(user.id, newPassword.trim())
+        if (user.email) storePin(user.email, newPassword.trim())
+        if (user.phone) storePin(user.phone, newPassword.trim())
+        const updatedUser = { ...user, needsPasswordUpgrade: false }
+        setUser(updatedUser)
+        userRef.current = updatedUser
+        saveCurrentUser(updatedUser)
+        return { ok: true }
+      }
     },
     [user, cloud],
   )
@@ -1196,6 +1236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       resetPassword,
       updatePassword,
+      upgradeStaffPassword,
       setUserRole,
       setUserTier,
       updateUserProfile,
@@ -1219,6 +1260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       resetPassword,
       updatePassword,
+      upgradeStaffPassword,
       setUserRole,
       setUserTier,
       updateUserProfile,

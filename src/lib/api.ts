@@ -333,6 +333,23 @@ export async function updateOwnPin(callerId: string, oldPin: string, newPin: str
   if (!result?.ok) throw new Error(result?.error || 'Failed to update PIN')
 }
 
+export async function upgradeStaffPasswordApi(
+  callerId: string,
+  oldSecret: string,
+  newPassword: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const client = requireClient()
+  const { data, error } = await client.rpc('upgrade_staff_password', {
+    p_caller_id: callerId,
+    p_old_secret: oldSecret,
+    p_new_password: newPassword,
+  })
+  if (error) throw new Error(error.message || 'Failed to upgrade staff password')
+  const result = data as { ok?: boolean; error?: string; message?: string } | null
+  if (!result?.ok) throw new Error(result?.error || 'Failed to upgrade staff password')
+  return { ok: true, message: result.message }
+}
+
 export async function updateProfilePinAdmin(
   userId: string,
   pin: string,

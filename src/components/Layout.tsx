@@ -14,6 +14,7 @@ import NotificationBell from './NotificationBell'
 import CustomerNotificationBanner from './CustomerNotificationBanner'
 import PwaInstallPrompt from './PwaInstallPrompt'
 import BottomNav from './BottomNav'
+import StaffPasswordUpgradeModal from './StaffPasswordUpgradeModal'
 
 // ⚡ Performance Optimization: Lazy-load support chat widget so initial layout render is instant
 const SupportChatWidget = lazy(() => import('./SupportChatWidget'))
@@ -464,6 +465,9 @@ export default function Layout() {
 
       {/* 📱 Mobile Bottom Navigation Bar — Dynamic Island Style */}
       <BottomNav />
+
+      {/* 🛡️ Forced Password Upgrade Gate for Staff & Admins */}
+      <StaffPasswordUpgradeModal />
     </div>
   )
 }
