@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- Migration 024: Staff 8+ char password & Anti-Escalation Shield
 -- - Customers keep fast 4-digit PINs
 -- - Staff (Admin, Seller, Rider) require 8+ character passwords
@@ -74,7 +74,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS 
+AS $$
 BEGIN
   -- Strict Super Admin lock: cannot modify is_super_admin without special internal flag
   IF (NEW.is_super_admin IS DISTINCT FROM OLD.is_super_admin) THEN

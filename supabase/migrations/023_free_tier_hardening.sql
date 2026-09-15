@@ -729,7 +729,7 @@ REVOKE ALL ON FUNCTION public.save_product_admin(text,text,text,text,text,numeri
 
 GRANT EXECUTE ON FUNCTION public.login_with_pin(text,text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.register_customer_atomic(text,text,text,text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.create_order_atomic(text,text,text,text,text,text,text,text,text,numeric,numeric,text,jsonb,text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_order_atomic(text,text,text,text,text,text,text,text,text,numeric,numeric,text,jsonb,text,double precision,double precision,text,text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.validate_coupon(text,numeric) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.check_account_exists(text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.verify_delivery_handover(text,text) TO anon, authenticated;
