@@ -59,7 +59,7 @@ export interface DeliveryCalculationResult {
 
 export function calcDeliveryFee(
   pin?: string,
-  _coordsOrZones?: { lat: number; lng: number } | DbDeliveryZone[] | null,
+  coordsOrZones?: { lat: number; lng: number } | DbDeliveryZone[] | null,
   fulfillmentMode: 'delivery' | 'pickup' = 'delivery',
 ): DeliveryCalculationResult {
   // Store Pickup is always 100% Free (₹0)
@@ -75,9 +75,48 @@ export function calcDeliveryFee(
     }
   }
 
+  // Priority 1: Exact GPS coordinates distance
+  let coords: { lat: number; lng: number } | null = null
+  if (coordsOrZones && 'lat' in coordsOrZones && 'lng' in coordsOrZones && coordsOrZones.lat && coordsOrZones.lng) {
+    coords = coordsOrZones as { lat: number; lng: number }
+  }
+
+  if (coords) {
+    const distanceKm = calculateDistanceKm(STORE_LOCATION.lat, STORE_LOCATION.lng, coords.lat, coords.lng)
+
+    // Over 15 km is out of delivery range
+    if (distanceKm > STORE_LOCATION.maxDeliveryRadiusKm) {
+      return {
+        fee: 0,
+        zone: 'Out of Delivery Range',
+        distanceKm,
+        isPickup: false,
+        isOutOfRange: true,
+        noticeEn: `Your location is ~${distanceKm} km away (outside 15 km delivery zone). Please choose Store Pickup (₹0) or enter a local address.`,
+        noticeBn: `আপনার অবস্থান ~${distanceKm} কিমি দূরে (১৫ কিমি ডেলিভারি সীমার বাইরে)। দোকান থেকে ফ্রি পিকআপ (₹০) বেছে নিন।`,
+      }
+    }
+
+    // <= 5 km: ₹30, > 5 km: ₹50
+    const fee = distanceKm > 5 ? 50 : 30
+    return {
+      fee,
+      zone: distanceKm > 5 ? `Extended Delivery (~${distanceKm} km)` : `Local Delivery (~${distanceKm} km)`,
+      distanceKm,
+      isPickup: false,
+      isOutOfRange: false,
+      noticeEn: distanceKm > 5
+        ? `Delivery Fee: ₹50 (~${distanceKm} km from store)`
+        : `Delivery Fee: ₹30 (~${distanceKm} km from store)`,
+      noticeBn: distanceKm > 5
+        ? `ডেলিভারি চার্জ: ₹৫০ (দোকান থেকে ~${distanceKm} কিমি)`
+        : `ডেলিভারি চার্জ: ₹৩০ (দোকান থেকে ~${distanceKm} কিমি)`,
+    }
+  }
+
   const cleanPin = pin ? pin.replace(/\D/g, '') : ''
 
-  // 1. Strict check: if a 6-digit PIN is entered and it is NOT in serviceable PINs
+  // Priority 2: Strict check: if a 6-digit PIN is entered and it is NOT in serviceable PINs
   if (cleanPin.length === 6 && !isServiceablePin(cleanPin)) {
     return {
       fee: 0,
@@ -90,21 +129,23 @@ export function calcDeliveryFee(
     }
   }
 
-  // 2. Serviceable PIN delivery
+  // Priority 3: Serviceable PIN delivery
   if (isServiceablePin(cleanPin)) {
     const pinInfo = PIN_DISTANCE_MAP[cleanPin]
+    const distanceKm = pinInfo ? pinInfo.distanceKm : 3.5
+    const fee = distanceKm > 5 ? 50 : 30
     return {
-      fee: pinInfo ? pinInfo.fee : 30,
+      fee,
       zone: `PIN ${cleanPin}`,
-      distanceKm: pinInfo ? pinInfo.distanceKm : 3.5,
+      distanceKm,
       isPickup: false,
       isOutOfRange: false,
-      noticeEn: 'Home Delivery Available: ₹30',
-      noticeBn: 'হোম ডেলিভারি চার্জ: ₹৩০',
+      noticeEn: fee === 50 ? 'Delivery: ₹50' : 'Delivery: ₹30',
+      noticeBn: fee === 50 ? 'ডেলিভারি চার্জ: ₹৫০' : 'ডেলিভারি চার্জ: ₹৩০',
     }
   }
 
-  // 3. Default for local delivery
+  // Priority 4: Default for local delivery
   return {
     fee: 30,
     zone: 'Local PIN Area',
@@ -113,6 +154,91 @@ export function calcDeliveryFee(
     isOutOfRange: false,
     noticeEn: `Home Delivery Available: ₹30 (PINs: ${SERVICEABLE_PINCODES.join(', ')})`,
     noticeBn: `হোম ডেলিভারি উপলব্ধ: ₹৩০ (পিন: ${SERVICEABLE_PINCODES.join(', ')})`,
+  }
+}
+
+export async function reverseGeocodeLocation(
+  lat: number,
+  lng: number,
+): Promise<{ village?: string; town?: string; pin?: string; displayName?: string }> {
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 3500)
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`,
+      {
+        headers: { 'User-Agent': 'GreenVest-Delivery/1.0' },
+        signal: controller.signal,
+      },
+    )
+    clearTimeout(timer)
+    if (!res.ok) return {}
+    const data = await res.json()
+    const addr = data.address || {}
+    const village = addr.village || addr.suburb || addr.neighbourhood || addr.hamlet || ''
+    const town = addr.town || addr.city || addr.county || addr.state_district || ''
+    const pin = addr.postcode ? addr.postcode.replace(/\D/g, '').slice(0, 6) : undefined
+    return {
+      village,
+      town,
+      pin,
+      displayName: [village, town].filter(Boolean).join(', ') || data.name || '',
+    }
+  } catch {
+    return {}
+  }
+}
+
+export interface LocationServiceabilityResult {
+  isServiceable: boolean
+  distanceKm: number
+  fee: number
+  detectedPin?: string
+  detectedArea?: string
+  noticeEn: string
+  noticeBn: string
+}
+
+export async function checkLocationServiceability(
+  lat: number,
+  lng: number,
+): Promise<LocationServiceabilityResult> {
+  const distanceKm = calculateDistanceKm(STORE_LOCATION.lat, STORE_LOCATION.lng, lat, lng)
+
+  if (distanceKm > STORE_LOCATION.maxDeliveryRadiusKm) {
+    return {
+      isServiceable: false,
+      distanceKm,
+      fee: 0,
+      noticeEn: `Your location is ~${distanceKm} km away (outside 15 km delivery zone).`,
+      noticeBn: `আপনার অবস্থান ~${distanceKm} কিমি দূরে (১৫ কিমি ডেলিভারি সীমার বাইরে)।`,
+    }
+  }
+
+  const fee = distanceKm > 5 ? 50 : 30
+  const geo = await reverseGeocodeLocation(lat, lng)
+
+  let matchedPin: string | undefined
+  if (geo.pin && isServiceablePin(geo.pin)) {
+    matchedPin = geo.pin
+  } else {
+    matchedPin = '721632'
+  }
+
+  const areaName = geo.displayName || geo.village || geo.town || ''
+
+  return {
+    isServiceable: true,
+    distanceKm,
+    fee,
+    detectedPin: matchedPin,
+    detectedArea: areaName,
+    noticeEn: distanceKm > 5
+      ? `Delivery Available: ₹50 (~${distanceKm} km from store)`
+      : `Delivery Available: ₹30 (~${distanceKm} km from store)`,
+    noticeBn: distanceKm > 5
+      ? `ডেলিভারি চার্জ: ₹৫০ (দোকান থেকে ~${distanceKm} কিমি)`
+      : `ডেলিভারি চার্জ: ₹৩০ (দোকান থেকে ~${distanceKm} কিমি)`,
   }
 }
 export function isValidPinCode(pin?: string): boolean {

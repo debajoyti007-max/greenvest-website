@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES } from '../lib/business'
-import { calcDeliveryFee, isServiceablePin, STORE_LOCATION } from '../lib/delivery'
+import { calcDeliveryFee, isServiceablePin, STORE_LOCATION, checkLocationServiceability } from '../lib/delivery'
 import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC, generateDynamicUpiQr, buildUpiPayUri } from '../lib/payment'
 import { getSavedDelivery, saveDelivery } from '../lib/storage'
@@ -34,6 +34,7 @@ export default function Checkout() {
 
   const userEditedAddress = useRef(false)
   const submitLockRef = useRef(false)
+  const autoGpsAttempted = useRef(false)
   const [house, setHouse] = useState('')
   const [landmark, setLandmark] = useState('')
   const [area, setArea] = useState('')
@@ -42,6 +43,12 @@ export default function Checkout() {
   const [geoLat, setGeoLat] = useState<number | undefined>(undefined)
   const [geoLng, setGeoLng] = useState<number | undefined>(undefined)
   const [detectingGps, setDetectingGps] = useState(false)
+  const [locationStatus, setLocationStatus] = useState<{
+    status: 'idle' | 'detecting' | 'verified' | 'out_of_range' | 'denied'
+    distanceKm?: number
+    fee?: number
+    message?: string
+  }>({ status: 'idle' })
 
   const [phone, setPhone] = useState(user?.phone || '')
   const [payerUpiName, setPayerUpiName] = useState('')
@@ -268,6 +275,82 @@ export default function Checkout() {
     }
   }, [user, orders])
 
+  const handleDetectGps = useCallback((isAuto = false) => {
+    if (!navigator.geolocation) {
+      if (!isAuto) setError(lang === 'bn' ? 'ব্রাউজারে GPS সাপোর্ট নেই' : 'Geolocation is not supported by your browser')
+      return
+    }
+    setDetectingGps(true)
+    setLocationStatus({ status: 'detecting' })
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        const mapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+        setGeoCoords(mapUrl)
+        setGeoLat(lat)
+        setGeoLng(lng)
+
+        try {
+          localStorage.setItem('gv_user_lat', String(lat))
+          localStorage.setItem('gv_user_lng', String(lng))
+        } catch {}
+
+        const check = await checkLocationServiceability(lat, lng)
+        if (check.isServiceable) {
+          if (check.detectedPin) {
+            setPin(check.detectedPin)
+            userEditedAddress.current = true
+          }
+          if (!area && check.detectedArea) {
+            setArea(check.detectedArea)
+            userEditedAddress.current = true
+          }
+          setLocationStatus({
+            status: 'verified',
+            distanceKm: check.distanceKm,
+            fee: check.fee,
+            message: lang === 'bn' ? check.noticeBn : check.noticeEn,
+          })
+        } else {
+          setLocationStatus({
+            status: 'out_of_range',
+            distanceKm: check.distanceKm,
+            fee: 0,
+            message: lang === 'bn' ? check.noticeBn : check.noticeEn,
+          })
+        }
+        setDetectingGps(false)
+      },
+      (err) => {
+        setDetectingGps(false)
+        console.warn('Geolocation error:', err)
+        setLocationStatus({
+          status: 'denied',
+          message: lang === 'bn' ? 'লোকেশন অনুমতি পাওয়া যায়নি' : 'Location permission not granted',
+        })
+        if (!isAuto) {
+          setError(lang === 'bn' ? 'GPS পাওয়া যায়নি — ডিভাইসের লোকেশন অন করুন' : 'Location not found — please turn on device location')
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      },
+    )
+  }, [area, lang])
+
+  // 📍 Auto-check location on checkout mount with user permission
+  useEffect(() => {
+    if (autoGpsAttempted.current) return
+    if (fulfillmentMode !== 'delivery') return
+    if (geoLat && geoLng) return
+    autoGpsAttempted.current = true
+    handleDetectGps(true)
+  }, [fulfillmentMode, geoLat, geoLng, handleDetectGps])
+
   if (!user) return <Navigate to="/auth" replace />
   if (cart.length === 0) {
     return (
@@ -298,40 +381,6 @@ export default function Checkout() {
     } catch {
       setError(lang === 'bn' ? 'কপি করা যায়নি — নিজে টাইপ করুন' : 'Could not copy — please type manually')
     }
-  }
-
-  const handleDetectGps = () => {
-    if (!navigator.geolocation) {
-      setError(lang === 'bn' ? 'আপনার ব্রাউজারে GPS সাপোর্ট নেই' : 'Geolocation is not supported by your browser')
-      return
-    }
-    setDetectingGps(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
-        const mapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
-        setGeoCoords(mapUrl)
-        setGeoLat(lat)
-        setGeoLng(lng)
-        try {
-          localStorage.setItem('gv_user_lat', String(lat))
-          localStorage.setItem('gv_user_lng', String(lng))
-        } catch {}
-        if (!area) setArea(lang === 'bn' ? 'GPS অবস্থান সংরক্ষিত' : 'GPS Location Saved')
-        setDetectingGps(false)
-      },
-      (err) => {
-        setDetectingGps(false)
-        console.warn('Geolocation error:', err)
-        setError(lang === 'bn' ? 'GPS অবস্থান পাওয়া যায়নি — ডিভাইসের লোকেশন অন রাখুন' : 'Unable to detect GPS — please turn on device location')
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      },
-    )
   }
 
   const onSubmit = async (e: FormEvent) => {
@@ -954,116 +1003,127 @@ export default function Checkout() {
                 </label>
               )}
 
-              {/* Option 2: GPS Auto-Location Button */}
+              {/* 📍 Minimal Doorstep Auto-Location Card */}
               <div
-                className="gps-detector-box"
                 style={{
-                  background: '#f0fdf4',
-                  border: geoCoords ? '1px solid #bbf7d0' : '1.5px solid #86efac',
-                  padding: '0.85rem 1rem',
+                  background: locationStatus.status === 'out_of_range' ? '#fef2f2' : '#f0fdf4',
+                  border: locationStatus.status === 'out_of_range' ? '1.5px solid #fca5a5' : '1.5px solid #86efac',
                   borderRadius: '12px',
-                  marginBottom: '0.65rem',
-                  boxShadow: !geoCoords ? '0 2px 8px rgba(34,197,94,0.12)' : 'none',
+                  padding: '0.65rem 0.85rem',
+                  marginBottom: '0.75rem',
                 }}
               >
-                {!geoCoords && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      marginBottom: '0.45rem',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      color: '#166534',
-                    }}
-                  >
-                    <span>💡</span>
-                    <span>
-                      {lang === 'bn'
-                        ? 'সরাসরি আপনার বাড়ির দরজায় ডেলিভারি পেতে এই বোতামটি ১-বার চাপুন:'
-                        : 'Tap once so the rider reaches your doorstep without calling for directions:'}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                    <span style={{ fontSize: '1.15rem' }}>
+                      {detectingGps ? '⏳' : locationStatus.status === 'out_of_range' ? '🔴' : geoCoords ? '🟢' : '📍'}
                     </span>
+                    <div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: locationStatus.status === 'out_of_range' ? '#991b1b' : '#166534' }}>
+                        {detectingGps
+                          ? (lang === 'bn' ? 'লোকেশন ও ডেলিভারি চার্জ যাচাই হচ্ছে...' : 'Checking doorstep delivery...')
+                          : locationStatus.status === 'out_of_range'
+                            ? (lang === 'bn' ? `ডেলিভারি এলাকার বাইরে (~${locationStatus.distanceKm} কিমি)` : `Outside Delivery Zone (~${locationStatus.distanceKm} km)`)
+                            : geoCoords
+                              ? (lang === 'bn'
+                                ? `ডেলিভারি উপলব্ধ (${(locationStatus.fee ?? delivery.fee) === 50 ? '₹৫০' : '₹৩০'} · ~${locationStatus.distanceKm ?? delivery.distanceKm} কিমি)`
+                                : `Delivery Verified: ₹${locationStatus.fee ?? delivery.fee} (~${locationStatus.distanceKm ?? delivery.distanceKm} km)`)
+                              : (lang === 'bn' ? 'দরজায় ডেলিভারির জন্য লোকেশন চেক করুন' : 'Auto-check location for doorstep delivery')}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: locationStatus.status === 'out_of_range' ? '#b91c1c' : '#15803d', fontWeight: 500 }}>
+                        {locationStatus.status === 'out_of_range'
+                          ? (lang === 'bn' ? 'সর্বোচ্চ সীমা ১৫ কিমি। দোকান থেকে ফ্রি সংগ্রহ করুন।' : 'Max limit is 15 km. Free Store Pickup available.')
+                          : geoCoords
+                            ? (lang === 'bn' ? '✓ রাইডারের জন্য সঠিক GPS লিঙ্ক করা হয়েছে' : '✓ Exact GPS linked for rider')
+                            : (lang === 'bn' ? '১-ট্যাপে লোকেশন ও পিন যাচাই করুন' : 'Tap to detect location & verify PIN')}
+                      </div>
+                    </div>
                   </div>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={handleDetectGps}
-                  disabled={detectingGps}
-                  style={{
-                    width: '100%',
-                    background: '#166534',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    fontWeight: 700,
-                    boxShadow: !geoCoords ? '0 2px 6px rgba(22,101,52,0.2)' : 'none',
-                  }}
-                >
-                  <span>📍</span>
-                  <span>
-                    {detectingGps
-                      ? (lang === 'bn' ? '⏳ অবস্থান চিহ্নিত করা হচ্ছে...' : '⏳ Detecting GPS...')
-                      : (lang === 'bn' ? 'আমার বর্তমান অবস্থান চিহ্নিত করুন (GPS)' : 'Auto-Fill My Location (GPS)')}
-                  </span>
-                </button>
-                {geoCoords && (
-                  <div style={{ marginTop: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                    <p className="hint" style={{ color: '#166534', margin: 0, fontWeight: 700, fontSize: '0.82rem' }}>
-                      ✓ {lang === 'bn' ? 'সঠিক GPS অবস্থান সংরক্ষিত হয়েছে!' : 'Exact GPS linked for delivery rider!'}
-                    </p>
-                    <a
-                      href={geoCoords}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 700, textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                    >
-                      🗺️ {lang === 'bn' ? 'ম্যাপে বাড়ি যাচাই করুন' : 'Verify on Map'} ❯
-                    </a>
+
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    {locationStatus.status === 'out_of_range' ? (
+                      <button
+                        type="button"
+                        onClick={() => setFulfillmentMode('pickup')}
+                        style={{
+                          background: '#166534',
+                          color: '#ffffff',
+                          border: 'none',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🏪 {lang === 'bn' ? 'ফ্রি পিকআপ (₹০)' : 'Free Pickup (₹0)'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDetectGps(false)}
+                        disabled={detectingGps}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #86efac',
+                          color: '#166534',
+                          padding: '4px 9px',
+                          borderRadius: '6px',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {detectingGps ? '⏳...' : geoCoords ? '🔄 GPS' : '📍 ' + (lang === 'bn' ? 'লোকেশন' : 'GPS')}
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
-              {/* Address Form Inputs */}
-              <label>
-                🏡 {lang === 'bn' ? 'বাড়ি / এলাকা' : 'House / Street / Area'}
-                <input
-                  value={house}
-                  onChange={(e) => { setHouse(e.target.value); userEditedAddress.current = true }}
-                  required={fulfillmentMode === 'delivery'}
-                  placeholder={lang === 'bn' ? 'যেমন: কয়েল বাগান, বিশ্বাস বাড়ি' : 'e.g. Biswas House, Street #12'}
-                />
-              </label>
-
-              <label>
-                🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক ও বাড়ির চেনার উপায় (ঐচ্ছিক)' : 'Landmark & Visual Cue (Optional)'}
-                <input
-                  value={landmark}
-                  onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
-                  placeholder={lang === 'bn' ? 'যেমন: শিব মন্দিরের পাশে হলুদ দোতলা বাড়ি / প্রাইমারি স্কুলের উল্টোদিকে' : 'e.g. Yellow 2-storey house near Shiv temple / opposite primary school'}
-                />
-              </label>
-
+              {/* 📍 Town / Village */}
               <label>
                 📍 {lang === 'bn' ? 'গ্রাম / শহর' : 'Town / Village'}
                 <input
                   value={area}
                   onChange={(e) => { setArea(e.target.value); userEditedAddress.current = true }}
                   required={fulfillmentMode === 'delivery'}
-                  placeholder={lang === 'bn' ? 'যেমন: গ্রাম / পাড়া / রোড' : 'e.g. Village / Para / Road'}
+                  placeholder={lang === 'bn' ? 'যেমন: ভবানীপুর / নন্দকুমার' : 'e.g. Bhabanipur / Nandakumar'}
                 />
               </label>
 
-              <div>
+              {/* 🏡 House / Street / Para */}
+              <label>
+                🏡 {lang === 'bn' ? 'বাড়ি / পাড়া / রোড' : 'House / Street / Para'}
+                <input
+                  value={house}
+                  onChange={(e) => { setHouse(e.target.value); userEditedAddress.current = true }}
+                  required={fulfillmentMode === 'delivery'}
+                  placeholder={lang === 'bn' ? 'যেমন: বিশ্বাস বাড়ি / মণ্ডল পাড়া' : 'e.g. Biswas House / Ward #4'}
+                />
+              </label>
+
+              {/* 🏛️ Landmark (Optional) */}
+              <label>
+                🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক (ঐচ্ছিক)' : 'Landmark (Optional)'}
+                <input
+                  value={landmark}
+                  onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
+                  placeholder={lang === 'bn' ? 'যেমন: শিব মন্দিরের পাশে / স্কুলের বিপরীতে' : 'e.g. Near Shiv Temple / Opp. Primary School'}
+                />
+              </label>
+
+              {/* 📮 1-Tap Serviceable PIN Code Selection */}
+              <div style={{ marginBottom: '0.75rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                  <label style={{ margin: 0, fontWeight: 600 }}>📮 {lang === 'bn' ? 'পিন কোড (PIN)' : 'PIN Code'}</label>
-                  <span style={{ fontSize: '0.75rem', color: '#166534', fontWeight: 600 }}>
-                    {lang === 'bn' ? '১-ট্যাপে নির্বাচন করুন:' : '1-Tap Select:'}
+                  <label style={{ margin: 0, fontWeight: 700, fontSize: '0.84rem' }}>
+                    📮 {lang === 'bn' ? 'ডেলিভারি পিন কোড (PIN)' : 'Delivery PIN Code'}
+                  </label>
+                  <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>
+                    {delivery.fee > 0 ? (lang === 'bn' ? `চার্জ: ₹${delivery.fee}` : `Delivery: ₹${delivery.fee}`) : ''}
                   </span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '0.45rem' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
                   {SERVICEABLE_PINCODES.map((p) => {
                     const isSelected = pin === p
                     return (
@@ -1076,13 +1136,13 @@ export default function Checkout() {
                         }}
                         style={{
                           flex: 1,
-                          padding: '0.45rem 0.25rem',
+                          padding: '0.55rem 0.35rem',
                           borderRadius: '8px',
                           border: isSelected ? '2px solid #166534' : '1px solid #cbd5e1',
                           background: isSelected ? '#dcfce7' : '#ffffff',
                           color: isSelected ? '#166534' : '#334155',
                           fontWeight: 700,
-                          fontSize: '0.86rem',
+                          fontSize: '0.88rem',
                           cursor: 'pointer',
                           textAlign: 'center',
                           transition: 'all 0.15s ease',
@@ -1094,18 +1154,6 @@ export default function Checkout() {
                     )
                   })}
                 </div>
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={pin}
-                  onChange={(e) => {
-                    setPin(e.target.value.replace(/\D/g, ''))
-                    userEditedAddress.current = true
-                  }}
-                  required={fulfillmentMode === 'delivery'}
-                  placeholder="721632"
-                  style={{ width: '100%' }}
-                />
               </div>
 
               <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '-0.25rem' }}>
@@ -1175,7 +1223,7 @@ export default function Checkout() {
               <input
                 value={payerUpiName}
                 onChange={(e) => setPayerUpiName(e.target.value)}
-                placeholder={lang === 'bn' ? `যেমন: ${user?.name || 'Rahul'}` : `e.g. ${user?.name || 'Rahul'}`}
+                placeholder={lang === 'bn' ? 'যেমন: রাহুল সেন (UPI নাম)' : 'e.g. Rahul Sen (Name in UPI App)'}
                 style={{ marginTop: '0.35rem', background: '#ffffff' }}
               />
             </label>

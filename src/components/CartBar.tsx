@@ -1,10 +1,20 @@
-﻿import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useStore } from '../context/useStore'
 import { MIN_ORDER_AMOUNT } from '../lib/business'
 
 export default function CartBar() {
   const { cartCount, cartTotal, lang } = useStore()
-  if (cartCount === 0) return null
+  const location = useLocation()
+
+  // Hide CartBar on checkout, cart, order confirmation, and management portals
+  const isHidden =
+    location.pathname === '/cart' ||
+    location.pathname === '/checkout' ||
+    location.pathname.startsWith('/orders/success') ||
+    location.pathname.startsWith('/seller') ||
+    location.pathname.startsWith('/rider')
+
+  if (cartCount === 0 || isHidden) return null
 
   const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
   const meetsMin = cartTotal >= MIN_ORDER_AMOUNT

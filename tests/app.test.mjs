@@ -337,10 +337,30 @@ describe('Optimistic Updates State Rollback', () => {
   })
 })
 
-// 10. Free Delivery & PIN Code Verification Logic
-describe('Free Delivery & PIN Code Verification Logic', () => {
-  function calcDeliveryFee(_pin) {
-    return { fee: 0, zone: 'Free Delivery' }
+// 10. Tiered Delivery & PIN Code Verification Logic
+describe('Tiered Delivery & PIN Code Verification Logic', () => {
+  const SERVICEABLE_PINCODES = ['721632', '721633', '721643']
+  const PIN_DISTANCE_MAP = {
+    '721632': { distanceKm: 3.2, fee: 30 },
+    '721633': { distanceKm: 8.0, fee: 50 },
+    '721643': { distanceKm: 10.5, fee: 50 },
+  }
+
+  function calcDeliveryFee(pin, fulfillmentMode = 'delivery') {
+    if (fulfillmentMode === 'pickup') {
+      return { fee: 0, isPickup: true, isOutOfRange: false }
+    }
+    const cleanPin = pin ? String(pin).replace(/\D/g, '') : ''
+    if (cleanPin.length === 6 && !SERVICEABLE_PINCODES.includes(cleanPin)) {
+      return { fee: 0, isOutOfRange: true }
+    }
+    if (SERVICEABLE_PINCODES.includes(cleanPin)) {
+      const pinInfo = PIN_DISTANCE_MAP[cleanPin]
+      const distanceKm = pinInfo ? pinInfo.distanceKm : 3.5
+      const fee = distanceKm > 5 ? 50 : 30
+      return { fee, distanceKm, isOutOfRange: false }
+    }
+    return { fee: 30, isOutOfRange: false }
   }
 
   function isValidPinCode(pin) {
@@ -349,10 +369,25 @@ describe('Free Delivery & PIN Code Verification Logic', () => {
     return cleaned.length === 6
   }
 
-  test('Always provides ₹0 free delivery regardless of PIN location', () => {
-    assert.equal(calcDeliveryFee('721632').fee, 0)
-    assert.equal(calcDeliveryFee('700001').fee, 0)
-    assert.equal(calcDeliveryFee('110001').fee, 0)
+  test('Store pickup provides ₹0 free delivery', () => {
+    assert.equal(calcDeliveryFee('721632', 'pickup').fee, 0)
+    assert.equal(calcDeliveryFee('721632', 'pickup').isPickup, true)
+  })
+
+  test('Local PIN under 5km (721632) charges ₹30', () => {
+    const res = calcDeliveryFee('721632')
+    assert.equal(res.fee, 30)
+    assert.equal(res.isOutOfRange, false)
+  })
+
+  test('Extended PIN over 5km (721633, 721643) charges ₹50', () => {
+    assert.equal(calcDeliveryFee('721633').fee, 50)
+    assert.equal(calcDeliveryFee('721643').fee, 50)
+  })
+
+  test('Unserviceable PIN is flagged as out of range', () => {
+    assert.equal(calcDeliveryFee('700001').isOutOfRange, true)
+    assert.equal(calcDeliveryFee('110001').isOutOfRange, true)
   })
 
   test('Validates 6-digit PIN code format for address verification', () => {
