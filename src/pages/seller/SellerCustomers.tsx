@@ -187,7 +187,7 @@ export default function SellerCustomers() {
         resetModalUser.id,
         lang === 'bn' ? '🔐 অ্যাকাউন্ট পিন রিসেট' : '🔐 Account PIN Reset',
         lang === 'bn' ? `আপনার নতুন পিন: ${newPin}` : `Your new login PIN is: ${newPin}`,
-        'MS Vegetable Center Security'
+        'Security'
       )
     }
     try {
@@ -212,7 +212,7 @@ export default function SellerCustomers() {
               targetId,
               notifTitle.trim() || (lang === 'bn' ? 'স্টোর মেসেজ' : 'Store Update'),
               notifMessage.trim(),
-              user.name || 'MS Vegetable Center Seller'
+              user.name || 'Store Seller'
             )
           }
         }
@@ -227,7 +227,7 @@ export default function SellerCustomers() {
           notifModalTarget.id,
           notifTitle.trim() || (lang === 'bn' ? 'স্টোর মেসেজ' : 'Store Update'),
           notifMessage.trim(),
-          user.name || 'MS Vegetable Center Seller'
+          user.name || 'Store Seller'
         )
       }
       setNotifModalTarget(null)

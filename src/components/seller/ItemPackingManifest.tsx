@@ -409,8 +409,8 @@ export default function ItemPackingManifest({
 
     const title =
       lang === 'bn'
-        ? 'গ্রিনভেস্ট মণ্ডি সোর্সিং ও আইটেম প্যাকিং শিট'
-        : 'GreenVest Mandi Sourcing & Item Packing Sheet'
+        ? 'এম এস ভেজিটেবল সেন্টার মণ্ডি সোর্সিং ও আইটেম প্যাকিং শিট'
+        : 'MS Vegetable Center Mandi Sourcing & Item Packing Sheet'
 
     const html = `<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title>
     <style>
@@ -478,7 +478,7 @@ export default function ItemPackingManifest({
     })
 
     const lines: string[] = []
-    lines.push(`🌿 *GreenVest Mandi Sourcing List* (${dateStr})`)
+    lines.push(`🌿 *MS Vegetable Center Mandi Sourcing List* (${dateStr})`)
     lines.push(`📦 Active Orders: ${activeOrders.length} | 12–24h Delivery Batch`)
     lines.push(`⚖️ Total Weight: *${metrics.totalKg} kg* | Pieces: *${metrics.totalPcs}*`)
     lines.push(`-----------------------------------`)
@@ -508,7 +508,7 @@ export default function ItemPackingManifest({
   // 📋 Copy text to clipboard
   const handleCopyText = async () => {
     const lines: string[] = []
-    lines.push(`GreenVest Sourcing List - ${new Date().toLocaleDateString('en-IN')}`)
+    lines.push(`MS Vegetable Center Sourcing List - ${new Date().toLocaleDateString('en-IN')}`)
     lines.push(`Orders: ${activeOrders.length} | Total: ${metrics.totalKg} kg`)
     lines.push(`---------------------------------`)
 

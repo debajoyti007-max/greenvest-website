@@ -153,8 +153,8 @@ export default function SellerSupport() {
     try {
       // Send friendly closing message
       const farewell = lang === 'bn'
-        ? '✓ আপনার সমস্যার সমাধান সম্পন্ন হিসেবে চিহ্নিত করা হয়েছে। GreenVest-এর সাথে থাকার জন্য ধন্যবাদ! 🌿'
-        : '✓ Your support request has been resolved. Thank you for shopping with GreenVest! 🌿'
+        ? '✓ আপনার সমস্যার সমাধান সম্পন্ন হিসেবে চিহ্নিত করা হয়েছে। MS Vegetable Center-এর সাথে থাকার জন্য ধন্যবাদ! 🌿'
+        : '✓ Your support request has been resolved. Thank you for shopping with MS Vegetable Center! 🌿'
 
       await sendSupportMessage({
         userId: selectedUserId,

@@ -84,7 +84,7 @@ export function printThermalReceipt(order: Order) {
     .hr { border-bottom: 1px dashed #000; margin: 4px 0; }
   </style></head><body>
   <div class="c b">MS VEGETABLE CENTER</div>
-  <div class="c">Fresh Vegetables & Daily Groceries</div>
+  <div class="c">Farm-Fresh Vegetables & Daily Groceries</div>
   <div class="hr"></div>
   <div>ID: ${escapeHtml(order.id)}</div>
   <div>Date: ${new Date(order.createdAt).toLocaleDateString()}</div>
@@ -266,7 +266,7 @@ export function printRiderManifest(orders: Order[], lang: 'en' | 'bn' = 'en') {
   </style></head><body>
   <div class="header-box">
     <div>
-      <h1>🌿 GreenVest ${escapeHtml(title)}</h1>
+      <h1>🌿 MS Vegetable Center ${escapeHtml(title)}</h1>
       <div class="muted">Date: ${escapeHtml(dateStr)} · Active Orders: ${active.length}</div>
     </div>
     <div style="text-align:right">

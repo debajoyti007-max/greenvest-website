@@ -223,7 +223,7 @@ export default function RiderView() {
   }
 
   const copyDeliveryNotice = async (userName: string, id: string) => {
-    const msg = `নমস্কার ${userName}, আপনার MS Vegetable Center অর্ডার #${id.slice(0, 6)} রাইডারের কাছে ডেলিভারির জন্য রওয়ানা হয়েছে! 🛵`
+    const msg = `নমস্কার ${userName}, আপনার অর্ডার #${id.slice(0, 6)} ডেলিভারির জন্য রওয়ানা হয়েছে! 🛵`
     try {
       await navigator.clipboard.writeText(msg)
       showToast(lang === 'bn' ? 'বার্তা কপি হয়েছে!' : 'Notice copied!', '📋')
@@ -233,11 +233,11 @@ export default function RiderView() {
   const copyDeliveredInvoice = async (o: Order) => {
     const balance = Math.max(0, o.total - o.advanceAmount)
     const itemsText = o.items.map((it) => `• ${it.name} (${it.qty}x)`).join('\n')
-    const msg = `🎉 MS Vegetable Center ডেলিভারি সম্পন্ন\n\nনমস্কার ${o.userName},\nআপনার অর্ডার #${o.id.slice(0, 6)} সফলভাবে ডেলিভারি করা হয়েছে।\n\n📦 সামগ্রী:\n${itemsText}\n\n💰 মোট: ₹${o.total}\n💵 সংগৃহীত ক্যাশ: ₹${balance}\n\nধন্যবাদ! তাজা শাকসবজির জন্য আবার MS Vegetable Center ব্যবহার করুন 🌱`
+    const msg = `🎉 ডেলিভারি সম্পন্ন\n\nনমস্কার ${o.userName},\nআপনার অর্ডার #${o.id.slice(0, 6)} সফলভাবে ডেলিভারি করা হয়েছে।\n\n📦 সামগ্রী:\n${itemsText}\n\n💰 মোট: ₹${o.total}\n💵 সংগৃহীত ক্যাশ: ₹${balance}\n\nধন্যবাদ! তাজা শাকসবজির জন্য আবার কেনাকাটা করুন 🌱`
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `MS Vegetable Center Delivery #${o.id.slice(0, 6)}`,
+          title: `Delivery #${o.id.slice(0, 6)}`,
           text: msg,
         })
         return

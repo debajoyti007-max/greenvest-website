@@ -3,9 +3,9 @@ import { SERVICEABLE_PINCODES, SUPPORT_PHONE } from './business'
 
 export const STORE_LOCATION = {
   name: 'MS Vegetable Center',
-  nameBn: 'এম.এস ভেজিটেবল সেন্টার',
+  nameBn: 'এম এস ভেজিটেবল সেন্টার',
   address: 'MS Vegetable Center, Purba Medinipur, PIN 721632',
-  addressBn: 'এম.এস ভেজিটেবল সেন্টার, পূর্ব মেদিনীপুর, পিন: ৭২১৬৩২',
+  addressBn: 'এমএস ভেজিটেবল সেন্টার, পূর্ব মেদিনীপুর, পিন: ৭২১৬৩২',
   lat: 22.1746825,
   lng: 87.9106158,
   mapsUrl: 'https://maps.app.goo.gl/pdafSPpPPBymCDgDA',
@@ -34,11 +34,11 @@ export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lo
   return Math.round(R * c * 10) / 10 // 1 decimal place
 }
 
-/** Known PIN distances and delivery fees from Store Hub (pure PIN codes, zero town names) */
+/** Known PIN distances and delivery fees from Store Hub (<= 5km: ₹30, > 5km: ₹50) */
 const PIN_DISTANCE_MAP: Record<string, { distanceKm: number; fee: number }> = {
-  '721632': { distanceKm: 3.5, fee: 30 },
-  '721633': { distanceKm: 4.2, fee: 30 },
-  '721643': { distanceKm: 4.8, fee: 30 },
+  '721632': { distanceKm: 3.2, fee: 30 },
+  '721633': { distanceKm: 7.8, fee: 50 },
+  '721643': { distanceKm: 10.2, fee: 50 },
 }
 
 export function isServiceablePin(pin?: string): boolean {
@@ -70,8 +70,8 @@ export function calcDeliveryFee(
       distanceKm: 0,
       isPickup: true,
       isOutOfRange: false,
-      noticeEn: 'Self-Pickup from MS Vegetable Center (₹0 Delivery Charge)',
-      noticeBn: 'সরাসরি এম.এস ভেজিটেবল সেন্টার থেকে সংগ্রহ (₹০ ডেলিভারি চার্জ)',
+      noticeEn: 'Self-Pickup from Store Outlet (₹0 Delivery Charge)',
+      noticeBn: 'স্টোর আউটলেট থেকে নিজস্ব পিকআপ (₹০ ডেলিভারি চার্জ)',
     }
   }
 
@@ -140,8 +140,8 @@ export function calcDeliveryFee(
       distanceKm,
       isPickup: false,
       isOutOfRange: false,
-      noticeEn: fee === 50 ? 'Delivery: ₹50' : 'Delivery: ₹30',
-      noticeBn: fee === 50 ? 'ডেলিভারি চার্জ: ₹৫০' : 'ডেলিভারি চার্জ: ₹৩০',
+      noticeEn: fee === 50 ? `Delivery Fee: ₹50 (~${distanceKm} km from store)` : `Delivery Fee: ₹30 (~${distanceKm} km from store)`,
+      noticeBn: fee === 50 ? `ডেলিভারি চার্জ: ₹৫০ (দোকান থেকে ~${distanceKm} কিমি)` : `ডেলিভারি চার্জ: ₹৩০ (দোকান থেকে ~${distanceKm} কিমি)`,
     }
   }
 
@@ -152,8 +152,8 @@ export function calcDeliveryFee(
     distanceKm: 3.5,
     isPickup: false,
     isOutOfRange: false,
-    noticeEn: `Home Delivery Available: ₹30 (PINs: ${SERVICEABLE_PINCODES.join(', ')})`,
-    noticeBn: `হোম ডেলিভারি উপলব্ধ: ₹৩০ (পিন: ${SERVICEABLE_PINCODES.join(', ')})`,
+    noticeEn: `Home Delivery Available: ₹30 – ₹50 (PINs: ${SERVICEABLE_PINCODES.join(', ')})`,
+    noticeBn: `হোম ডেলিভারি উপলব্ধ: ₹৩০ – ₹৫০ (পিন: ${SERVICEABLE_PINCODES.join(', ')})`,
   }
 }
 
@@ -367,6 +367,6 @@ export function createLocationRequestWhatsAppUrl(
   const msg =
     lang === 'bn'
       ? `নমস্কার ${order.userName} বাবু/দিদি, এম.এস ভেজিটেবল সেন্টারের রাইডার আপনার অর্ডার (#${shortId}) নিয়ে বের হচ্ছে। 🛵\n\nঅনুগ্রহ করে এই চ্যাটে পেপারক্লিপ (📎) আইকন চেপে আপনার লাইভ লোকেশন (Share Live Location / Current Location pin) পাঠিয়ে দিন, যাতে রাইডার সরাসরি আপনার বাড়ির দরজায় পৌঁছে যেতে পারে। ধন্যবাদ!`
-      : `Hello ${order.userName}, GreenVest delivery rider is on the way with your order (#${shortId}). 🛵\n\nPlease share your Live Location or Current Pin in this WhatsApp chat using the attachment (📎) icon so the rider can reach your exact doorstep without delay. Thank you!`
+      : `Hello ${order.userName}, MS Vegetable Center delivery rider is on the way with your order (#${shortId}). 🛵\n\nPlease share your Live Location or Current Pin in this WhatsApp chat using the attachment (📎) icon so the rider can reach your exact doorstep without delay. Thank you!`
   return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`
 }

@@ -219,8 +219,8 @@ export default function Support() {
           {/* Welcome Message */}
           <div style={{ alignSelf: 'flex-start', maxWidth: '80%', background: '#ffffff', border: '1px solid #e2e8f0', padding: '10px 14px', borderRadius: '14px 14px 14px 2px', fontSize: '0.85rem', color: '#334155', lineHeight: 1.4 }}>
             👋 {lang === 'bn'
-              ? 'নমস্কার! MS Vegetable Center সহায়তা কেন্দ্রে স্বাগতম। আপনার অর্ডার বা কোনো প্রশ্নের জন্য নিচে বার্তা পাঠান।'
-              : 'Hello! Welcome to MS Vegetable Center Support. Feel free to ask any question or report any issue below.'}
+              ? 'নমস্কার! সহায়তা কেন্দ্রে স্বাগতম। আপনার অর্ডার বা কোনো প্রশ্নের জন্য নিচে বার্তা পাঠান।'
+              : 'Hello! Welcome to Support. Feel free to ask any question or report any issue below.'}
           </div>
 
           {userThread.map((m) => {

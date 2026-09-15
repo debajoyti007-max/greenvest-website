@@ -146,7 +146,7 @@ export default function SupportChatWidget() {
           >
             <div>
               <div style={{ fontWeight: 800, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>🌱</span> {lang === 'bn' ? 'GreenVest কাস্টমার কেয়ার' : 'GreenVest Support Desk'}
+                <span>🌱</span> {lang === 'bn' ? 'কাস্টমার কেয়ার' : 'Customer Support'}
               </div>
               <div className="support-status-line" style={{ marginTop: '4px' }}>
                 {lang === 'bn' ? '< ১ ঘন্টায় উত্তর দেওয়া হয়' : 'Typically replies in < 1 hr'}
@@ -288,8 +288,8 @@ export default function SupportChatWidget() {
               }}
             >
               👋 {lang === 'bn'
-                ? 'নমস্কার! GreenVest সাপোর্টে আপনাকে স্বাগতম। আপনার অর্ডার, পণ্য বা যেকোনো বিষয়ে প্রশ্ন থাকলে নিচে লিখুন।'
-                : 'Hello! Welcome to GreenVest Support. How can we help you with your fresh groceries today?'}
+                ? 'নমস্কার! কীভাবে সাহায্য করতে পারি? আপনার অর্ডার বা পণ্য সম্পর্কিত যেকোনো প্রশ্ন নিচে লিখুন।'
+                : 'Hello! How can we help you with your order or fresh produce today?'}
             </div>
 
             {/* Active order quick card */}

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '../context/useStore'
 
 interface BeforeInstallPromptEvent extends Event {
@@ -87,7 +87,7 @@ export default function PwaInstallPrompt() {
         <span style={{ fontSize: '2rem', lineHeight: 1 }}>🌿</span>
         <div>
           <strong style={{ display: 'block', color: '#166534', fontSize: '0.95rem' }}>
-            {lang === 'bn' ? 'GreenVest অ্যাপ ইনস্টল করুন' : 'Install GreenVest App'}
+            {lang === 'bn' ? 'স্টোর অ্যাপ ইনস্টল করুন' : 'Install Store Web App'}
           </strong>
           <span style={{ fontSize: '0.78rem', color: '#4b5563' }}>
             {lang === 'bn'

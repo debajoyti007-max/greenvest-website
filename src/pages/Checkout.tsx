@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
-import { DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES } from '../lib/business'
+import { DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES, createBulkOrderWhatsAppUrl } from '../lib/business'
 import { calcDeliveryFee, isServiceablePin, STORE_LOCATION, checkLocationServiceability } from '../lib/delivery'
 import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC, generateDynamicUpiQr, buildUpiPayUri } from '../lib/payment'
@@ -21,6 +21,8 @@ export default function Checkout() {
   const {
     cart,
     cartTotal,
+    products,
+    priceFor,
     lang,
     placeOrder,
     orders,
@@ -184,7 +186,7 @@ export default function Checkout() {
   useEffect(() => {
     let active = true
     if (payableAmount > 0) {
-      generateDynamicUpiQr(payableAmount, `MS Vegetable Center Order ₹${payableAmount}`).then((dataUri) => {
+      generateDynamicUpiQr(payableAmount, `Order ₹${payableAmount}`).then((dataUri) => {
         if (active && dataUri) setDynamicQr(dataUri)
       })
     }
@@ -747,28 +749,28 @@ export default function Checkout() {
                 </span>
                 <div className="upi-app-grid">
                   <a
-                    href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
+                    href={buildUpiPayUri(payableAmount, 'Order Payment')}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#0f9d58' }}>●</span> GPay
                   </a>
                   <a
-                    href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
+                    href={buildUpiPayUri(payableAmount, 'Order Payment')}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#5f259f' }}>●</span> PhonePe
                   </a>
                   <a
-                    href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
+                    href={buildUpiPayUri(payableAmount, 'Order Payment')}
                     className="upi-app-btn"
                     style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#1e293b' }}
                   >
                     <span style={{ color: '#00baf2' }}>●</span> Paytm
                   </a>
                   <a
-                    href={buildUpiPayUri(payableAmount, 'MS Vegetable Center Order')}
+                    href={buildUpiPayUri(payableAmount, 'Order Payment')}
                     className="upi-app-btn"
                     style={{ background: '#166534', border: '1px solid #166534', color: '#ffffff' }}
                   >
@@ -906,7 +908,9 @@ export default function Checkout() {
                   🚚 {lang === 'bn' ? 'হোম ডেলিভারি' : 'Home Delivery'}
                 </div>
                 <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 600, marginTop: '0.15rem' }}>
-                  {lang === 'bn' ? 'চার্জ: ₹৩০' : 'Delivery Fee: ₹30'}
+                  {lang === 'bn'
+                    ? (delivery.fee > 0 ? `চার্জ: ₹${delivery.fee}` : 'চার্জ: ₹৩০ - ₹৫০')
+                    : (delivery.fee > 0 ? `Delivery Fee: ₹${delivery.fee}` : 'Delivery: ₹30 - ₹50')}
                 </div>
               </button>
 
@@ -1251,6 +1255,74 @@ export default function Checkout() {
                     : 'Your order is being securely saved. Please do not refresh or close this tab.'}
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* 🏢 VIP Bulk & Wholesale Desk prompt for orders >= ₹10,000 */}
+          {grandTotal >= 10000 && (
+            <div
+              style={{
+                margin: '0.85rem 0',
+                padding: '0.85rem 1rem',
+                background: '#f0fdf4',
+                border: '1.5px solid #86efac',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.75rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🏢</span> {lang === 'bn' ? 'বাল্ক ও হোলসেল অর্ডার (₹১০,০০০+)' : 'Bulk / Wholesale Order (₹10,000+)'}
+                </div>
+                <div style={{ fontSize: '0.76rem', color: '#15803d', marginTop: '2px' }}>
+                  {lang === 'bn'
+                    ? 'পাইকারি দর, কাস্টম ইনভয়েস বা সরাসরি ডেলিভারির জন্য হোয়াটসঅ্যাপে যোগাযোগ করতে পারেন।'
+                    : 'Get special Mandi rates, custom invoicing & dedicated vehicle delivery via WhatsApp.'}
+                </div>
+              </div>
+              <a
+                href={createBulkOrderWhatsAppUrl({
+                  customerName: user?.name,
+                  customerPhone: phone || user?.phone,
+                  cartTotal: grandTotal,
+                  items: cart.map((c) => {
+                    const p = products.find((x) => x.id === c.productId)
+                    const name = p ? (lang === 'bn' ? p.bnName : p.name) : 'Item'
+                    const mult = c.weightMultiplier || 1
+                    const unitPrice = p ? Math.round(priceFor(p, c.grade) * mult) : 0
+                    return {
+                      name,
+                      grade: c.grade,
+                      qty: c.qty,
+                      unitPrice,
+                      weightLabel: c.weightLabel,
+                    }
+                  }),
+                  lang,
+                })}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: '#16a34a',
+                  color: '#ffffff',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                  boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)',
+                }}
+              >
+                <span>💬</span>
+                <span>{lang === 'bn' ? 'হোলসেল ডেস্ক' : 'WhatsApp Desk'}</span>
+              </a>
             </div>
           )}
 

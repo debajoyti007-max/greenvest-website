@@ -299,3 +299,53 @@ export function getOrderDeliveryOtp(
   const code = 1000 + (hash % 9000)
   return String(code)
 }
+
+/**
+ * Generates an executive-level WhatsApp link for bulk/wholesale orders (₹10,000+)
+ */
+export function createBulkOrderWhatsAppUrl(params: {
+  customerName?: string
+  customerPhone?: string
+  cartTotal: number
+  items: Array<{ name: string; grade: string; qty: number; unitPrice: number; weightLabel?: string }>
+  lang?: 'en' | 'bn'
+}): string {
+  const isBn = params.lang === 'bn'
+  const lines: string[] = []
+
+  if (isBn) {
+    lines.push(`🏢 *পাইকারি / বাল্ক অর্ডার অনুসন্ধান* (₹১০,০০০+)`)
+    lines.push(`স্টোর: ${STORE_NAME}`)
+    if (params.customerName) {
+      lines.push(`👤 ক্রেতা: ${params.customerName}${params.customerPhone ? ` (${params.customerPhone})` : ''}`)
+    }
+    lines.push(`💰 বর্তমান আনুমানিক মূল্য: ₹${params.cartTotal.toLocaleString('en-IN')}`)
+    lines.push(`\n📦 অর্ডারের পণ্যের তালিকা:`)
+    params.items.slice(0, 15).forEach((it) => {
+      const wLbl = it.weightLabel ? ` [${it.weightLabel}]` : ''
+      lines.push(`• ${it.name}${wLbl} (Grade ${it.grade}) × ${it.qty} = ₹${it.unitPrice * it.qty}`)
+    })
+    if (params.items.length > 15) {
+      lines.push(`... এবং আরও ${params.items.length - 15}টি পণ্য`)
+    }
+    lines.push(`\n💬 "নমস্কার, আমি ₹১০,০০০-এর বেশি বাল্ক অর্ডারের জন্য যোগাযোগ করছি। অনুগ্রহ করে পাইকারি রেট, বিশেষ ছাড় ও ডেলিভারির সুবিধা জানান।"`)
+  } else {
+    lines.push(`🏢 *Bulk / Wholesale Order Inquiry* (₹10,000+)`)
+    lines.push(`Store: ${STORE_NAME}`)
+    if (params.customerName) {
+      lines.push(`👤 Customer: ${params.customerName}${params.customerPhone ? ` (${params.customerPhone})` : ''}`)
+    }
+    lines.push(`💰 Estimated Total: ₹${params.cartTotal.toLocaleString('en-IN')}`)
+    lines.push(`\n📦 Order Items:`)
+    params.items.slice(0, 15).forEach((it) => {
+      const wLbl = it.weightLabel ? ` [${it.weightLabel}]` : ''
+      lines.push(`• ${it.name}${wLbl} (Grade ${it.grade}) × ${it.qty} = ₹${it.unitPrice * it.qty}`)
+    })
+    if (params.items.length > 15) {
+      lines.push(`... and ${params.items.length - 15} more items`)
+    }
+    lines.push(`\n💬 "Hello, I am looking to place a bulk order above ₹10,000. Please provide the wholesale quotation, bulk discount, and delivery schedule."`)
+  }
+
+  return `https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(lines.join('\n'))}`
+}

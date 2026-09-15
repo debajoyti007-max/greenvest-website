@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { showToast } from '../../lib/toast'
 import { useStore } from '../../context/useStore'
 import { useAuth } from '../../context/useAuth'
@@ -75,8 +75,8 @@ export default function CouponGeneratorModal({ onClose }: CouponGeneratorModalPr
         // Format share message
         const shareMsg =
           lang === 'bn'
-            ? `🎉 GreenVest বিশেষ অফার!\n\n🎟️ কুপন কোড: *${finalCode}*\n💸 ছাড়: *${discountLabel}*\n🛒 মিনিমাম অর্ডার: ₹${minOrder}\n⏳ ${expiryText}\n\n👉 অর্ডার করুন: https://greenvest-website.vercel.app`
-            : `🎉 GreenVest Special Discount Offer!\n\n🎟️ Coupon Code: *${finalCode}*\n💸 Discount: *${discountLabel}*\n🛒 Min Order: ₹${minOrder}\n⏳ ${expiryText}\n\n👉 Shop now: https://greenvest-website.vercel.app`
+            ? `🎉 MS Vegetable Center বিশেষ অফার!\n\n🎟️ কুপন কোড: *${finalCode}*\n💸 ছাড়: *${discountLabel}*\n🛒 মিনিমাম অর্ডার: ₹${minOrder}\n⏳ ${expiryText}\n\n👉 অর্ডার করুন: https://greenvest-website.vercel.app`
+            : `🎉 MS Vegetable Center Special Discount Offer!\n\n🎟️ Coupon Code: *${finalCode}*\n💸 Discount: *${discountLabel}*\n🛒 Min Order: ₹${minOrder}\n⏳ ${expiryText}\n\n👉 Shop now: https://greenvest-website.vercel.app`
 
         if (broadcast) {
           try {
@@ -84,9 +84,9 @@ export default function CouponGeneratorModal({ onClose }: CouponGeneratorModalPr
               'all',
               lang === 'bn' ? `🎟️ নতুন অফার কুপন: ${finalCode}` : `🎟️ New Promo Code: ${finalCode}`,
               lang === 'bn'
-                ? `ব্যবহার করুন কোড ${finalCode} এবং পান ${discountLabel} ছাড় (মিনিমাম অর্ডার ₹${minOrder})!`
+                ? `ব্যবহার করুন কোড ${finalCode} এবং পান ${discountLabel} ছাড় (মিনিমাম অর্ডার ₹${minOrder})!`
                 : `Use code ${finalCode} to get ${discountLabel} discount on orders over ₹${minOrder}!`,
-              user?.name || 'GreenVest Store'
+              user?.name || 'MS Vegetable Center'
             )
           } catch {}
         }
@@ -125,7 +125,7 @@ export default function CouponGeneratorModal({ onClose }: CouponGeneratorModalPr
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'GreenVest Coupon Offer',
+          title: 'MS Vegetable Center Coupon Offer',
           text: msg,
         })
         return

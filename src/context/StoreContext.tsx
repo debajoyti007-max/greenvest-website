@@ -1248,7 +1248,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [cloud])
 
   const sendNotification = useCallback(
-    async (targetUserId: string | 'all', title: string, message: string, senderName = 'MS Vegetable Center Seller') => {
+    async (targetUserId: string | 'all', title: string, message: string, senderName = 'Store Support') => {
       const newNotif: AppNotification = {
         id: uid('notif'),
         userId: targetUserId,

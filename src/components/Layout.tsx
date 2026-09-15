@@ -72,12 +72,12 @@ export default function Layout() {
 
   useEffect(() => {
     if (!isPrivileged || openAlertsCount === 0) {
-      document.title = 'GreenVest (MS Vegetable Center) – তাজা সবজি ও বাজার'
+      document.title = 'MS Vegetable Center – তাজা শাকসবজি ও বাজার'
       return
     }
 
     let toggle = false
-    const baseTitle = 'MS Vegetable Center – তাজা সবজি ও বাজার'
+    const baseTitle = 'MS Vegetable Center – তাজা শাকসবজি ও বাজার'
     const alertTitle = `🚨 (${openAlertsCount}) Alert | MS Vegetable Center`
 
     const timer = setInterval(() => {
@@ -419,7 +419,7 @@ export default function Layout() {
             <div className="footer-col">
               <h4 className="footer-col-title">{lang === 'bn' ? 'আউটলেট' : 'Our Outlet'}</h4>
               <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '0 0 0.5rem', lineHeight: 1.4 }}>
-                <strong>MS Vegetable Center Outlet</strong><br />
+                <strong>{lang === 'bn' ? STORE_LOCATION.nameBn : STORE_LOCATION.name}</strong><br />
                 {lang === 'bn' ? 'পূর্ব মেদিনীপুর, পিন: ৭২১৬৩২' : 'Purba Medinipur, PIN 721632'}
               </p>
               <a

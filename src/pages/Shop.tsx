@@ -527,7 +527,7 @@ export default function Shop() {
         image: HERO_VEGGIES_IMAGE,
         mobileImage: HERO_VEGGIES_MOBILE_IMAGE,
         kicker: lang === 'bn' ? 'সরাসরি খামার থেকে প্রতিদিন তাজা' : 'Farm-Fresh Daily Harvest',
-        title: lang === 'bn' ? 'তাজা সবজি ও আলু-টমেটো' : 'Fresh Vegetables & Organic Produce',
+        title: lang === 'bn' ? 'প্রতিদিনের তাজা শাকসবজি' : 'Fresh Vegetables & Organic Produce',
         sub:
           lang === 'bn'
             ? `গ্রেড A/B/C · মিনিমাম ₹${MIN_ORDER_AMOUNT} · ডেলিভারি ${DELIVERY_WINDOW_BN}`

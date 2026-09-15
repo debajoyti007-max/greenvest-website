@@ -503,7 +503,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           const profile = mapProfile(profileRow as any)
           if (!profile) return { ok: false, error: 'Profile error. Please contact support.' }
-          if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Contact MS Vegetable Center Admin.' }
+          if (profile.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Please contact support.' }
 
           // 🔐 Super Admin 2FA: Send magic link to Gmail
           if (profile.isSuperAdmin && supabase) {
@@ -548,7 +548,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           (u.password === password),
       )
       if (!found) return { ok: false, error: 'Invalid phone/email or PIN' }
-      if (found.isBlocked) return { ok: false, error: '🚫 Your account has been suspended by MS Vegetable Center Admin.' }
+      if (found.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Please contact support.' }
       setSessionUserId(found.id)
       setUser(found)
       userRef.current = found

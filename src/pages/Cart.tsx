@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, computeMarketMrp, MAX_VEGETABLE_QTY_KG, formatItemWeightDetail } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, computeMarketMrp, MAX_VEGETABLE_QTY_KG, formatItemWeightDetail, createBulkOrderWhatsAppUrl } from '../lib/business'
 import { t } from '../lib/i18n'
 
 export default function Cart() {
@@ -175,8 +175,8 @@ export default function Cart() {
         </div>
         <p className="hint" style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, margin: '0.25rem 0' }}>
           {lang === 'bn'
-            ? '🚚 ডোরস্টেপ ডেলিভারি (₹৩০) বা 🏪 ফ্রি দোকান থেকে পিকআপ (₹০)'
-            : '🚚 Doorstep Delivery (₹30) or 🏪 Free Store Pickup (₹0)'}
+            ? '🚚 হোম ডেলিভারি (দূরত্ব অনুযায়ী ₹৩০-₹৫০) বা 🏪 ফ্রি স্টোর পিকআপ (₹০)'
+            : '🚚 Home Delivery (₹30–₹50 by distance) or 🏪 Free Store Pickup (₹0)'}
         </p>
         {!canCheckout && (
           <p className="form-error">
@@ -198,6 +198,92 @@ export default function Cart() {
             </Link>
           </div>
         )}
+        {/* 🏢 VIP Bulk & Wholesale Desk for Orders >= ₹10,000 */}
+        {cartTotal >= 10000 && (
+          <div
+            style={{
+              margin: '1.25rem 0',
+              padding: '1rem 1.1rem',
+              background: 'linear-gradient(135deg, #064e3b 0%, #065f46 100%)',
+              borderRadius: '14px',
+              color: '#ffffff',
+              boxShadow: '0 4px 16px rgba(6, 78, 59, 0.28)',
+              border: '1.5px solid #34d399',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.45rem' }}>
+              <span
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  background: 'rgba(255,255,255,0.2)',
+                  padding: '3px 8px',
+                  borderRadius: '16px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                🏢 {lang === 'bn' ? 'হোলসেল ও বাল্ক অর্ডার' : 'Bulk & Wholesale Order'}
+              </span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#a7f3d0' }}>
+                ₹10,000+
+              </span>
+            </div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: '0.3rem', color: '#ffffff' }}>
+              {lang === 'bn' ? 'সরাসরি পাইকারি রেট ও বিশেষ গাড়ি ডেলিভারি' : 'Direct Wholesale Pricing & Dedicated Logistics'}
+            </div>
+            <p style={{ fontSize: '0.8rem', color: '#d1fae5', margin: '0 0 0.85rem 0', lineHeight: 1.45 }}>
+              {lang === 'bn'
+                ? 'আপনার কার্ট মূল্য ₹১০,০০০ ছাড়িয়েছে। সরাসরি আমাদের হোলসেল ডেস্কে যোগাযোগ করে বিশেষ পাইকারি দর ও নিজস্ব গাড়ি ডেলিভারি পেতে পারেন।'
+                : 'Your order qualifies for bulk wholesale pricing! Contact our dedicated Mandi desk directly via WhatsApp for discounted rates and vehicle delivery.'}
+            </p>
+            <a
+              href={createBulkOrderWhatsAppUrl({
+                customerName: user?.name,
+                customerPhone: user?.phone,
+                cartTotal,
+                items: cart.map((c) => {
+                  const p = products.find((x) => x.id === c.productId)
+                  const name = p ? (lang === 'bn' ? p.bnName : p.name) : 'Item'
+                  const mult = c.weightMultiplier || 1
+                  const unitPrice = p ? Math.round(priceFor(p, c.grade) * mult) : 0
+                  return {
+                    name,
+                    grade: c.grade,
+                    qty: c.qty,
+                    unitPrice,
+                    weightLabel: c.weightLabel,
+                  }
+                }),
+                lang,
+              })}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                width: '100%',
+                padding: '0.7rem 1rem',
+                background: '#25d366',
+                color: '#064e3b',
+                borderRadius: '10px',
+                fontWeight: 800,
+                fontSize: '0.9rem',
+                textDecoration: 'none',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+              }}
+            >
+              <span>💬</span>
+              <span>{lang === 'bn' ? 'হোয়াটসঅ্যাপে পাইকারি রেট জানুন ও বুক করুন' : 'Chat & Buy via Wholesale WhatsApp'}</span>
+            </a>
+          </div>
+        )}
+
         {canCheckout ? (
           user ? (
             <Link to="/checkout" className="btn btn-primary">
@@ -227,7 +313,7 @@ export default function Cart() {
               const wLbl = c.weightLabel ? ` [${c.weightLabel}]` : ''
               return `• ${name}${wLbl} (Grade ${c.grade}) × ${c.qty} = ₹${price}`
             })
-            const text = `নমস্কার MS Vegetable Center, আমি আমার কার্টের সামগ্রীগুলো নিয়ে সহায়তা চাই:\n\n${lines.join('\n')}\n\nমোট মূল্য: ₹${cartTotal}`
+            const text = `নমস্কার, আমি কার্টের সামগ্রীগুলো নিয়ে সহায়তা চাই:\n\n${lines.join('\n')}\n\nমোট মূল্য: ₹${cartTotal}`
             if (user) {
               try {
                 await sendSupportMessage({

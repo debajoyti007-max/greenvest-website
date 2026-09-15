@@ -4,7 +4,7 @@ import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../lib/business'
 export default function SetupRequired() {
   return (
     <div className="page narrow" style={{ paddingTop: '4rem', textAlign: 'center' }}>
-      <h1 className="brand-hero compact">GreenVest</h1>
+      <h1 className="brand-hero compact">MS Vegetable Center</h1>
       <p className="lede">
         This storefront is not connected to the database yet. Please contact the owner.
       </p>

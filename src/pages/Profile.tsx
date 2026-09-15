@@ -137,7 +137,7 @@ export default function Profile() {
       showToast(
         lang === 'bn'
           ? '✅ ক্লাউড সিঙ্ক সম্পন্ন! তাজা দাম ও অর্ডার আপডেট হয়েছে।'
-          : '✅ Synced with MS Vegetable Center Cloud! Latest data updated.',
+          : '✅ Synced successfully! Latest data updated.',
         '🔄',
       )
     } catch {

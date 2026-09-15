@@ -91,7 +91,7 @@ export default function AdminUsers() {
           u.id,
           lang === 'bn' ? '🔐 অ্যাকাউন্ট পিন আপডেট' : '🔐 Account PIN Updated',
           lang === 'bn' ? `আপনার নতুন পিন: ${cleanPin}` : `Your new login PIN is: ${cleanPin}`,
-          'MS Vegetable Center Security'
+          'Security'
         )
       }
       try {
@@ -115,7 +115,7 @@ export default function AdminUsers() {
             uid,
             notifTitle.trim() || (lang === 'bn' ? 'অ্যাডমিন আপডেট' : 'Admin Update'),
             notifMessage.trim(),
-            'MS Vegetable Center Admin'
+            'Admin'
           )
         }
         showToast(
@@ -129,7 +129,7 @@ export default function AdminUsers() {
           notifModalTarget.id,
           notifTitle.trim() || (lang === 'bn' ? 'অ্যাডমিন আপডেট' : 'Admin Update'),
           notifMessage.trim(),
-          'MS Vegetable Center Admin'
+          'Admin'
         )
       }
       setNotifModalTarget(null)
@@ -446,8 +446,8 @@ export default function AdminUsers() {
                                       u.id,
                                       lang === 'bn' ? '🏪 সেলার রোল সক্রিয়' : '🏪 Seller Access Granted',
                                       lang === 'bn'
-                                        ? 'অভিনন্দন! আপনাকে MS Vegetable Center-এ সেলার অ্যাক্সেস প্রদান করা হয়েছে।'
-                                        : 'Congratulations! You have been granted Seller access on MS Vegetable Center.'
+                                        ? 'অভিনন্দন! আপনাকে সেলার অ্যাক্সেস প্রদান করা হয়েছে।'
+                                        : 'Congratulations! You have been granted Seller access.'
                                     )
                                     showToast(
                                       lang === 'bn'

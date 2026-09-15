@@ -1572,7 +1572,7 @@ export async function fetchNotificationsApi(userId?: string): Promise<AppNotific
         userId: n.user_id || 'all',
         title: n.title || '',
         message: n.message || '',
-        sender: n.sender || 'MS Vegetable Center',
+        sender: n.sender || 'Store Support',
         createdAt: n.created_at || new Date().toISOString(),
       }))
   } catch {
