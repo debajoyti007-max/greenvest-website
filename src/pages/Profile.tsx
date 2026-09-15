@@ -418,7 +418,25 @@ export default function Profile() {
         )}
 
         {loadingAddrs ? (
-          <p style={{ color: 'var(--text-light)' }}>{lang === 'bn' ? 'লোড হচ্ছে...' : 'Loading...'}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }} aria-busy="true">
+            {[1, 2].map((n) => (
+              <div
+                key={n}
+                style={{
+                  ...cardStyle,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.45rem',
+                  padding: '0.75rem 1rem',
+                  border: '1px solid #e2e8f0',
+                }}
+              >
+                <div className="shimmer" style={{ width: '30%', height: '14px', borderRadius: '4px' }} />
+                <div className="shimmer" style={{ width: '80%', height: '12px', borderRadius: '4px' }} />
+                <div className="shimmer" style={{ width: '45%', height: '12px', borderRadius: '4px' }} />
+              </div>
+            ))}
+          </div>
         ) : addresses.length === 0 ? (
           <p style={{ ...cardStyle, color: 'var(--text-light)', fontStyle: 'italic', borderStyle: 'dashed' }}>
             {lang === 'bn' ? 'কোনো সংরক্ষিত ঠিকানা নেই। কেনাকাটার সময় অটো সংরক্ষণ হবে।' : 'No saved address yet. It will automatically save when you place an order!'}

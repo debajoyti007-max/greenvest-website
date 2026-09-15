@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
+import OrderSkeleton from '../components/OrderSkeleton'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN } from '../lib/business'
@@ -80,8 +81,11 @@ export default function OrderSuccess() {
 
   if (!order && waitingForOrder) {
     return (
-      <div className="page narrow" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-        <p>{lang === 'bn' ? '⏳ অর্ডার লোড হচ্ছে...' : '⏳ Loading your order...'}</p>
+      <div className="page narrow" style={{ padding: '2rem 1rem' }}>
+        <p style={{ textAlign: 'center', marginBottom: '1.25rem', color: 'var(--text-light)', fontWeight: 500 }}>
+          {lang === 'bn' ? 'অর্ডার তথ্য প্রস্তুত হচ্ছে...' : 'Preparing order details...'}
+        </p>
+        <OrderSkeleton count={1} />
       </div>
     )
   }

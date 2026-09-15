@@ -31,11 +31,13 @@ const Support = lazy(() => import('./pages/Support'))
 const SellerSupport = lazy(() => import('./pages/seller/SellerSupport'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
+import PageSkeleton from './components/PageSkeleton'
+
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
 
 function RequireRole({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
   const { user, loading } = useAuth()
-  if (loading) return <p className="page">Loading…</p>
+  if (loading) return <PageSkeleton />
   if (!user) return <Navigate to="/auth" replace />
   if (!roles.includes(user.role)) return <Navigate to="/" replace />
   return children
@@ -51,7 +53,7 @@ function AppRoutes() {
   }
 
   return (
-    <Suspense fallback={<div className="page narrow" style={{ textAlign: 'center', padding: '3rem 1rem' }}>Loading…</div>}>
+    <Suspense fallback={<PageSkeleton />}>
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Shop />} />

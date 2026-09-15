@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import OrderTimeline from '../components/OrderTimeline'
 import OrderChat from '../components/OrderChat'
+import OrderSkeleton from '../components/OrderSkeleton'
 import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
 import { formatOrderId, SUPPORT_PHONE } from '../lib/business'
@@ -252,7 +253,13 @@ export default function TrackOrder() {
         </button>
       </form>
 
-      {searched && matched && (
+      {loading && (
+        <div style={{ marginTop: '1.5rem' }}>
+          <OrderSkeleton count={1} />
+        </div>
+      )}
+
+      {!loading && searched && matched && (
         <article className="order-card" style={{ marginTop: '1.5rem' }}>
           <header>
             <div>

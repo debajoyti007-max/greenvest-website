@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import OrderChat from '../components/OrderChat'
 import FreshnessRating from '../components/FreshnessRating'
 import OrderTimeline from '../components/OrderTimeline'
+import OrderSkeleton from '../components/OrderSkeleton'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { t } from '../lib/i18n'
@@ -13,7 +14,7 @@ import type { Order, OrderItem } from '../types'
 
 export default function Orders() {
   const { user } = useAuth()
-  const { orders, lang, reorderFromOrder, updateOrderStatus, refreshOrdersOnly } = useStore()
+  const { orders, lang, loading, reorderFromOrder, updateOrderStatus, refreshOrdersOnly } = useStore()
   const navigate = useNavigate()
   const [msg, setMsg] = useState('')
 
@@ -209,7 +210,9 @@ export default function Orders() {
         </div>
       )}
 
-      {displayOrders.length === 0 ? (
+      {loading && displayOrders.length === 0 ? (
+        <OrderSkeleton />
+      ) : displayOrders.length === 0 ? (
         <div className="empty-block">
           <p>{activeTab === 'recent' ? (lang === 'bn' ? 'কোনো সাম্প্রতিক অর্ডার নেই।' : 'No recent orders.') : (lang === 'bn' ? 'কোনো আর্কাইভ অর্ডার নেই।' : 'No archived orders.')}</p>
           {mine.length === 0 && (

@@ -33,8 +33,13 @@ export default function Auth() {
 
   if (loading) {
     return (
-      <div className="page narrow auth-page">
-        <p className="lede center">{t(lang, 'loading')}</p>
+      <div className="page narrow auth-page" aria-busy="true">
+        <div style={{ maxWidth: '420px', margin: '2rem auto', background: 'var(--card-bg, #fff)', padding: '2rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+          <div className="shimmer" style={{ width: '45%', height: '28px', margin: '0 auto 1.5rem', borderRadius: '6px' }} />
+          <div className="shimmer" style={{ width: '100%', height: '42px', marginBottom: '1rem', borderRadius: '8px' }} />
+          <div className="shimmer" style={{ width: '100%', height: '42px', marginBottom: '1.25rem', borderRadius: '8px' }} />
+          <div className="shimmer" style={{ width: '100%', height: '44px', borderRadius: '8px' }} />
+        </div>
       </div>
     )
   }
