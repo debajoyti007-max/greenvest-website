@@ -188,6 +188,7 @@ export default function Layout() {
                       to="/seller"
                       onClick={closeMenu}
                       style={{
+                        backgroundColor: '#166534',
                         background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
                         color: '#ffffff',
                         padding: '4px 12px',
@@ -199,12 +200,12 @@ export default function Layout() {
                         boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
                       }}
                     >
-                      💼 {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
+                      <span aria-hidden="true">💼</span> {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
                       {openAlertsCount > 0 && (
                         <span
                           title={lang === 'bn' ? `${openAlertsCount}টি সক্রিয় সাপোর্ট টিকিট` : `${openAlertsCount} active support alerts`}
                           style={{
-                            background: '#ef4444',
+                            background: '#dc2626',
                             color: '#ffffff',
                             borderRadius: '10px',
                             padding: '1px 6px',
@@ -213,7 +214,8 @@ export default function Layout() {
                             lineHeight: 1.2,
                           }}
                         >
-                          {openAlertsCount}
+                          <span className="sr-only">{openAlertsCount} active alerts</span>
+                          <span aria-hidden="true">{openAlertsCount}</span>
                         </span>
                       )}
                     </NavLink>
@@ -231,10 +233,10 @@ export default function Layout() {
                         gap: '4px',
                       }}
                     >
-                      👑 {lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}
+                      <span aria-hidden="true">👑</span> {lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}
                     </NavLink>
                     <NavLink to="/rider" onClick={closeMenu}>
-                      🛵 {lang === 'bn' ? 'রাইডার' : 'Rider'}
+                      <span aria-hidden="true">🛵</span> {lang === 'bn' ? 'রাইডার' : 'Rider'}
                     </NavLink>
                   </>
                 )}
@@ -243,6 +245,7 @@ export default function Layout() {
                     to="/seller"
                     onClick={closeMenu}
                     style={{
+                      backgroundColor: '#166534',
                       background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
                       color: '#ffffff',
                       padding: '4px 12px',
@@ -254,12 +257,12 @@ export default function Layout() {
                       boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
                     }}
                   >
-                    💼 {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
+                    <span aria-hidden="true">💼</span> {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
                     {openAlertsCount > 0 && (
                       <span
                         title={lang === 'bn' ? `${openAlertsCount}টি সক্রিয় সাপোর্ট টিকিট` : `${openAlertsCount} active support alerts`}
                         style={{
-                          background: '#ef4444',
+                          background: '#dc2626',
                           color: '#ffffff',
                           borderRadius: '10px',
                           padding: '1px 6px',
@@ -268,7 +271,8 @@ export default function Layout() {
                           lineHeight: 1.2,
                         }}
                       >
-                        {openAlertsCount}
+                        <span className="sr-only">{openAlertsCount} active alerts</span>
+                        <span aria-hidden="true">{openAlertsCount}</span>
                       </span>
                     )}
                   </NavLink>
@@ -315,9 +319,10 @@ export default function Layout() {
         (location.pathname.startsWith('/seller') ||
           location.pathname.startsWith('/admin') ||
           location.pathname.startsWith('/rider')) && (
-          <div
+          <nav
+            aria-label={lang === 'bn' ? 'স্টাফ নেভিগেশন' : 'Staff Navigation'}
             style={{
-              background: '#0f172a',
+              backgroundColor: '#0f172a',
               borderBottom: '1px solid #334155',
               padding: '6px 1rem',
               display: 'flex',
@@ -329,14 +334,14 @@ export default function Layout() {
             }}
           >
             {[
-              { path: '/seller', label: lang === 'bn' ? '📊 ড্যাশবোর্ড' : '📊 Dashboard', end: true },
-              { path: '/seller/orders', label: lang === 'bn' ? '📦 অর্ডার' : '📦 Orders' },
-              { path: '/seller/deals', label: lang === 'bn' ? '🎟️ অফার ব্যানার' : '🎟️ Deals Banner' },
-              { path: '/seller/products', label: lang === 'bn' ? '🥬 প্রোডাক্ট ও দাম' : '🥬 Products & Rates' },
-              { path: '/seller/customers', label: lang === 'bn' ? '👥 কাস্টমার' : '👥 Customers' },
-              { path: '/seller/support', label: lang === 'bn' ? '💬 সাপোর্ট ডেস্ক' : '💬 Support Desk' },
-              { path: '/rider', label: lang === 'bn' ? '🛵 রাইডার' : '🛵 Rider' },
-              ...(user.role === 'admin' ? [{ path: '/admin', label: lang === 'bn' ? '⚙️ অ্যাডমিন' : '⚙️ Admin' }] : []),
+              { path: '/seller', label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', icon: '📊', end: true },
+              { path: '/seller/orders', label: lang === 'bn' ? 'অর্ডার' : 'Orders', icon: '📦' },
+              { path: '/seller/deals', label: lang === 'bn' ? 'অফার ব্যানার' : 'Deals Banner', icon: '🎟️' },
+              { path: '/seller/products', label: lang === 'bn' ? 'প্রোডাক্ট ও দাম' : 'Products & Rates', icon: '🥬' },
+              { path: '/seller/customers', label: lang === 'bn' ? 'কাস্টমার' : 'Customers', icon: '👥' },
+              { path: '/seller/support', label: lang === 'bn' ? 'সাপোর্ট ডেস্ক' : 'Support Desk', icon: '💬' },
+              { path: '/rider', label: lang === 'bn' ? 'রাইডার' : 'Rider', icon: '🛵' },
+              ...(user.role === 'admin' ? [{ path: '/admin', label: lang === 'bn' ? 'অ্যাডমিন' : 'Admin', icon: '⚙️' }] : []),
             ].map((tab) => {
               const active = tab.end
                 ? location.pathname === tab.path
@@ -345,23 +350,27 @@ export default function Layout() {
                 <Link
                   key={tab.path}
                   to={tab.path}
+                  aria-current={active ? 'page' : undefined}
                   style={{
                     padding: '4px 12px',
                     borderRadius: '20px',
                     fontSize: '0.8rem',
                     fontWeight: 700,
                     textDecoration: 'none',
-                    background: active ? '#16a34a' : 'rgba(255,255,255,0.08)',
-                    color: active ? '#ffffff' : '#cbd5e1',
-                    border: active ? '1px solid #86efac' : '1px solid transparent',
+                    backgroundColor: active ? '#15803d' : '#1e293b',
+                    color: active ? '#ffffff' : '#f1f5f9',
+                    border: active ? '1px solid #86efac' : '1px solid #334155',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  {tab.label}
+                  <span aria-hidden="true">{tab.icon}</span> {tab.label}
                 </Link>
               )
             })}
-          </div>
+          </nav>
         )}
 
       <main className="main-content">

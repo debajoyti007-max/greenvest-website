@@ -123,6 +123,7 @@ function ProductCard({
               position: 'absolute',
               top: '0.6rem',
               left: '0.6rem',
+              backgroundColor: '#15803d',
               background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
               color: '#ffffff',
               fontSize: '0.72rem',
@@ -137,7 +138,7 @@ function ProductCard({
               gap: '3px',
             }}
           >
-            ⚡ {discountPercent}% OFF
+            <span aria-hidden="true">⚡</span> {discountPercent}% OFF
           </span>
         )}
 
@@ -154,9 +155,10 @@ function ProductCard({
             position: 'absolute',
             top: '0.6rem',
             right: '0.6rem',
-            background: 'rgba(255, 255, 255, 0.92)',
+            backgroundColor: '#ffffff',
+            background: 'rgba(255, 255, 255, 0.95)',
             backdropFilter: 'blur(4px)',
-            border: '1px solid rgba(0,0,0,0.08)',
+            border: '1px solid rgba(0,0,0,0.12)',
             padding: '2px 7px',
             borderRadius: '12px',
             fontSize: '0.72rem',
@@ -170,9 +172,9 @@ function ProductCard({
             boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
           }}
         >
-          <span style={{ color: '#eab308' }}>★</span>
+          <span aria-hidden="true" style={{ color: '#b45309' }}>★</span>
           <span>{ratingData.avg.toFixed(1)}</span>
-          <span style={{ color: '#64748b', fontSize: '0.68rem' }}>({ratingData.count})</span>
+          <span style={{ color: '#334155', fontSize: '0.72rem', fontWeight: 600 }}>({ratingData.count})</span>
         </button>
 
         {!p.inStock && <span className="stock-badge">{t(lang, 'outOfStock')}</span>}
@@ -194,7 +196,7 @@ function ProductCard({
           <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#14532d', lineHeight: 1.25 }}>
             {p.bnName}
           </h3>
-          <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>
+          <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 500 }}>
             {p.name} · {catLabel(lang, p.category)}
           </span>
         </div>
@@ -202,7 +204,7 @@ function ProductCard({
         {/* Grade selector chips (Option A, B, C toggled on demand by Seller) */}
         {activeGrades.length > 1 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '2px 0 6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155' }}>
               {lang === 'bn' ? 'গ্রেড:' : 'Grade:'}
             </span>
             {activeGrades.map((g) => (
@@ -238,7 +240,7 @@ function ProductCard({
         {/* Quick Weight Chips (for kg items) */}
         {isKg && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '2px 0 8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155' }}>
               {lang === 'bn' ? 'ওজন:' : 'Size:'}
             </span>
             {[
@@ -283,15 +285,15 @@ function ProductCard({
                 ₹{calculatedPrice}
               </span>
               {calculatedMrp > calculatedPrice && (
-                <span style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '0.82rem', fontWeight: 500 }}>
-                  ₹{calculatedMrp}
+                <span style={{ textDecoration: 'line-through', color: '#64748b', fontSize: '0.82rem', fontWeight: 600 }}>
+                  <span className="sr-only">Original price: </span>₹{calculatedMrp}
                 </span>
               )}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+            <div style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 600 }}>
               /{weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
               {calculatedMrp > calculatedPrice && (
-                <span style={{ color: '#16a34a', marginLeft: '4px', fontWeight: 700 }}>
+                <span style={{ color: '#15803d', marginLeft: '4px', fontWeight: 700 }}>
                   · {lang === 'bn' ? `সাশ্রয় ₹${calculatedMrp - calculatedPrice}` : `Save ₹${calculatedMrp - calculatedPrice}`}
                 </span>
               )}
@@ -339,7 +341,13 @@ function ProductCard({
                   const label = weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`
                   onAdd(p, cardGrade, 1, weightMultiplier, label)
                 }}
+                aria-label={
+                  p.inStock
+                    ? `Add ${p.name} (${cardGrade}) to cart`
+                    : `${p.name} is out of stock`
+                }
                 style={{
+                  backgroundColor: p.inStock ? '#15803d' : '#94a3b8',
                   background: p.inStock ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : '#cbd5e1',
                   color: 'white',
                   border: 'none',
@@ -714,9 +722,12 @@ export default function Shop() {
         {/* 🔍 Search Field with Banglish & Phonetic Support (Top Positioned for Quick Access) */}
         <div className="shop-search-toolbar">
           <div className="glass-search-field">
-            <span className="search-glass-icon">🔍</span>
+            <span className="search-glass-icon" aria-hidden="true">🔍</span>
             <input
               type="text"
+              id="shop-search-input"
+              name="search"
+              aria-label={lang === 'bn' ? 'সবজি ও পণ্য অনুসন্ধান করুন' : 'Search vegetables, fish, and produce'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={lang === 'bn' ? 'সবজি, মাছ বা Banglish খুঁজুন (যেমন: alu, potol, chingri, ada)…' : 'Search veggies, fish or Banglish (alu, potol, chingri)…'}
@@ -740,7 +751,7 @@ export default function Shop() {
           <div className="repeat-order-banner glass-mono-banner">
             <div>
               <strong className="repeat-banner-title">
-                {lang === 'bn' ? '🔁 আগের অর্ডার পুনরাবৃত্তি করুন' : '🔁 Repeat Your Last Order'}
+                <span aria-hidden="true">🔁</span> {lang === 'bn' ? 'আগের অর্ডার পুনরাবৃত্তি করুন' : 'Repeat Your Last Order'}
               </strong>
               <span className="repeat-banner-sub">
                 {lastOrder.items.length} {lang === 'bn' ? 'টি সামগ্রী' : 'items'} ({lastOrder.items.map((i) => i.name).join(', ')})
@@ -762,26 +773,28 @@ export default function Shop() {
             type="button"
             className="glass-quick-pill"
             onClick={() => setShowUsualBasketModal(true)}
+            aria-label={`${lang === 'bn' ? 'আমার পছন্দের ফর্দ' : 'My Usual Basket'} - 1-Tap Essentials`}
           >
-            <span className="glass-pill-icon">🧺</span>
+            <span className="glass-pill-icon" aria-hidden="true">🧺</span>
             <div className="glass-pill-text">
               <strong className="glass-pill-bn">{lang === 'bn' ? 'আমার পছন্দের ফর্দ' : 'My Usual Basket'}</strong>
-              <span className="glass-pill-hint">1-Tap Essentials</span>
+              <span className="glass-pill-hint" style={{ color: '#475569' }}>1-Tap Essentials</span>
             </div>
-            <span className="glass-pill-arrow">➔</span>
+            <span className="glass-pill-arrow" aria-hidden="true">➔</span>
           </button>
 
           <button
             type="button"
             className="glass-quick-pill secondary"
             onClick={() => setShowBasketModal(true)}
+            aria-label={`${lang === 'bn' ? 'পারিবারিক বাস্কেট' : 'Family Basket'} - Curated Combo`}
           >
-            <span className="glass-pill-icon">📦</span>
+            <span className="glass-pill-icon" aria-hidden="true">📦</span>
             <div className="glass-pill-text">
               <strong className="glass-pill-bn">{lang === 'bn' ? 'পারিবারিক বাস্কেট' : 'Family Basket'}</strong>
-              <span className="glass-pill-hint">Curated Combo</span>
+              <span className="glass-pill-hint" style={{ color: '#475569' }}>Curated Combo</span>
             </div>
-            <span className="glass-pill-arrow">➔</span>
+            <span className="glass-pill-arrow" aria-hidden="true">➔</span>
           </button>
         </div>
 

@@ -207,6 +207,8 @@ export default function AdminUsers() {
       {/* 🧭 Admin Tab Switcher */}
       <div
         className="admin-tab-nav"
+        role="tablist"
+        aria-label={lang === 'bn' ? 'অ্যাডমিন বিভাগ' : 'Admin Sections'}
         style={{
           display: 'flex',
           gap: '0.5rem',
@@ -217,20 +219,24 @@ export default function AdminUsers() {
       >
         <button
           type="button"
+          role="tab"
+          aria-selected={adminTab === 'users'}
           className={`btn btn-sm ${adminTab === 'users' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setAdminTab('users')}
           style={{ borderRadius: '8px' }}
         >
-          👥 {lang === 'bn' ? 'ইউজার ও সিকিউরিটি' : 'Users & Security'} ({users.length})
+          <span aria-hidden="true">👥 </span>{lang === 'bn' ? 'ইউজার ও সিকিউরিটি' : 'Users & Security'} ({users.length})
         </button>
 
         <button
           type="button"
+          role="tab"
+          aria-selected={adminTab === 'database'}
           className={`btn btn-sm ${adminTab === 'database' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setAdminTab('database')}
           style={{ borderRadius: '8px' }}
         >
-          📊 {lang === 'bn' ? 'স্মার্ট ডেটাবেস ক্লিনার ও হেলথ' : 'Smart Database Cleaner & Health'}
+          <span aria-hidden="true">📊 </span>{lang === 'bn' ? 'স্মার্ট ডেটাবেস ক্লিনার ও হেলথ' : 'Smart Database Cleaner & Health'}
         </button>
       </div>
 

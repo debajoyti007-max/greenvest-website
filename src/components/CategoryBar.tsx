@@ -33,8 +33,8 @@ export default function CategoryBar({
   categoryCounts = {},
 }: CategoryBarProps) {
   return (
-    <div className="category-scroll-wrapper" aria-label="Product categories">
-      <div className="category-chips-bar">
+    <nav className="category-scroll-wrapper" aria-label="Product categories">
+      <div className="category-chips-bar" role="toolbar" aria-label="Filter by category">
         {categories.map((cat) => {
           const meta = CATEGORY_META[cat] || {
             labelEn: cat,
@@ -51,19 +51,20 @@ export default function CategoryBar({
               className={`category-chip ${isSelected ? 'active' : ''}`}
               onClick={() => onSelectCategory(cat)}
               aria-pressed={isSelected}
+              aria-label={`${meta.labelEn}, ${count ?? 0} items`}
             >
-              <span className="category-chip-emoji">{meta.emoji}</span>
+              <span className="category-chip-emoji" aria-hidden="true">{meta.emoji}</span>
               <span className="category-chip-text">
                 <span className="category-chip-bn">{meta.labelBn}</span>
                 <span className="category-chip-en">{meta.labelEn}</span>
               </span>
               {typeof count === 'number' && count > 0 && (
-                <span className="category-chip-count">{count}</span>
+                <span className="category-chip-count" aria-hidden="true">{count}</span>
               )}
             </button>
           )
         })}
       </div>
-    </div>
+    </nav>
   )
 }

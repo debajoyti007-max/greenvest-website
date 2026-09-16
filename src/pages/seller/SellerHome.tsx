@@ -221,12 +221,12 @@ export default function SellerHome() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+            <span aria-hidden="true" style={{ fontSize: '1.2rem' }}>⚠️</span>
             <div>
               <strong style={{ color: '#92400e', fontSize: '0.95rem', display: 'block' }}>
                 {lang === 'bn' ? 'অ্যাকশন প্রয়োজন:' : 'Action Required:'}
               </strong>
-              <span style={{ color: '#b45309', fontSize: '0.85rem' }}>
+              <span style={{ color: '#92400e', fontSize: '0.85rem' }}>
                 {pending} {lang === 'bn' ? 'টি নতুন অর্ডার কনফার্মেশনের জন্য অপেক্ষা করছে।' : 'new order(s) waiting for confirmation.'}
               </span>
             </div>
@@ -234,7 +234,7 @@ export default function SellerHome() {
           <Link
             to="/seller/orders"
             style={{
-              background: '#d97706',
+              background: '#b45309',
               color: '#ffffff',
               padding: '6px 14px',
               borderRadius: '8px',
@@ -243,7 +243,7 @@ export default function SellerHome() {
               textDecoration: 'none',
             }}
           >
-            {lang === 'bn' ? 'যাচাই করুন →' : 'Verify Now →'}
+            {lang === 'bn' ? 'যাচাই করুন' : 'Verify Now'} <span aria-hidden="true">→</span>
           </Link>
         </div>
       )}
@@ -260,7 +260,8 @@ export default function SellerHome() {
             color: '#991b1b',
           }}
         >
-          <strong>🚫 {lang === 'bn' ? 'স্টক শেষ:' : 'Out of Stock:'} </strong>
+          <strong aria-hidden="true">🚫 </strong>
+          <strong>{lang === 'bn' ? 'স্টক শেষ:' : 'Out of Stock:'} </strong>
           <span>{outStock.map((p) => (lang === 'bn' ? p.bnName : p.name)).join(', ')}</span>
         </div>
       )}
@@ -284,12 +285,12 @@ export default function SellerHome() {
           }}
         >
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            💰 {lang === 'bn' ? 'আজকের মোট বিক্রি' : "Today's Sales"}
+            <span aria-hidden="true">💰 </span>{lang === 'bn' ? 'আজকের মোট বিক্রি' : "Today's Sales"}
           </span>
           <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#14532d', margin: '4px 0' }}>
             ₹{todaySales}
           </div>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
             {todayOrders.length} {lang === 'bn' ? 'টি অর্ডার' : 'orders placed'}
           </span>
         </div>
@@ -303,13 +304,13 @@ export default function SellerHome() {
             boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
           }}
         >
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            📅 {lang === 'bn' ? 'গতকালের বিক্রি' : "Yesterday's Sales"}
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <span aria-hidden="true">📅 </span>{lang === 'bn' ? 'গতকালের বিক্রি' : "Yesterday's Sales"}
           </span>
-          <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#334155', margin: '4px 0' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#1e293b', margin: '4px 0' }}>
             ₹{yesterdaySales}
           </div>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
             {yesterdayOrders.length} {lang === 'bn' ? 'টি অর্ডার' : 'orders'}
           </span>
         </div>
@@ -324,12 +325,12 @@ export default function SellerHome() {
           }}
         >
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            🛵 {lang === 'bn' ? 'চলমান ডেলিভারি' : 'Active Deliveries'}
+            <span aria-hidden="true">🛵 </span>{lang === 'bn' ? 'চলমান ডেলিভারি' : 'Active Deliveries'}
           </span>
           <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#1e3a8a', margin: '4px 0' }}>
             {active}
           </div>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
             {lang === 'bn' ? 'প্যাকিং ও ডেলিভারি চলমান' : 'In packing & transit'}
           </span>
         </div>
@@ -344,12 +345,12 @@ export default function SellerHome() {
           }}
         >
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            ⏳ {lang === 'bn' ? 'কনফার্মেশন বাকি' : 'Needs Confirmation'}
+            <span aria-hidden="true">⏳ </span>{lang === 'bn' ? 'কনফার্মেশন বাকি' : 'Needs Confirmation'}
           </span>
           <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#9a3412', margin: '4px 0' }}>
             {pending}
           </div>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
             {lang === 'bn' ? 'অগ্রিম সংগৃহীত: ₹' : 'Advance Collected: ₹'}{revenue}
           </span>
         </div>
@@ -364,12 +365,12 @@ export default function SellerHome() {
           }}
         >
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#7e22ce', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            🥬 {lang === 'bn' ? 'সক্রিয় ক্যাটালগ' : 'Live Inventory'}
+            <span aria-hidden="true">🥬 </span>{lang === 'bn' ? 'সক্রিয় ক্যাটালগ' : 'Live Inventory'}
           </span>
           <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#581c87', margin: '4px 0' }}>
             {inStock}
           </div>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
             {uniqueCustomers} {lang === 'bn' ? 'জন কাস্টমার' : 'unique buyers'}
           </span>
         </div>
@@ -388,12 +389,12 @@ export default function SellerHome() {
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '1.4rem' }}>📊</span>
+            <span aria-hidden="true" style={{ fontSize: '1.4rem' }}>📊</span>
             <div>
               <strong style={{ fontSize: '1rem', color: '#0f172a', display: 'block' }}>
                 {lang === 'bn' ? 'আজকের মন্ডি লাভ-ক্ষতি হিসাব' : "Today's Mandi Profit Calculator"}
               </strong>
-              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              <span style={{ fontSize: '0.8rem', color: '#475569' }}>
                 {lang === 'bn' ? 'মন্ডি ক্রয়ের খরচ লিখুন এবং দৈনিক মার্জিন সংরক্ষণ করুন।' : 'Record wholesale procurement cost and track profit margins.'}
               </span>
             </div>
@@ -401,10 +402,11 @@ export default function SellerHome() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '4px 10px' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569', marginRight: '4px' }}>₹</span>
+              <span aria-hidden="true" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginRight: '4px' }}>₹</span>
               <input
                 type="number"
                 placeholder="0"
+                aria-label={lang === 'bn' ? 'আজকের মন্ডি খরচ' : "Today's Mandi cost in Rupees"}
                 value={mandiCost}
                 onChange={(e) => setMandiCost(e.target.value ? Number(e.target.value) : '')}
                 style={{ width: '100px', border: 'none', background: 'transparent', outline: 'none', fontSize: '0.95rem', fontWeight: 700 }}
@@ -415,7 +417,7 @@ export default function SellerHome() {
               type="button"
               onClick={handleSaveReport}
               style={{
-                background: '#16a34a',
+                background: '#15803d',
                 color: '#ffffff',
                 border: 'none',
                 padding: '8px 16px',
@@ -425,7 +427,7 @@ export default function SellerHome() {
                 cursor: 'pointer',
               }}
             >
-              💾 {lang === 'bn' ? 'রিপোর্ট সেভ করুন' : 'Save Report'}
+              <span aria-hidden="true">💾 </span>{lang === 'bn' ? 'রিপোর্ট সেভ করুন' : 'Save Report'}
             </button>
 
             {typeof mandiCost === 'number' && mandiCost >= 0 && (
@@ -434,7 +436,7 @@ export default function SellerHome() {
                   {lang === 'bn' ? 'নিট লাভ: ₹' : 'Net Profit: ₹'}{todaySales - mandiCost}
                 </span>
                 {todaySales > 0 && (
-                  <span style={{ fontSize: '0.75rem', background: '#22c55e', color: '#ffffff', padding: '2px 6px', borderRadius: '12px', fontWeight: 800 }}>
+                  <span style={{ fontSize: '0.75rem', background: '#166534', color: '#ffffff', padding: '2px 6px', borderRadius: '12px', fontWeight: 800 }}>
                     {(((todaySales - mandiCost) / todaySales) * 100).toFixed(1)}%
                   </span>
                 )}
@@ -446,7 +448,7 @@ export default function SellerHome() {
 
       {/* Categorized 4-Suite Operations Control Center */}
       <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>
-        ⚙️ {lang === 'bn' ? 'ম্যানেজমেন্ট কন্ট্রোল সেন্টার' : 'Management Control Suites'}
+        <span aria-hidden="true">⚙️ </span>{lang === 'bn' ? 'ম্যানেজমেন্ট কন্ট্রোল সেন্টার' : 'Management Control Suites'}
       </h2>
 
       <div
@@ -470,12 +472,12 @@ export default function SellerHome() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '1.3rem' }}>📦</span>
+            <span aria-hidden="true" style={{ fontSize: '1.3rem' }}>📦</span>
             <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>
               {lang === 'bn' ? 'অর্ডার ও ডেলিভারি' : 'Orders & Dispatch'}
             </h3>
           </div>
-          <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 1rem', flex: 1 }}>
+          <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 1rem', flex: 1 }}>
             {lang === 'bn'
               ? 'নতুন অর্ডার যাচাই, স্ট্যাটাস পরিবর্তন এবং ডেলিভারি শিট প্রিন্ট করুন।'
               : 'Process customer orders, verify payments, and generate delivery manifests.'}
@@ -484,7 +486,7 @@ export default function SellerHome() {
             <Link
               to="/seller/orders"
               style={{
-                background: '#16a34a',
+                background: '#15803d',
                 color: '#ffffff',
                 textAlign: 'center',
                 padding: '9px',
@@ -494,7 +496,7 @@ export default function SellerHome() {
                 textDecoration: 'none',
               }}
             >
-              📋 {lang === 'bn' ? 'সমস্ত অর্ডার দেখুন' : 'Manage Orders'}
+              <span aria-hidden="true">📋 </span>{lang === 'bn' ? 'সমস্ত অর্ডার দেখুন' : 'Manage Orders'}
             </Link>
             <Link
               to="/seller/orders?view=manifest"
@@ -514,7 +516,7 @@ export default function SellerHome() {
                 gap: '6px',
               }}
             >
-              📊 {lang === 'bn' ? 'মালামাল সোর্সিং শিট (কেজি ও পিস)' : '12–24h Item Sourcing (kg / pcs)'}
+              <span aria-hidden="true">📊 </span>{lang === 'bn' ? 'মালামাল সোর্সিং শিট (কেজি ও পিস)' : '12–24h Item Sourcing (kg / pcs)'}
             </Link>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
               <button
@@ -531,7 +533,7 @@ export default function SellerHome() {
                   cursor: 'pointer',
                 }}
               >
-                🖨️ {lang === 'bn' ? 'প্যাকিং লিস্ট' : 'Packing List'}
+                <span aria-hidden="true">🖨️ </span>{lang === 'bn' ? 'প্যাকিং লিস্ট' : 'Packing List'}
               </button>
               <button
                 type="button"
@@ -547,7 +549,7 @@ export default function SellerHome() {
                   cursor: 'pointer',
                 }}
               >
-                🛵 {lang === 'bn' ? 'রাইডার শিট' : 'Rider Sheet'}
+                <span aria-hidden="true">🛵 </span>{lang === 'bn' ? 'রাইডার শিট' : 'Rider Sheet'}
               </button>
             </div>
           </div>
@@ -566,12 +568,12 @@ export default function SellerHome() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '1.3rem' }}>🥬</span>
+            <span aria-hidden="true" style={{ fontSize: '1.3rem' }}>🥬</span>
             <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>
               {lang === 'bn' ? 'প্রোডাক্ট ও মন্ডি রেট' : 'Produce & Mandi Rates'}
             </h3>
           </div>
-          <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 1rem', flex: 1 }}>
+          <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 1rem', flex: 1 }}>
             {lang === 'bn'
               ? 'দৈনিক বাজার দর, গ্রেড A/B/C টগল এবং মন্ডি সোর্সিং তালিকা তৈরি।'
               : 'Update daily vegetable rates, MRP markup, Grade A/B/C options, and mandi sheets.'}
@@ -590,7 +592,7 @@ export default function SellerHome() {
                 textDecoration: 'none',
               }}
             >
-              🏷️ {lang === 'bn' ? 'প্রোডাক্ট ও রেট পরিবর্তন' : 'Edit Products & Rates'}
+              <span aria-hidden="true">🏷️ </span>{lang === 'bn' ? 'প্রোডাক্ট ও রেট পরিবর্তন' : 'Edit Products & Rates'}
             </Link>
             <button
               type="button"
@@ -606,7 +608,7 @@ export default function SellerHome() {
                 cursor: 'pointer',
               }}
             >
-              📝 {lang === 'bn' ? 'সকালের মন্ডি সোর্সিং শিট' : 'Generate Mandi Sourcing Sheet'}
+              <span aria-hidden="true">📝 </span>{lang === 'bn' ? 'সকালের মন্ডি সোর্সিং শিট' : 'Generate Mandi Sourcing Sheet'}
             </button>
           </div>
         </div>
@@ -624,12 +626,12 @@ export default function SellerHome() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '1.3rem' }}>👥</span>
+            <span aria-hidden="true" style={{ fontSize: '1.3rem' }}>👥</span>
             <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>
               {lang === 'bn' ? 'কাস্টমার ও টায়ার' : 'Customers & Pricing Tiers'}
             </h3>
           </div>
-          <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 1rem', flex: 1 }}>
+          <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 1rem', flex: 1 }}>
             {lang === 'bn'
               ? 'কাস্টমার লিস্ট দেখুন এবং VIP ও পাইকারি টায়ার মূল্য ম্যানেজ করুন।'
               : 'View customer directory, reset PINs, and assign VIP/Wholesale pricing tiers.'}
@@ -650,7 +652,7 @@ export default function SellerHome() {
                 textDecoration: 'none',
               }}
             >
-              👥 {lang === 'bn' ? 'কাস্টমার পরিচালনা' : 'Manage Customers'}
+              <span aria-hidden="true">👥 </span>{lang === 'bn' ? 'কাস্টমার পরিচালনা' : 'Manage Customers'}
             </Link>
           </div>
         </div>
@@ -668,12 +670,12 @@ export default function SellerHome() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '1.3rem' }}>🎟️</span>
+            <span aria-hidden="true" style={{ fontSize: '1.3rem' }}>🎟️</span>
             <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>
               {lang === 'bn' ? 'অফার ব্যানার ও কুপন' : 'Deals & Coupons'}
             </h3>
           </div>
-          <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 1rem', flex: 1 }}>
+          <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 1rem', flex: 1 }}>
             {lang === 'bn'
               ? 'হোমপেজ অফার ব্যানার তৈরি (অটো-এক্সপায়ারি সহ) ও ডিসকাউন্ট কুপন।'
               : 'Create promotional home banners with auto-expiry timers and custom promo coupons.'}
@@ -693,7 +695,7 @@ export default function SellerHome() {
                 textDecoration: 'none',
               }}
             >
-              🎟️ {lang === 'bn' ? 'অফার ব্যানার' : 'Deals Banner'}
+              <span aria-hidden="true">🎟️ </span>{lang === 'bn' ? 'অফার ব্যানার' : 'Deals Banner'}
             </Link>
             <button
               type="button"
@@ -709,7 +711,7 @@ export default function SellerHome() {
                 cursor: 'pointer',
               }}
             >
-              ⚡ {lang === 'bn' ? 'কুপন তৈরি' : 'Coupons'}
+              <span aria-hidden="true">⚡ </span>{lang === 'bn' ? 'কুপন তৈরি' : 'Coupons'}
             </button>
           </div>
         </div>
@@ -729,11 +731,12 @@ export default function SellerHome() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#166534' }}>
-              📝 {lang === 'bn' ? 'আজকের মন্ডি সোর্সিং তালিকা' : 'Mandi Procurement Sourcing Sheet'}
+              <span aria-hidden="true">📝 </span>{lang === 'bn' ? 'আজকের মন্ডি সোর্সিং তালিকা' : 'Mandi Procurement Sourcing Sheet'}
             </h3>
             <button
               type="button"
               onClick={() => setSheet(null)}
+              aria-label={lang === 'bn' ? 'বন্ধ করুন' : 'Close sourcing sheet'}
               style={{ background: 'transparent', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b' }}
             >
               ✕
@@ -758,7 +761,7 @@ export default function SellerHome() {
               type="button"
               onClick={() => void copySheet()}
               style={{
-                background: '#16a34a',
+                background: '#15803d',
                 color: '#ffffff',
                 border: 'none',
                 padding: '8px 18px',
@@ -768,7 +771,7 @@ export default function SellerHome() {
                 cursor: 'pointer',
               }}
             >
-              📋 {lang === 'bn' ? 'কপি করুন' : 'Copy Sheet'}
+              <span aria-hidden="true">📋 </span>{lang === 'bn' ? 'কপি করুন' : 'Copy Sheet'}
             </button>
             <button
               type="button"
