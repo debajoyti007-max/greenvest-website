@@ -125,11 +125,11 @@ function ProductCard({
               left: '0.6rem',
               backgroundColor: '#15803d',
               background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
-              color: '#ffffff',
-              fontSize: '0.72rem',
+              color: 'var(--color-text-inverse)',
+              fontSize: 'var(--text-xs)',
               fontWeight: 800,
               padding: '3px 8px',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
               letterSpacing: '0.3px',
               zIndex: 2,
@@ -160,10 +160,10 @@ function ProductCard({
             backdropFilter: 'blur(4px)',
             border: '1px solid rgba(0,0,0,0.12)',
             padding: '2px 7px',
-            borderRadius: '12px',
-            fontSize: '0.72rem',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 'var(--text-xs)',
             fontWeight: 700,
-            color: '#1e293b',
+            color: 'var(--color-text-primary)',
             display: 'flex',
             alignItems: 'center',
             gap: '3px',
@@ -174,7 +174,7 @@ function ProductCard({
         >
           <span aria-hidden="true" style={{ color: '#b45309' }}>★</span>
           <span>{ratingData.avg.toFixed(1)}</span>
-          <span style={{ color: '#334155', fontSize: '0.72rem', fontWeight: 600 }}>({ratingData.count})</span>
+          <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', fontWeight: 600 }}>({ratingData.count})</span>
         </button>
 
         {!p.inStock && <span className="stock-badge">{t(lang, 'outOfStock')}</span>}
@@ -193,10 +193,10 @@ function ProductCard({
       <div className="product-info" style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: '0.85rem' }}>
         {/* Product Title & Category */}
         <div style={{ marginBottom: '0.4rem' }}>
-          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#14532d', lineHeight: 1.25 }}>
+          <h3 style={{ margin: 0, fontSize: 'var(--text-md)', fontWeight: 800, color: 'var(--color-text-brand)', lineHeight: 1.25 }}>
             {p.bnName}
           </h3>
-          <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 500 }}>
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
             {p.name} · {catLabel(lang, p.category)}
           </span>
         </div>
@@ -204,7 +204,7 @@ function ProductCard({
         {/* Grade selector chips (Option A, B, C toggled on demand by Seller) */}
         {activeGrades.length > 1 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '2px 0 6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155' }}>
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
               {lang === 'bn' ? 'গ্রেড:' : 'Grade:'}
             </span>
             {activeGrades.map((g) => (
@@ -213,7 +213,7 @@ function ProductCard({
                 type="button"
                 className={`grade-chip-glass ${cardGrade === g ? 'active' : ''}`}
                 onClick={() => setCardGrade(g)}
-                style={{ padding: '2px 8px', fontSize: '0.72rem', borderRadius: '6px' }}
+                style={{ padding: '2px 8px', fontSize: 'var(--text-xs)', borderRadius: 'var(--radius-sm)' }}
                 aria-pressed={cardGrade === g}
               >
                 Grade {g}
@@ -224,7 +224,7 @@ function ProductCard({
               className="info-btn-glass"
               onClick={() => setShowGradeInfo(!showGradeInfo)}
               title="Quality grade info"
-              style={{ fontSize: '0.75rem', padding: '1px 4px' }}
+              style={{ fontSize: 'var(--text-xs)', padding: '1px 4px' }}
             >
               ℹ️
             </button>
@@ -232,7 +232,7 @@ function ProductCard({
         )}
 
         {showGradeInfo && (
-          <p className="grade-desc-glass" style={{ margin: '0 0 6px', fontSize: '0.75rem' }}>
+          <p className="grade-desc-glass" style={{ margin: '0 0 6px', fontSize: 'var(--text-xs)' }}>
             {gradeLabels[cardGrade][lang]}
           </p>
         )}
@@ -240,7 +240,7 @@ function ProductCard({
         {/* Quick Weight Chips (for kg items) */}
         {isKg && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '2px 0 8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#334155' }}>
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
               {lang === 'bn' ? 'ওজন:' : 'Size:'}
             </span>
             {[
@@ -255,7 +255,7 @@ function ProductCard({
                 type="button"
                 className={`weight-chip ${weightMultiplier === chip.val ? 'active' : ''}`}
                 onClick={() => setWeightMultiplier(chip.val)}
-                style={{ padding: '2px 8px', fontSize: '0.75rem', borderRadius: '6px' }}
+                style={{ padding: '2px 8px', fontSize: 'var(--text-xs)', borderRadius: 'var(--radius-sm)' }}
                 aria-pressed={weightMultiplier === chip.val}
               >
                 {chip.label}
@@ -266,11 +266,11 @@ function ProductCard({
 
         {/* 10 kg Limit Warning & Bulk Order CTA */}
         {isBulkCapReached && (
-          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '4px 8px', margin: '4px 0 8px', fontSize: '0.72rem', color: '#92400e' }}>
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', padding: '4px 8px', margin: '4px 0 8px', fontSize: 'var(--text-xs)', color: '#92400e' }}>
             <span>⚠️ {lang === 'bn' ? 'সর্বোচ্চ ১০ কেজি সীমা পৌঁছেছে।' : 'Max 10 kg limit reached.'}</span>
             <Link
               to="/support"
-              style={{ display: 'block', color: '#15803d', fontWeight: 700, marginTop: '2px', textDecoration: 'underline' }}
+              style={{ display: 'block', color: 'var(--green-700)', fontWeight: 700, marginTop: '2px', textDecoration: 'underline' }}
             >
               💬 {lang === 'bn' ? '১০ কেজির বেশি অর্ডারে ইন-অ্যাপ সাপোর্টে জানান' : 'For >10 kg, message in-app support'}
             </Link>
@@ -281,19 +281,19 @@ function ProductCard({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px' }}>
-              <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#14532d' }}>
+              <span style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--color-text-brand)' }}>
                 ₹{calculatedPrice}
               </span>
               {calculatedMrp > calculatedPrice && (
-                <span style={{ textDecoration: 'line-through', color: '#64748b', fontSize: '0.82rem', fontWeight: 600 }}>
+                <span style={{ textDecoration: 'line-through', color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
                   <span className="sr-only">Original price: </span>₹{calculatedMrp}
                 </span>
               )}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 600 }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
               /{weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
               {calculatedMrp > calculatedPrice && (
-                <span style={{ color: '#15803d', marginLeft: '4px', fontWeight: 700 }}>
+                <span style={{ color: 'var(--green-700)', marginLeft: '4px', fontWeight: 700 }}>
                   · {lang === 'bn' ? `সাশ্রয় ₹${calculatedMrp - calculatedPrice}` : `Save ₹${calculatedMrp - calculatedPrice}`}
                 </span>
               )}
@@ -302,21 +302,21 @@ function ProductCard({
 
           <div>
             {cartQty > 0 ? (
-              <div style={{ display: 'inline-flex', alignItems: 'center', background: '#166534', color: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 6px rgba(22, 101, 52, 0.3)' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', background: 'var(--color-text-brand)', color: 'white', borderRadius: 'var(--radius-md)', overflow: 'hidden', boxShadow: '0 2px 6px rgba(22, 101, 52, 0.3)' }}>
                 <button
                   type="button"
                   onClick={() => onUpdateQty(p.id, cardGrade, cartQty - 1, weightMultiplier)}
-                  style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', padding: '4px 10px' }}
+                  style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: 800, fontSize: 'var(--text-base)', cursor: 'pointer', padding: '4px 10px' }}
                   aria-label="Decrease quantity"
                 >
                   −
                 </button>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '32px', padding: '0 4px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.88rem', lineHeight: 1.2 }}>
+                  <span style={{ fontWeight: 800, fontSize: 'var(--text-sm)', lineHeight: 1.2 }}>
                     {cartQty}
                   </span>
                   {isKg && (
-                    <span style={{ fontSize: '0.62rem', color: '#bbf7d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 'var(--text-xs)', color: '#bbf7d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>
                       {lang === 'bn'
                         ? `${toBnDigits(Number((cartQty * weightMultiplier).toFixed(2)))}কেজি`
                         : `${Number((cartQty * weightMultiplier).toFixed(2))}kg`}
@@ -327,7 +327,7 @@ function ProductCard({
                   type="button"
                   disabled={isBulkCapReached}
                   onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1, weightMultiplier)}
-                  style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', padding: '4px 10px' }}
+                  style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: 800, fontSize: 'var(--text-base)', cursor: 'pointer', padding: '4px 10px' }}
                   aria-label="Increase quantity"
                 >
                   +
@@ -351,10 +351,10 @@ function ProductCard({
                   background: p.inStock ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)' : '#cbd5e1',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   padding: '7px 16px',
                   fontWeight: 800,
-                  fontSize: '0.85rem',
+                  fontSize: 'var(--text-sm)',
                   cursor: p.inStock ? 'pointer' : 'not-allowed',
                   boxShadow: p.inStock ? '0 2px 8px rgba(22, 163, 74, 0.3)' : 'none',
                   display: 'inline-flex',
@@ -697,10 +697,10 @@ export default function Shop() {
               gap: '6px',
               background: '#f0fdf4',
               border: '1px solid #bbf7d0',
-              color: '#166534',
-              borderRadius: '20px',
+              color: 'var(--color-text-brand)',
+              borderRadius: 'var(--radius-full)',
               padding: '5px 14px',
-              fontSize: '0.82rem',
+              fontSize: 'var(--text-sm)',
               fontWeight: 600,
               boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
             }}
@@ -709,7 +709,7 @@ export default function Shop() {
               📍 {lang === 'bn' ? 'ডেলিভারি পিন কোড:' : 'Delivery PINs:'}{' '}
               <strong style={{ letterSpacing: '0.5px' }}>{SERVICEABLE_PINCODES.join(', ')}</strong>
               {' · '}
-              <span style={{ color: '#15803d', fontWeight: 700 }}>
+              <span style={{ color: 'var(--green-700)', fontWeight: 700 }}>
                 {lang === 'bn' ? 'চার্জ ₹৩০' : 'Fee ₹30'}
               </span>
             </span>
