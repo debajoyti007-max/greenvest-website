@@ -139,6 +139,7 @@ interface StoreContextValue {
   addReview: (review: Omit<ProductReview, 'id' | 'createdAt'>) => Promise<ProductReview>
   getProductRating: (productId: string) => { avg: number; count: number }
   getReviewsForProduct: (productId: string) => ProductReview[]
+  loadProductReviews: (productId: string, offset?: number, limit?: number) => Promise<ProductReview[]>
   shiftStatus: ShiftInfo
   extendedDeliveryNotice: string | null
   setExtendedDeliveryNotice: (notice: string | null) => void
@@ -1335,6 +1336,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [reviews],
   )
 
+  const loadProductReviews = useCallback(
+    async (productId: string, offset = 0, limit = 20) => {
+      const fetched = await fetchProductReviewsApi(productId, { limit, offset })
+      if (fetched.length > 0) {
+        setReviews((prev) => {
+          const map = new Map(prev.map((r) => [r.id, r]))
+          fetched.forEach((r) => map.set(r.id, r))
+          return Array.from(map.values())
+        })
+      }
+      return fetched
+    },
+    [],
+  )
+
   const getProductRating = useCallback(
     (productId: string) => {
       const prodReviews = reviews.filter((r) => r.productId === productId)
@@ -1395,6 +1411,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addReview,
       getProductRating,
       getReviewsForProduct,
+      loadProductReviews,
       shiftStatus,
       extendedDeliveryNotice,
       setExtendedDeliveryNotice: (notice: string | null) => {
@@ -1464,6 +1481,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addReview,
       getProductRating,
       getReviewsForProduct,
+      loadProductReviews,
       shiftStatus,
       extendedDeliveryNotice,
       promotionalDeals,

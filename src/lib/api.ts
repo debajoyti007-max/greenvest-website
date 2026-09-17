@@ -1522,7 +1522,12 @@ export async function sendOrderMessageApi(
 
 // ── Customer Product Reviews ──────────────────────────────────────────────────
 
-export async function fetchProductReviewsApi(productId?: string): Promise<ProductReview[]> {
+export async function fetchProductReviewsApi(
+  productId?: string,
+  options?: { limit?: number; offset?: number }
+): Promise<ProductReview[]> {
+  const limit = options?.limit ?? (productId ? 20 : 50)
+  const offset = options?.offset ?? 0
   const localKey = productId ? `greenvest_reviews_${productId}` : 'greenvest_all_reviews'
   const fallbackRaw: ProductReview[] = JSON.parse(localStorage.getItem(localKey) || '[]')
   // Filter out any legacy seed reviews from localStorage cache
@@ -1531,7 +1536,12 @@ export async function fetchProductReviewsApi(productId?: string): Promise<Produc
   if (!supabase) return fallback
 
   try {
-    let query = supabase.from('product_reviews').select('*').order('created_at', { ascending: false }).limit(productId ? 20 : 50)
+    let query = supabase
+      .from('product_reviews')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+
     if (productId) {
       query = query.eq('product_id', productId)
     }
@@ -1550,7 +1560,9 @@ export async function fetchProductReviewsApi(productId?: string): Promise<Produc
       createdAt: r.created_at,
     }))
 
-    localStorage.setItem(localKey, JSON.stringify(mapped))
+    if (offset === 0) {
+      localStorage.setItem(localKey, JSON.stringify(mapped))
+    }
     return mapped
   } catch {
     return fallback

@@ -34,6 +34,19 @@ export default function AdminUsers() {
   const [notifTitle, setNotifTitle] = useState('')
   const [notifMessage, setNotifMessage] = useState('')
   const [sendingNotif, setSendingNotif] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([refreshUsers(), refresh()])
+      showToast(lang === 'bn' ? 'তথ্য সফলভাবে সিঙ্ক হয়েছে!' : 'Data synced successfully!', '🟢')
+    } catch {
+      showToast(lang === 'bn' ? 'সিঙ্ক ব্যর্থ হয়েছে' : 'Sync failed', '⚠️', 'error')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   if (!user || user.role !== 'admin') {
     return <Navigate to="/" replace />
@@ -181,7 +194,27 @@ export default function AdminUsers() {
         }}
       >
         <div>
-          <h1>{lang === 'bn' ? 'অ্যাডমিন ড্যাশবোর্ড' : 'Admin Control Dashboard'}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0 }}>{lang === 'bn' ? 'অ্যাডমিন ড্যাশবোর্ড' : 'Admin Control Dashboard'}</h1>
+            <button
+              type="button"
+              className={`sync-badge ${isRefreshing ? 'syncing' : 'synced'}`}
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              title={lang === 'bn' ? 'ক্লিক করে সরাসরি ক্লাউড থেকে রিফ্রেশ করুন' : 'Click to refresh directly from cloud'}
+              aria-label={isRefreshing ? 'Syncing data' : 'Data is synced, click to refresh'}
+            >
+              <span className={`sync-badge-icon ${isRefreshing ? 'spinning' : ''}`}>
+                {isRefreshing ? '🔄' : '🟢'}
+              </span>
+              <span>
+                {isRefreshing
+                  ? (lang === 'bn' ? 'সিঙ্ক হচ্ছে...' : 'Syncing...')
+                  : (lang === 'bn' ? 'লাইভ • সিঙ্কড' : 'Live • Synced')}
+              </span>
+              <span style={{ opacity: 0.6, fontSize: '0.75rem' }}>↻</span>
+            </button>
+          </div>
           <p className="subtle" style={{ margin: '0.25rem 0 0' }}>
             {lang === 'bn'
               ? 'ইউজার সিকিউরিটি, রোল ম্যানেজমেন্ট ও স্মার্ট ডেটাবেস রক্ষণাবেক্ষণ'

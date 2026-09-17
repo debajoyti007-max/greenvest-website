@@ -11,11 +11,34 @@ if (typeof window !== 'undefined') {
     window.history.replaceState(null, '', `${window.location.origin}/admin${hashRemainder}`)
   }
 
-  // Register PWA Service Worker for offline shell and speed
+  // Register PWA Service Worker for offline shell and speed with auto-update
   if ('serviceWorker' in navigator && !window.location.host.includes('localhost')) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.debug('ServiceWorker registration skipped/failed:', err)
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => {
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing
+            if (!newWorker) return
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // New content available: notify worker to skip waiting immediately
+                newWorker.postMessage({ type: 'SKIP_WAITING' })
+              }
+            })
+          })
+        })
+        .catch((err) => {
+          console.debug('ServiceWorker registration skipped/failed:', err)
+        })
+
+      // When the updated service worker takes control, refresh page once for seamless update
+      let refreshing = false
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true
+          window.location.reload()
+        }
       })
     })
   }

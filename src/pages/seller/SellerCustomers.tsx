@@ -43,6 +43,19 @@ export default function SellerCustomers() {
   const [notifTitle, setNotifTitle] = useState('')
   const [notifMessage, setNotifMessage] = useState('')
   const [sendingNotif, setSendingNotif] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([refreshUsers(), refresh()])
+      showToast(lang === 'bn' ? 'তথ্য সফলভাবে সিঙ্ক হয়েছে!' : 'Data synced successfully!', '🟢')
+    } catch {
+      showToast(lang === 'bn' ? 'সিঙ্ক ব্যর্থ হয়েছে' : 'Sync failed', '⚠️', 'error')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const now = new Date()
   const [filterMonth, setFilterMonth] = useState(now.getMonth()) // 0-indexed
@@ -242,7 +255,27 @@ export default function SellerCustomers() {
   return (
     <div className="page">
       <div className="page-head">
-        <h1>{lang === 'bn' ? 'কাস্টমার ও ইউজার ম্যানেজমেন্ট' : 'Customer & User Management'}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <h1 style={{ margin: 0 }}>{lang === 'bn' ? 'কাস্টমার ও ইউজার ম্যানেজমেন্ট' : 'Customer & User Management'}</h1>
+          <button
+            type="button"
+            className={`sync-badge ${isRefreshing ? 'syncing' : 'synced'}`}
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            title={lang === 'bn' ? 'ক্লিক করে সরাসরি ক্লাউড থেকে রিফ্রেশ করুন' : 'Click to refresh directly from cloud'}
+            aria-label={isRefreshing ? 'Syncing data' : 'Data is synced, click to refresh'}
+          >
+            <span className={`sync-badge-icon ${isRefreshing ? 'spinning' : ''}`}>
+              {isRefreshing ? '🔄' : '🟢'}
+            </span>
+            <span>
+              {isRefreshing
+                ? (lang === 'bn' ? 'সিঙ্ক হচ্ছে...' : 'Syncing...')
+                : (lang === 'bn' ? 'লাইভ • সিঙ্কড' : 'Live • Synced')}
+            </span>
+            <span style={{ opacity: 0.6, fontSize: '0.75rem' }}>↻</span>
+          </button>
+        </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button
             type="button"

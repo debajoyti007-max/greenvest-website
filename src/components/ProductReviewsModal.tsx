@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, type FormEvent } from 'react'
+import { useState, useMemo, useEffect, type FormEvent } from 'react'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import type { Product } from '../types'
@@ -18,7 +18,7 @@ const PRESET_TAGS = [
 
 export default function ProductReviewsModal({ product, onClose }: ProductReviewsModalProps) {
   const { user } = useAuth()
-  const { lang, getReviewsForProduct, getProductRating, addReview } = useStore()
+  const { lang, getReviewsForProduct, getProductRating, addReview, loadProductReviews } = useStore()
 
   const reviews = getReviewsForProduct(product.id)
   const { avg, count } = getProductRating(product.id)
@@ -29,6 +29,29 @@ export default function ProductReviewsModal({ product, onClose }: ProductReviews
   const [comment, setComment] = useState('')
   const [selectedTag, setSelectedTag] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  // Fetch initial product-specific reviews on modal mount
+  useEffect(() => {
+    void loadProductReviews(product.id, 0, 20).then((res) => {
+      if (res.length < 20) {
+        setHasMore(false)
+      }
+    })
+  }, [product.id, loadProductReviews])
+
+  const handleLoadMore = async () => {
+    setLoadingMore(true)
+    try {
+      const more = await loadProductReviews(product.id, reviews.length, 20)
+      if (more.length < 20) {
+        setHasMore(false)
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   // Star breakdown calculation
   const breakdown = useMemo(() => {
@@ -311,6 +334,27 @@ export default function ProductReviewsModal({ product, onClose }: ProductReviews
                   )}
                 </div>
               ))}
+
+              {hasMore && reviews.length >= 20 && (
+                <div style={{ textAlign: 'center', marginTop: '1rem', marginBottom: '0.5rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    style={{
+                      borderRadius: '9999px',
+                      padding: '7px 18px',
+                      fontWeight: 600,
+                      fontSize: '0.82rem',
+                    }}
+                  >
+                    {loadingMore
+                      ? (lang === 'bn' ? 'লোড হচ্ছে...' : 'Loading more...')
+                      : (lang === 'bn' ? '⬇️ আরো রিভিউ দেখুন' : '⬇️ Load More Reviews')}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

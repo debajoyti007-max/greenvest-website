@@ -29,18 +29,19 @@ import { STORE_LOCATION } from '../lib/delivery'
 import type { Grade, Lang, Product, CartItem } from '../types'
 
 const GRADES: Grade[] = ['A', 'B', 'C']
+const EMPTY_CART_ITEMS: CartItem[] = []
 
 const ProductCard = memo(function ProductCard({
   p,
   lang,
-  cart,
+  productCart,
   onAdd,
   onUpdateQty,
   onOpenReviews,
 }: {
   p: Product
   lang: Lang
-  cart: CartItem[]
+  productCart: CartItem[]
   onAdd: (p: Product, grade: Grade, qty?: number, weightMultiplier?: number, weightLabel?: string) => void
   onUpdateQty: (productId: string, grade: Grade, qty: number, weightMultiplier?: number) => void
   onOpenReviews: (p: Product) => void
@@ -85,8 +86,8 @@ const ProductCard = memo(function ProductCard({
       ? Math.round(((calculatedMrp - calculatedPrice) / calculatedMrp) * 100)
       : 0
 
-  const cartItem = cart.find(
-    (c) => c.productId === p.id && c.grade === cardGrade && (c.weightMultiplier || 1) === weightMultiplier,
+  const cartItem = productCart.find(
+    (c) => c.grade === cardGrade && (c.weightMultiplier || 1) === weightMultiplier,
   )
   const cartQty = cartItem ? cartItem.qty : 0
   const currentTotalKg = cartQty * weightMultiplier
@@ -371,36 +372,6 @@ const ProductCard = memo(function ProductCard({
       </div>
     </article>
   )
-}, (prev, next) => {
-  if (
-    prev.p.id !== next.p.id ||
-    prev.p.inStock !== next.p.inStock ||
-    prev.p.pA !== next.p.pA ||
-    prev.p.pB !== next.p.pB ||
-    prev.p.pC !== next.p.pC ||
-    prev.p.stockQty !== next.p.stockQty
-  ) {
-    return false
-  }
-  if (prev.lang !== next.lang) return false
-  if (prev.onAdd !== next.onAdd || prev.onUpdateQty !== next.onUpdateQty || prev.onOpenReviews !== next.onOpenReviews) {
-    return false
-  }
-
-  // Selective memoization: only re-render if the cart entries for THIS specific product changed
-  const prevItems = prev.cart.filter((c) => c.productId === prev.p.id)
-  const nextItems = next.cart.filter((c) => c.productId === next.p.id)
-  if (prevItems.length !== nextItems.length) return false
-  for (let i = 0; i < prevItems.length; i++) {
-    if (
-      prevItems[i].grade !== nextItems[i].grade ||
-      prevItems[i].qty !== nextItems[i].qty ||
-      (prevItems[i].weightMultiplier || 1) !== (nextItems[i].weightMultiplier || 1)
-    ) {
-      return false
-    }
-  }
-  return true
 })
 
 export default function Shop() {
@@ -417,6 +388,21 @@ export default function Shop() {
     reorderFromOrder,
     loading,
   } = useStore()
+
+  // Pre-index cart items by productId for O(1) card lookup.
+  // Standard React.memo(ProductCard) shallow equality skips rendering when this item's array reference is unchanged.
+  const cartByProductId = useMemo(() => {
+    const map = new Map<string, CartItem[]>()
+    for (const item of cart) {
+      const existing = map.get(item.productId)
+      if (existing) {
+        existing.push(item)
+      } else {
+        map.set(item.productId, [item])
+      }
+    }
+    return map
+  }, [cart])
 
   const [category, setCategory] = useState('All')
   const [search, setSearch] = useState('')
@@ -945,7 +931,7 @@ export default function Shop() {
                       key={p.id}
                       p={p}
                       lang={lang}
-                      cart={cart}
+                      productCart={cartByProductId.get(p.id) || EMPTY_CART_ITEMS}
                       onAdd={handleAddDirect}
                       onUpdateQty={updateCartQty}
                       onOpenReviews={setReviewProduct}
@@ -974,7 +960,7 @@ export default function Shop() {
                       key={p.id}
                       p={p}
                       lang={lang}
-                      cart={cart}
+                      productCart={cartByProductId.get(p.id) || EMPTY_CART_ITEMS}
                       onAdd={handleAddDirect}
                       onUpdateQty={updateCartQty}
                       onOpenReviews={setReviewProduct}
