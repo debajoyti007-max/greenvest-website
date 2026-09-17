@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type { Lang } from '../types'
 
 export interface CategoryOption {
@@ -26,7 +27,7 @@ const CATEGORY_META: Record<string, { labelEn: string; labelBn: string; emoji: s
   Pulses: { labelEn: 'Pulses & Dal', labelBn: 'ডাল', emoji: '🌾' },
 }
 
-export default function CategoryBar({
+const CategoryBar = memo(function CategoryBar({
   categories,
   selectedCategory,
   onSelectCategory,
@@ -67,4 +68,6 @@ export default function CategoryBar({
       </div>
     </nav>
   )
-}
+})
+
+export default CategoryBar

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, lazy, Suspense } from 'react'
+import { useEffect, useMemo, useState, useRef, lazy, Suspense, memo, useCallback } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import SkeletonCard from '../components/SkeletonCard'
 import CategoryBar from '../components/CategoryBar'
@@ -30,7 +30,7 @@ import type { Grade, Lang, Product, CartItem } from '../types'
 
 const GRADES: Grade[] = ['A', 'B', 'C']
 
-function ProductCard({
+const ProductCard = memo(function ProductCard({
   p,
   lang,
   cart,
@@ -371,7 +371,37 @@ function ProductCard({
       </div>
     </article>
   )
-}
+}, (prev, next) => {
+  if (
+    prev.p.id !== next.p.id ||
+    prev.p.inStock !== next.p.inStock ||
+    prev.p.pA !== next.p.pA ||
+    prev.p.pB !== next.p.pB ||
+    prev.p.pC !== next.p.pC ||
+    prev.p.stockQty !== next.p.stockQty
+  ) {
+    return false
+  }
+  if (prev.lang !== next.lang) return false
+  if (prev.onAdd !== next.onAdd || prev.onUpdateQty !== next.onUpdateQty || prev.onOpenReviews !== next.onOpenReviews) {
+    return false
+  }
+
+  // Selective memoization: only re-render if the cart entries for THIS specific product changed
+  const prevItems = prev.cart.filter((c) => c.productId === prev.p.id)
+  const nextItems = next.cart.filter((c) => c.productId === next.p.id)
+  if (prevItems.length !== nextItems.length) return false
+  for (let i = 0; i < prevItems.length; i++) {
+    if (
+      prevItems[i].grade !== nextItems[i].grade ||
+      prevItems[i].qty !== nextItems[i].qty ||
+      (prevItems[i].weightMultiplier || 1) !== (nextItems[i].weightMultiplier || 1)
+    ) {
+      return false
+    }
+  }
+  return true
+})
 
 export default function Shop() {
   const { user } = useAuth()
@@ -464,8 +494,15 @@ export default function Shop() {
     })
   }, [shopProducts, category, search])
 
-  const available = filtered.filter((p) => p.inStock)
-  const unavailable = filtered.filter((p) => !p.inStock)
+  const { available, unavailable } = useMemo(() => {
+    const avail: Product[] = []
+    const unavail: Product[] = []
+    for (const p of filtered) {
+      if (p.inStock) avail.push(p)
+      else unavail.push(p)
+    }
+    return { available: avail, unavailable: unavail }
+  }, [filtered])
 
   // Progress bar
   const progressPct = Math.min(100, Math.round((cartTotal / MIN_ORDER_AMOUNT) * 100))
@@ -505,7 +542,7 @@ export default function Shop() {
     void import(/* webpackChunkName: "Checkout" */ './Checkout')
   }
 
-  const handleAddDirect = (p: Product, g: Grade, qty = 1, weightMultiplier = 1, weightLabel?: string) => {
+  const handleAddDirect = useCallback((p: Product, g: Grade, qty = 1, weightMultiplier = 1, weightLabel?: string) => {
     if (!p.inStock) return
     addToCart(p.id, g, qty, weightMultiplier, weightLabel)
     prefetchCartChunks()
@@ -516,7 +553,7 @@ export default function Shop() {
         : `${p.name}${lbl} (${g}) added to cart!`,
       p.emoji || '✅',
     )
-  }
+  }, [addToCart, lang])
 
   const handleAddBulkStaples = (items: { product: Product; grade: Grade; qty: number }[]) => {
     items.forEach((item) => {

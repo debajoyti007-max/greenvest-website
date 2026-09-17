@@ -1531,7 +1531,7 @@ export async function fetchProductReviewsApi(productId?: string): Promise<Produc
   if (!supabase) return fallback
 
   try {
-    let query = supabase.from('product_reviews').select('*').order('created_at', { ascending: false })
+    let query = supabase.from('product_reviews').select('*').order('created_at', { ascending: false }).limit(productId ? 20 : 50)
     if (productId) {
       query = query.eq('product_id', productId)
     }
@@ -1608,7 +1608,9 @@ export async function fetchPromotionalDealsApi(): Promise<PromotionalDeal[]> {
     const { data, error } = await supabase
       .from('promotional_deals')
       .select('*')
+      .eq('is_active', true)
       .order('created_at', { ascending: false })
+      .limit(20)
 
     if (error || !data) return fallback
     const mapped = (data as PromotionalDealRow[]).map(mapDeal)
