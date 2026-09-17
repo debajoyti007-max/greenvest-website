@@ -6,7 +6,14 @@ import { showToast } from '../lib/toast'
 import { verifyDeliveryOtpApi } from '../lib/api'
 import { generateDynamicUpiQr } from '../lib/payment'
 import { formatItemWeightDetail } from '../lib/business'
-import { STORE_LOCATION, calculateDistanceKm, resolveNavDestination, createLocationRequestWhatsAppUrl } from '../lib/delivery'
+import {
+  STORE_LOCATION,
+  resolveNavDestination,
+  createLocationRequestWhatsAppUrl,
+  generateMultiStopRouteUrl,
+  optimizeDeliveryRoute,
+  launchRiderNavigation,
+} from '../lib/delivery'
 import type { Order } from '../types'
 
 type RiderTab = 'active' | 'upcoming' | 'done' | 'all'
@@ -101,27 +108,27 @@ export default function RiderView() {
     return orders.filter((o) => o.status !== 'pending').sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }, [orders])
 
-  // 6. Smart Route Sequencer for Active Today
-  const sortedActiveToday = useMemo(() => {
-    const list = [...activeToday]
+  // 6. Smart Route Sequencer for Active Today (Nearest-Neighbor TSP)
+  const routeOptimizationResult = useMemo(() => {
     if (!routeOptimized) {
-      return list.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      const list = [...activeToday].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      return {
+        sequencedOrders: list,
+        totalDistanceKm: 0,
+        legDistancesKm: [] as number[],
+        estimatedMinutes: 0,
+      }
     }
-    // Sort by PIN group and GPS distance from store location
-    return list.sort((a, b) => {
-      const pinA = a.pin || ''
-      const pinB = b.pin || ''
-      if (pinA !== pinB) {
-        return pinA.localeCompare(pinB)
-      }
-      if (a.geoLat && a.geoLng && b.geoLat && b.geoLng) {
-        const distA = calculateDistanceKm(STORE_LOCATION.lat, STORE_LOCATION.lng, a.geoLat, a.geoLng)
-        const distB = calculateDistanceKm(STORE_LOCATION.lat, STORE_LOCATION.lng, b.geoLat, b.geoLng)
-        return distA - distB
-      }
-      return a.createdAt.localeCompare(b.createdAt)
-    })
+    return optimizeDeliveryRoute(activeToday, { lat: STORE_LOCATION.lat, lng: STORE_LOCATION.lng })
   }, [activeToday, routeOptimized])
+
+  const sortedActiveToday = routeOptimizationResult.sequencedOrders
+
+  // 1-Tap Continuous Multi-Stop Route URL for Google Maps
+  const multiStopRouteUrl = useMemo(() => {
+    if (activeToday.length === 0) return ''
+    return generateMultiStopRouteUrl(sortedActiveToday)
+  }, [sortedActiveToday, activeToday.length])
 
   // Active displayed list based on active tab
   const displayedOrders = useMemo(() => {
@@ -346,33 +353,82 @@ export default function RiderView() {
         </button>
       </div>
 
-      {/* Live Route Sequencer & Action Bar (When in Active Tab) */}
-      {tab === 'active' && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.65rem 0.85rem', borderRadius: '10px', fontSize: '0.85rem', color: '#166534', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span>🔔 <strong>{activeToday.length}</strong> {lang === 'bn' ? 'টি স্টপ বাকি' : 'active stops left'}</span>
-            <span style={{ fontSize: '0.7rem', background: '#22c55e', color: 'white', padding: '0.1rem 0.4rem', borderRadius: '6px', fontWeight: 700 }}>LIVE ⚡</span>
+      {/* 🚀 Live Multi-Stop Route Command Hub (When in Active Tab) */}
+      {tab === 'active' && activeToday.length > 0 && (
+        <div style={{
+          background: '#f0fdf4',
+          border: '1.5px solid #86efac',
+          borderRadius: '12px',
+          padding: '0.85rem 1rem',
+          marginBottom: '1.25rem',
+          boxShadow: '0 2px 8px rgba(22, 101, 52, 0.08)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.65rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.25rem' }}>🛵</span>
+              <div>
+                <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem' }}>
+                  {lang === 'bn' ? `আজকের সক্রিয় ডেলিভারি রুট (${activeToday.length} টি স্টপ)` : `Today's Active Delivery Route (${activeToday.length} stops)`}
+                </div>
+                {routeOptimizationResult.totalDistanceKm > 0 && (
+                  <div style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>
+                    📏 {lang === 'bn' ? `মোট আনুমানিক দূরত্ব: ~${routeOptimizationResult.totalDistanceKm} কিমি` : `Est. Total Distance: ~${routeOptimizationResult.totalDistanceKm} km`}
+                    {routeOptimizationResult.estimatedMinutes > 0 && ` · ⏱️ ~${routeOptimizationResult.estimatedMinutes} ${lang === 'bn' ? 'মিনিট' : 'mins'}`}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setRouteOptimized(!routeOptimized)}
+              style={{
+                padding: '0.35rem 0.75rem',
+                borderRadius: '8px',
+                border: '1.5px solid #166534',
+                background: routeOptimized ? '#166534' : '#ffffff',
+                color: routeOptimized ? '#ffffff' : '#166534',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              🧭 {routeOptimized
+                ? (lang === 'bn' ? '✓ স্বল্প দূরত্বের রুট সাজানো (TSP)' : '✓ Shortest Route (TSP)')
+                : (lang === 'bn' ? 'স্বল্প দূরত্বের রুট সাজান' : 'Optimize Shortest Route')}
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setRouteOptimized(!routeOptimized)}
-            style={{
-              padding: '0.35rem 0.65rem',
-              borderRadius: '8px',
-              border: '1.5px solid #166534',
-              background: routeOptimized ? '#166534' : '#ffffff',
-              color: routeOptimized ? '#ffffff' : '#166534',
-              fontSize: '0.78rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.3rem',
-            }}
-          >
-            🧭 {routeOptimized ? (lang === 'bn' ? '✓ রুট সাজানো (PIN)' : '✓ Route Optimized') : (lang === 'bn' ? 'রুট সাজান (PIN)' : 'Optimize Route')}
-          </button>
+          {/* 🚀 1-Tap Google Maps Full Multi-Stop Day Route */}
+          {multiStopRouteUrl && (
+            <a
+              href={multiStopRouteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                width: '100%',
+                padding: '0.65rem 1rem',
+                background: '#166534',
+                color: '#ffffff',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                fontWeight: 700,
+                fontSize: '0.88rem',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              }}
+            >
+              🗺️ {lang === 'bn'
+                ? 'Google Maps-এ সম্পূর্ণ দিনের রুট শুরু করুন (সব কটি স্টপ ➔)'
+                : 'Start Full Multi-Stop Route in Google Maps (All Stops ➔)'}
+            </a>
+          )}
         </div>
       )}
 
@@ -397,7 +453,19 @@ export default function RiderView() {
             return (
               <div key={o.id} className="rider-order-card">
                 <div className="rider-card-top">
-                  <span className="stop-num">Stop #{idx + 1}</span>
+                  {(() => {
+                    const legKm = routeOptimizationResult.legDistancesKm[idx]
+                    const legText = legKm != null && legKm > 0
+                      ? idx === 0
+                        ? (lang === 'bn' ? `দোকান থেকে ~${legKm} কিমি` : `~${legKm} km from Hub`)
+                        : (lang === 'bn' ? `স্টপ #${idx} থেকে ~${legKm} কিমি` : `~${legKm} km from Stop #${idx}`)
+                      : ''
+                    return (
+                      <span className="stop-num">
+                        Stop #{idx + 1}{legText ? ` · ${legText}` : ''}
+                      </span>
+                    )
+                  })()}
                   <span
                     className="slot-tag"
                     style={{
@@ -413,18 +481,27 @@ export default function RiderView() {
                 <div className="rider-cust-info">
                   <h2>{o.userName}</h2>
                   <p className="rider-address" style={{ margin: '0.2rem 0' }}>📍 {o.address} (PIN {o.pin})</p>
-                  {o.deliveryNotes && (
+                  {(navDest.hasLandmark || o.deliveryNotes) && (
                     <div style={{
-                      marginTop: '0.35rem',
-                      padding: '0.45rem 0.75rem',
+                      marginTop: '0.4rem',
+                      padding: '0.5rem 0.8rem',
                       background: '#fefce8',
-                      border: '1.5px solid #fde047',
+                      border: '1.5px solid #eab308',
                       borderRadius: '8px',
-                      fontSize: '0.84rem',
+                      fontSize: '0.86rem',
                       color: '#854d0e',
                       fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
                     }}>
-                      🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক ও গেট নির্দেশ:' : 'Landmark & House Note:'} {o.deliveryNotes}
+                      <span style={{ fontSize: '1.1rem' }}>🏛️</span>
+                      <div>
+                        <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', display: 'block', color: '#a16207' }}>
+                          {lang === 'bn' ? 'সুনির্দিষ্ট ল্যান্ডমার্ক / মোড়:' : 'Precise Landmark / Crossing:'}
+                        </span>
+                        <span>{navDest.landmarkName || o.deliveryNotes}</span>
+                      </div>
                     </div>
                   )}
                   {/* Map Pin Precision Badge */}
@@ -434,11 +511,11 @@ export default function RiderView() {
                       fontWeight: 700,
                       padding: '2px 8px',
                       borderRadius: '12px',
-                      background: navDest.isExact ? '#dcfce7' : '#eff6ff',
-                      color: navDest.isExact ? '#15803d' : '#1e40af',
-                      border: `1px solid ${navDest.isExact ? '#86efac' : '#bfdbfe'}`,
+                      background: navDest.hasLandmark ? '#fef9c3' : navDest.isExact ? '#dcfce7' : '#eff6ff',
+                      color: navDest.hasLandmark ? '#854d0e' : navDest.isExact ? '#15803d' : '#1e40af',
+                      border: `1px solid ${navDest.hasLandmark ? '#fde047' : navDest.isExact ? '#86efac' : '#bfdbfe'}`,
                     }}>
-                      {navDest.isExact ? '✓ ' : '📍 '}{lang === 'bn' ? navDest.labelBn : navDest.labelEn}
+                      {navDest.hasLandmark ? '🏛️ ' : navDest.isExact ? '✓ ' : '📍 '}{lang === 'bn' ? navDest.labelBn : navDest.labelEn}
                     </span>
                   </div>
                 </div>
@@ -500,16 +577,25 @@ export default function RiderView() {
                   </button>
                   <a
                     href={navDest.navUrl}
+                    onClick={(e) => {
+                      if (/android/i.test(navigator.userAgent || '')) {
+                        e.preventDefault()
+                        launchRiderNavigation(navDest)
+                      }
+                    }}
                     className="btn btn-primary rider-btn rider-nav-btn"
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
-                      background: navDest.isExact ? '#166534' : '#1d4ed8',
-                      borderColor: navDest.isExact ? '#166534' : '#1d4ed8',
+                      background: navDest.hasLandmark ? '#b45309' : navDest.isExact ? '#166534' : '#1d4ed8',
+                      borderColor: navDest.hasLandmark ? '#b45309' : navDest.isExact ? '#166534' : '#1d4ed8',
                       fontWeight: 700,
                     }}
+                    title={navDest.destinationQuery}
                   >
-                    🧭 {navDest.isExact
+                    🧭 {navDest.hasLandmark
+                      ? (lang === 'bn' ? 'ল্যান্ডমার্গে নেভিগেট ➔' : 'Nav to Landmark ➔')
+                      : navDest.isExact
                       ? (lang === 'bn' ? 'GPS সঠিক পিন ➔' : 'Exact GPS Nav ➔')
                       : (lang === 'bn' ? 'এলাকা ম্যাপ ➔' : 'Area Map ➔')}
                   </a>

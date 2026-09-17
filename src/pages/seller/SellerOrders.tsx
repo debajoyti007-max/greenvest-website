@@ -1033,9 +1033,26 @@ export default function SellerOrders() {
                               PIN: {o.pin || '—'}
                             </span>
                           </div>
-                          <div style={{ fontSize: '0.85rem', color: '#1f2937', fontWeight: 500, marginBottom: '0.55rem', lineHeight: 1.45 }}>
+                          <div style={{ fontSize: '0.85rem', color: '#1f2937', fontWeight: 500, marginBottom: '0.45rem', lineHeight: 1.45 }}>
                             🏡 {cleanAddr}
                           </div>
+                          {navDest.hasLandmark && (
+                            <div style={{
+                              marginBottom: '0.55rem',
+                              padding: '0.35rem 0.65rem',
+                              background: '#fefce8',
+                              border: '1px solid #fde047',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              color: '#854d0e',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}>
+                              🏛️ {lang === 'bn' ? 'চিহ্নিত ল্যান্ডমার্ক:' : 'Landmark:'} <span>{navDest.landmarkName}</span>
+                            </div>
+                          )}
                           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                             <a
                               href={navDest.navUrl}
@@ -1045,7 +1062,7 @@ export default function SellerOrders() {
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '5px',
-                                background: navDest.isExact ? '#166534' : '#1d4ed8',
+                                background: navDest.hasLandmark ? '#b45309' : navDest.isExact ? '#166534' : '#1d4ed8',
                                 color: '#ffffff',
                                 padding: '5px 11px',
                                 borderRadius: '7px',
@@ -1056,7 +1073,7 @@ export default function SellerOrders() {
                             >
                               🗺️ {lang === 'bn' ? 'Google Maps-এ রুট দেখুন' : 'Open in Google Maps'}
                               <span style={{ opacity: 0.85, fontSize: '0.72rem', fontWeight: 600 }}>
-                                ({navDest.isExact ? 'Exact GPS' : 'Area PIN'})
+                                ({navDest.hasLandmark ? 'Landmark' : navDest.isExact ? 'Exact GPS' : 'Area PIN'})
                               </span>
                             </a>
                             {locWaUrl && (

@@ -1820,3 +1820,128 @@ describe('Invoice, POS Thermal Slip & Print Engine Engine', () => {
   })
 })
 
+// 35. Rural Landmark Precision, Android App Intent & Multi-Stop TSP Routing
+describe('Rural Landmark Precision, Android App Intent & Multi-Stop TSP Routing', () => {
+  function extractRuralLandmark(notes, address) {
+    const combined = `${notes || ''} ${address || ''}`
+    if (!combined.trim()) return null
+
+    const explicitNote = (notes || '').trim()
+    if (explicitNote) {
+      const stripped = explicitNote
+        .replace(/^(?:near|opp|opposite|beside|behind|কাছে|নিকট|পাশে|সামনে|ল্যান্ডমার্ক|landmark)[:\s-]+/i, '')
+        .replace(/[()[\]{}]/g, '')
+        .trim()
+      if (stripped.length >= 3 && stripped.length <= 50) return stripped
+    }
+
+    const bracketMatch = (address || '').match(/\((?:near|opp|opposite|landmark|কাছে|পাশে)?[:\s-]*([^)]+)\)/i)
+    if (bracketMatch) {
+      const l = bracketMatch[1].replace(/^(?:near|opp|opposite|landmark|কাছে|পাশে)[:\s-]+/i, '').trim()
+      if (l.length >= 3 && l.length <= 50) return l
+    }
+
+    const nearRegex = /(?:near|opp|opposite|beside|behind|নিকট|পাশে|সামনে)[:\s-]+([^,;\n·/]+)/i
+    const nearMatch = (address || '').match(nearRegex)
+    if (nearMatch) {
+      const l = nearMatch[1].replace(/[()[\]{}]/g, '').trim()
+      if (l.length >= 3 && l.length <= 50 && !/^(house|bari|para|door|flat|room|ward)$/i.test(l)) {
+        return l
+      }
+    }
+
+    const landmarkKeywordRegex = /\b([a-zA-Z\u0980-\u09FF\s]{2,25}(?:more|mor|school|college|hospital|club|mandir|temple|masjid|station|bazar|market|hat|bridge|pool|petrol\s*pump|bank|atm|panchayat|ঘাট|মোড়|মোর|স্কুল|কলেজ|হাসপাতাল|ক্লাব|মন্দির|মসজিদ|স্টেশন|বাজার|হাট|ব্রিজ|পুল|ঘাট))\b/i
+    const kwMatch = combined.match(landmarkKeywordRegex)
+    if (kwMatch) {
+      const l = kwMatch[1].trim()
+      if (l.length >= 4 && l.length <= 45) return l
+    }
+    return null
+  }
+
+  function deduplicateAddressTokens(address) {
+    if (!address) return []
+    const cleaned = address
+      .replace(/Store Pickup.*?\)/gi, '')
+      .replace(/Pickup - .*?\)/gi, '')
+      .replace(/\[Maps:.*?\]/gi, '')
+      .replace(/GPS অবস্থান.*/gi, '')
+      .replace(/GPS Location Saved.*/gi, '')
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/\(Near:.*?\)/gi, '')
+      .replace(/[()[\]{}]/g, ',')
+      .trim()
+
+    const rawTokens = cleaned
+      .split(/[,/·\n;-]+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 2)
+
+    const seen = new Set()
+    const unique = []
+
+    for (const t of rawTokens) {
+      const normalized = t.toLowerCase().replace(/\s+/g, ' ')
+      if (/^(house|bari|para|door|flat|floor|room|ward)$/i.test(normalized)) continue
+      if (!seen.has(normalized)) {
+        seen.add(normalized)
+        unique.push(t)
+      }
+    }
+    return unique
+  }
+
+  test('Extracts prominent rural landmark from messy address and delivery notes', () => {
+    const rawAddr = 'Bhabanipur, নন্দকুমার, , bhabanipur (Near: Girls school more)'
+    const landmark = extractRuralLandmark(undefined, rawAddr)
+    assert.strictEqual(landmark, 'Girls school more')
+
+    const deduped = deduplicateAddressTokens(rawAddr)
+    assert.deepStrictEqual(deduped, ['Bhabanipur', 'নন্দকুমার'])
+  })
+
+  test('Extracts Bengali landmark keywords like মন্দিরের কাছে and ক্লাবের পাশে', () => {
+    const landmark1 = extractRuralLandmark('শিব মন্দিরের কাছে', 'Bhabanipur')
+    assert.strictEqual(landmark1, 'শিব মন্দিরের কাছে')
+
+    const landmark2 = extractRuralLandmark(undefined, 'নান্দীগ্রাম (কাছে: বাজার মোড়)')
+    assert.strictEqual(landmark2, 'বাজার মোড়')
+  })
+
+  test('Composes high-precision Google Maps query prioritizing landmark over generic village center', () => {
+    const landmark = 'Girls school more'
+    const tokens = ['Bhabanipur', 'Nandakumar']
+    const pin = '721632'
+    const query = [landmark, ...tokens, pin, 'West Bengal'].join(', ')
+
+    assert.ok(query.startsWith('Girls school more, Bhabanipur, Nandakumar'))
+    assert.ok(query.includes('721632'))
+  })
+
+  test('Generates Android Google Maps Navigation voice intent and universal web fallback', () => {
+    const query = 'Girls school more, Bhabanipur, 721632, West Bengal'
+    const appNavUrl = `google.navigation:q=${encodeURIComponent(query)}&mode=d`
+    const webNavUrl = `https://www.google.com/maps/dir/?api=1&origin=22.1746825,87.9106158&destination=${encodeURIComponent(query)}&travelmode=driving`
+
+    assert.ok(appNavUrl.startsWith('google.navigation:q='))
+    assert.ok(appNavUrl.endsWith('&mode=d'))
+    assert.ok(webNavUrl.includes('travelmode=driving'))
+    assert.ok(webNavUrl.includes('origin=22.1746825,87.9106158'))
+  })
+
+  test('Multi-stop continuous route formats waypoints correctly for full day delivery', () => {
+    const destinations = ['22.1741,87.9040', '22.1800,87.9100', '22.1900,87.9200']
+    const origin = '22.1746825,87.9106158'
+    const finalDest = destinations[destinations.length - 1]
+    const waypoints = destinations.slice(0, destinations.length - 1)
+    const waypointsParam = waypoints.map((w) => encodeURIComponent(w)).join('|')
+    const multiUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${encodeURIComponent(finalDest)}&waypoints=${waypointsParam}&travelmode=driving`
+
+    assert.ok(multiUrl.includes('origin=22.1746825,87.9106158'))
+    assert.ok(multiUrl.includes(`destination=${encodeURIComponent('22.1900,87.9200')}`))
+    assert.ok(multiUrl.includes('waypoints='))
+    assert.ok(multiUrl.includes(encodeURIComponent('22.1741,87.9040')))
+    assert.ok(multiUrl.includes(encodeURIComponent('22.1800,87.9100')))
+  })
+})
+

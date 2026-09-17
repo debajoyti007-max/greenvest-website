@@ -1103,13 +1103,52 @@ export default function Checkout() {
 
               {/* 🏛️ Landmark (Optional) */}
               <label>
-                🏛️ {lang === 'bn' ? 'ল্যান্ডমার্ক (ঐচ্ছিক)' : 'Landmark (Optional)'}
+                <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>🏛️ {lang === 'bn' ? 'কাছের ল্যান্ডমার্ক / মোড় (ঐচ্ছিক)' : 'Nearby Landmark / Crossing (Optional)'}</span>
+                  <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600 }}>
+                    {lang === 'bn' ? '✓ রাইডারের জন্য সহায়ক' : '✓ Helps Rider Find You'}
+                  </span>
+                </span>
                 <input
                   value={landmark}
                   onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
-                  placeholder={lang === 'bn' ? 'যেমন: শিব মন্দিরের পাশে / স্কুলের বিপরীতে' : 'e.g. Near Shiv Temple / Opp. Primary School'}
+                  placeholder={lang === 'bn' ? 'যেমন: শিব মন্দিরের পাশে / স্কুলের বিপরীতে / মোড়' : 'e.g. Near Shiv Mandir / Opp. School / More'}
                 />
               </label>
+
+              {/* Quick Landmark Helper Chips */}
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '0.75rem', marginTop: '-0.3rem' }}>
+                {[
+                  { en: 'Near School', bn: 'স্কুলের কাছে' },
+                  { en: 'Near Mandir', bn: 'মন্দিরের কাছে' },
+                  { en: 'Near Club', bn: 'ক্লাবের পাশে' },
+                  { en: 'Near More', bn: 'মোড়ের কাছে' },
+                  { en: 'Near Hospital', bn: 'হাসপাতালের কাছে' },
+                  { en: 'Near Bazar', bn: 'বাজারের কাছে' },
+                ].map((chip) => (
+                  <button
+                    key={chip.en}
+                    type="button"
+                    onClick={() => {
+                      const text = lang === 'bn' ? chip.bn : chip.en
+                      setLandmark((prev) => (prev ? `${prev}, ${text}` : text))
+                      userEditedAddress.current = true
+                    }}
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '12px',
+                      padding: '2px 8px',
+                      fontSize: '0.72rem',
+                      color: '#334155',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    + {lang === 'bn' ? chip.bn : chip.en}
+                  </button>
+                ))}
+              </div>
 
               {/* 📮 1-Tap Serviceable PIN Code Selection */}
               <div style={{ marginBottom: '0.75rem' }}>
