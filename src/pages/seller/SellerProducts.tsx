@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
@@ -7,6 +7,7 @@ import { SEASON_LABELS, computeMarketMrp, computeDiscountPercent } from '../../l
 import { t } from '../../lib/i18n'
 import { uploadProductImage } from '../../lib/imageUpload'
 import { resolveProductImage } from '../../lib/productImages'
+import MandiBulkPriceModal from '../../components/seller/MandiBulkPriceModal'
 import type { Grade, Product, Season } from '../../types'
 
 const emptyForm = {
@@ -42,6 +43,7 @@ export default function SellerProducts() {
   const [section, setSection] = useState<Section>('active')
   const [quickPriceId, setQuickPriceId] = useState<string | null>(null)
   const [quickPrices, setQuickPrices] = useState({ pA: 0, pB: 0, pC: 0 })
+  const [isMandiOpen, setIsMandiOpen] = useState(false)
 
   const searched = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -147,9 +149,25 @@ export default function SellerProducts() {
     <div className="page">
       <div className="page-head">
         <h1>{lang === 'bn' ? 'প্রোডাক্ট ম্যানেজ' : 'Manage products'}</h1>
-        <Link to="/seller" className="btn btn-ghost">
-          {t(lang, 'backDashboard')}
-        </Link>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setIsMandiOpen(true)}
+            style={{
+              background: 'linear-gradient(135deg, #166534 0%, #15803d 100%)',
+              boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            ⚡ {lang === 'bn' ? 'দৈনিক মান্ডি রেট' : 'Daily Mandi Rates'}
+          </button>
+          <Link to="/seller" className="btn btn-ghost">
+            {t(lang, 'backDashboard')}
+          </Link>
+        </div>
       </div>
       <p className="lede">
         {lang === 'bn'
@@ -521,6 +539,8 @@ export default function SellerProducts() {
           </tbody>
         </table>
       </div>
+
+      {isMandiOpen && <MandiBulkPriceModal onClose={() => setIsMandiOpen(false)} />}
     </div>
   )
 }

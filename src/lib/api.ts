@@ -138,7 +138,7 @@ function repairBnName(id: string, name: string, bnName: string) {
   return bnById.get(id) || bnByName.get(name.toLowerCase()) || name
 }
 
-function mapProduct(row: ProductRow): Product {
+export function mapProduct(row: ProductRow): Product {
   const season = (row.season || 'all') as Season
   return {
     id: row.id,
@@ -519,6 +519,50 @@ export async function upsertProduct(product: Product, staff: StaffCredentials): 
   if (!rpcData) throw new Error('Failed to save product')
   return mapProduct(rpcData as ProductRow)
 }
+
+export async function bulkUpsertProducts(
+  products: Product[],
+  staff: StaffCredentials,
+  onProgress?: (completed: number, total: number) => void,
+): Promise<{ updated: Product[]; errors: { id: string; name: string; error: string }[] }> {
+  invalidateProductCache()
+  const updated: Product[] = []
+  const errors: { id: string; name: string; error: string }[] = []
+  let count = 0
+
+  // Run in chunks of 4 to prevent network throttling while keeping updates fast
+  const BATCH_SIZE = 4
+  for (let i = 0; i < products.length; i += BATCH_SIZE) {
+    const chunk = products.slice(i, i + BATCH_SIZE)
+    const results = await Promise.allSettled(
+      chunk.map(async (prod) => {
+        return upsertProduct(prod, staff)
+      }),
+    )
+
+    results.forEach((res, idx) => {
+      count++
+      const target = chunk[idx]
+      if (res.status === 'fulfilled') {
+        updated.push(res.value)
+      } else {
+        const errMsg = res.reason instanceof Error ? res.reason.message : String(res.reason)
+        errors.push({ id: target.id, name: target.name, error: errMsg })
+      }
+      onProgress?.(count, products.length)
+    })
+  }
+
+  // Broadcast catalog version change to notify all open tabs
+  try {
+    const now = Date.now().toString()
+    localStorage.setItem('gv_catalog_version', now)
+    window.dispatchEvent(new CustomEvent('gv_catalog_version_changed', { detail: now }))
+  } catch {}
+
+  return { updated, errors }
+}
+
 
 export async function insertProduct(product: Omit<Product, 'id'>, staff: StaffCredentials): Promise<Product> {
   invalidateProductCache()
@@ -1028,12 +1072,28 @@ export function subscribeOrders(onChange: () => void) {
   }
 }
 
-export function subscribeProducts(onChange: () => void) {
+export type ProductRealtimePayload = {
+  eventType: string
+  new?: Record<string, unknown>
+  old?: Record<string, unknown>
+}
+
+export function subscribeProducts(onChange: (payload?: ProductRealtimePayload) => void) {
   if (!isSupabaseConfigured || !supabase) return () => {}
   const client = supabase
   const channel = client
     .channel('products-live')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => onChange())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+      invalidateProductCache()
+      try {
+        localStorage.setItem('gv_catalog_version', Date.now().toString())
+      } catch {}
+      onChange({
+        eventType: payload.eventType,
+        new: payload.new as Record<string, unknown>,
+        old: payload.old as Record<string, unknown>,
+      })
+    })
     .subscribe()
   return () => {
     void client.removeChannel(channel)

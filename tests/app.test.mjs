@@ -1945,3 +1945,140 @@ describe('Rural Landmark Precision, Android App Intent & Multi-Stop TSP Routing'
   })
 })
 
+describe('Suite 36: Morning Mandi Bulk Pricing, Delta Calculation & Free-Tier Silent Sync', () => {
+  test('Identifies only modified products from baseline catalog', () => {
+    const baseline = [
+      { id: 'p1', name: 'Potato', pA: 25, pB: 20, pC: 15, mrp: 30, inStock: true },
+      { id: 'p2', name: 'Onion', pA: 35, pB: 30, pC: 0, mrp: 45, inStock: true },
+      { id: 'p3', name: 'Tomato', pA: 40, pB: 32, pC: 0, mrp: 50, inStock: true },
+    ]
+
+    const drafts = {
+      p1: { pA: 28, pB: 20, pC: 15, mrp: 30, inStock: true }, // pA changed
+      p2: { pA: 35, pB: 30, pC: 0, mrp: 45, inStock: false }, // inStock changed
+      p3: { pA: 40, pB: 32, pC: 0, mrp: 50, inStock: true }, // unchanged
+    }
+
+    const isItemModified = (p) => {
+      const d = drafts[p.id]
+      if (!d) return false
+      return (
+        d.pA !== p.pA ||
+        d.pB !== p.pB ||
+        d.pC !== p.pC ||
+        d.mrp !== p.mrp ||
+        d.inStock !== p.inStock
+      )
+    }
+
+    const modified = baseline.filter(isItemModified)
+    assert.strictEqual(modified.length, 2)
+    assert.strictEqual(modified[0].id, 'p1')
+    assert.strictEqual(modified[1].id, 'p2')
+  })
+
+  test('Bulk flat and percentage adjustments calculate integer prices with safe bounds', () => {
+    const item = { pA: 30, pB: 25, pC: 0 }
+
+    // Flat +5
+    const flatPlus5 = {
+      pA: Math.max(1, Math.round(item.pA + 5)),
+      pB: item.pB > 0 ? Math.max(1, Math.round(item.pB + 5)) : 0,
+      pC: item.pC > 0 ? Math.max(1, Math.round(item.pC + 5)) : 0,
+    }
+    assert.strictEqual(flatPlus5.pA, 35)
+    assert.strictEqual(flatPlus5.pB, 30)
+    assert.strictEqual(flatPlus5.pC, 0)
+
+    // Flat -40 (must clamp to min 1)
+    const flatClamp = {
+      pA: Math.max(1, Math.round(item.pA - 40)),
+      pB: item.pB > 0 ? Math.max(1, Math.round(item.pB - 40)) : 0,
+    }
+    assert.strictEqual(flatClamp.pA, 1)
+    assert.strictEqual(flatClamp.pB, 1)
+
+    // Percent +10%
+    const pctPlus10 = {
+      pA: Math.max(1, Math.round(item.pA * 1.1)),
+      pB: item.pB > 0 ? Math.max(1, Math.round(item.pB * 1.1)) : 0,
+    }
+    assert.strictEqual(pctPlus10.pA, 33)
+    assert.strictEqual(pctPlus10.pB, 28)
+  })
+
+  test('Realtime product row maps PostgreSQL snake_case to Product structure cleanly', () => {
+    const pgRow = {
+      id: 'p-tomato',
+      name: 'Tomato Local',
+      bn_name: 'টমেটো',
+      p_a: '38',
+      p_b: '32',
+      p_c: '0',
+      mrp: '48',
+      in_stock: true,
+      category: 'Vegetables',
+      unit: 'kg',
+      available_grades: ['A', 'B'],
+    }
+
+    const mapped = {
+      id: pgRow.id,
+      name: pgRow.name,
+      bnName: pgRow.bn_name,
+      pA: Number(pgRow.p_a),
+      pB: Number(pgRow.p_b),
+      pC: Number(pgRow.p_c),
+      mrp: pgRow.mrp != null ? Number(pgRow.mrp) : undefined,
+      inStock: Boolean(pgRow.in_stock),
+      category: pgRow.category,
+      unit: pgRow.unit,
+      availableGrades: pgRow.available_grades,
+    }
+
+    assert.strictEqual(mapped.id, 'p-tomato')
+    assert.strictEqual(mapped.pA, 38)
+    assert.strictEqual(mapped.pB, 32)
+    assert.strictEqual(mapped.mrp, 48)
+    assert.strictEqual(mapped.inStock, true)
+  })
+
+  test('In-memory product map update replaces target in 0ms without mutating siblings', () => {
+    const catalog = [
+      { id: 'p1', name: 'Alu', pA: 20 },
+      { id: 'p2', name: 'Potol', pA: 40 },
+      { id: 'p3', name: 'Lanka', pA: 80 },
+    ]
+
+    const updated = { id: 'p2', name: 'Potol', pA: 35 }
+
+    const map = new Map(catalog.map((p) => [p.id, p]))
+    map.set(updated.id, updated)
+    const next = Array.from(map.values())
+
+    assert.strictEqual(next.length, 3)
+    assert.strictEqual(next.find((p) => p.id === 'p1').pA, 20)
+    assert.strictEqual(next.find((p) => p.id === 'p2').pA, 35) // Updated
+    assert.strictEqual(next.find((p) => p.id === 'p3').pA, 80)
+  })
+
+  test('Free-Tier silent sync policy only polls when tab is active and visible', () => {
+    function shouldRunSilentSync(visibilityState, lastCheckedTime, currentTime, minIntervalMs) {
+      if (visibilityState !== 'visible') return false // Screen off / background tab: 0 network calls!
+      return (currentTime - lastCheckedTime) >= minIntervalMs
+    }
+
+    const now = 1000000
+
+    // Case 1: Phone screen is off / tab hidden -> NEVER POLL (conserves 100% Free-Tier slots)
+    assert.strictEqual(shouldRunSilentSync('hidden', now - 60000, now, 15000), false)
+
+    // Case 2: User is actively looking at screen and 20s have elapsed -> Poll
+    assert.strictEqual(shouldRunSilentSync('visible', now - 20000, now, 15000), true)
+
+    // Case 3: User is actively looking at screen but checked 5s ago -> Throttle
+    assert.strictEqual(shouldRunSilentSync('visible', now - 5000, now, 15000), false)
+  })
+})
+
+

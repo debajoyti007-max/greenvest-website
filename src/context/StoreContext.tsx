@@ -19,12 +19,15 @@ import {
   fetchProducts,
   invalidateProductCache,
   insertProduct,
+  mapProduct,
   setAllProductsInStock,
   subscribeOrders,
+  subscribeProducts,
   updateOrderStatusApi,
   updateOrderDeliveryDateApi,
   deleteOrderApi,
   upsertProduct,
+  bulkUpsertProducts,
   updateOrderUtrApi,
   fetchAddresses as fetchAddressesApi,
   saveAddress as saveAddressApi,
@@ -110,6 +113,10 @@ interface StoreContextValue {
   placeOrder: (opts: PlaceOrderOpts) => Promise<Order | null>
   reorderFromOrder: (order: Order) => { added: number; skipped: number }
   updateProduct: (product: Product) => Promise<void>
+  bulkUpdateProducts: (
+    products: Product[],
+    onProgress?: (completed: number, total: number) => void,
+  ) => Promise<{ success: boolean; count: number; error?: string }>
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>
   deleteProduct: (id: string) => Promise<void>
   toggleStock: (id: string) => Promise<void>
@@ -417,41 +424,94 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [cloud, refreshLocal, user?.id])
 
   useEffect(() => {
-    // ⚡ High-Volume WebSocket Optimization:
-    // Only open persistent order & product websocket channels for staff (seller, admin, rider).
-    // For regular customers, catalog updates on window focus / tab visibility change to eliminate 95% of server connection slots.
     if (!cloud) return
 
     const isStaff = user && (user.role === 'seller' || user.role === 'admin' || user.role === 'rider')
 
-    if (!isStaff) {
-      // Smart refresh on window focus / tab visibility / mobile unlock for regular customers
-      const onFocus = () => {
-        if (document.visibilityState === 'visible') {
+    if (isStaff) {
+      // ⚡ Staff Realtime Channels: Sellers, Admins, Riders subscribe to Supabase Realtime
+      // (Consumes only 1-3 connections total, keeping 195+ Free-Tier connection slots open)
+      let oTimer: ReturnType<typeof setTimeout> | null = null
+      const unsubOrds = subscribeOrders(() => {
+        if (oTimer) clearTimeout(oTimer)
+        oTimer = setTimeout(() => {
+          void refreshOrdersOnly()
+        }, 1000)
+      })
+
+      const unsubProds = subscribeProducts((payload) => {
+        if (payload?.new && (payload.new as any).id) {
+          try {
+            const updated = mapProduct(payload.new as any)
+            setProducts((prev) => {
+              const exists = prev.some((p) => p.id === updated.id)
+              const next = exists ? prev.map((p) => (p.id === updated.id ? updated : p)) : [...prev, updated]
+              saveProducts(next)
+              return next
+            })
+          } catch {
+            void fetchProducts(true).then((p) => setProducts(p)).catch(() => {})
+          }
+        } else {
           void fetchProducts(true).then((p) => setProducts(p)).catch(() => {})
+        }
+      })
+
+      return () => {
+        unsubOrds()
+        unsubProds?.()
+      }
+    } else {
+      // ⚡ Free-Tier Safe Customer Smart Sync (ZERO extra WebSockets consumed!):
+      // 1. Instant re-fetch when customer focuses tab / unlocks mobile device
+      // 2. Silent 30-second background pulse ONLY when the page is active and visible
+      // 3. 0ms Cross-tab sync when seller updates rates in another tab
+
+      let lastCheckedTime = Date.now()
+
+      const silentSyncCatalog = async () => {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+        try {
+          const fresh = await fetchProducts(true)
+          setProducts(fresh)
+          saveProducts(fresh)
+          lastCheckedTime = Date.now()
+        } catch {}
+      }
+
+      const onFocus = () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          if (Date.now() - lastCheckedTime > 15000) {
+            void silentSyncCatalog()
+          }
           if (user) {
             void refreshOrdersOnly()
           }
         }
       }
+
+      // 30-second silent pulse (Free-Tier safe: stops completely when tab is hidden / phone screen is off)
+      const pulseInterval = setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          void silentSyncCatalog()
+        }
+      }, 30000)
+
+      // Cross-tab broadcast: if seller or mandi tool changes price in another tab on the same device
+      const onCatalogVersionChanged = () => {
+        void silentSyncCatalog()
+      }
+
       window.addEventListener('visibilitychange', onFocus)
       window.addEventListener('focus', onFocus)
+      window.addEventListener('gv_catalog_version_changed', onCatalogVersionChanged)
+
       return () => {
+        clearInterval(pulseInterval)
         window.removeEventListener('visibilitychange', onFocus)
         window.removeEventListener('focus', onFocus)
+        window.removeEventListener('gv_catalog_version_changed', onCatalogVersionChanged)
       }
-    }
-
-    let oTimer: ReturnType<typeof setTimeout> | null = null
-    const unsubOrds = subscribeOrders(() => {
-      if (oTimer) clearTimeout(oTimer)
-      oTimer = setTimeout(() => {
-        void refreshOrdersOnly()
-      }, 1000)
-    })
-
-    return () => {
-      unsubOrds()
     }
   }, [cloud, user, refreshOrdersOnly])
 
@@ -749,6 +809,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setProducts(localNext)
     },
     [cloud, user],
+  )
+
+  const bulkUpdateProducts = useCallback(
+    async (
+      updatedList: Product[],
+      onProgress?: (completed: number, total: number) => void,
+    ): Promise<{ success: boolean; count: number; error?: string }> => {
+      if (!updatedList.length) return { success: true, count: 0 }
+      const prevSnapshot = products
+
+      // Optimistic update
+      setProducts((prev) => {
+        const map = new Map(prev.map((p) => [p.id, p]))
+        updatedList.forEach((p) => map.set(p.id, p))
+        const next = Array.from(map.values())
+        saveProducts(next)
+        return next
+      })
+
+      if (cloud) {
+        try {
+          const staff = requireStaffCredentials(user)
+          const res = await bulkUpsertProducts(updatedList, staff, onProgress)
+          if (res.errors.length > 0 && res.updated.length === 0) {
+            setProducts(prevSnapshot)
+            saveProducts(prevSnapshot)
+            return { success: false, count: 0, error: res.errors[0].error }
+          }
+          setProducts((prev) => {
+            const map = new Map(prev.map((p) => [p.id, p]))
+            res.updated.forEach((p) => map.set(p.id, p))
+            const next = Array.from(map.values())
+            saveProducts(next)
+            return next
+          })
+          return { success: true, count: res.updated.length }
+        } catch (err: any) {
+          setProducts(prevSnapshot)
+          saveProducts(prevSnapshot)
+          return { success: false, count: 0, error: err.message || 'Bulk update failed' }
+        }
+      } else {
+        return { success: true, count: updatedList.length }
+      }
+    },
+    [cloud, products, user],
   )
 
   const addProduct = useCallback(
@@ -1386,6 +1492,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       placeOrder,
       reorderFromOrder,
       updateProduct,
+      bulkUpdateProducts,
       addProduct,
       deleteProduct,
       toggleStock,
