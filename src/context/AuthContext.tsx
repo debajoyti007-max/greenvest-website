@@ -249,8 +249,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             }
           }
-        } catch (err) {
+        } catch (err: any) {
           console.warn('Supabase session check error:', err)
+          if (err?.message?.includes('Refresh Token') || err?.message?.includes('invalid_grant')) {
+            try {
+              if (supabase) void supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+            } catch {}
+          }
         }
 
         // 2. Restore session from localStorage userId or cached profile
@@ -272,6 +277,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
               // Secondary staff customer list hydration must NEVER block authentication
               void loadUsersIfStaff(cachedProfile)
+
+              // Silent background re-validation against cloud database to guarantee zero state drift
+              void supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', cachedProfile.id)
+                .maybeSingle()
+                .then(({ data: cloudRow }) => {
+                  if (cloudRow) {
+                    const fresh = mapProfile(cloudRow as any)
+                    if (fresh) {
+                      if (fresh.isBlocked) {
+                        saveCurrentUser(null)
+                        setUser(null)
+                        userRef.current = null
+                        clearStoredPins()
+                      } else if (
+                        fresh.role !== cachedProfile.role ||
+                        fresh.name !== cachedProfile.name ||
+                        fresh.phone !== cachedProfile.phone ||
+                        fresh.tier !== cachedProfile.tier ||
+                        fresh.isSuperAdmin !== cachedProfile.isSuperAdmin
+                      ) {
+                        setUser(fresh)
+                        userRef.current = fresh
+                        saveCurrentUser(fresh)
+                      }
+                    }
+                  }
+                })
             }
           } else if (!cachedProfile) {
             setSessionUserId(null)
@@ -579,28 +614,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             profile.needsPasswordUpgrade = true
           }
 
-          // 🔐 Super Admin 2FA: Send magic link to Gmail
-          if (profile.isSuperAdmin && supabase) {
+          // Seamless Supabase session establishment for accounts present in auth.users
+          if (supabase && profile.email && usedPin && usedPin.length >= 6) {
             try {
-              const { error: otpErr } = await supabase.auth.signInWithOtp({
+              await supabase.auth.signInWithPassword({
                 email: profile.email,
-                options: {
-                  shouldCreateUser: true,
-                  emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/admin` : undefined,
-                },
+                password: usedPin,
               })
-              if (otpErr) {
-                console.error('Super Admin OTP send failed:', otpErr)
-                return { ok: false, error: `Failed to send verification code to ${profile.email}: ${otpErr.message}` }
-              }
-            } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message : String(err)
-              return { ok: false, error: `Error sending security code to Gmail: ${msg}` }
+            } catch (authErr) {
+              console.debug('Supabase session signin optional:', authErr)
             }
-            mfaPinRef.current = usedPin
-            mfaProfileRef.current = profile
-            setMfaPending(true)
-            return { ok: true, mfaPending: true, user: profile }
           }
 
           setUser(profile)
