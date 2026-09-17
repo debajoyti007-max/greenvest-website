@@ -10,6 +10,7 @@ import { t } from '../lib/i18n'
 import { formatItemWeightDetail } from '../lib/business'
 import { subscribeCustomerOrders } from '../lib/api'
 import { showToast } from '../lib/toast'
+import { printOrderInvoice } from '../lib/printOrder'
 import type { Order, OrderItem } from '../types'
 
 export default function Orders() {
@@ -343,6 +344,14 @@ export default function Orders() {
                     onClick={() => void onShareReceipt(o)}
                   >
                     📋 {lang === 'bn' ? 'রসিদ কপি / শেয়ার' : 'Copy / Share Receipt'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => printOrderInvoice(o, lang)}
+                    title={lang === 'bn' ? 'A4 ইনভয়েস প্রিন্ট / PDF' : 'Print A4 Invoice / PDF'}
+                  >
+                    🧾 {lang === 'bn' ? 'ইনভয়েস PDF' : 'Invoice PDF'}
                   </button>
                   {o.status !== 'cancelled' && (o.status === 'pending' || o.status === 'advance_paid') && (Date.now() - new Date(o.createdAt).getTime() < 15 * 60 * 1000) && (
                     <button 

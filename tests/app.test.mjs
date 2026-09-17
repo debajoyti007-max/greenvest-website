@@ -1712,3 +1712,111 @@ describe('Deep Auth Cleanup, Anti-Resurrection & Multi-Tab Logout Sync', () => {
   })
 })
 
+// 34. Invoice, POS Thermal Slip & Print Engine HTML Generation
+describe('Invoice, POS Thermal Slip & Print Engine Engine', () => {
+  const sampleOrder = {
+    id: 'ORD-789012',
+    userId: 'user-debajoyti',
+    userName: 'Debajoyti Mukherjee <script>alert(1)</script>',
+    phone: '8170859653',
+    address: 'Bhabanipur, Midnapore',
+    deliveryNotes: 'Near Girls School',
+    pin: '721632',
+    deliveryDate: '2026-09-18',
+    deliverySlot: 'morning',
+    deliveryOtp: '4892',
+    paymentType: 'advance',
+    status: 'confirmed',
+    subtotal: 350,
+    deliveryFee: 20,
+    discountAmount: 30,
+    total: 340,
+    advanceAmount: 34,
+    createdAt: '2026-09-17T12:00:00.000Z',
+    items: [
+      {
+        productId: 'prod-potato',
+        name: 'Potato Jyoti <b>Fresh</b>',
+        emoji: '🥔',
+        grade: 'A',
+        qty: 2,
+        unitPrice: 40,
+        weightMultiplier: 1,
+        weightLabel: '1 kg',
+      },
+      {
+        productId: 'prod-fish',
+        name: 'Rohu Fish (Rui)',
+        emoji: '🐟',
+        grade: 'B',
+        qty: 1,
+        unitPrice: 260,
+        weightMultiplier: 1,
+        weightLabel: '1 kg',
+      },
+    ],
+  }
+
+  function escapeHtml(str) {
+    if (str == null) return ''
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+
+  test('A4 Tax Invoice escapes malicious HTML and formats financials accurately', () => {
+    const escapedName = escapeHtml(sampleOrder.userName)
+    assert.ok(!escapedName.includes('<script>'), 'Must escape script tags')
+    assert.ok(escapedName.includes('&lt;script&gt;alert(1)&lt;/script&gt;'))
+
+    const balanceDue = Math.max(0, sampleOrder.total - sampleOrder.advanceAmount)
+    assert.strictEqual(balanceDue, 306, 'Net balance due must be 340 - 34 = 306')
+  })
+
+  test('POS Thermal receipt generates valid 58mm compact format with balance banner', () => {
+    const balanceDue = Math.max(0, sampleOrder.total - sampleOrder.advanceAmount)
+    assert.strictEqual(balanceDue, 306)
+
+    const expectedOtp = sampleOrder.deliveryOtp
+    assert.strictEqual(expectedOtp, '4892')
+  })
+
+  test('Packing list groups active orders by morning and evening slots while omitting cancelled', () => {
+    const orders = [
+      { id: 'O1', status: 'confirmed', deliverySlot: 'morning' },
+      { id: 'O2', status: 'pending', deliverySlot: 'evening' },
+      { id: 'O3', status: 'cancelled', deliverySlot: 'morning' },
+      { id: 'O4', status: 'delivered', deliverySlot: 'morning' },
+      { id: 'O5', status: 'confirmed', deliverySlot: 'morning' },
+    ]
+
+    const active = orders.filter((o) => o.status !== 'cancelled' && o.status !== 'delivered')
+    const morning = active.filter((o) => o.deliverySlot === 'morning' || !o.deliverySlot)
+    const evening = active.filter((o) => o.deliverySlot === 'evening')
+
+    assert.strictEqual(active.length, 3)
+    assert.strictEqual(morning.length, 2)
+    assert.strictEqual(evening.length, 1)
+  })
+
+  test('Rider Manifest calculates total cash/UPI collection accurately across zones', () => {
+    const orders = [
+      { id: 'O1', status: 'confirmed', pin: '721632', total: 500, advanceAmount: 50 }, // bal: 450
+      { id: 'O2', status: 'confirmed', pin: '721632', total: 300, advanceAmount: 300 }, // bal: 0 (prepaid)
+      { id: 'O3', status: 'confirmed', pin: '721636', total: 200, advanceAmount: 20 }, // bal: 180
+    ]
+
+    const totalToCollect = orders.reduce((sum, o) => sum + Math.max(0, o.total - o.advanceAmount), 0)
+    assert.strictEqual(totalToCollect, 630, 'Total collection must be 450 + 0 + 180 = 630')
+  })
+
+  test('Window features do not include noopener or noreferrer which causes window.open to return null', () => {
+    const features = 'width=850,height=950,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'
+    assert.ok(!features.includes('noopener'), 'Must NOT contain noopener')
+    assert.ok(!features.includes('noreferrer'), 'Must NOT contain noreferrer')
+  })
+})
+

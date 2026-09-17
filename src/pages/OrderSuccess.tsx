@@ -216,7 +216,7 @@ export default function OrderSuccess() {
 
 
       <div className="form-actions" style={{ flexWrap: 'wrap', gap: '0.6rem' }}>
-        <button type="button" className="btn btn-primary" onClick={() => printOrderInvoice(order)}>
+        <button type="button" className="btn btn-primary" onClick={() => printOrderInvoice(order, lang)}>
           📄 {lang === 'bn' ? 'অফিসিয়াল PDF রসিদ ডাউনলোড / প্রিন্ট' : 'Download / Print PDF Invoice'}
         </button>
         <Link to="/support" className="btn btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>

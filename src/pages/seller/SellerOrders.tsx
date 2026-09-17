@@ -1200,10 +1200,10 @@ export default function SellerOrders() {
                         </Link>
 
                         {/* Printing */}
-                        <button type="button" onClick={() => printOrderInvoice(o)} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '0.8rem', cursor: 'pointer', color: '#334155', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }} title={lang === 'bn' ? 'A4 সাইজ ইনভয়েস প্রিন্ট' : 'Print A4 Tax Invoice'}>
+                        <button type="button" onClick={() => printOrderInvoice(o, lang)} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '0.8rem', cursor: 'pointer', color: '#334155', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }} title={lang === 'bn' ? 'A4 সাইজ ইনভয়েস প্রিন্ট / PDF ডাউনলোড' : 'Print A4 Tax Invoice / PDF'}>
                           🧾 {lang === 'bn' ? 'ইনভয়েস' : 'A4 Invoice'}
                         </button>
-                        <button type="button" onClick={() => printThermalReceipt(o)} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '0.8rem', cursor: 'pointer', color: '#334155', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }} title={lang === 'bn' ? 'থার্মাল পিওএস রসিদ প্রিন্ট (৫৮/৮০ মিমি)' : 'Print Thermal POS Receipt (58/80mm)'}>
+                        <button type="button" onClick={() => printThermalReceipt(o, lang)} style={{ padding: '0.4rem 0.75rem', borderRadius: '7px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '0.8rem', cursor: 'pointer', color: '#334155', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }} title={lang === 'bn' ? 'থার্মাল পিওএস রসিদ প্রিন্ট (৫৮/৮০ মিমি)' : 'Print Thermal POS Receipt (58/80mm)'}>
                           🖨️ {lang === 'bn' ? 'থার্মাল স্লিপ' : 'POS Slip'}
                         </button>
 
