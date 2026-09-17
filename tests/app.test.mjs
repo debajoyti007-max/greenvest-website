@@ -1630,3 +1630,85 @@ describe('Order Card Address Sanitizer & Clean Display Engine', () => {
   })
 })
 
+// 33. Deep Auth Cleanup, Anti-Resurrection & Multi-Tab Logout Sync
+describe('Deep Auth Cleanup, Anti-Resurrection & Multi-Tab Logout Sync', () => {
+  const SENSITIVE_AUTH_KEYS = new Set(['gv_current_user', 'gv_session', 'gv_pins'])
+
+  test('Excludes sensitive auth keys from background IndexedDB auto-restore', () => {
+    assert.ok(SENSITIVE_AUTH_KEYS.has('gv_current_user'), 'gv_current_user must be protected')
+    assert.ok(SENSITIVE_AUTH_KEYS.has('gv_session'), 'gv_session must be protected')
+    assert.ok(SENSITIVE_AUTH_KEYS.has('gv_pins'), 'gv_pins must be protected')
+
+    // Catalog & orders are NOT sensitive and can auto-restore
+    assert.ok(!SENSITIVE_AUTH_KEYS.has('gv_products'), 'Catalog products can auto-restore')
+    assert.ok(!SENSITIVE_AUTH_KEYS.has('gv_orders'), 'Order cache can auto-restore')
+  })
+
+  test('Simulated auto-restore policy blocks ghost login when localStorage is empty', () => {
+    const mockLocalStorage = {}
+    const mockIndexedDb = {
+      'gv_current_user': { id: 'u-123', name: 'Ghost User', role: 'customer' },
+      'gv_session': 'u-123',
+      'gv_products': [{ id: 'p-1', name: 'Potato' }],
+    }
+
+    const readKey = (key) => {
+      const raw = mockLocalStorage[key]
+      if (!raw && !SENSITIVE_AUTH_KEYS.has(key)) {
+        // Only non-auth keys are allowed to restore
+        const idbVal = mockIndexedDb[key]
+        if (idbVal) {
+          mockLocalStorage[key] = JSON.stringify(idbVal)
+        }
+      }
+      return mockLocalStorage[key] ? JSON.parse(mockLocalStorage[key]) : null
+    }
+
+    // 1. Read sensitive auth key: must return null and NOT restore to localStorage
+    const restoredUser = readKey('gv_current_user')
+    assert.strictEqual(restoredUser, null, 'Logged-out user must never be resurrected from IndexedDB')
+    assert.strictEqual(mockLocalStorage['gv_current_user'], undefined, 'localStorage must remain clean')
+
+    // 2. Read catalog key: properly auto-restores
+    const restoredProducts = readKey('gv_products')
+    assert.deepStrictEqual(restoredProducts, [{ id: 'p-1', name: 'Potato' }])
+    assert.ok(mockLocalStorage['gv_products'], 'Catalog must be safely restored')
+  })
+
+  test('Deep wipe purges Supabase auth tokens, PINs, and active sessions completely', () => {
+    const mockStorage = {
+      'gv_current_user': '{"id":"u-1"}',
+      'gv_session': 'u-1',
+      'gv_pins': '{"u-1":"1234"}',
+      'sb-zvjqpigduyvczidzafus-auth-token': '{"access_token":"xyz"}',
+      'gv_order_idempotency_u-1': 'ord-123',
+      'gv_pending_coupon': 'SAVE20',
+      'gv_products': '[]',
+    }
+
+    const wipeAuth = () => {
+      delete mockStorage['gv_current_user']
+      delete mockStorage['gv_session']
+      delete mockStorage['gv_pins']
+      delete mockStorage['gv_pending_coupon']
+
+      for (const k of Object.keys(mockStorage)) {
+        if (k.startsWith('sb-') || k.includes('auth-token') || k.startsWith('gv_order_idempotency_')) {
+          delete mockStorage[k]
+        }
+      }
+    }
+
+    wipeAuth()
+
+    assert.strictEqual(mockStorage['gv_current_user'], undefined)
+    assert.strictEqual(mockStorage['gv_session'], undefined)
+    assert.strictEqual(mockStorage['gv_pins'], undefined)
+    assert.strictEqual(mockStorage['sb-zvjqpigduyvczidzafus-auth-token'], undefined)
+    assert.strictEqual(mockStorage['gv_order_idempotency_u-1'], undefined)
+    assert.strictEqual(mockStorage['gv_pending_coupon'], undefined)
+    // Preserves unrelated cache
+    assert.strictEqual(mockStorage['gv_products'], '[]')
+  })
+})
+

@@ -36,6 +36,8 @@ import {
   storePin,
   getActiveUserPin,
   clearStoredPins,
+  clearAllAuthSessionData,
+  STORE_EVENT,
   uid,
 } from '../lib/storage'
 import type { Role, User } from '../types'
@@ -318,6 +320,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           setSessionUserId(cachedProfile.id)
           void loadUsersIfStaff(cachedProfile)
+        } else {
+          // No active local session and no Supabase session found — ensure auth state is cleanly null
+          if (userRef.current || user) {
+            setUser(null)
+            userRef.current = null
+          }
         }
         return
       }
@@ -346,9 +354,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const client = supabase
     if (!cloud || !client) return
 
-    // 🔗 Magic Link listener:
-    // When you tap "Sign in" in your Gmail, this catches the session and immediately logs you in!
-    const { data: authSub } = client.auth.onAuthStateChange(async (_event, session) => {
+    // 🔗 Supabase Auth State listener:
+    // Handles magic links, password sessions, and explicit SIGNED_OUT events
+    const { data: authSub } = client.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || (!session && !getCurrentUser())) {
+        setMfaPending(false)
+        mfaProfileRef.current = null
+        setUser(null)
+        userRef.current = null
+        setUsers([])
+        return
+      }
+
       if (session?.user?.email) {
         try {
           const { data: profileRow } = await client
@@ -385,6 +402,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [cloud, refresh])
 
+  // 🔄 Cross-Tab & Local Storage Auth Synchronization
+  useEffect(() => {
+    const handleStorage = (e: Event) => {
+      const customEvt = e as CustomEvent<{ key?: string }>
+      const storageEvt = e as StorageEvent
+      const key = customEvt.detail?.key || storageEvt.key
+      if (!key || key === 'gv_session' || key === 'gv_current_user') {
+        const cached = getCurrentUser()
+        const sid = getSessionUserId()
+        if (!cached && !sid) {
+          if (userRef.current) {
+            setUser(null)
+            userRef.current = null
+            setUsers([])
+          }
+        }
+      }
+    }
+
+    window.addEventListener('storage', handleStorage)
+    window.addEventListener(STORE_EVENT, handleStorage)
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener(STORE_EVENT, handleStorage)
+    }
+  }, [])
+
   // ── Realtime: auto-logout/update when admin changes this user's profile ──────
   // Rules:
   //  1. is_blocked = true  → immediate logout with suspension message.
@@ -414,6 +458,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             )
             // Small delay so the toast is visible before redirect
             setTimeout(() => {
+              void clearAllAuthSessionData()
               saveCurrentUser(null)
               setUser(null)
               userRef.current = null
@@ -449,6 +494,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             showToast(message, '🔔', 'info')
 
             setTimeout(() => {
+              void clearAllAuthSessionData()
               saveCurrentUser(null)
               setUser(null)
               userRef.current = null
@@ -777,16 +823,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     if (cloud && supabase) {
       try {
+        await supabase.auth.signOut({ scope: 'local' })
+      } catch {}
+      try {
         await supabase.auth.signOut()
-      } catch {
-        /* ignore */
-      }
+      } catch {}
     }
+    await clearAllAuthSessionData()
     saveCurrentUser(null)
     setUser(null)
     userRef.current = null
     setUsers([])
     clearStoredPins()
+    setMfaPending(false)
+    mfaProfileRef.current = null
+    mfaPinRef.current = ''
   }, [cloud])
 
   const resetPassword = useCallback(

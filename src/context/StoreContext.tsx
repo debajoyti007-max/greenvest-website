@@ -312,10 +312,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       // 4. Hydrate cloud persistent notifications (offline support)
       try {
-        const cloudNotifs = await fetchNotificationsApi(currentUser?.id)
-        if (cloudNotifs.length > 0) {
-          setNotifications(cloudNotifs)
-          saveAppNotifications(cloudNotifs)
+        if (currentUser) {
+          const cloudNotifs = await fetchNotificationsApi(currentUser.id)
+          if (cloudNotifs.length > 0) {
+            setNotifications(cloudNotifs)
+            saveAppNotifications(cloudNotifs)
+          }
+        } else {
+          setNotifications([])
         }
       } catch {}
     } catch (err) {

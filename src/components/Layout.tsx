@@ -104,11 +104,13 @@ export default function Layout() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  const handleLogout = () => {
-    void logout().then(() => {
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } finally {
       setMenuOpen(false)
-      navigate('/')
-    })
+      navigate('/auth')
+    }
   }
 
   const closeMenu = () => setMenuOpen(false)

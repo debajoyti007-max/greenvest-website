@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { supabase } from '../lib/supabase'
@@ -10,6 +10,7 @@ import { SERVICEABLE_PINCODES } from '../lib/business'
 import type { Address } from '../types'
 
 export default function Profile() {
+  const navigate = useNavigate()
   const { user, logout, updateUserProfile, updatePassword } = useAuth()
   const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang, safeCloudSync } = useStore()
 
@@ -610,14 +611,24 @@ export default function Profile() {
           </button>
         </div>
 
-        <button onClick={logout}
+        <button
+          onClick={async () => {
+            await logout()
+            navigate('/auth')
+          }}
           style={{ width: '100%', border: '1px solid #fca5a5', color: '#dc2626', background: '#fef2f2', padding: '0.75rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}>
           {lang === 'bn' ? '🚪 লগআউট' : '🚪 Logout'}
         </button>
-        <button onClick={async () => {
-          if (supabase) await supabase.auth.signOut({ scope: 'global' })
-          await logout()
-        }}
+        <button
+          onClick={async () => {
+            if (supabase) {
+              try {
+                await supabase.auth.signOut({ scope: 'global' })
+              } catch {}
+            }
+            await logout()
+            navigate('/auth')
+          }}
           style={{ width: '100%', border: '1px solid #fca5a5', color: '#dc2626', background: 'transparent', padding: '0.5rem', borderRadius: '12px', cursor: 'pointer', fontSize: '0.85rem' }}>
           {lang === 'bn' ? 'সব ডিভাইস থেকে লগআউট করুন' : 'Logout from all devices'}
         </button>

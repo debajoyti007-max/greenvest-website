@@ -73,6 +73,7 @@ export function clearStoredPins(): void {
     sessionStorage.removeItem(PINS_KEY)
     localStorage.removeItem(PINS_KEY)
   } catch {}
+  void idbDelete(PINS_KEY)
 }
 
 export function getActiveUserPin(user?: { id?: string; email?: string; phone?: string } | null): string {
@@ -111,13 +112,15 @@ export type SavedDelivery = {
   landmark?: string
 }
 
-import { idbSet, idbGet } from './indexedDb'
+import { idbSet, idbGet, idbDelete } from './indexedDb'
+
+const SENSITIVE_AUTH_KEYS = new Set<string>(['gv_current_user', 'gv_session', 'gv_pins'])
 
 function read<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)
-    if (!raw && typeof window !== 'undefined') {
-      // Trigger background auto-restore from IndexedDB if localStorage was cleared
+    if (!raw && typeof window !== 'undefined' && !SENSITIVE_AUTH_KEYS.has(key)) {
+      // Trigger background auto-restore from IndexedDB ONLY for non-auth data (catalog, orders, app settings)
       void idbGet<T | null>(key, null).then((idbVal) => {
         if (idbVal !== null && idbVal !== undefined) {
           try {
@@ -244,7 +247,9 @@ export function saveCurrentUser(user: User | null): void {
     try {
       localStorage.removeItem(CURRENT_USER_KEY)
     } catch {}
+    void idbDelete(CURRENT_USER_KEY)
     setSessionUserId(null)
+    window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: CURRENT_USER_KEY } }))
   }
 }
 
@@ -253,8 +258,59 @@ export function getSessionUserId(): string | null {
 }
 
 export function setSessionUserId(id: string | null) {
-  if (id) localStorage.setItem(KEYS.session, id)
-  else localStorage.removeItem(KEYS.session)
+  if (id) {
+    localStorage.setItem(KEYS.session, id)
+  } else {
+    try {
+      localStorage.removeItem(KEYS.session)
+    } catch {}
+    void idbDelete(KEYS.session)
+  }
+  window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: KEYS.session } }))
+}
+
+/** Deep wipe of all persistent authentication and session data across storage systems */
+export async function clearAllAuthSessionData(): Promise<void> {
+  try {
+    localStorage.removeItem(CURRENT_USER_KEY)
+    localStorage.removeItem(KEYS.session)
+    localStorage.removeItem(PINS_KEY)
+    sessionStorage.removeItem(PINS_KEY)
+    sessionStorage.removeItem('gv_pending_coupon')
+  } catch {}
+
+  // Await IndexedDB deletion to guarantee zero resurrection upon refresh
+  await Promise.allSettled([
+    idbDelete(CURRENT_USER_KEY),
+    idbDelete(KEYS.session),
+    idbDelete(PINS_KEY),
+  ])
+
+  // Wipe all Supabase auth tokens and idempotency keys
+  try {
+    const toRemoveLocal: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k && (k.startsWith('sb-') || k.includes('auth-token') || k.startsWith('gv_order_idempotency_'))) {
+        toRemoveLocal.push(k)
+      }
+    }
+    toRemoveLocal.forEach((k) => {
+      localStorage.removeItem(k)
+      void idbDelete(k)
+    })
+
+    const toRemoveSession: string[] = []
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i)
+      if (k && (k.startsWith('sb-') || k.includes('auth-token') || k.startsWith('gv_order_idempotency_'))) {
+        toRemoveSession.push(k)
+      }
+    }
+    toRemoveSession.forEach((k) => sessionStorage.removeItem(k))
+  } catch {}
+
+  window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: CURRENT_USER_KEY } }))
   window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: KEYS.session } }))
 }
 
