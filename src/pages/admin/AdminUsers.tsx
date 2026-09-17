@@ -22,7 +22,8 @@ export default function AdminUsers() {
   useEffect(() => {
     void refreshUsers()
     void refresh()
-  }, [refreshUsers, refresh])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [adminTab, setAdminTab] = useState<'users' | 'database'>('users')
   const [resettingPinId, setResettingPinId] = useState<string | null>(null)

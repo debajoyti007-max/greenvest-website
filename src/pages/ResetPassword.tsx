@@ -16,7 +16,7 @@ export default function ResetPassword() {
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
 
-  if (loading) {
+  if (loading && !user) {
     return (
       <div className="page narrow auth-page" aria-busy="true">
         <div style={{ maxWidth: '420px', margin: '2rem auto', background: 'var(--card-bg, #fff)', padding: '2rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>

@@ -120,7 +120,8 @@ export default function Checkout() {
       setCouponCode((curr) => curr || pending)
       sessionStorage.removeItem('gv_pending_coupon')
     }
-  }, [refresh])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const availableCoupons = useMemo(() => {
     return (promotionalDeals || [])

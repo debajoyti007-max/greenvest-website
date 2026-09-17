@@ -158,9 +158,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let cloudUsers: User[] = []
       try {
         const callerPin = getActiveUserPin(profile)
-        cloudUsers = await fetchProfiles(profile.id, callerPin)
-      } catch {
-        cloudUsers = []
+        // 4s timeout race so RPC latency on mobile never hangs
+        const fetchPromise = fetchProfiles(profile.id, callerPin)
+        const timeoutPromise = new Promise<User[]>((_, reject) =>
+          setTimeout(() => reject(new Error('fetchProfiles timeout')), 4000)
+        )
+        cloudUsers = await Promise.race([fetchPromise, timeoutPromise])
+      } catch (err) {
+        console.warn('loadUsersIfStaff cloud fetch failed or timed out:', err)
+        cloudUsers = getUsers()
       }
 
       const map = new Map<string, User>()
@@ -209,83 +215,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refresh = useCallback(async () => {
-    // Bug 7 fix: use ref so this callback isn't recreated each time initialized changes
-    if (!initializedRef.current) setLoading(true)
-    if (cloud && supabase) {
-      // 1. Check if user just landed via a Magic Link email redirect or active Supabase session
-      try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        const sessionEmail = sessionData?.session?.user?.email
-        if (sessionEmail) {
-          const { data: profileRow } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('email', sessionEmail.toLowerCase())
-            .maybeSingle()
-          if (profileRow) {
-            const profile = mapProfile(profileRow as any)
-            if (profile) {
-              setUser(profile)
-              userRef.current = profile
-              setSessionUserId(profile.id)
-              await loadUsersIfStaff(profile)
-              setLoading(false)
-              initializedRef.current = true
-              return
+    // Only set loading to true if we don't already have a resolved user in memory/cache.
+    // Re-validating existing sessions should be silent and non-blocking!
+    if (!initializedRef.current && !userRef.current && !getCurrentUser()) {
+      setLoading(true)
+    }
+
+    try {
+      if (cloud && supabase) {
+        // 1. Check if user just landed via a Magic Link email redirect or active Supabase session
+        try {
+          const sessionPromise = supabase.auth.getSession()
+          const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+            setTimeout(() => resolve({ data: { session: null } }), 3500)
+          )
+          const { data: sessionData } = await Promise.race([sessionPromise, timeoutPromise])
+          const sessionEmail = sessionData?.session?.user?.email
+          if (sessionEmail) {
+            const { data: profileRow } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('email', sessionEmail.toLowerCase())
+              .maybeSingle()
+            if (profileRow) {
+              const profile = mapProfile(profileRow as any)
+              if (profile) {
+                setUser(profile)
+                userRef.current = profile
+                setSessionUserId(profile.id)
+                // Secondary staff customer list hydration must NEVER block authentication
+                void loadUsersIfStaff(profile)
+                return
+              }
             }
           }
+        } catch (err) {
+          console.warn('Supabase session check error:', err)
         }
-      } catch (err) {
-        console.warn('Supabase session check error:', err)
-      }
 
-      // 2. Restore session from localStorage userId or cached profile
-      const localId = getSessionUserId()
-      const cachedProfile = getCurrentUser()
+        // 2. Restore session from localStorage userId or cached profile
+        const localId = getSessionUserId()
+        const cachedProfile = getCurrentUser()
 
-      if (localId) {
-        // PIN-auth users have no JWT — restore from local cache (RLS blocks anon profile reads)
-        if (cachedProfile && cachedProfile.id === localId) {
-          if (cachedProfile.isBlocked) {
-            saveCurrentUser(null)
-            setUser(null)
-            userRef.current = null
-            clearStoredPins()
-          } else {
+        if (localId) {
+          // PIN-auth users have no JWT — restore from local cache (RLS blocks anon profile reads)
+          if (cachedProfile && cachedProfile.id === localId) {
+            if (cachedProfile.isBlocked) {
+              saveCurrentUser(null)
+              setUser(null)
+              userRef.current = null
+              clearStoredPins()
+            } else {
+              if (!userRef.current || userRef.current.id !== cachedProfile.id || userRef.current.role !== cachedProfile.role) {
+                setUser(cachedProfile)
+                userRef.current = cachedProfile
+              }
+              // Secondary staff customer list hydration must NEVER block authentication
+              void loadUsersIfStaff(cachedProfile)
+            }
+          } else if (!cachedProfile) {
+            setSessionUserId(null)
+          }
+        } else if (cachedProfile) {
+          if (!userRef.current || userRef.current.id !== cachedProfile.id || userRef.current.role !== cachedProfile.role) {
             setUser(cachedProfile)
             userRef.current = cachedProfile
-            await loadUsersIfStaff(cachedProfile)
           }
-        } else if (!cachedProfile) {
-          setSessionUserId(null)
+          setSessionUserId(cachedProfile.id)
+          void loadUsersIfStaff(cachedProfile)
         }
-      } else if (cachedProfile) {
-        setUser(cachedProfile)
-        userRef.current = cachedProfile
-        setSessionUserId(cachedProfile.id)
+        return
       }
+
+      if (allowLocal) {
+        refreshLocal()
+        return
+      }
+    } catch (err) {
+      console.error('Auth refresh error:', err)
+    } finally {
       setLoading(false)
       initializedRef.current = true
-      return
     }
-    if (allowLocal) {
-      refreshLocal()
-      setLoading(false)
-      initializedRef.current = true
-      return
-    }
-    setLoading(false)
-    initializedRef.current = true
-  // Removed `initialized` from deps — it was a stale-closure that caused double-init (Bug 7)
   }, [cloud, allowLocal, refreshLocal, loadUsersIfStaff])
 
   const refreshUsers = useCallback(async () => {
-    if (userRef.current) {
-      await loadUsersIfStaff(userRef.current)
-    } else if (user) {
-      await loadUsersIfStaff(user)
+    const targetUser = userRef.current || getCurrentUser()
+    if (targetUser) {
+      await loadUsersIfStaff(targetUser)
     }
-  }, [user, loadUsersIfStaff])
+  }, [loadUsersIfStaff])
 
   useEffect(() => {
     void refresh()
@@ -310,7 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(profile)
               userRef.current = profile
               setSessionUserId(profile.id)
-              await loadUsersIfStaff(profile)
+              void loadUsersIfStaff(profile)
               if (
                 (profile.role === 'admin' || profile.isSuperAdmin) &&
                 typeof window !== 'undefined' &&
@@ -329,7 +348,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       authSub?.subscription?.unsubscribe()
     }
-  }, [cloud, refresh, loadUsersIfStaff])
+  }, [cloud, refresh])
 
   // ── Realtime: auto-logout/update when admin changes this user's profile ──────
   // Rules:

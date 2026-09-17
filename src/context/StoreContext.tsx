@@ -162,6 +162,8 @@ export const StoreContext = createContext<StoreContextValue | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { user, mode } = useAuth()
+  const userRef = useRef(user)
+  userRef.current = user
   const cloud = mode === 'cloud' && isSupabaseConfigured
   const [products, setProducts] = useState<Product[]>(() => {
     ensureSeeded()
@@ -281,15 +283,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       const prods = await fetchProducts()
       setProducts(prods)
-      setCart(getCart(user?.id))
+      const currentUser = userRef.current
+      setCart(getCart(currentUser?.id))
       const l = getLang()
       setLangState(l)
       document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
       document.body.classList.toggle('lang-bn', l === 'bn')
-      if (user) {
+      if (currentUser) {
         // Pass role + id + pin so fetchOrders filters correctly via Staff Gateway RPC
-        const callerPin = getActiveUserPin(user)
-        const ords = await fetchOrders(user.role, user.id, user.email, user.phone, 100, callerPin)
+        const callerPin = getActiveUserPin(currentUser)
+        const ords = await fetchOrders(currentUser.role, currentUser.id, currentUser.email, currentUser.phone, 100, callerPin)
         // Merge with local cache to safeguard scheduled deliveryDate against empty/null remote schemas
         const localOrders = getOrders()
         const localMap = new Map(localOrders.map((o) => [o.id, o]))
@@ -308,7 +311,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       // 4. Hydrate cloud persistent notifications (offline support)
       try {
-        const cloudNotifs = await fetchNotificationsApi(user?.id)
+        const cloudNotifs = await fetchNotificationsApi(currentUser?.id)
         if (cloudNotifs.length > 0) {
           setNotifications(cloudNotifs)
           saveAppNotifications(cloudNotifs)
@@ -319,13 +322,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [])
 
   const refreshOrdersOnly = useCallback(async () => {
-    if (!user) return
+    const currentUser = userRef.current
+    if (!currentUser) return
     try {
-      const callerPin = getActiveUserPin(user)
-      const ords = await fetchOrders(user.role, user.id, user.email, user.phone, 100, callerPin)
+      const callerPin = getActiveUserPin(currentUser)
+      const ords = await fetchOrders(currentUser.role, currentUser.id, currentUser.email, currentUser.phone, 100, callerPin)
       const localOrders = getOrders()
       const localMap = new Map(localOrders.map((o) => [o.id, o]))
       const mergedOrds = ords.map((o) => {
@@ -338,7 +342,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setOrders(mergedOrds)
       saveOrders(mergedOrds)
     } catch {}
-  }, [user])
+  }, [])
 
   const refresh = useCallback(async () => {
     if (cloud) {
@@ -349,15 +353,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       refreshLocal()
       return
     }
+    const currentUser = userRef.current
     setProducts([])
-    setCart(getCart(user?.id))
+    setCart(getCart(currentUser?.id))
     setOrders([])
     const l = getLang()
     setLangState(l)
     document.documentElement.lang = l === 'bn' ? 'bn' : 'en'
     document.body.classList.toggle('lang-bn', l === 'bn')
     setLoading(false)
-  }, [cloud, refreshCloud, refreshLocal, user?.id])
+  }, [cloud, refreshCloud, refreshLocal])
 
   const safeCloudSync = useCallback(async () => {
     invalidateProductCache()
@@ -368,9 +373,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [cloud, refreshCloud, refreshLocal])
 
+  // Initial hydration on mount
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Re-fetch only when user identity or role changes (login/logout/switch), NOT on every re-render
+  const prevUserKeyRef = useRef(`${user?.id || ''}:${user?.role || ''}`)
+  useEffect(() => {
+    const currentKey = `${user?.id || ''}:${user?.role || ''}`
+    if (prevUserKeyRef.current !== currentKey) {
+      prevUserKeyRef.current = currentKey
+      void refresh()
+    }
+  }, [user?.id, user?.role, refresh])
 
   useEffect(() => {
     const onStore = () => {

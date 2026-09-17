@@ -30,7 +30,8 @@ export default function SellerCustomers() {
   useEffect(() => {
     void refreshUsers()
     void refresh()
-  }, [refreshUsers, refresh])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [resetModalUser, setResetModalUser] = useState<{ id: string; name: string; phone: string } | null>(null)
   const [newPin, setNewPin] = useState('1234')
