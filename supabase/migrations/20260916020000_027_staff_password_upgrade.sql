@@ -18,6 +18,7 @@ AS $$
 DECLARE
   v_caller public.profiles%ROWTYPE;
   v_clean_pass text := trim(coalesce(p_new_password, ''));
+  v_old_secret text := trim(coalesce(p_old_secret, ''));
 BEGIN
   -- 1. Locate caller
   SELECT * INTO v_caller FROM public.profiles WHERE id = p_caller_id;
@@ -30,11 +31,16 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'Password upgrade is only applicable to staff and administrator accounts.');
   END IF;
 
-  -- 3. Verify old credentials (either current PIN/password matches, or Supabase auth session is active)
-  IF NOT (auth.uid() IS NOT NULL AND auth.uid()::text = p_caller_id) THEN
-    IF NOT public.profile_pin_matches(v_caller, p_old_secret) THEN
-      RETURN jsonb_build_object('ok', false, 'error', 'Current credentials are incorrect. Please re-enter your current PIN.');
-    END IF;
+  -- 3. Verify old credentials:
+  --    Priority 1: Active Supabase session (auth.uid) matches caller — most trusted.
+  --    Priority 2: profile_pin_matches verifies old_secret against bcrypt pin_hash OR plain pin.
+  --    This handles staff with 4-digit PINs (plain/hashed) AND staff who partially upgraded to 8+ chars.
+  IF NOT (
+    (auth.uid() IS NOT NULL AND auth.uid()::text = p_caller_id)
+    OR
+    (v_old_secret <> '' AND public.profile_pin_matches(v_caller, v_old_secret))
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Current credentials are incorrect. Please re-enter your current PIN or password.');
   END IF;
 
   -- 4. Validate new password length

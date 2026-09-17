@@ -8,6 +8,7 @@ export default function StaffPasswordUpgradeModal() {
   const { lang } = useStore()
 
   const activePin = user ? getActiveUserPin(user) : ''
+  // Pre-fill with the cached credential so the user doesn't need to type it again
   const [currentPin, setCurrentPin] = useState(activePin || '')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -21,8 +22,10 @@ export default function StaffPasswordUpgradeModal() {
   const isStaff = user.role === 'admin' || user.role === 'seller' || user.role === 'rider' || user.isSuperAdmin
   if (!isStaff) return null
 
-  // Trigger if explicitly flagged by database or if cached credentials are < 8 characters
-  const needsUpgrade = Boolean(user.needsPasswordUpgrade) || (Boolean(activePin) && activePin.length < 8)
+  // Only show upgrade modal if explicitly flagged by the DB AND the cached credential is still
+  // a legacy short PIN (< 8 chars). If the active credential is already 8+ chars, the upgrade
+  // is complete — never show the modal again to avoid the "incorrect PIN" confusion loop.
+  const needsUpgrade = Boolean(user.needsPasswordUpgrade) && !(activePin && activePin.length >= 8)
   if (!needsUpgrade) return null
 
   const roleLabel =
@@ -184,24 +187,23 @@ export default function StaffPasswordUpgradeModal() {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* Current 4-digit PIN */}
+          {/* Current PIN or Password */}
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
-            <span>{lang === 'bn' ? 'বর্তমান ৪-সংখ্যার পিন' : 'Current 4-Digit PIN'}</span>
+            <span>{lang === 'bn' ? 'বর্তমান পিন বা পাসওয়ার্ড' : 'Current PIN or Password'}</span>
             <input
               type="password"
-              inputMode="numeric"
-              maxLength={4}
+              autoComplete="current-password"
+              maxLength={30}
               required
               value={currentPin}
-              onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              placeholder="1234"
+              onChange={(e) => setCurrentPin(e.target.value)}
+              placeholder={lang === 'bn' ? 'আপনার বর্তমান পিন বা পাসওয়ার্ড' : 'Enter your current PIN or password'}
               style={{
                 width: '100%',
                 padding: '0.65rem 0.85rem',
                 borderRadius: '8px',
                 border: '1px solid #cbd5e1',
-                fontSize: '1.1rem',
-                letterSpacing: '0.2rem',
+                fontSize: '1rem',
                 fontWeight: 700,
                 outline: 'none',
                 boxSizing: 'border-box',
