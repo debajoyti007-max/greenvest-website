@@ -89,7 +89,7 @@ export default function ResetPassword() {
             maxLength={4}
             value={password}
             onChange={(e) => setPassword(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            placeholder={lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234'}
+            placeholder={lang === 'bn' ? '৪ সংখ্যার নতুন পিন' : 'New 4-digit PIN'}
             required
             autoComplete="new-password"
             style={{ fontSize: '1.2rem', fontWeight: 'bold', letterSpacing: '0.2rem' }}
@@ -103,7 +103,7 @@ export default function ResetPassword() {
             maxLength={4}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            placeholder={lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234'}
+            placeholder={lang === 'bn' ? 'পিন পুনরায় লিখুন' : 'Re-enter 4-digit PIN'}
             required
             autoComplete="new-password"
             style={{ fontSize: '1.2rem', fontWeight: 'bold', letterSpacing: '0.2rem' }}

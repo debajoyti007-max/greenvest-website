@@ -4,6 +4,8 @@
   "version": "1.2.0",
   "type": "module",
   "scripts": {
+    "setup": "node scripts/setup-env.mjs",
+    "check:env": "node scripts/setup-env.mjs --check-only",
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build-all.mjs",
     "lint": "oxlint",

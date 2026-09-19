@@ -9,6 +9,10 @@ const env = (key: string, fallback: string) => {
 export const MIN_ORDER_AMOUNT = 500
 export const STORE_NAME = env('VITE_STORE_NAME', 'MS Vegetable Center')
 export const MAX_VEGETABLE_QTY_KG = 10
+/** Maximum total order weight (in kg) allowed for bike/scooter home delivery. Orders exceeding this must choose Store Pickup */
+export const MAX_DELIVERY_WEIGHT_KG = 10
+/** Maximum number of non-cancelled orders a customer can place within a rolling 60-minute window */
+export const MAX_ORDERS_PER_HOUR = 3
 export const DELIVERY_WINDOW = '12–24 hours'
 export const DELIVERY_WINDOW_BN = '১২–২৪ ঘণ্টা'
 export const ADVANCE_PERCENT = 10
@@ -16,6 +20,65 @@ export const ADVANCE_PERCENT = 10
 export const LOW_STOCK_QTY = 5
 
 export const SERVICEABLE_PINCODES = ['721632', '721633', '721643'] as const
+
+/**
+ * Calculates total physical weight of cart items in kg.
+ * Accounts for quantity and weight multipliers (e.g. 250g = 0.25, 500g = 0.5, 5kg = 5).
+ */
+export function calculateCartTotalWeightKg(items?: Array<{ qty: number; weightMultiplier?: number }> | null): number {
+  if (!items || items.length === 0) return 0
+  const total = items.reduce((sum, item) => sum + (item.qty * (item.weightMultiplier || 1)), 0)
+  return Math.round(total * 100) / 100
+}
+
+/**
+ * Checks whether a customer has exceeded the hourly order rate limit.
+ * Returns { isExceeded: boolean, count: number, resetMinutes: number }
+ */
+export function checkOrderRateLimit(
+  orders: Array<{ userId?: string; phone?: string; createdAt?: string; status?: string }>,
+  userId?: string,
+  phone?: string,
+  nowMs = Date.now(),
+): { isExceeded: boolean; count: number; oldestOrderMs?: number; resetMinutes: number } {
+  if (!orders || orders.length === 0 || (!userId && !phone)) {
+    return { isExceeded: false, count: 0, resetMinutes: 0 }
+  }
+
+  const cleanPhone = phone ? phone.replace(/\D/g, '').slice(-10) : ''
+  const oneHourAgo = nowMs - 60 * 60 * 1000
+
+  const recentOrders = orders.filter((o) => {
+    if (o.status === 'cancelled') return false
+    const matchUser = userId && o.userId === userId
+    const oPhone = o.phone ? o.phone.replace(/\D/g, '').slice(-10) : ''
+    const matchPhone = cleanPhone && oPhone && oPhone === cleanPhone
+    if (!matchUser && !matchPhone) return false
+
+    const orderTime = o.createdAt ? new Date(o.createdAt).getTime() : 0
+    return orderTime >= oneHourAgo && orderTime <= nowMs + 60000 // safe tolerance for clock skew
+  })
+
+  const count = recentOrders.length
+  const isExceeded = count >= MAX_ORDERS_PER_HOUR
+
+  let resetMinutes = 0
+  let oldestOrderMs: number | undefined
+
+  if (isExceeded && recentOrders.length > 0) {
+    const timestamps = recentOrders
+      .map((o) => (o.createdAt ? new Date(o.createdAt).getTime() : 0))
+      .filter((t) => t > 0)
+      .sort((a, b) => a - b)
+    oldestOrderMs = timestamps[0]
+    if (oldestOrderMs) {
+      const msUntilExpiry = oldestOrderMs + 60 * 60 * 1000 - nowMs
+      resetMinutes = Math.max(1, Math.ceil(msUntilExpiry / 60000))
+    }
+  }
+
+  return { isExceeded, count, oldestOrderMs, resetMinutes }
+}
 
 /**
  * Automatically computes dynamic market MRP strikethrough:

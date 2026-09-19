@@ -242,7 +242,7 @@ export default function ProductReviewsModal({ product, onClose }: ProductReviews
                 className="input-compact"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={lang === 'bn' ? 'যেমন: সুব্রত মন্ডল' : 'e.g. Subrata Mondal'}
+                placeholder={lang === 'bn' ? 'আপনার নাম লিখুন' : 'Enter your name'}
               />
             </div>
 

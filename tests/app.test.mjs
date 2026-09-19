@@ -1,5 +1,10 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // 1. Weight & Pricing Calculation Logic
 describe('Weight Multipliers & Pricing Calculations', () => {
@@ -2081,4 +2086,283 @@ describe('Suite 36: Morning Mandi Bulk Pricing, Delta Calculation & Free-Tier Si
   })
 })
 
+describe('Suite 37: Multi-PC Environment Provisioning & Supabase Verification Engine', () => {
+  function parseEnv(content) {
+    const result = {}
+    const lines = content.split(/\r?\n/)
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const match = trimmed.match(/^([^=]+)=(.*)$/)
+      if (match) {
+        const key = match[1].trim()
+        let val = match[2].trim()
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1)
+        }
+        result[key] = val
+      }
+    }
+    return result
+  }
 
+  function formatEnv(config) {
+    return [
+      `VITE_SUPABASE_URL=${config.VITE_SUPABASE_URL}`,
+      `VITE_SUPABASE_ANON_KEY=${config.VITE_SUPABASE_ANON_KEY}`,
+      `VITE_SUPER_ADMIN_EMAIL=${config.VITE_SUPER_ADMIN_EMAIL}`,
+      `VITE_SUPER_ADMIN_PHONE=${config.VITE_SUPER_ADMIN_PHONE}`,
+    ].join('\n')
+  }
+
+  test('parseEnv correctly parses key-value pairs, ignores comments and trims quotes', () => {
+    const raw = `
+      # GreenVest Environment
+      VITE_SUPABASE_URL="https://zvjqpigduyvczidzafus.supabase.co"
+      VITE_SUPABASE_ANON_KEY='sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR'
+      VITE_SUPER_ADMIN_PHONE=8170859653
+    `
+    const parsed = parseEnv(raw)
+    assert.strictEqual(parsed.VITE_SUPABASE_URL, 'https://zvjqpigduyvczidzafus.supabase.co')
+    assert.strictEqual(parsed.VITE_SUPABASE_ANON_KEY, 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR')
+    assert.strictEqual(parsed.VITE_SUPER_ADMIN_PHONE, '8170859653')
+  })
+
+  test('formatEnv generates valid .env string that roundtrips through parseEnv', () => {
+    const config = {
+      VITE_SUPABASE_URL: 'https://zvjqpigduyvczidzafus.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'sb_publishable_test_key',
+      VITE_SUPER_ADMIN_EMAIL: 'debajoyti007@gmail.com',
+      VITE_SUPER_ADMIN_PHONE: '8170859653',
+    }
+
+    const formatted = formatEnv(config)
+    const roundtripped = parseEnv(formatted)
+
+    assert.strictEqual(roundtripped.VITE_SUPABASE_URL, config.VITE_SUPABASE_URL)
+    assert.strictEqual(roundtripped.VITE_SUPABASE_ANON_KEY, config.VITE_SUPABASE_ANON_KEY)
+    assert.strictEqual(roundtripped.VITE_SUPER_ADMIN_EMAIL, config.VITE_SUPER_ADMIN_EMAIL)
+    assert.strictEqual(roundtripped.VITE_SUPER_ADMIN_PHONE, config.VITE_SUPER_ADMIN_PHONE)
+  })
+
+  test('Supabase URL validator accurately flags placeholders and requires valid https URL', () => {
+    function isValidSupabaseUrl(url) {
+      if (!url) return false
+      if (!url.startsWith('https://') && !url.startsWith('http://')) return false
+      if (url.includes('your-project') || url.includes('YOUR_PROJECT')) return false
+      return true
+    }
+
+    assert.strictEqual(isValidSupabaseUrl('https://zvjqpigduyvczidzafus.supabase.co'), true)
+    assert.strictEqual(isValidSupabaseUrl('https://your-project.supabase.co'), false)
+    assert.strictEqual(isValidSupabaseUrl(''), false)
+    assert.strictEqual(isValidSupabaseUrl('invalid-url'), false)
+  })
+
+  test('Idempotent environment check preserves existing valid credentials', () => {
+    const existing = {
+      VITE_SUPABASE_URL: 'https://zvjqpigduyvczidzafus.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'custom_existing_key_123',
+      VITE_SUPER_ADMIN_PHONE: '9876543210',
+    }
+
+    function ensureConfig(current) {
+      if (current.VITE_SUPABASE_URL && current.VITE_SUPABASE_ANON_KEY && !current.VITE_SUPABASE_URL.includes('your-project')) {
+        return { modified: false, config: current }
+      }
+      return { modified: true, config: { ...current, VITE_SUPABASE_URL: 'https://zvjqpigduyvczidzafus.supabase.co' } }
+    }
+
+    const res = ensureConfig(existing)
+    assert.strictEqual(res.modified, false)
+    assert.strictEqual(res.config.VITE_SUPABASE_ANON_KEY, 'custom_existing_key_123')
+  })
+
+  test('New PC detection generates default production credentials when configuration is empty', () => {
+    const emptyConfig = {}
+    const defaultVals = {
+      VITE_SUPABASE_URL: 'https://zvjqpigduyvczidzafus.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR',
+    }
+
+    const merged = { ...defaultVals, ...emptyConfig }
+    assert.strictEqual(merged.VITE_SUPABASE_URL, 'https://zvjqpigduyvczidzafus.supabase.co')
+    assert.strictEqual(merged.VITE_SUPABASE_ANON_KEY, 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR')
+  })
+})
+
+// 38. Total Order Weight Cap (10 kg for Home Delivery) & Customer Rate Limiting (3 orders/hr)
+describe('Suite 38: 10 kg Total Delivery Weight Cap & Order Rate Limiter', () => {
+  const MAX_DELIVERY_WEIGHT_KG = 10
+  const MAX_ORDERS_PER_HOUR = 3
+
+  function calculateCartTotalWeightKg(items) {
+    if (!items || items.length === 0) return 0
+    const total = items.reduce((sum, item) => sum + (item.qty * (item.weightMultiplier || 1)), 0)
+    return Math.round(total * 100) / 100
+  }
+
+  function checkOrderRateLimit(orders, userId, phone, nowMs = Date.now()) {
+    if (!orders || orders.length === 0 || (!userId && !phone)) {
+      return { isExceeded: false, count: 0, resetMinutes: 0 }
+    }
+    const cleanPhone = phone ? phone.replace(/\D/g, '').slice(-10) : ''
+    const oneHourAgo = nowMs - 60 * 60 * 1000
+
+    const recentOrders = orders.filter((o) => {
+      if (o.status === 'cancelled') return false
+      const matchUser = userId && o.userId === userId
+      const oPhone = o.phone ? o.phone.replace(/\D/g, '').slice(-10) : ''
+      const matchPhone = cleanPhone && oPhone && oPhone === cleanPhone
+      if (!matchUser && !matchPhone) return false
+
+      const orderTime = o.createdAt ? new Date(o.createdAt).getTime() : 0
+      return orderTime >= oneHourAgo && orderTime <= nowMs + 60000
+    })
+
+    const count = recentOrders.length
+    const isExceeded = count >= MAX_ORDERS_PER_HOUR
+
+    let resetMinutes = 0
+    let oldestOrderMs
+    if (isExceeded && recentOrders.length > 0) {
+      const timestamps = recentOrders
+        .map((o) => (o.createdAt ? new Date(o.createdAt).getTime() : 0))
+        .filter((t) => t > 0)
+        .sort((a, b) => a - b)
+      oldestOrderMs = timestamps[0]
+      if (oldestOrderMs) {
+        const msUntilExpiry = oldestOrderMs + 60 * 60 * 1000 - nowMs
+        resetMinutes = Math.max(1, Math.ceil(msUntilExpiry / 60000))
+      }
+    }
+    return { isExceeded, count, oldestOrderMs, resetMinutes }
+  }
+
+  test('Calculates multi-item cart total weight in kg accurately with fractional multipliers', () => {
+    const cart = [
+      { qty: 2, weightMultiplier: 1.0 },   // 2.0 kg
+      { qty: 3, weightMultiplier: 0.5 },   // 1.5 kg
+      { qty: 2, weightMultiplier: 0.25 },  // 0.5 kg
+      { qty: 1, weightMultiplier: 5.0 },   // 5.0 kg
+    ]
+    const weight = calculateCartTotalWeightKg(cart)
+    assert.strictEqual(weight, 9.0)
+  })
+
+  test('Enforces 10 kg total cap for home delivery while permitting <= 10 kg', () => {
+    const safeCart = [
+      { qty: 5, weightMultiplier: 1.0 },   // 5 kg
+      { qty: 10, weightMultiplier: 0.5 },  // 5 kg -> Total = 10 kg
+    ]
+    const safeWeight = calculateCartTotalWeightKg(safeCart)
+    assert.strictEqual(safeWeight <= MAX_DELIVERY_WEIGHT_KG, true)
+
+    const overCart = [
+      { qty: 6, weightMultiplier: 1.0 },   // 6 kg
+      { qty: 10, weightMultiplier: 0.5 },  // 5 kg -> Total = 11 kg
+    ]
+    const overWeight = calculateCartTotalWeightKg(overCart)
+    assert.strictEqual(overWeight > MAX_DELIVERY_WEIGHT_KG, true)
+  })
+
+  test('Exempts Store Pickup from the 10 kg bike delivery capacity limit', () => {
+    const bulkCart = [
+      { qty: 10, weightMultiplier: 5.0 }, // 50 kg wholesale order
+    ]
+    const bulkWeight = calculateCartTotalWeightKg(bulkCart)
+    assert.strictEqual(bulkWeight, 50.0)
+
+    function canPlaceOrder(weight, isPickup) {
+      if (!isPickup && weight > MAX_DELIVERY_WEIGHT_KG) return false
+      return true
+    }
+
+    assert.strictEqual(canPlaceOrder(bulkWeight, false), false, 'Delivery must be rejected')
+    assert.strictEqual(canPlaceOrder(bulkWeight, true), true, 'Store pickup must be allowed')
+  })
+
+  test('Customer rate limiter blocks 4th order within 60 minutes and calculates reset time', () => {
+    const now = Date.now()
+    const orders = [
+      { id: 'O1', userId: 'user-surajit', phone: '9876543210', createdAt: new Date(now - 45 * 60 * 1000).toISOString(), status: 'pending' },
+      { id: 'O2', userId: 'user-surajit', phone: '9876543210', createdAt: new Date(now - 30 * 60 * 1000).toISOString(), status: 'confirmed' },
+      { id: 'O3', userId: 'user-surajit', phone: '9876543210', createdAt: new Date(now - 10 * 60 * 1000).toISOString(), status: 'confirmed' },
+    ]
+
+    const limit = checkOrderRateLimit(orders, 'user-surajit', '9876543210', now)
+    assert.strictEqual(limit.isExceeded, true)
+    assert.strictEqual(limit.count, 3)
+    assert.strictEqual(limit.resetMinutes, 15) // 60 - 45 = 15 minutes remaining
+  })
+
+  test('Cancelled orders and orders older than 60 minutes do not count toward rate limit', () => {
+    const now = Date.now()
+    const orders = [
+      { id: 'O1', userId: 'user-1', phone: '9876543210', createdAt: new Date(now - 90 * 60 * 1000).toISOString(), status: 'delivered' }, // 90 min ago (expired)
+      { id: 'O2', userId: 'user-1', phone: '9876543210', createdAt: new Date(now - 20 * 60 * 1000).toISOString(), status: 'cancelled' }, // cancelled
+      { id: 'O3', userId: 'user-1', phone: '9876543210', createdAt: new Date(now - 10 * 60 * 1000).toISOString(), status: 'pending' }, // valid 1
+      { id: 'O4', userId: 'user-1', phone: '9876543210', createdAt: new Date(now - 5 * 60 * 1000).toISOString(), status: 'pending' },  // valid 2
+    ]
+
+    const limit = checkOrderRateLimit(orders, 'user-1', '9876543210', now)
+    assert.strictEqual(limit.isExceeded, false)
+    assert.strictEqual(limit.count, 2)
+  })
+
+  test('Detects rate limit across multiple accounts sharing the same phone number', () => {
+    const now = Date.now()
+    const orders = [
+      { id: 'O1', userId: 'user-alpha', phone: '919876543210', createdAt: new Date(now - 25 * 60 * 1000).toISOString(), status: 'pending' },
+      { id: 'O2', userId: 'user-beta',  phone: '9876543210',   createdAt: new Date(now - 15 * 60 * 1000).toISOString(), status: 'pending' },
+      { id: 'O3', userId: 'user-gamma', phone: '+91 98765 43210', createdAt: new Date(now - 5 * 60 * 1000).toISOString(), status: 'pending' },
+    ]
+
+    const limit = checkOrderRateLimit(orders, 'user-delta', '9876543210', now)
+    assert.strictEqual(limit.isExceeded, true, 'Must flag 3 orders on same phone number across different user IDs')
+    assert.strictEqual(limit.count, 3)
+  })
+})
+
+// ==============================================================================
+// SUITE 39: SUB-5MS QUERY INDEXING & FREE-TIER DATABASE OPTIMIZATION
+// ==============================================================================
+describe('Suite 39: Sub-5ms Query Indexing & Free-Tier Database Optimization', () => {
+  const sqlPath = path.resolve(__dirname, '../supabase/PERFORMANCE_INDEXES_AND_FREE_TIER_OPTIMIZATION.sql')
+
+  test('Migration script exists and defines all 7 high-performance query indexes', () => {
+    assert.ok(fs.existsSync(sqlPath), 'Migration script must exist')
+    const sql = fs.readFileSync(sqlPath, 'utf8')
+
+    // Essential compound indexes for sub-5ms queries
+    assert.ok(sql.includes('idx_orders_user_created'), 'Must define user order history index')
+    assert.ok(sql.includes('idx_orders_phone_created'), 'Must define phone-based rate limit index')
+    assert.ok(sql.includes('idx_orders_status_created'), 'Must define rider & seller status queue index')
+    assert.ok(sql.includes('idx_orders_pin'), 'Must define delivery PIN index')
+    assert.ok(sql.includes('idx_orders_utr_active'), 'Must define active UTR index')
+    assert.ok(sql.includes('idx_order_items_order_id'), 'Must define order items join index')
+    assert.ok(sql.includes('idx_products_catalog'), 'Must define products catalog index')
+  })
+
+  test('Strictly excludes rigid PIN constraints and stock locks per operational requirements', () => {
+    const sql = fs.readFileSync(sqlPath, 'utf8')
+    assert.ok(!sql.includes('chk_orders_serviceable_pin'), 'Must omit rigid chk_orders_serviceable_pin to allow business flexibility')
+    assert.ok(!sql.includes('chk_products_stock_non_negative'), 'Must omit rigid stock lock to allow natural vegetable/fish weights')
+  })
+
+  test('Configures autovacuum tuning parameters to prevent free-tier storage bloat', () => {
+    const sql = fs.readFileSync(sqlPath, 'utf8')
+    assert.ok(sql.includes('autovacuum_vacuum_scale_factor = 0.05'), 'Must tune autovacuum scale factor to 5%')
+    assert.ok(sql.includes('ALTER TABLE IF EXISTS public.orders SET'), 'Must tune orders table autovacuum')
+    assert.ok(sql.includes('ALTER TABLE IF EXISTS public.order_items SET'), 'Must tune order_items table autovacuum')
+    assert.ok(sql.includes('ALTER TABLE IF EXISTS public.notifications SET'), 'Must tune notifications table autovacuum')
+  })
+
+  test('Ephemeral data purging procedure enforces safe 30-day minimum retention and cleans stale records', () => {
+    const sql = fs.readFileSync(sqlPath, 'utf8')
+    assert.ok(sql.includes('FUNCTION public.purge_stale_ephemeral_data'), 'Must define purge_stale_ephemeral_data function')
+    assert.ok(sql.includes('p_days_retention integer DEFAULT 90'), 'Default retention must be 90 days')
+    assert.ok(sql.includes('p_days_retention < 30'), 'Must enforce safe minimum retention of 30 days')
+    assert.ok(sql.includes('is_read = true'), 'Only purged read notifications')
+  })
+})

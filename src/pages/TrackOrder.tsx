@@ -233,7 +233,7 @@ export default function TrackOrder() {
             type="text"
             value={orderId}
             onChange={(e) => setOrderId(e.target.value)}
-            placeholder={lang === 'bn' ? 'যেমন: 849201 বা ORD-849201' : 'e.g. 849201 or ORD-849201'}
+            placeholder={lang === 'bn' ? 'অর্ডার নম্বর লিখুন' : 'Enter Order ID'}
             autoComplete="off"
             style={{ fontSize: '1.05rem', fontWeight: 600 }}
           />

@@ -753,7 +753,7 @@ export default function Shop() {
               aria-label={lang === 'bn' ? 'সবজি ও পণ্য অনুসন্ধান করুন' : 'Search vegetables, fish, and produce'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={lang === 'bn' ? 'সবজি, মাছ বা Banglish খুঁজুন (যেমন: alu, potol, chingri, ada)…' : 'Search veggies, fish or Banglish (alu, potol, chingri)…'}
+              placeholder={lang === 'bn' ? 'তাজা শাকসবজি, মাছ বা বাজার খুঁজুন…' : 'Search fresh vegetables, fish, groceries…'}
               className="glass-search-input"
             />
             {search && (

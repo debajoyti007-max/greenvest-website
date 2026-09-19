@@ -51,8 +51,21 @@ import {
   deleteSupportThreadApi,
   cleanupOldSupportMessagesApi,
 } from '../lib/api'
-import { ALLOW_LOCAL_FALLBACK, MIN_ORDER_AMOUNT, MAX_VEGETABLE_QTY_KG, ADVANCE_PERCENT, calculateTierDiscount, getCurrentShiftStatus, isOrderStalePending } from '../lib/business'
-import { calcDeliveryFee, STORE_LOCATION } from '../lib/delivery'
+import {
+  ALLOW_LOCAL_FALLBACK,
+  MIN_ORDER_AMOUNT,
+  MAX_VEGETABLE_QTY_KG,
+  MAX_DELIVERY_WEIGHT_KG,
+  MAX_ORDERS_PER_HOUR,
+  SERVICEABLE_PINCODES,
+  calculateCartTotalWeightKg,
+  checkOrderRateLimit,
+  ADVANCE_PERCENT,
+  calculateTierDiscount,
+  getCurrentShiftStatus,
+  isOrderStalePending,
+} from '../lib/business'
+import { calcDeliveryFee, isServiceablePin, STORE_LOCATION } from '../lib/delivery'
 import { getStoredPromotionalDeals, saveStoredPromotionalDeals } from '../lib/deals'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
@@ -665,7 +678,73 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const subtotal = items.reduce((s, i) => s + i.unitPrice * i.qty, 0)
       if (subtotal < MIN_ORDER_AMOUNT) return null
 
-      const isPickup = opts.pin === STORE_LOCATION.pin || opts.address.toLowerCase().includes('pickup')
+      const isPickup =
+        opts.address.toLowerCase().includes('pickup') ||
+        (opts.pin === STORE_LOCATION.pin && opts.address.toLowerCase().includes('store'))
+
+      // 📍 0. Serviceable PIN Validation for Home Delivery
+      if (!isPickup && !isServiceablePin(opts.pin)) {
+        const errMsg =
+          lang === 'bn'
+            ? `বর্তমানে হোম ডেলিভারি শুধুমাত্র ${SERVICEABLE_PINCODES.join(', ')} পিন কোডে চালু রয়েছে। দোকান থেকে ফ্রি পিকআপ (₹০) বেছে নিন।`
+            : `Home delivery is currently available only in PIN codes: ${SERVICEABLE_PINCODES.join(', ')}. Please choose Free Store Pickup.`
+        showToast(errMsg, '⚠️')
+        throw new Error(errMsg)
+      }
+
+      // ⚖️ 1. Total Weight Cap for Home Delivery (Two-Wheeler / Bike Capacity)
+      const totalCartWeightKg = calculateCartTotalWeightKg(currentCart)
+      if (!isPickup && totalCartWeightKg > MAX_DELIVERY_WEIGHT_KG) {
+        const errMsg =
+          lang === 'bn'
+            ? `মোটরবাইকে হোম ডেলিভারির সর্বোচ্চ সীমা ১০ কেজি (আপনার ব্যাগের ওজন: ${totalCartWeightKg} কেজি)। অনুগ্রহ করে দোকান থেকে ফ্রি পিকআপ (₹০) বেছে নিন অথবা কার্ট থেকে পরিমাণ কমান।`
+            : `Home delivery by two-wheeler is limited to ${MAX_DELIVERY_WEIGHT_KG} kg max (your cart weight: ${totalCartWeightKg} kg). Please choose Free Store Pickup or reduce item quantity.`
+        showToast(errMsg, '⚠️')
+        throw new Error(errMsg)
+      }
+
+      // 🛡️ 2. Customer Order Rate Limit (Max 3 orders / hour)
+      // Check in-memory store orders first
+      const rateLimitCheck = checkOrderRateLimit(orders, user.id, opts.phone)
+      if (rateLimitCheck.isExceeded) {
+        const waitMin = rateLimitCheck.resetMinutes || 15
+        const errMsg =
+          lang === 'bn'
+            ? `নিরাপত্তা কারণে প্রতি ঘণ্টায় সর্বোচ্চ ${MAX_ORDERS_PER_HOUR}টি অর্ডার করা যাবে। অনুগ্রহ করে ~${waitMin} মিনিট অপেক্ষা করুন।`
+            : `Rate limit reached: Maximum ${MAX_ORDERS_PER_HOUR} orders per hour. Please wait ~${waitMin} minutes before placing another order.`
+        showToast(errMsg, '⚠️')
+        throw new Error(errMsg)
+      }
+
+      // Server-Side Supabase check (prevents multi-tab / incognito / cache-cleared bypass)
+      if (cloud && supabase) {
+        try {
+          const oneHourAgoIso = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+          const cleanPhone = opts.phone.replace(/\D/g, '').slice(-10)
+          const filterStr = cleanPhone ? `user_id.eq.${user.id},phone.ilike.%${cleanPhone}%` : `user_id.eq.${user.id}`
+          const { count, error } = await supabase
+            .from('orders')
+            .select('id', { count: 'exact', head: true })
+            .gte('created_at', oneHourAgoIso)
+            .neq('status', 'cancelled')
+            .or(filterStr)
+
+          if (!error && count !== null && count >= MAX_ORDERS_PER_HOUR) {
+            const errMsg =
+              lang === 'bn'
+                ? `নিরাপত্তা কারণে প্রতি ঘণ্টায় সর্বোচ্চ ${MAX_ORDERS_PER_HOUR}টি অর্ডার করা যাবে। পূর্ববর্তী অর্ডার সম্পন্ন হওয়া পর্যন্ত অপেক্ষা করুন।`
+                : `Server rate limit: Maximum ${MAX_ORDERS_PER_HOUR} orders per hour allowed. Please wait for previous orders to process.`
+            showToast(errMsg, '⚠️')
+            throw new Error(errMsg)
+          }
+        } catch (rateErr) {
+          if (rateErr instanceof Error && rateErr.message.includes('rate limit')) {
+            throw rateErr
+          }
+          console.warn('Server rate limit check non-fatal error:', rateErr)
+        }
+      }
+
       const coords = opts.geoLat && opts.geoLng ? { lat: opts.geoLat, lng: opts.geoLng } : null
       const { fee: deliveryFee } = calcDeliveryFee(opts.pin, coords || opts.zones, isPickup ? 'pickup' : 'delivery')
       const safeDiscount = Math.min(subtotal, Math.max(0, opts.discountAmount || 0))
@@ -738,7 +817,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCart([])
       return order
     },
-    [user, cloud, products, priceFor, refreshCloud],
+    [user, cloud, products, priceFor, refreshCloud, orders, lang],
   )
 
   const reorderFromOrder = useCallback(

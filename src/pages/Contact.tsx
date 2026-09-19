@@ -130,7 +130,7 @@ export default function Contact() {
           <div>
             <p className="contact-card-label">{lang === 'bn' ? 'ডেলিভারি চার্জ' : 'Delivery Charges'}</p>
             <p className="contact-card-value" style={{ fontSize: '0.85rem' }}>
-              {lang === 'bn' ? 'হোম ডেলিভারি: ₹৩০ (পিন: ৭২১৬৩২, ৭২১৬৩৩, ৭২১৬৪৩)' : 'Home Delivery: ₹30 (PINs: 721632, 721633, 721643)'}
+              {lang === 'bn' ? 'হোম ডেলিভারি: ₹৩০ – ₹৫০ (পিন: ৭২১৬৩২, ৭২১৬৩৩, ৭২১৬৪৩)' : 'Home Delivery: ₹30 – ₹50 (PINs: 721632, 721633, 721643)'}
             </p>
           </div>
         </div>

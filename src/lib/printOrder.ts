@@ -383,7 +383,7 @@ export function generateInvoiceHtml(order: Order, lang: 'en' | 'bn' = 'bn'): str
           <div class="store-title">🌿 MS VEGETABLE CENTER</div>
           <p class="store-subtitle">
             ${isBn ? 'ফার্ম-ফ্রেশ শাকসবজি ও নিত্যপ্রয়োজনীয় বাজার' : 'Farm-Fresh Vegetables, Daily Groceries & Essentials'}<br/>
-            📍 Bhabanipur, Midnapore, West Bengal - 721632<br/>
+            📍 Purba Medinipur, West Bengal - 721632<br/>
             📞 Helpline: +91 8170859653 · Web: <strong>greenvest.shop</strong>
           </p>
         </td>
@@ -641,7 +641,7 @@ export function generateThermalReceiptHtml(order: Order, lang: 'en' | 'bn' = 'bn
 
   <div class="c b" style="font-size:13px">MS VEGETABLE CENTER</div>
   <div class="c" style="font-size:9.5px">${isBn ? 'টাটকা সবজি ও নিত্যপ্রয়োজনীয়' : 'Fresh Veg & Daily Essentials'}</div>
-  <div class="c" style="font-size:9px">Bhabanipur, WB · Mob: 8170859653</div>
+  <div class="c" style="font-size:9px">Purba Medinipur, WB · Mob: 8170859653</div>
   <div class="d-line"></div>
 
   <div>ORDER: <span class="b">${escapeHtml(order.id)}</span></div>

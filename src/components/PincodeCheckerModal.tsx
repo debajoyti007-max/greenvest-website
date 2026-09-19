@@ -50,7 +50,7 @@ export default function PincodeCheckerModal({
             type="text"
             className="input"
             maxLength={6}
-            placeholder={lang === 'bn' ? 'উদাঃ 721632' : 'e.g. 721632'}
+            placeholder={lang === 'bn' ? '৬ সংখ্যার পিন কোড' : '6-digit PIN code'}
             value={pinInput}
             onChange={(e) => {
               setPinInput(e.target.value)

@@ -2,7 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
-import { DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, SERVICEABLE_PINCODES, createBulkOrderWhatsAppUrl } from '../lib/business'
+import {
+  DELIVERY_WINDOW_BN,
+  MIN_ORDER_AMOUNT,
+  SERVICEABLE_PINCODES,
+  MAX_DELIVERY_WEIGHT_KG,
+  MAX_ORDERS_PER_HOUR,
+  calculateCartTotalWeightKg,
+  checkOrderRateLimit,
+  createBulkOrderWhatsAppUrl,
+} from '../lib/business'
 import { calcDeliveryFee, isServiceablePin, STORE_LOCATION, checkLocationServiceability } from '../lib/delivery'
 import { t } from '../lib/i18n'
 import { UPI_BANK, UPI_ID, UPI_QR_SRC, generateDynamicUpiQr, buildUpiPayUri } from '../lib/payment'
@@ -176,6 +185,13 @@ export default function Checkout() {
 
   const coords = useMemo(() => (geoLat && geoLng ? { lat: geoLat, lng: geoLng } : null), [geoLat, geoLng])
   const delivery = useMemo(() => calcDeliveryFee(pin, coords, fulfillmentMode), [pin, coords, fulfillmentMode])
+  const totalCartWeightKg = useMemo(() => calculateCartTotalWeightKg(cart), [cart])
+  const isOverDeliveryCap = totalCartWeightKg > MAX_DELIVERY_WEIGHT_KG
+
+  const rateLimitStatus = useMemo(() => {
+    return checkOrderRateLimit(orders, user?.id, phone)
+  }, [orders, user?.id, phone])
+
   const grandTotal = Math.max(0, cartTotal + delivery.fee - (couponApplied?.discount || 0))
   const [paymentMode, setPaymentMode] = useState<'advance' | 'full'>('advance')
   const advance = grandTotal > 0 ? Math.max(1, Math.ceil(grandTotal * 0.1)) : 0
@@ -434,6 +450,29 @@ export default function Checkout() {
         lang === 'bn'
           ? `আপনার পিন কোড আমাদের ডেলিভারি সীমার বাইরে (অনুমোদিত পিন: ${SERVICEABLE_PINCODES.join(', ')})।`
           : `Your location is outside our delivery service area (Serviceable PINs: ${SERVICEABLE_PINCODES.join(', ')}).`,
+      )
+      submitLockRef.current = false
+      return
+    }
+
+    // ⚖️ Weight Cap for Home Delivery (Bike/Two-Wheeler Capacity)
+    if (!isPickup && isOverDeliveryCap) {
+      setError(
+        lang === 'bn'
+          ? `মোটরবাইকে হোম ডেলিভারির সর্বোচ্চ সীমা ১০ কেজি (আপনার ব্যাগের ওজন: ${totalCartWeightKg} কেজি)। অনুগ্রহ করে "দোকান থেকে ফ্রি পিকআপ" বেছে নিন অথবা পরিমাণ কমান।`
+          : `Home delivery by bike is limited to ${MAX_DELIVERY_WEIGHT_KG} kg (your cart is ${totalCartWeightKg} kg). Please choose Store Pickup above or reduce quantity.`
+      )
+      submitLockRef.current = false
+      return
+    }
+
+    // 🛡️ Customer Order Rate Limit (Max 3 orders / hour)
+    if (rateLimitStatus.isExceeded) {
+      const waitMin = rateLimitStatus.resetMinutes || 15
+      setError(
+        lang === 'bn'
+          ? `নিরাপত্তা কারণে প্রতি ঘণ্টায় সর্বোচ্চ ${MAX_ORDERS_PER_HOUR}টি অর্ডার করা যাবে। অনুগ্রহ করে ~${waitMin} মিনিট অপেক্ষা করুন।`
+          : `Rate limit reached: Maximum ${MAX_ORDERS_PER_HOUR} orders per hour. Please wait ~${waitMin} minutes before placing another order.`
       )
       submitLockRef.current = false
       return
@@ -965,6 +1004,74 @@ export default function Checkout() {
             </div>
           )}
 
+          {/* ⚖️ Over Weight Cap Warning */}
+          {isOverDeliveryCap && fulfillmentMode === 'delivery' && (
+            <div
+              style={{
+                background: '#fffbeb',
+                border: '1.5px solid #fde68a',
+                borderRadius: '12px',
+                padding: '0.85rem 1rem',
+                marginBottom: '1rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '0.75rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#92400e' }}>
+                  ⚖️ {lang === 'bn' ? `ব্যাগের মোট ওজন: ${totalCartWeightKg} কেজি (সীমা: ১০ কেজি)` : `Total Order Weight: ${totalCartWeightKg} kg (Cap: 10 kg)`}
+                </div>
+                <div style={{ fontSize: '0.76rem', color: '#b45309', marginTop: '3px', lineHeight: 1.35 }}>
+                  {lang === 'bn'
+                    ? 'রাইডারের মোটরবাইকে নিরাপদে বহনের সর্বোচ্চ সীমা ১০ কেজি। এই অর্ডারের জন্য দোকান থেকে ফ্রি পিকআপ (₹০) বেছে নিন।'
+                    : `Bike delivery capacity is strictly limited to ${MAX_DELIVERY_WEIGHT_KG} kg. Please switch to Free Store Pickup (₹0) for this order.`}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFulfillmentMode('pickup')}
+                style={{
+                  background: '#166534',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                🏪 {lang === 'bn' ? 'ফ্রি পিকআপ (₹০) বেছে নিন' : 'Switch to Store Pickup (₹0)'}
+              </button>
+            </div>
+          )}
+
+          {/* 🛡️ Order Rate Limit Banner */}
+          {rateLimitStatus.isExceeded && (
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1.5px solid #fca5a5',
+                borderRadius: '12px',
+                padding: '0.85rem 1rem',
+                marginBottom: '1rem',
+                color: '#991b1b',
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>
+                ⏳ {lang === 'bn' ? 'অর্ডার লিমিট সীমা পৌঁছেছে' : 'Hourly Order Limit Reached'}
+              </div>
+              <div style={{ fontSize: '0.78rem', marginTop: '3px', lineHeight: 1.4 }}>
+                {lang === 'bn'
+                  ? `নিরাপত্তা কারণে প্রতি ঘণ্টায় সর্বোচ্চ ${MAX_ORDERS_PER_HOUR}টি অর্ডার করা যাবে। আপনার আগের অর্ডার প্রস্তুত হচ্ছে — দয়া করে ~${rateLimitStatus.resetMinutes} মিনিট অপেক্ষা করুন।`
+                  : `For security and smooth packing, customers can place up to ${MAX_ORDERS_PER_HOUR} orders per hour. Please wait ~${rateLimitStatus.resetMinutes} minutes.`}
+              </div>
+            </div>
+          )}
+
           {/* 🚚 Home Delivery Distance & Address Section */}
           {fulfillmentMode === 'delivery' && (
             <>
@@ -1086,7 +1193,7 @@ export default function Checkout() {
                   value={area}
                   onChange={(e) => { setArea(e.target.value); userEditedAddress.current = true }}
                   required={fulfillmentMode === 'delivery'}
-                  placeholder={lang === 'bn' ? 'যেমন: ভবানীপুর / নন্দকুমার' : 'e.g. Bhabanipur / Nandakumar'}
+                  placeholder={lang === 'bn' ? 'গ্রাম বা শহরের নাম লিখুন' : 'Enter Town or Village'}
                 />
               </label>
 
@@ -1097,7 +1204,7 @@ export default function Checkout() {
                   value={house}
                   onChange={(e) => { setHouse(e.target.value); userEditedAddress.current = true }}
                   required={fulfillmentMode === 'delivery'}
-                  placeholder={lang === 'bn' ? 'যেমন: বিশ্বাস বাড়ি / মণ্ডল পাড়া' : 'e.g. Biswas House / Ward #4'}
+                  placeholder={lang === 'bn' ? 'বাড়ি, পাড়া বা রাস্তার বিবরণ' : 'House no., Building, Street or Area'}
                 />
               </label>
 
@@ -1112,43 +1219,9 @@ export default function Checkout() {
                 <input
                   value={landmark}
                   onChange={(e) => { setLandmark(e.target.value); userEditedAddress.current = true }}
-                  placeholder={lang === 'bn' ? 'যেমন: শিব মন্দিরের পাশে / স্কুলের বিপরীতে / মোড়' : 'e.g. Near Shiv Mandir / Opp. School / More'}
+                  placeholder={lang === 'bn' ? 'কাছের ল্যান্ডমার্ক বা মোড়ের বিবরণ' : 'Nearby landmark, school or crossing'}
                 />
               </label>
-
-              {/* Quick Landmark Helper Chips */}
-              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '0.75rem', marginTop: '-0.3rem' }}>
-                {[
-                  { en: 'Near School', bn: 'স্কুলের কাছে' },
-                  { en: 'Near Mandir', bn: 'মন্দিরের কাছে' },
-                  { en: 'Near Club', bn: 'ক্লাবের পাশে' },
-                  { en: 'Near More', bn: 'মোড়ের কাছে' },
-                  { en: 'Near Hospital', bn: 'হাসপাতালের কাছে' },
-                  { en: 'Near Bazar', bn: 'বাজারের কাছে' },
-                ].map((chip) => (
-                  <button
-                    key={chip.en}
-                    type="button"
-                    onClick={() => {
-                      const text = lang === 'bn' ? chip.bn : chip.en
-                      setLandmark((prev) => (prev ? `${prev}, ${text}` : text))
-                      userEditedAddress.current = true
-                    }}
-                    style={{
-                      background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '12px',
-                      padding: '2px 8px',
-                      fontSize: '0.72rem',
-                      color: '#334155',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                    }}
-                  >
-                    + {lang === 'bn' ? chip.bn : chip.en}
-                  </button>
-                ))}
-              </div>
 
               {/* 📮 1-Tap Serviceable PIN Code Selection */}
               <div style={{ marginBottom: '0.75rem' }}>
@@ -1249,7 +1322,7 @@ export default function Checkout() {
               required
               inputMode="numeric"
               maxLength={10}
-              placeholder={lang === 'bn' ? '১০ সংখ্যার মোবাইল (যেমন 9876543210)' : '10-digit mobile (e.g. 9876543210)'}
+              placeholder={lang === 'bn' ? '১০ সংখ্যার মোবাইল নম্বর দিন' : 'Enter 10-digit mobile number'}
             />
           </label>
           <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem', marginTop: '0.5rem' }}>
@@ -1366,7 +1439,12 @@ export default function Checkout() {
             </div>
           )}
 
-          <button type="submit" className="btn btn-primary" disabled={submitting || !isOnline} style={{ fontSize: '1.05rem', padding: '0.9rem', fontWeight: 800 }}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={submitting || !isOnline || rateLimitStatus.isExceeded || (fulfillmentMode === 'delivery' && isOverDeliveryCap)}
+            style={{ fontSize: '1.05rem', padding: '0.9rem', fontWeight: 800 }}
+          >
             {submitting
               ? (lang === 'bn' ? '⏳ অর্ডার হচ্ছে...' : '⏳ Placing order...')
               : (lang === 'bn' ? '✅ পেমেন্ট সম্পন্ন করেছি · অর্ডার জমা দিন' : '✅ I Have Paid · Place Order')}

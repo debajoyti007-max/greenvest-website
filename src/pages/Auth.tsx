@@ -333,7 +333,7 @@ export default function Auth() {
                   name="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder={lang === 'bn' ? 'আপনার নাম (যেমন: দেবজ্যোতি দাস)' : 'Your full name / username'}
+                  placeholder={lang === 'bn' ? 'আপনার সম্পূর্ণ নাম লিখুন' : 'Enter your full name'}
                   required
                   autoComplete="name"
                 />
@@ -418,8 +418,8 @@ export default function Auth() {
                 }
                 placeholder={
                   mode === 'login'
-                    ? (lang === 'bn' ? 'যেমন ১২৩৪ বা স্টাফ পাসওয়ার্ড' : 'e.g. 1234 or staff password')
-                    : (lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234')
+                    ? (lang === 'bn' ? '৪ সংখ্যার পিন বা পাসওয়ার্ড' : '4-digit PIN or password')
+                    : (lang === 'bn' ? '৪ সংখ্যার গোপন পিন' : '4-digit security PIN')
                 }
                 required
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}

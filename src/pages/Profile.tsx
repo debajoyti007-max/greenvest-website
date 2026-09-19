@@ -526,7 +526,7 @@ export default function Profile() {
                 placeholder={
                   isStaff
                     ? (lang === 'bn' ? 'কমপক্ষে ৮ অক্ষর' : 'Minimum 8 characters')
-                    : (lang === 'bn' ? 'যেমন ১২৩৪' : 'e.g. 1234')
+                    : (lang === 'bn' ? '৪ সংখ্যার পিন' : '4-digit PIN')
                 }
                 style={{
                   width: '100%',
