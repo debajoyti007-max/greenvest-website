@@ -51,18 +51,3 @@ export function requireStaffCredentials(user: User | null | undefined): StaffCre
   return creds
 }
 
-/** Customer self-service credentials (same shape as staff gateway). */
-export type CustomerCredentials = StaffCredentials
-
-export function getCustomerCredentials(user: User | null | undefined): CustomerCredentials | null {
-  return getStaffCredentials(user, false)
-}
-
-export function requireCustomerCredentials(user: User | null | undefined): CustomerCredentials {
-  const creds = getStaffCredentials(user, true)
-  if (!creds) {
-    throw new Error('Customer authentication required. Please sign in with your PIN.')
-  }
-  return creds
-}
-

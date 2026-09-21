@@ -88,6 +88,7 @@ import {
 import type { CartItem, Grade, Lang, Order, OrderStatus, Product, Address, Coupon, DailyReport, DeliveryZone, AppNotification, ProductReview, CustomerTier, ShiftInfo, PromotionalDeal, SupportMessage } from '../types'
 import { showToast } from '../lib/toast'
 import { requireStaffCredentials } from '../lib/staffAuth'
+import { initOfflineQueue, syncPendingOfflineOrders } from '../lib/offlineQueue'
 import { useAuth } from './useAuth'
 
 interface PlaceOrderOpts {
@@ -811,6 +812,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [user, cloud, products, priceFor, refreshCloud, orders, lang],
   )
+
+  // ── Offline Order Queue Reconnection Engine ──────────────────────────────
+  // Automatically replays and syncs any orders queued while offline as soon
+  // as browser connectivity returns.
+  useEffect(() => {
+    const cleanup = initOfflineQueue(async (payload) => {
+      await placeOrder(payload)
+    })
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      void syncPendingOfflineOrders(async (payload) => {
+        await placeOrder(payload)
+      }, lang)
+    }
+    return cleanup
+  }, [placeOrder, lang])
 
   const reorderFromOrder = useCallback(
     (order: Order) => {

@@ -1048,26 +1048,6 @@ export function subscribeCustomerOrders(
   }
 }
 
-// ── Per-order message subscription (DB-level guarantee) ──────────────────────
-// Listens to postgres_changes on order_messages filtered to a specific orderId.
-// This is a reliable DB-level fallback — if the recipient was offline when the
-// broadcast fired, they still get the message when they open the chat.
-export function subscribeOrderMessages(orderId: string, onChange: () => void) {
-  if (!isSupabaseConfigured || !supabase || !orderId) return () => {}
-  const client = supabase
-  const channel = client
-    .channel(`order-msg-db-${orderId}`)
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'order_messages', filter: `order_id=eq.${orderId}` },
-      () => onChange(),
-    )
-    .subscribe()
-  return () => {
-    void client.removeChannel(channel)
-  }
-}
-
 // ── Single order subscription for live tracking (free-tier optimized) ────────
 // Used on TrackOrder.tsx when viewing a specific order. Subscribes only while on page.
 // Passes the updated row directly so the caller can patch state in-memory

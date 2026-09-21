@@ -2431,5 +2431,25 @@ describe('Suite 42: Complete UTR Purge Verification Across Frontend & Database',
     assert.ok(sql.includes('ALTER TABLE public.orders ALTER COLUMN utr DROP NOT NULL'), 'Must drop NOT NULL')
     assert.ok(sql.includes("ALTER TABLE public.orders ALTER COLUMN utr SET DEFAULT 'ONLINE'"), 'Must set default ONLINE')
   })
+
+  test('validation.ts has zero dead UTR validators or banned UTR patterns', () => {
+    const filePath = path.resolve(__dirname, '../src/lib/validation.ts')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.equal(/validateUtrStrict|validatePayerNameOrUtr|BANNED_UTR_PATTERNS/i.test(content), false, 'validation.ts must not contain dead UTR functions')
+  })
+
+  test('StoreContext.tsx mounts initOfflineQueue for automatic reconnect recovery', () => {
+    const filePath = path.resolve(__dirname, '../src/context/StoreContext.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.includes('initOfflineQueue'), 'Must mount initOfflineQueue')
+    assert.ok(content.includes('syncPendingOfflineOrders'), 'Must invoke syncPendingOfflineOrders')
+  })
+
+  test('Database migration exists to drop obsolete create_order_with_items RPC', () => {
+    const migrationPath = path.resolve(__dirname, '../supabase/migrations/20260921172000_drop_obsolete_create_order_with_items.sql')
+    assert.ok(fs.existsSync(migrationPath), 'Migration 20260921172000 must exist')
+    const sql = fs.readFileSync(migrationPath, 'utf8')
+    assert.ok(sql.includes('DROP FUNCTION IF EXISTS public.create_order_with_items(jsonb)'), 'Must drop create_order_with_items')
+  })
 })
 
