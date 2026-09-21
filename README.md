@@ -16,7 +16,7 @@ Users authenticate with a **10-digit Mobile Number** or **Email** + **4-digit PI
 | :--- | :--- | :--- |
 | **Customer** | Sign up on website | Browse catalog, weekly staples basket, live order tracking, membership tiers |
 | **Rider** | Assigned by Admin | **/rider** — Delivery manifest, route optimizer, 4-digit OTP handover, UPI balance collection |
-| **Seller** | Assigned by Admin | **/seller** — Mandi procurement, inventory, Grade A/B/C pricing, UTR verification, deals |
+| **Seller** | Assigned by Admin | **/seller** — Mandi procurement, inventory, Grade A/B/C pricing, 1-tap order management, deals |
 | **Admin** | Supabase SQL / Master | **/admin** — User roles, customer blocklist, shadow cloaking, system telemetry cleaner |
 
 ### Make Yourself Admin (First Time)

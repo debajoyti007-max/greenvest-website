@@ -79,8 +79,8 @@ type OrderRow = {
   payment_mode?: string | null
   rejection_reason?: string | null
   assigned_rider_id?: string | null
-  utr: string
-  utr_verified: boolean
+  utr?: string | null
+  utr_verified?: boolean | null
   status: OrderStatus
   address: string
   phone: string
@@ -237,9 +237,9 @@ function mapOrder(row: OrderRow): Order {
     paymentType: (row.payment_type as 'full' | 'advance') || 'advance',
     paymentMode: (row.payment_mode as 'online' | undefined) || undefined,
     rejectionReason: row.rejection_reason || undefined,
-    utr: row.utr,
+    utr: row.utr || undefined,
     payerUpiName: (row as any).payer_upi_name || undefined,
-    utrVerified: row.utr_verified,
+    utrVerified: row.utr_verified ?? undefined,
     status: row.status,
     address: row.address,
     phone: row.phone,
@@ -683,21 +683,6 @@ export async function cancelOwnOrderApi(
   if (!result?.ok) throw new Error(result?.error || 'Failed to cancel order')
 }
 
-export async function updateOrderUtrApi(orderId: string, utr: string): Promise<boolean> {
-  const client = requireClient()
-
-  const cleanedUtr = (utr || '').trim().toUpperCase()
-  const { error } = await client
-    .from('orders')
-    .update({ utr: cleanedUtr, updated_at: new Date().toISOString() })
-    .eq('id', orderId)
-    .eq('utr_verified', false)
-
-  if (error) {
-    throw error
-  }
-  return true
-}
 
 async function withTimeout<T>(promiseLike: PromiseLike<T>, ms: number, errorMsg = 'Request timed out'): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -731,7 +716,7 @@ export async function createOrder(order: Order): Promise<Order> {
     p_phone: order.phone,
     p_pin: order.pin,
     p_delivery_slot: order.deliverySlot || 'morning',
-    p_utr: order.utr,
+    p_utr: order.utr || 'ONLINE',
     p_delivery_fee: order.deliveryFee,
     p_discount: order.discountAmount || 0,
     p_payment_type: order.paymentType || 'advance',
@@ -811,8 +796,8 @@ export async function createOrder(order: Order): Promise<Order> {
     payment_type: order.paymentType || 'advance',
     payment_mode: order.paymentMode || 'online',
     rejection_reason: order.rejectionReason || null,
-    utr: order.utr,
-    utr_verified: order.utrVerified,
+    utr: order.utr || 'ONLINE',
+    utr_verified: false,
     status: order.status,
     address: order.address,
     phone: order.phone,
@@ -842,8 +827,8 @@ export async function createOrder(order: Order): Promise<Order> {
       delivery_fee: order.deliveryFee,
       total: order.total,
       advance_amount: order.advanceAmount,
-      utr: order.utr,
-      utr_verified: order.utrVerified,
+      utr: order.utr || 'ONLINE',
+      utr_verified: false,
       status: order.status,
       address: order.address,
       phone: order.phone,
@@ -964,29 +949,16 @@ export async function updateOrderDeliveryDateApi(
   if (result?.success === false) throw new Error('Failed to update delivery date')
 }
 
-export async function checkDuplicateUtrApi(utr: string): Promise<boolean> {
-  if (!isSupabaseConfigured || !supabase) return false
-  const clean = utr.trim().toUpperCase()
-  if (clean.length < 6) return false
-  const { data } = await supabase
-    .from('orders')
-    .select('id')
-    .eq('utr', clean)
-    .neq('status', 'cancelled')
-    .limit(1)
-  return Boolean(data && data.length > 0)
-}
-
-export async function findRecentOrderByUtrApi(userId: string, utr: string): Promise<Order | null> {
+export async function findRecentOrderForUserApi(userId: string): Promise<Order | null> {
   if (!isSupabaseConfigured || !supabase) return null
-  const clean = utr.trim().toUpperCase()
-  if (!clean) return null
+  if (!userId) return null
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
   try {
     const { data, error } = await supabase
       .from('orders')
       .select('*, order_items(*)')
       .eq('user_id', userId)
-      .eq('utr', clean)
+      .gte('created_at', tenMinutesAgo)
       .neq('status', 'cancelled')
       .order('created_at', { ascending: false })
       .limit(1)
@@ -994,13 +966,10 @@ export async function findRecentOrderByUtrApi(userId: string, utr: string): Prom
       return mapOrder(data[0] as OrderRow)
     }
   } catch (e) {
-    console.warn('findRecentOrderByUtrApi fallback check error:', e)
+    console.warn('findRecentOrderForUserApi fallback check error:', e)
   }
   return null
 }
-
-// verifyUtrApi removed — UTR verification feature was removed.
-// Sellers now use 1-tap Accept Order only (no UTR entry required).
 
 export async function deleteOrderApi(id: string, staff: StaffCredentials): Promise<void> {
   const client = requireClient()

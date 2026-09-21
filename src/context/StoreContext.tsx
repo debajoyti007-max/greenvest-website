@@ -11,8 +11,7 @@ import {
 import {
   bulkUpdateOrderStatusApi,
   cancelOwnOrderApi,
-  checkDuplicateUtrApi,
-  findRecentOrderByUtrApi,
+  findRecentOrderForUserApi,
   createOrder,
   deleteProductApi,
   fetchOrders,
@@ -28,7 +27,6 @@ import {
   deleteOrderApi,
   upsertProduct,
   bulkUpsertProducts,
-  updateOrderUtrApi,
   fetchAddresses as fetchAddressesApi,
   saveAddress as saveAddressApi,
   deleteAddress as deleteAddressApi,
@@ -96,7 +94,6 @@ interface PlaceOrderOpts {
   address: string
   phone: string
   pin: string
-  utr: string
   payerUpiName?: string
   deliverySlot: import('../types').DeliverySlot
   deliveryDate?: string
@@ -137,10 +134,7 @@ interface StoreContextValue {
   updateOrderStatus: (id: string, status: OrderStatus, rejectionReason?: string) => Promise<void>
   updateOrderDeliveryDate: (id: string, deliveryDate: string) => Promise<void>
   bulkUpdateOrderStatus: (ids: string[], status: OrderStatus) => Promise<void>
-  checkDuplicateUtr: (utr: string) => Promise<boolean>
-  findRecentOrderByUtr: (utr: string) => Promise<Order | null>
-  updateOrderUtr: (orderId: string, utr: string) => Promise<void>
-  verifyUtr: (id: string, verified: boolean) => Promise<void>
+  findRecentOrder: () => Promise<Order | null>
   deleteOrder: (id: string) => Promise<void>
   refresh: () => Promise<void>
   refreshOrdersOnly: () => Promise<void>
@@ -766,9 +760,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         total,
         advanceAmount,
         paymentType: opts.paymentType || (isFull ? 'full' : 'advance'),
-        utr: opts.utr.trim().toUpperCase(),
         payerUpiName: opts.payerUpiName?.trim() || undefined,
-        utrVerified: false,
         status: 'pending',
         address: opts.address.trim(),
         phone: opts.phone.trim(),
@@ -1005,27 +997,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setProducts(next)
   }, [cloud, refreshCloud, user])
 
-  const checkDuplicateUtr = useCallback(
-    async (utr: string): Promise<boolean> => {
-      const clean = utr.trim().toUpperCase()
-      if (clean.length < 6) return false
-      // In cloud mode: only check Supabase (ignore stale local orders)
-      if (cloud) return checkDuplicateUtrApi(clean)
-      // Local mode only: check local storage
-      const existing = getOrders()
-      return existing.some((o) => o.utr.toUpperCase() === clean && o.status !== 'cancelled')
-    },
-    [cloud],
-  )
-
-  const findRecentOrderByUtr = useCallback(
-    async (utr: string): Promise<Order | null> => {
-      const clean = utr.trim().toUpperCase()
-      if (!clean || !user) return null
-      if (cloud) return findRecentOrderByUtrApi(user.id, clean)
+  const findRecentOrder = useCallback(
+    async (): Promise<Order | null> => {
+      if (!user) return null
+      if (cloud) return findRecentOrderForUserApi(user.id)
       const existing = getOrders()
       const found = existing.find(
-        (o) => o.userId === user.id && o.utr.toUpperCase() === clean && o.status !== 'cancelled',
+        (o) => o.userId === user.id && o.status !== 'cancelled',
       )
       return found || null
     },
@@ -1367,43 +1345,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [cloud, user],
   )
 
-  // verifyUtr: UTR verification was removed from the product.
-  // Kept as a stub so any lingering references don't crash.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const verifyUtr = useCallback(async (_id: string, _verified: boolean) => {
-    // no-op: UTR verify feature removed. Sellers use 1-tap Accept Order.
-  }, [])
-
-  const updateOrderUtr = useCallback(
-    async (orderId: string, newUtr: string) => {
-      const prevOrders = [...orders]
-      const cleaned = (newUtr || '').trim().toUpperCase()
-      if (!cleaned) throw new Error('Invalid UTR')
-
-      // Optimistic update
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, utr: cleaned, updatedAt: new Date().toISOString() } : o)),
-      )
-
-      try {
-        if (cloud) {
-          await updateOrderUtrApi(orderId, cleaned)
-        } else {
-          const current = getOrders()
-          saveOrders(
-            current.map((o) => (o.id === orderId ? { ...o, utr: cleaned, updatedAt: new Date().toISOString() } : o)),
-          )
-        }
-        showToast('✓ UTR successfully updated!', '✅')
-      } catch (err: any) {
-        setOrders(prevOrders)
-        showToast(`Failed to update UTR: ${err.message || 'Error'}`, 'error')
-        throw err
-      }
-    },
-    [cloud, orders],
-  )
-
   const deleteOrder = useCallback(
     async (id: string) => {
       let prevSnapshot: Order[] = []
@@ -1579,10 +1520,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateOrderStatus,
       updateOrderDeliveryDate,
       bulkUpdateOrderStatus,
-      checkDuplicateUtr,
-      findRecentOrderByUtr,
-      updateOrderUtr,
-      verifyUtr,
+      findRecentOrder,
       deleteOrder,
       refresh,
       refreshOrdersOnly,
@@ -1650,10 +1588,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateOrderStatus,
       updateOrderDeliveryDate,
       bulkUpdateOrderStatus,
-      checkDuplicateUtr,
-      findRecentOrderByUtr,
-      updateOrderUtr,
-      verifyUtr,
+      findRecentOrder,
       deleteOrder,
       refresh,
       refreshOrdersOnly,

@@ -36,7 +36,7 @@ export default function Checkout() {
     placeOrder,
     orders,
     promotionalDeals,
-    findRecentOrderByUtr,
+    findRecentOrder,
     fetchAddresses,
     saveAddress,
     validateCoupon,
@@ -480,7 +480,6 @@ export default function Checkout() {
 
     // 2. UPI Payer Name Handling
     const finalPayerName = payerUpiName.trim() || user?.name || ''
-    const cleanedUtr = 'ONLINE-PAY'
 
     if (cartTotal < MIN_ORDER_AMOUNT) {
       setError(
@@ -527,7 +526,6 @@ export default function Checkout() {
           address: fullAddress,
           phone: phoneVal.cleanedValue,
           pin: isPickup ? STORE_LOCATION.pin : pin.trim(),
-          utr: cleanedUtr,
           payerUpiName: finalPayerName,
           deliverySlot: 'morning',
           deliveryDate: effectiveDeliveryDate === 'standard' ? undefined : effectiveDeliveryDate,
@@ -569,7 +567,7 @@ export default function Checkout() {
         navigate(`/orders/success/${order.id}`, { state: { order } })
       } else {
         // Fallback recovery check: did Supabase insert it despite network lag?
-        const recovered = await findRecentOrderByUtr(cleanedUtr)
+        const recovered = await findRecentOrder()
         if (recovered) {
           navigate(`/orders/success/${recovered.id}`, { state: { order: recovered } })
         } else {
@@ -584,7 +582,7 @@ export default function Checkout() {
       clearTimeout(slowTimer)
       // Check if order succeeded despite client-side network drop
       try {
-        const recovered = await findRecentOrderByUtr(cleanedUtr)
+        const recovered = await findRecentOrder()
         if (recovered) {
           clearCartIdempotencyKey(user.id)
           navigate(`/orders/success/${recovered.id}`, { state: { order: recovered } })
@@ -614,7 +612,6 @@ export default function Checkout() {
           address: fullAddress,
           phone: phoneVal.cleanedValue,
           pin: isPickup ? STORE_LOCATION.pin : pin.trim(),
-          utr: cleanedUtr,
           deliverySlot: 'morning',
           deliveryDate: effectiveDeliveryDate === 'standard' ? undefined : effectiveDeliveryDate,
           discountAmount: couponApplied?.discount || 0,

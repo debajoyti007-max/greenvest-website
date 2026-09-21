@@ -147,7 +147,7 @@ function exportOrdersToCSV(ordersToExport: Order[], lang: 'bn' | 'en') {
     'Total Amount (INR)',
     'Advance Paid (INR)',
     'Balance Due (INR)',
-    'UTR / Ref',
+    'Payment Mode',
     'Status',
     'Items Summary'
   ]
@@ -170,7 +170,7 @@ function exportOrdersToCSV(ordersToExport: Order[], lang: 'bn' | 'en') {
       o.total,
       o.advanceAmount || 0,
       balance,
-      `"${o.utr || ''}"`,
+      `"${o.paymentType || 'advance'}"`,
       `"${o.status}"`,
       `"${itemsSummary.replace(/"/g, '""')}"`
     ].join(',')
@@ -380,8 +380,7 @@ export default function SellerOrders() {
         o.phone.toLowerCase().includes(q) ||
         o.userName.toLowerCase().includes(q) ||
         o.address.toLowerCase().includes(q) ||
-        o.pin.toLowerCase().includes(q) ||
-        (o.utr && o.utr.toLowerCase().includes(q))
+        o.pin.toLowerCase().includes(q)
       )
     }
 
@@ -616,7 +615,7 @@ export default function SellerOrders() {
         >
           <div>
             <strong style={{ color: '#92400e', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              ⏱️ {orders.filter(o => isOrderStalePending(o, 2)).length}টি অর্ডার ২ ঘণ্টার বেশি সময় ধরে পেমেন্ট যাচাইহীন (Unverified Pending)
+              ⏱️ {orders.filter(o => isOrderStalePending(o, 2)).length} {lang === 'bn' ? 'টি অর্ডার ২ ঘণ্টার বেশি সময় ধরে পেন্ডিং রয়েছে (Stale Pending)' : 'orders pending for over 2 hours (Stale Pending)'}
             </strong>
             <span style={{ fontSize: '0.75rem', color: '#78350f', display: 'block', marginTop: '2px' }}>
               {lang === 'bn'

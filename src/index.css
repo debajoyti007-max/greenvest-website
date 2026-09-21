@@ -1773,14 +1773,6 @@ a.contact-card-value:hover { text-decoration: underline; }
   font-weight: 700;
 }
 
-.seller-order .utr-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-  font-size: 0.9rem;
-}
-
 .status-select {
   display: flex;
   flex-direction: column;
@@ -2672,83 +2664,6 @@ button.linkish {
   margin-left: 0.75rem;
 }
 
-/* ── UTR Screenshot Scanner Component ────────────── */
-.utr-scanner-box {
-  margin-top: 0.85rem;
-}
-
-.utr-scanner-dropzone {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.85rem 1rem;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1.5px dashed rgba(255, 255, 255, 0.3);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.utr-scanner-dropzone:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: #86efac;
-}
-
-.scanner-icon {
-  font-size: 1.8rem;
-}
-
-.scanner-label {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
-}
-
-.scanner-label strong {
-  font-size: 0.9rem;
-  color: #fff;
-}
-
-.scanner-label span {
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-.scanner-result-card {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  margin-top: 0.65rem;
-  padding: 0.65rem;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 10px;
-}
-
-.scanner-preview-thumb {
-  width: 50px;
-  height: 50px;
-  object-fit: cover;
-  border-radius: 8px;
-}
-
-.scanner-success-text {
-  font-size: 0.82rem;
-  color: #86efac;
-  font-weight: 600;
-}
-
-.candidate-chip {
-  background: #16a34a;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-  margin-right: 0.35rem;
-  margin-top: 0.25rem;
-}
 
 /* ── Rider Delivery Route View ─────────────────────── */
 .rider-page {

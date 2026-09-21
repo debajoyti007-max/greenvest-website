@@ -135,52 +135,35 @@ describe('Coupon Validation & Dual Schema Interoperability', () => {
   })
 })
 
-// 4. UTR Validation & Duplicate Checks
-describe('UTR Sanitization & Validation', () => {
-  function sanitizeUTR(raw) {
-    const clean = String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
-    const isValid = clean.length >= 10 && clean.length <= 22
-    return { clean, isValid }
-  }
-
-  test('Sanitizes and validates normal 12-digit UPI UTR', () => {
-    const res = sanitizeUTR(' 412345678901 ')
-    assert.equal(res.clean, '412345678901')
-    assert.equal(res.isValid, true)
-  })
-
-  test('Rejects too short UTR (< 10 chars)', () => {
-    const res = sanitizeUTR('12345')
-    assert.equal(res.isValid, false)
-  })
-
-  test('Rejects duplicate UTR when already exists on active order', () => {
-    const existingOrders = [
-      { id: 'ord-1', utr: '412345678901', status: 'confirmed' },
-      { id: 'ord-2', utr: '598765432109', status: 'cancelled' },
-    ]
-
-    function isDuplicate(utr, currentOrderId = null) {
-      return existingOrders.some(
-        (o) => o.utr === utr && o.id !== currentOrderId && o.status !== 'cancelled'
-      )
-    }
-
-    assert.equal(isDuplicate('412345678901'), true) // Confirmed order -> duplicate!
-    assert.equal(isDuplicate('598765432109'), false) // Cancelled order -> allowed!
-    assert.equal(isDuplicate('999999999999'), false) // New UTR -> allowed!
-  })
-
-  test('Permits friendly 1-tap checkout with Payer Name and PENDING-VERIFY placeholder', () => {
+// 4. Zero-Friction 1-Tap UPI Order Placement (No UTR Required)
+describe('Zero-Friction 1-Tap UPI Order Placement', () => {
+  test('Creates order seamlessly without requiring customer UTR input', () => {
     const order = {
+      id: 'ord-test-1',
+      userId: 'usr-123',
       payerUpiName: 'Sourav Ghosh',
-      utr: 'PENDING-VERIFY',
       total: 350,
+      advanceAmount: 35,
       paymentType: 'advance',
+      status: 'pending',
     }
 
-    assert.equal(order.utr, 'PENDING-VERIFY')
+    assert.equal(order.status, 'pending')
     assert.equal(order.payerUpiName, 'Sourav Ghosh')
+    assert.equal(order.advanceAmount, 35)
+    assert.equal(order.utr, undefined)
+  })
+
+  test('Defaults database storage UTR to ONLINE when unspecified', () => {
+    function prepareOrderForDb(order) {
+      return {
+        ...order,
+        utr: order.utr || 'ONLINE',
+      }
+    }
+
+    const res = prepareOrderForDb({ id: 'ord-2', total: 400 })
+    assert.equal(res.utr, 'ONLINE')
   })
 })
 
@@ -298,19 +281,19 @@ describe('Customer Privacy & Order Isolation', () => {
 // 8. Rider Delivery Gating
 describe('Rider Delivery Gating Requirements', () => {
   function canRiderDeliver(order) {
-    return Boolean(order.utrVerified || order.status === 'confirmed' || order.status === 'advance_paid')
+    return Boolean(order.status === 'confirmed' || order.status === 'advance_paid')
   }
 
-  test('Allows delivery when payment is verified (utrVerified: true)', () => {
-    assert.equal(canRiderDeliver({ status: 'pending', utrVerified: true }), true)
-  })
-
   test('Allows delivery when seller confirmed order (status: confirmed)', () => {
-    assert.equal(canRiderDeliver({ status: 'confirmed', utrVerified: false }), true)
+    assert.equal(canRiderDeliver({ status: 'confirmed' }), true)
   })
 
-  test('Prevents rider from marking delivered when order is unverified pending', () => {
-    assert.equal(canRiderDeliver({ status: 'pending', utrVerified: false }), false)
+  test('Allows delivery when advance is paid (status: advance_paid)', () => {
+    assert.equal(canRiderDeliver({ status: 'advance_paid' }), true)
+  })
+
+  test('Prevents rider from marking delivered when order is still pending', () => {
+    assert.equal(canRiderDeliver({ status: 'pending' }), false)
   })
 })
 
@@ -432,8 +415,8 @@ describe('High-Volume Scalability & Quota Protection', () => {
   })
 })
 
-// 12. Guest Order Tracking, UTR Edit, and Daily Manifest
-describe('Guest Tracking, UTR Edit & Manifest Logic', () => {
+// 12. Guest Order Tracking, Cancellation Window, and Daily Manifest
+describe('Guest Tracking, Order Cancellation Window & Manifest Logic', () => {
   test('Public order query normalizes search inputs correctly', () => {
     function cleanTrackingQuery(raw) {
       return (raw || '').trim().toLowerCase().replace(/^#/, '')
@@ -444,23 +427,20 @@ describe('Guest Tracking, UTR Edit & Manifest Logic', () => {
     assert.equal(cleanTrackingQuery('#849201'), '849201')
   })
 
-  test('UTR edit is only allowed for unverified pending orders within 30 minutes', () => {
-    function canEditUtr(order) {
+  test('Customer cancellation is only allowed for pending orders within 30 minutes', () => {
+    function canCancelPendingOrder(order) {
       if (order.status !== 'pending') return false
-      if (order.utrVerified) return false
       const elapsed = Date.now() - new Date(order.createdAt).getTime()
       return elapsed < 30 * 60 * 1000
     }
 
-    const recentPending = { status: 'pending', utrVerified: false, createdAt: new Date().toISOString() }
-    const verifiedPending = { status: 'pending', utrVerified: true, createdAt: new Date().toISOString() }
-    const confirmedOrder = { status: 'confirmed', utrVerified: true, createdAt: new Date().toISOString() }
-    const oldPending = { status: 'pending', utrVerified: false, createdAt: new Date(Date.now() - 40 * 60 * 1000).toISOString() }
+    const recentPending = { status: 'pending', createdAt: new Date().toISOString() }
+    const confirmedOrder = { status: 'confirmed', createdAt: new Date().toISOString() }
+    const oldPending = { status: 'pending', createdAt: new Date(Date.now() - 40 * 60 * 1000).toISOString() }
 
-    assert.equal(canEditUtr(recentPending), true)
-    assert.equal(canEditUtr(verifiedPending), false)
-    assert.equal(canEditUtr(confirmedOrder), false)
-    assert.equal(canEditUtr(oldPending), false)
+    assert.equal(canCancelPendingOrder(recentPending), true)
+    assert.equal(canCancelPendingOrder(confirmedOrder), false)
+    assert.equal(canCancelPendingOrder(oldPending), false)
   })
 
   test('Rider daily manifest calculates correct total balance to collect', () => {
@@ -848,25 +828,23 @@ describe('Auto Smart Remove Engine', () => {
 
   // Feature 4: Stale Pending Orders Auto-Cancel
   const isOrderStalePending = (order, timeoutHours = 2) => {
-    if (order.status !== 'pending' || order.utrVerified) return false
+    if (order.status !== 'pending') return false
     const created = new Date(order.createdAt).getTime()
     if (isNaN(created)) return false
     const ageHours = (Date.now() - created) / (1000 * 60 * 60)
     return ageHours >= timeoutHours
   }
 
-  test('Correctly identifies unpaid orders older than 2 hours as stale pending', () => {
+  test('Correctly identifies unconfirmed orders older than 2 hours as stale pending', () => {
     const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
     const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
 
-    const staleOrder = { id: 'ord-stale', status: 'pending', utrVerified: false, createdAt: threeHoursAgo }
-    const freshPendingOrder = { id: 'ord-fresh', status: 'pending', utrVerified: false, createdAt: thirtyMinsAgo }
-    const verifiedOrder = { id: 'ord-verified', status: 'pending', utrVerified: true, createdAt: threeHoursAgo }
-    const confirmedOrder = { id: 'ord-conf', status: 'confirmed', utrVerified: false, createdAt: threeHoursAgo }
+    const staleOrder = { id: 'ord-stale', status: 'pending', createdAt: threeHoursAgo }
+    const freshPendingOrder = { id: 'ord-fresh', status: 'pending', createdAt: thirtyMinsAgo }
+    const confirmedOrder = { id: 'ord-conf', status: 'confirmed', createdAt: threeHoursAgo }
 
-    assert.equal(isOrderStalePending(staleOrder, 2), true, 'Order > 2 hours unverified pending must be stale')
+    assert.equal(isOrderStalePending(staleOrder, 2), true, 'Order > 2 hours pending must be stale')
     assert.equal(isOrderStalePending(freshPendingOrder, 2), false, 'Recent order must not be stale')
-    assert.equal(isOrderStalePending(verifiedOrder, 2), false, 'Verified UTR order must not be stale')
     assert.equal(isOrderStalePending(confirmedOrder, 2), false, 'Confirmed order must not be stale')
   })
 })
@@ -2417,6 +2395,41 @@ describe('Suite 41: Senior Dev Audit - Cart Wipeout Guard, Canonical Domains & R
     assert.ok(content.includes('PIN: **`721632`**'), 'Must document PIN 721632')
     assert.ok(content.includes('22.1746825'), 'Must document verified latitude')
     assert.ok(content.includes('87.9106158'), 'Must document verified longitude')
+  })
+})
+
+// 42. Complete UTR Purge Verification
+describe('Suite 42: Complete UTR Purge Verification Across Frontend & Database', () => {
+  test('Checkout.tsx has zero UTR references in UI, inputs, or recovery flow', () => {
+    const filePath = path.resolve(__dirname, '../src/pages/Checkout.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.equal(/\butr\b/i.test(content), false, 'Checkout.tsx must have zero UTR occurrences')
+  })
+
+  test('StoreContext.tsx has zero UTR callbacks or placeOrder requirements', () => {
+    const filePath = path.resolve(__dirname, '../src/context/StoreContext.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.equal(/\butr\b/i.test(content), false, 'StoreContext.tsx must have zero UTR occurrences')
+  })
+
+  test('SellerOrders.tsx has zero UTR CSV headers or filters', () => {
+    const filePath = path.resolve(__dirname, '../src/pages/seller/SellerOrders.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.equal(/\butr\b/i.test(content), false, 'SellerOrders.tsx must have zero UTR occurrences')
+  })
+
+  test('index.css has zero dead UTR scanner or row classes', () => {
+    const filePath = path.resolve(__dirname, '../src/index.css')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.equal(/utr-scanner|utr-row/i.test(content), false, 'index.css must have zero UTR styles')
+  })
+
+  test('Database migration exists to relax orders.utr column to DEFAULT ONLINE', () => {
+    const migrationPath = path.resolve(__dirname, '../supabase/migrations/20260921154500_relax_utr_columns.sql')
+    assert.ok(fs.existsSync(migrationPath), 'Migration 20260921154500 must exist')
+    const sql = fs.readFileSync(migrationPath, 'utf8')
+    assert.ok(sql.includes('ALTER TABLE public.orders ALTER COLUMN utr DROP NOT NULL'), 'Must drop NOT NULL')
+    assert.ok(sql.includes("ALTER TABLE public.orders ALTER COLUMN utr SET DEFAULT 'ONLINE'"), 'Must set default ONLINE')
   })
 })
 

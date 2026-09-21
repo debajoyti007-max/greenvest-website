@@ -317,12 +317,12 @@ export function formatOrderId(id: string): string {
 
 export const STALE_PENDING_ORDER_TIMEOUT_HOURS = 2
 
-/** Checks if an unverified pending order is older than timeout hours */
+/** Checks if a pending order is older than timeout hours without confirmation */
 export function isOrderStalePending(
-  order: { createdAt: string; status: string; utrVerified?: boolean },
+  order: { createdAt: string; status: string },
   timeoutHours = STALE_PENDING_ORDER_TIMEOUT_HOURS,
 ): boolean {
-  if (order.status !== 'pending' || order.utrVerified) return false
+  if (order.status !== 'pending') return false
   const created = new Date(order.createdAt).getTime()
   if (isNaN(created)) return false
   const ageHours = (Date.now() - created) / (1000 * 60 * 60)

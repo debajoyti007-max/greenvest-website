@@ -81,9 +81,9 @@ export interface Order {
   advanceAmount: number
   paymentType?: 'full' | 'advance'
   paymentMode?: 'online'
-  utr: string
+  utr?: string
   payerUpiName?: string
-  utrVerified: boolean
+  utrVerified?: boolean
   status: OrderStatus
   address: string
   phone: string
