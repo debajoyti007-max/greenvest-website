@@ -75,8 +75,8 @@ export default function CouponGeneratorModal({ onClose }: CouponGeneratorModalPr
         // Format share message
         const shareMsg =
           lang === 'bn'
-            ? `🎉 MS Vegetable Center বিশেষ অফার!\n\n🎟️ কুপন কোড: *${finalCode}*\n💸 ছাড়: *${discountLabel}*\n🛒 মিনিমাম অর্ডার: ₹${minOrder}\n⏳ ${expiryText}\n\n👉 অর্ডার করুন: https://greenvest-website.vercel.app`
-            : `🎉 MS Vegetable Center Special Discount Offer!\n\n🎟️ Coupon Code: *${finalCode}*\n💸 Discount: *${discountLabel}*\n🛒 Min Order: ₹${minOrder}\n⏳ ${expiryText}\n\n👉 Shop now: https://greenvest-website.vercel.app`
+            ? `🎉 MS Vegetable Center বিশেষ অফার!\n\n🎟️ কুপন কোড: *${finalCode}*\n💸 ছাড়: *${discountLabel}*\n🛒 মিনিমাম অর্ডার: ₹${minOrder}\n⏳ ${expiryText}\n\n👉 অর্ডার করুন: https://greenvest.shop`
+            : `🎉 MS Vegetable Center Special Discount Offer!\n\n🎟️ Coupon Code: *${finalCode}*\n💸 Discount: *${discountLabel}*\n🛒 Min Order: ₹${minOrder}\n⏳ ${expiryText}\n\n👉 Shop now: https://greenvest.shop`
 
         if (broadcast) {
           try {

@@ -41,6 +41,8 @@ type ProductRow = {
   image_url: string | null
   sold_as?: string | null
   gram_options?: number[] | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 type PromotionalDealRow = {
@@ -275,13 +277,6 @@ export function mapProfile(row: ProfileRow): User {
   }
 }
 
-export async function fetchProfile(userId: string): Promise<User | null> {
-  const client = requireClient()
-  const { data, error } = await client.from('profiles').select('*').eq('id', userId).maybeSingle()
-  if (error) throw error
-  return data ? mapProfile(data as ProfileRow) : null
-}
-
 export async function fetchProfiles(callerId: string, callerPin: string): Promise<User[]> {
   const client = requireClient()
   const { data: rpcData, error: rpcErr } = await client.rpc('get_staff_customers', {
@@ -291,14 +286,6 @@ export async function fetchProfiles(callerId: string, callerPin: string): Promis
   if (rpcErr) throw new Error(rpcErr.message || 'Failed to load customer list')
   if (!rpcData || !Array.isArray(rpcData)) return []
   return (rpcData as ProfileRow[]).map(mapProfile)
-}
-
-export async function checkAccountExistsByEmail(email: string): Promise<boolean> {
-  const client = requireClient()
-  const { data, error } = await client.rpc('check_account_exists', { p_identifier: email.trim() })
-  if (error) return false
-  const row = data as { exists?: boolean } | null
-  return Boolean(row?.exists)
 }
 
 export async function updateProfileRole(
@@ -649,35 +636,6 @@ export async function fetchOrders(
 }
 
 /**
- * @deprecated Use fetchOrderByIdAndPhone instead.
- * This function is kept only for internal admin/seller staff queries
- * that already have verified authentication context.
- * DO NOT call from public-facing pages.
- */
-async function fetchOrderByPublicQueryInternal(rawQuery: string): Promise<Order | null> {
-  if (!supabase) return null
-
-  const cleaned = (rawQuery || '').trim().toLowerCase().replace(/^#/, '')
-  const digitsOnly = cleaned.replace(/\D/g, '')
-  if (!cleaned) return null
-
-  try {
-    const query = supabase.from('orders').select('*, order_items(*)')
-    const filters: string[] = [`id.eq.${cleaned}`, `id.ilike.%${cleaned}`]
-    if (digitsOnly.length >= 10) {
-      filters.push(`phone.eq.${digitsOnly.slice(-10)}`)
-    }
-    const { data, error } = await query.or(filters.join(',')).limit(1).maybeSingle()
-    if (!error && data) {
-      return mapOrder(data as OrderRow)
-    }
-  } catch (err) {
-    console.debug('fetchOrderByPublicQueryInternal error:', err)
-  }
-  return null
-}
-
-/**
  * Secure dual-factor order lookup for the public /track page.
  * Requires BOTH the Order ID AND the customer's 10-digit phone number.
  * This prevents strangers from looking up other people's orders by guessing IDs.
@@ -724,9 +682,6 @@ export async function cancelOwnOrderApi(
   const result = data as { ok?: boolean; error?: string } | null
   if (!result?.ok) throw new Error(result?.error || 'Failed to cancel order')
 }
-
-// Re-export internal function for admin/seller staff code that uses the old name
-export { fetchOrderByPublicQueryInternal as fetchOrderByPublicQuery }
 
 export async function updateOrderUtrApi(orderId: string, utr: string): Promise<boolean> {
   const client = requireClient()

@@ -2366,3 +2366,57 @@ describe('Suite 39: Sub-5ms Query Indexing & Free-Tier Database Optimization', (
     assert.ok(sql.includes('is_read = true'), 'Only purged read notifications')
   })
 })
+
+describe('Suite 40: Products updated_at Column & Schema Migration', () => {
+  test('Migration file exists for adding updated_at column to products', () => {
+    const migrationPath = path.resolve(__dirname, '../supabase/migrations/20260920190558_add_products_updated_at.sql')
+    assert.ok(fs.existsSync(migrationPath), 'Migration file must exist')
+    const sql = fs.readFileSync(migrationPath, 'utf8')
+    assert.ok(sql.includes('ALTER TABLE public.products ADD COLUMN IF NOT EXISTS updated_at'), 'Must add updated_at to products')
+  })
+
+  test('Core schema.sql defines updated_at on products table', () => {
+    const schemaPath = path.resolve(__dirname, '../supabase/schema.sql')
+    assert.ok(fs.existsSync(schemaPath), 'schema.sql must exist')
+    const sql = fs.readFileSync(schemaPath, 'utf8')
+    assert.ok(sql.includes('updated_at timestamptz not null default now()'), 'schema.sql must define updated_at on products')
+  })
+})
+
+describe('Suite 41: Senior Dev Audit - Cart Wipeout Guard, Canonical Domains & RPC Hardening', () => {
+  test('Cart.tsx wraps orphaned item cleanup in useEffect with products length guard', () => {
+    const cartPath = path.resolve(__dirname, '../src/pages/Cart.tsx')
+    assert.ok(fs.existsSync(cartPath), 'Cart.tsx must exist')
+    const content = fs.readFileSync(cartPath, 'utf8')
+    assert.ok(content.includes('useEffect(() => {'), 'Must use useEffect for cleanup')
+    assert.ok(content.includes('if (!products || products.length === 0) return'), 'Must guard against empty catalog wipeout')
+    assert.ok(!content.includes('const orphanedItems = cart.filter'), 'Must not run orphaned filter directly in render body')
+  })
+
+  test('CouponGeneratorModal uses canonical greenvest.shop domain with zero vercel.app references', () => {
+    const modalPath = path.resolve(__dirname, '../src/components/seller/CouponGeneratorModal.tsx')
+    assert.ok(fs.existsSync(modalPath), 'CouponGeneratorModal.tsx must exist')
+    const content = fs.readFileSync(modalPath, 'utf8')
+    assert.ok(content.includes('https://greenvest.shop'), 'Must link to canonical domain greenvest.shop')
+    assert.ok(!content.includes('vercel.app'), 'Must contain zero references to vercel.app')
+  })
+
+  test('Database security migration exists and revokes anon from purge_stale_ephemeral_data', () => {
+    const migrationPath = path.resolve(__dirname, '../supabase/migrations/20260921152000_harden_purge_and_obsolete_rpcs.sql')
+    assert.ok(fs.existsSync(migrationPath), 'Security migration must exist')
+    const sql = fs.readFileSync(migrationPath, 'utf8')
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.purge_stale_ephemeral_data(integer) FROM PUBLIC'), 'Must revoke from PUBLIC')
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.purge_stale_ephemeral_data(integer) FROM anon'), 'Must revoke from anon')
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.purge_stale_ephemeral_data(integer) TO authenticated, service_role'), 'Must grant to authenticated/service_role')
+  })
+
+  test('PROJECT_BLUEPRINT.md documents verified store location PIN 721632 and Lat/Lng coordinates', () => {
+    const bpPath = path.resolve(__dirname, '../PROJECT_BLUEPRINT.md')
+    assert.ok(fs.existsSync(bpPath), 'PROJECT_BLUEPRINT.md must exist')
+    const content = fs.readFileSync(bpPath, 'utf8')
+    assert.ok(content.includes('PIN: **`721632`**'), 'Must document PIN 721632')
+    assert.ok(content.includes('22.1746825'), 'Must document verified latitude')
+    assert.ok(content.includes('87.9106158'), 'Must document verified longitude')
+  })
+})
+

@@ -340,7 +340,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       initializedRef.current = true
     }
-  }, [cloud, allowLocal, refreshLocal, loadUsersIfStaff])
+  }, [cloud, allowLocal, refreshLocal, loadUsersIfStaff, user])
 
   const refreshUsers = useCallback(async () => {
     const targetUser = userRef.current || getCurrentUser()
@@ -400,7 +400,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       authSub?.subscription?.unsubscribe()
     }
-  }, [cloud, refresh])
+  }, [cloud, refresh, loadUsersIfStaff])
 
   // 🔄 Cross-Tab & Local Storage Auth Synchronization
   useEffect(() => {
@@ -1106,7 +1106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { ok: true }
     },
-    [cloud, user, users],
+    [cloud, user, users, executeWithStaffAuth],
   )
 
   const setUserTier = useCallback(
@@ -1146,7 +1146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { ok: true }
     },
-    [cloud, user, users],
+    [cloud, user, users, executeWithStaffAuth],
   )
 
   const adminResetUserPin = useCallback(
@@ -1197,7 +1197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { ok: true }
     },
-    [cloud, user, users],
+    [cloud, user, users, executeWithStaffAuth],
   )
 
   const toggleBlockUser = useCallback(
@@ -1236,7 +1236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { ok: true }
     },
-    [cloud, user, users],
+    [cloud, user, users, executeWithStaffAuth],
   )
 
   const deleteUser = useCallback(
@@ -1307,7 +1307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { ok: true }
     },
-    [cloud, user, users],
+    [cloud, user, users, executeWithStaffAuth],
   )
 
   const updateUserProfile = useCallback(

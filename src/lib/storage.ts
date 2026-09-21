@@ -149,7 +149,7 @@ function write<T>(key: string, value: T) {
 
 // Admin identity is verified via Supabase database (is_super_admin column).
 // No personal data is seeded from env vars into the JS bundle.
-export const DEFAULT_USERS: User[] = []
+const DEFAULT_USERS: User[] = []
 
 /** Local catalog & user accounts bootstrap. */
 export function ensureSeeded() {

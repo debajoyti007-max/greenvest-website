@@ -1642,6 +1642,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       placeOrder,
       reorderFromOrder,
       updateProduct,
+      bulkUpdateProducts,
       addProduct,
       deleteProduct,
       toggleStock,

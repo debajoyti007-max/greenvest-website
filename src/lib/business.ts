@@ -289,7 +289,7 @@ const assetBase = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
 export const UPI_QR_SRC = env('VITE_UPI_QR_SRC', `${assetBase}upi-qr.png`)
 
 /** True only during `npm run dev` — allows localStorage fallback. */
-export const IS_DEV = import.meta.env.DEV
+const IS_DEV = import.meta.env.DEV
 
 /** Local offline shop allowed only in development. */
 export const ALLOW_LOCAL_FALLBACK = IS_DEV

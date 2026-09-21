@@ -27,7 +27,8 @@ create table if not exists public.products (
   category text not null default 'Vegetables',
   unit text not null default 'kg',
   image_url text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 -- Orders

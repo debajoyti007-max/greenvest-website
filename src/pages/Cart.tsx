@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
@@ -23,11 +23,15 @@ export default function Cart() {
 
   const shortfall = Math.max(0, MIN_ORDER_AMOUNT - cartTotal)
 
-  // Auto-clean orphaned cart items (products that no longer exist)
-  const orphanedItems = cart.filter(item => !products.find(x => x.id === item.productId))
-  if (orphanedItems.length > 0) {
-    orphanedItems.forEach(item => removeFromCart(item.productId, item.grade))
-  }
+  // Auto-clean orphaned cart items (products that no longer exist in catalog).
+  // 🛡️ Guard: ONLY run when products catalog has loaded (length > 0) to avoid wiping cart on refresh / initial load
+  useEffect(() => {
+    if (!products || products.length === 0) return
+    const orphaned = cart.filter((item) => !products.some((x) => x.id === item.productId))
+    if (orphaned.length > 0) {
+      orphaned.forEach((item) => removeFromCart(item.productId, item.grade))
+    }
+  }, [products, cart, removeFromCart])
 
   const totalMrp = cart.reduce((sum, item) => {
     const p = products.find((x) => x.id === item.productId)
