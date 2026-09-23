@@ -2169,9 +2169,8 @@ describe('Suite 37: Multi-PC Environment Provisioning & Supabase Verification En
   })
 })
 
-// 38. Total Order Weight Cap (10 kg for Home Delivery) & Customer Rate Limiting (3 orders/hr)
-describe('Suite 38: 10 kg Total Delivery Weight Cap & Order Rate Limiter', () => {
-  const MAX_DELIVERY_WEIGHT_KG = 10
+// 38. Per-Item 10 kg Cap & Customer Rate Limiting (3 orders/hr)
+describe('Suite 38: Per-Item 10 kg Cap & Order Rate Limiter', () => {
   const MAX_ORDERS_PER_HOUR = 3
 
   function calculateCartTotalWeightKg(items) {
@@ -2228,36 +2227,41 @@ describe('Suite 38: 10 kg Total Delivery Weight Cap & Order Rate Limiter', () =>
     assert.strictEqual(weight, 9.0)
   })
 
-  test('Enforces 10 kg total cap for home delivery while permitting <= 10 kg', () => {
-    const safeCart = [
-      { qty: 5, weightMultiplier: 1.0 },   // 5 kg
-      { qty: 10, weightMultiplier: 0.5 },  // 5 kg -> Total = 10 kg
-    ]
-    const safeWeight = calculateCartTotalWeightKg(safeCart)
-    assert.strictEqual(safeWeight <= MAX_DELIVERY_WEIGHT_KG, true)
+  test('Enforces 10 kg per-item anti-hoarding cap while allowing total cart to exceed 10 kg', () => {
+    const MAX_VEGETABLE_QTY_KG = 10
+    function validateItemQuantity(qty, multiplier) {
+      return qty * multiplier <= MAX_VEGETABLE_QTY_KG
+    }
+    assert.strictEqual(validateItemQuantity(10, 1.0), true, '10 kg of an item is allowed')
+    assert.strictEqual(validateItemQuantity(11, 1.0), false, '11 kg of an item is blocked')
+    assert.strictEqual(validateItemQuantity(21, 0.5), false, '10.5 kg of an item is blocked')
 
-    const overCart = [
-      { qty: 6, weightMultiplier: 1.0 },   // 6 kg
-      { qty: 10, weightMultiplier: 0.5 },  // 5 kg -> Total = 11 kg
+    // Multi-item cart total weight > 10 kg is fully permitted for home delivery
+    const multiItemFamilyCart = [
+      { qty: 5, weightMultiplier: 1.0 },  // 5 kg potatoes
+      { qty: 4, weightMultiplier: 1.0 },  // 4 kg onions
+      { qty: 3, weightMultiplier: 1.0 },  // 3 kg tomatoes
+      { qty: 2, weightMultiplier: 1.0 },  // 2 kg fish
     ]
-    const overWeight = calculateCartTotalWeightKg(overCart)
-    assert.strictEqual(overWeight > MAX_DELIVERY_WEIGHT_KG, true)
-  })
+    const totalWeight = calculateCartTotalWeightKg(multiItemFamilyCart)
+    assert.strictEqual(totalWeight, 14.0)
 
-  test('Exempts Store Pickup from the 10 kg bike delivery capacity limit', () => {
-    const bulkCart = [
-      { qty: 10, weightMultiplier: 5.0 }, // 50 kg wholesale order
-    ]
-    const bulkWeight = calculateCartTotalWeightKg(bulkCart)
-    assert.strictEqual(bulkWeight, 50.0)
-
-    function canPlaceOrder(weight, isPickup) {
-      if (!isPickup && weight > MAX_DELIVERY_WEIGHT_KG) return false
+    function canPlaceHomeDelivery(items) {
+      // Per item check
+      const exceedsPerItem = items.some((it) => it.qty * (it.weightMultiplier || 1) > MAX_VEGETABLE_QTY_KG)
+      if (exceedsPerItem) return false
+      // Total weight is NOT blocked
       return true
     }
 
-    assert.strictEqual(canPlaceOrder(bulkWeight, false), false, 'Delivery must be rejected')
-    assert.strictEqual(canPlaceOrder(bulkWeight, true), true, 'Store pickup must be allowed')
+    assert.strictEqual(canPlaceHomeDelivery(multiItemFamilyCart), true, 'Multi-item 14 kg order is allowed for home delivery')
+  })
+
+  test('Checkout.tsx has zero total weight blockers or disabled submit state for orders > 10 kg', () => {
+    const checkoutPath = path.resolve(__dirname, '../src/pages/Checkout.tsx')
+    const content = fs.readFileSync(checkoutPath, 'utf8')
+    assert.strictEqual(content.includes('isOverDeliveryCap'), false, 'Checkout must not contain isOverDeliveryCap')
+    assert.strictEqual(content.includes('Bike delivery capacity is strictly limited'), false, 'Checkout must not contain bike weight warning')
   })
 
   test('Customer rate limiter blocks 4th order within 60 minutes and calculates reset time', () => {

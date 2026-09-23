@@ -6,9 +6,7 @@ import {
   DELIVERY_WINDOW_BN,
   MIN_ORDER_AMOUNT,
   SERVICEABLE_PINCODES,
-  MAX_DELIVERY_WEIGHT_KG,
   MAX_ORDERS_PER_HOUR,
-  calculateCartTotalWeightKg,
   checkOrderRateLimit,
   createBulkOrderWhatsAppUrl,
 } from '../lib/business'
@@ -185,8 +183,6 @@ export default function Checkout() {
 
   const coords = useMemo(() => (geoLat && geoLng ? { lat: geoLat, lng: geoLng } : null), [geoLat, geoLng])
   const delivery = useMemo(() => calcDeliveryFee(pin, coords, fulfillmentMode), [pin, coords, fulfillmentMode])
-  const totalCartWeightKg = useMemo(() => calculateCartTotalWeightKg(cart), [cart])
-  const isOverDeliveryCap = totalCartWeightKg > MAX_DELIVERY_WEIGHT_KG
 
   const rateLimitStatus = useMemo(() => {
     return checkOrderRateLimit(orders, user?.id, phone)
@@ -450,17 +446,6 @@ export default function Checkout() {
         lang === 'bn'
           ? `আপনার পিন কোড আমাদের ডেলিভারি সীমার বাইরে (অনুমোদিত পিন: ${SERVICEABLE_PINCODES.join(', ')})।`
           : `Your location is outside our delivery service area (Serviceable PINs: ${SERVICEABLE_PINCODES.join(', ')}).`,
-      )
-      submitLockRef.current = false
-      return
-    }
-
-    // ⚖️ Weight Cap for Home Delivery (Bike/Two-Wheeler Capacity)
-    if (!isPickup && isOverDeliveryCap) {
-      setError(
-        lang === 'bn'
-          ? `মোটরবাইকে হোম ডেলিভারির সর্বোচ্চ সীমা ১০ কেজি (আপনার ব্যাগের ওজন: ${totalCartWeightKg} কেজি)। অনুগ্রহ করে "দোকান থেকে ফ্রি পিকআপ" বেছে নিন অথবা পরিমাণ কমান।`
-          : `Home delivery by bike is limited to ${MAX_DELIVERY_WEIGHT_KG} kg (your cart is ${totalCartWeightKg} kg). Please choose Store Pickup above or reduce quantity.`
       )
       submitLockRef.current = false
       return
@@ -1001,51 +986,6 @@ export default function Checkout() {
             </div>
           )}
 
-          {/* ⚖️ Over Weight Cap Warning */}
-          {isOverDeliveryCap && fulfillmentMode === 'delivery' && (
-            <div
-              style={{
-                background: '#fffbeb',
-                border: '1.5px solid #fde68a',
-                borderRadius: '12px',
-                padding: '0.85rem 1rem',
-                marginBottom: '1rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '0.75rem',
-                flexWrap: 'wrap',
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#92400e' }}>
-                  ⚖️ {lang === 'bn' ? `ব্যাগের মোট ওজন: ${totalCartWeightKg} কেজি (সীমা: ১০ কেজি)` : `Total Order Weight: ${totalCartWeightKg} kg (Cap: 10 kg)`}
-                </div>
-                <div style={{ fontSize: '0.76rem', color: '#b45309', marginTop: '3px', lineHeight: 1.35 }}>
-                  {lang === 'bn'
-                    ? 'রাইডারের মোটরবাইকে নিরাপদে বহনের সর্বোচ্চ সীমা ১০ কেজি। এই অর্ডারের জন্য দোকান থেকে ফ্রি পিকআপ (₹০) বেছে নিন।'
-                    : `Bike delivery capacity is strictly limited to ${MAX_DELIVERY_WEIGHT_KG} kg. Please switch to Free Store Pickup (₹0) for this order.`}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFulfillmentMode('pickup')}
-                style={{
-                  background: '#166534',
-                  color: '#ffffff',
-                  border: 'none',
-                  padding: '6px 14px',
-                  borderRadius: '8px',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                🏪 {lang === 'bn' ? 'ফ্রি পিকআপ (₹০) বেছে নিন' : 'Switch to Store Pickup (₹0)'}
-              </button>
-            </div>
-          )}
-
           {/* 🛡️ Order Rate Limit Banner */}
           {rateLimitStatus.isExceeded && (
             <div
@@ -1439,7 +1379,7 @@ export default function Checkout() {
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={submitting || !isOnline || rateLimitStatus.isExceeded || (fulfillmentMode === 'delivery' && isOverDeliveryCap)}
+            disabled={submitting || !isOnline || rateLimitStatus.isExceeded}
             style={{ fontSize: '1.05rem', padding: '0.9rem', fontWeight: 800 }}
           >
             {submitting

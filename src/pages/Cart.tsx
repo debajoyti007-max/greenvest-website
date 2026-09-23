@@ -8,7 +8,6 @@ import {
   MIN_ORDER_AMOUNT,
   computeMarketMrp,
   MAX_VEGETABLE_QTY_KG,
-  MAX_DELIVERY_WEIGHT_KG,
   calculateCartTotalWeightKg,
   formatItemWeightDetail,
   createBulkOrderWhatsAppUrl,
@@ -43,7 +42,6 @@ export default function Cart() {
   }, 0)
   const totalSavings = Math.max(0, totalMrp - cartTotal)
   const totalCartWeightKg = calculateCartTotalWeightKg(cart)
-  const isOverDeliveryCap = totalCartWeightKg > MAX_DELIVERY_WEIGHT_KG
 
   const canCheckout = cartTotal >= MIN_ORDER_AMOUNT
 
@@ -300,44 +298,30 @@ export default function Cart() {
           </div>
         )}
 
-        {/* ⚖️ Cart Weight Meter & Delivery Capacity Indicator */}
+        {/* ⚖️ Cart Weight Badge */}
         <div
           style={{
-            background: isOverDeliveryCap ? '#fffbeb' : '#f0fdf4',
-            border: isOverDeliveryCap ? '1.5px solid #fde68a' : '1px solid #bbf7d0',
-            borderRadius: '10px',
-            padding: '0.65rem 0.85rem',
+            background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+            border: '1.5px solid #86efac',
+            borderRadius: '12px',
+            padding: '0.65rem 0.95rem',
             marginBottom: '0.9rem',
             display: 'flex',
-            flexDirection: 'column',
-            gap: '5px',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '0.82rem',
+            boxShadow: '0 2px 6px rgba(22, 101, 52, 0.04)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
-            <span style={{ fontWeight: 700, color: isOverDeliveryCap ? '#b45309' : '#166534' }}>
-              ⚖️ {lang === 'bn' ? 'মোট ওজন:' : 'Total Weight:'} <strong>{totalCartWeightKg} {lang === 'bn' ? 'কেজি' : 'kg'}</strong>
-            </span>
-            <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
-              {lang === 'bn' ? `ডেলিভারি সর্বোচ্চ: ${MAX_DELIVERY_WEIGHT_KG} কেজি` : `Bike Cap: ${MAX_DELIVERY_WEIGHT_KG} kg`}
-            </span>
-          </div>
-          <div style={{ height: '6px', width: '100%', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-            <div
-              style={{
-                height: '100%',
-                width: `${Math.min(100, (totalCartWeightKg / MAX_DELIVERY_WEIGHT_KG) * 100)}%`,
-                background: isOverDeliveryCap ? '#d97706' : '#16a34a',
-                transition: 'width 0.3s ease',
-              }}
-            />
-          </div>
-          {isOverDeliveryCap && (
-            <div style={{ fontSize: '0.74rem', color: '#92400e', fontWeight: 600, marginTop: '2px', lineHeight: 1.35 }}>
-              {lang === 'bn'
-                ? `⚠️ মোটরবাইকে হোম ডেলিভারির সর্বোচ্চ সীমা ১০ কেজি। আপনার ওজন ${totalCartWeightKg} কেজি হওয়ায় চেকআউটে "দোকান থেকে ফ্রি পিকআপ (₹০)" বেছে নিন অথবা পরিমাণ কমান।`
-                : `⚠️ Bike delivery limited to ${MAX_DELIVERY_WEIGHT_KG} kg. Your cart is ${totalCartWeightKg} kg — choose Free Store Pickup at checkout or reduce quantity.`}
-            </div>
-          )}
+          <span style={{ fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>⚖️</span>
+            <span>{lang === 'bn' ? 'অর্ডারের মোট ওজন:' : 'Total Order Weight:'}</span>
+            <strong style={{ color: '#0f172a' }}>{totalCartWeightKg} {lang === 'bn' ? 'কেজি' : 'kg'}</strong>
+          </span>
+          <span style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <span>🛵</span>
+            <span>{lang === 'bn' ? 'রাইডার হোম ডেলিভারি' : 'Rider Doorstep Delivery'}</span>
+          </span>
         </div>
 
         {canCheckout ? (

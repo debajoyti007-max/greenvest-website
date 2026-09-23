@@ -53,10 +53,8 @@ import {
   ALLOW_LOCAL_FALLBACK,
   MIN_ORDER_AMOUNT,
   MAX_VEGETABLE_QTY_KG,
-  MAX_DELIVERY_WEIGHT_KG,
   MAX_ORDERS_PER_HOUR,
   SERVICEABLE_PINCODES,
-  calculateCartTotalWeightKg,
   checkOrderRateLimit,
   ADVANCE_PERCENT,
   calculateTierDiscount,
@@ -687,18 +685,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         throw new Error(errMsg)
       }
 
-      // ⚖️ 1. Total Weight Cap for Home Delivery (Two-Wheeler / Bike Capacity)
-      const totalCartWeightKg = calculateCartTotalWeightKg(currentCart)
-      if (!isPickup && totalCartWeightKg > MAX_DELIVERY_WEIGHT_KG) {
-        const errMsg =
-          lang === 'bn'
-            ? `মোটরবাইকে হোম ডেলিভারির সর্বোচ্চ সীমা ১০ কেজি (আপনার ব্যাগের ওজন: ${totalCartWeightKg} কেজি)। অনুগ্রহ করে দোকান থেকে ফ্রি পিকআপ (₹০) বেছে নিন অথবা কার্ট থেকে পরিমাণ কমান।`
-            : `Home delivery by two-wheeler is limited to ${MAX_DELIVERY_WEIGHT_KG} kg max (your cart weight: ${totalCartWeightKg} kg). Please choose Free Store Pickup or reduce item quantity.`
-        showToast(errMsg, '⚠️')
-        throw new Error(errMsg)
-      }
-
-      // 🛡️ 2. Customer Order Rate Limit (Max 3 orders / hour)
+      // 🛡️ Customer Order Rate Limit (Max 3 orders / hour)
       // Check in-memory store orders first
       const rateLimitCheck = checkOrderRateLimit(orders, user.id, opts.phone)
       if (rateLimitCheck.isExceeded) {
