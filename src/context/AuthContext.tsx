@@ -1158,7 +1158,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const actualId = targetUser?.id || userId
 
       const isTargetStaff = targetUser?.isSuperAdmin || targetUser?.role === 'admin' || targetUser?.role === 'seller' || targetUser?.role === 'rider'
+      const isSelf = user?.id === actualId || (targetEmail && user?.email === targetEmail)
       if (isTargetStaff) {
+        if (!user?.isSuperAdmin && !isSelf) {
+          return { ok: false, error: '👑 Permission Denied: Only Super Admin can reset passwords for other staff members.' }
+        }
         if (newPin.trim().length < 8) {
           return { ok: false, error: 'Staff password must be at least 8 characters long.' }
         }

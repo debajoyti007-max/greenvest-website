@@ -63,13 +63,28 @@ export default function AdminUsers() {
 
   const handleResetPin = async (u: { id: string; name: string; phone?: string; email: string; role?: string }) => {
     const isTargetStaff = u.role === 'admin' || u.role === 'seller' || u.role === 'rider'
+    const isSelf = user?.id === u.id
     let cleanSecret = ''
 
     if (isTargetStaff) {
+      if (!isViewerSuperAdmin && !isSelf) {
+        showToast(
+          lang === 'bn'
+            ? '⚠️ শুধুমাত্র সুপার অ্যাডমিন অন্য স্টাফদের পাসওয়ার্ড রিসেট করতে পারেন'
+            : '⚠️ Only Super Admin can reset passwords for other staff members',
+          '🔒',
+          'error'
+        )
+        return
+      }
       const inputPass = window.prompt(
-        lang === 'bn'
-          ? `${u.name}-এর জন্য নতুন স্টাফ পাসওয়ার্ড দিন (কমপক্ষে ৮ অক্ষর):`
-          : `Enter new staff password for ${u.name} (minimum 8 characters):`,
+        isSelf
+          ? (lang === 'bn'
+              ? 'আপনার নিজের জন্য নতুন স্টাফ পাসওয়ার্ড দিন (কমপক্ষে ৮ অক্ষর):'
+              : 'Enter your new staff password (minimum 8 characters):')
+          : (lang === 'bn'
+              ? `${u.name}-এর জন্য নতুন স্টাফ পাসওয়ার্ড দিন (কমপক্ষে ৮ অক্ষর):`
+              : `Enter new staff password for ${u.name} (minimum 8 characters):`),
         ''
       )
       if (!inputPass) return

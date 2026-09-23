@@ -2614,3 +2614,83 @@ describe('Suite 45: Customer Delivery Address Auto-Save & 1-Tap Selector', () =>
   })
 })
 
+describe('Suite 46: Tiered Role Delegation & Admin Customer PIN Reset', () => {
+  const migrationPath = path.resolve(__dirname, '../supabase/migrations/20260923223000_tiered_role_delegation_and_customer_pin_reset.sql')
+  const migrationContent = fs.readFileSync(migrationPath, 'utf8')
+  const authContextPath = path.resolve(__dirname, '../src/context/AuthContext.tsx')
+  const authContextContent = fs.readFileSync(authContextPath, 'utf8')
+  const adminUsersPath = path.resolve(__dirname, '../src/pages/admin/AdminUsers.tsx')
+  const adminUsersContent = fs.readFileSync(adminUsersPath, 'utf8')
+
+  test('Database migration restricts role assignment strictly to admins and denies sellers', () => {
+    assert.ok(
+      migrationContent.includes("verify_staff_caller(p_caller_id, p_caller_pin, ARRAY['admin'])"),
+      'Must verify caller has admin role only'
+    )
+  })
+
+  test('Database migration strictly blocks normal admins from granting or revoking Admin role', () => {
+    assert.ok(
+      migrationContent.includes("(p_role = 'admin' OR v_target.role = 'admin') AND NOT coalesce(v_caller.is_super_admin, false)"),
+      'Must check if caller is Super Admin when granting or revoking Admin'
+    )
+    assert.ok(
+      migrationContent.includes('Only Super Admin can grant or revoke the Admin role'),
+      'Must return informative error message'
+    )
+  })
+
+  test('Database migration allows normal admins to assign seller and rider roles', () => {
+    assert.ok(
+      migrationContent.includes("UPDATE public.profiles SET role = p_role, updated_at = now()"),
+      'Must perform update for permitted roles'
+    )
+    assert.ok(
+      migrationContent.includes("PERFORM set_config('app.allow_profile_change', 'true', true);"),
+      'Must bypass anti-escalation trigger for authorized admin caller'
+    )
+  })
+
+  test('Database migration allows admins to reset customer PIN (4 digits)', () => {
+    assert.ok(
+      migrationContent.includes("Target is a Customer: Any admin (Normal or Super Admin) can reset customer PIN") ||
+      migrationContent.includes("Customer PIN must be exactly 4 digits"),
+      'Must allow admin to reset customer PIN'
+    )
+  })
+
+  test('Database migration allows staff self-password reset but blocks normal admins from resetting other staff', () => {
+    assert.ok(
+      migrationContent.includes("v_target.id <> v_caller.id AND NOT coalesce(v_caller.is_super_admin, false)"),
+      'Must allow self reset or require Super Admin for other staff'
+    )
+    assert.ok(
+      migrationContent.includes("Only Super Admin can reset passwords for other staff members"),
+      'Must protect other staff members from unauthorized password resets'
+    )
+  })
+
+  test('AuthContext.tsx prevents non-super admin from resetting other staff passwords but allows self-reset', () => {
+    assert.ok(
+      authContextContent.includes('!user?.isSuperAdmin && !isSelf'),
+      'Must check both isSuperAdmin and isSelf'
+    )
+    assert.ok(
+      authContextContent.includes('Only Super Admin can reset passwords for other staff members'),
+      'Must reject resetting other staff members'
+    )
+  })
+
+  test('AdminUsers.tsx guards staff password reset modal for non-super admin non-self viewers', () => {
+    assert.ok(
+      adminUsersContent.includes('!isViewerSuperAdmin && !isSelf'),
+      'Must check both isViewerSuperAdmin and isSelf in AdminUsers.tsx'
+    )
+    assert.ok(
+      adminUsersContent.includes('Only Super Admin can reset passwords for other staff members'),
+      'Must inform user when attempting to reset other staff'
+    )
+  })
+})
+
+
