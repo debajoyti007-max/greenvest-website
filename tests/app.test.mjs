@@ -2766,6 +2766,29 @@ describe('Suite 47: Super Admin 1-Tap Magic Link Verification & Zero Local Cache
     )
   })
 
+  test('AuthContext.tsx prevents infinite loading loop by detecting auth params and shielding in-memory session', () => {
+    assert.ok(
+      authContextContent.includes('hasAuthParams'),
+      'Must detect auth parameters in URL (hasAuthParams)'
+    )
+    assert.ok(
+      authContextContent.includes('window.location.hash.includes(\'access_token\')'),
+      'Must check access_token in URL hash'
+    )
+    assert.ok(
+      authContextContent.includes('if (hasAuthParams) return true'),
+      'Must hold loading state to true on initial render when auth params exist'
+    )
+    assert.ok(
+      authContextContent.includes('userRef.current?.isSuperAdmin || userRef.current?.email?.toLowerCase() === \'debajoyti007@gmail.com\''),
+      'Must protect in-memory Super Admin session from handleStorage purge'
+    )
+    assert.ok(
+      authContextContent.includes('window.history.replaceState(null, \'\', window.location.pathname + window.location.search)'),
+      'Must strip auth tokens from URL bar cleanly via replaceState without hard window reload'
+    )
+  })
+
   test('Auth.tsx renders Gmail prompt and direct 1-tap Gmail link', () => {
     assert.ok(authContent.includes("mode === 'mfa'"), 'Must handle mfa mode')
     assert.ok(authContent.includes('https://mail.google.com'), 'Must provide 1-tap Gmail link')

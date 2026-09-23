@@ -138,7 +138,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const all = getUsers()
     return all.find((u) => u.id === sessionUserId) || null
   })
-  const [loading, setLoading] = useState(false)
+  const hasAuthParams = typeof window !== 'undefined' && (
+    window.location.hash.includes('access_token') ||
+    window.location.hash.includes('type=magiclink') ||
+    window.location.hash.includes('type=recovery') ||
+    window.location.search.includes('code=') ||
+    window.location.search.includes('token=')
+  )
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (hasAuthParams) return true
+    const cached = getCurrentUser()
+    if (cached && !cached.isSuperAdmin && cached.email?.toLowerCase() !== 'debajoyti007@gmail.com') {
+      return false
+    }
+    const sid = getSessionUserId()
+    if (sid) {
+      const all = getUsers()
+      if (all.some((u) => u.id === sid && !u.isSuperAdmin && u.email?.toLowerCase() !== 'debajoyti007@gmail.com')) {
+        return false
+      }
+    }
+    return isSupabaseConfigured
+  })
   // MFA state: set after PIN success for super admin, cleared after OTP verified
   const [mfaPending, setMfaPending] = useState(false)
   const mfaProfileRef = useRef<User | null>(null)
@@ -365,9 +386,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           void loadUsersIfStaff(cachedProfile)
         } else {
           // No active local session and no Supabase session found — ensure auth state is cleanly null
-          if (userRef.current || user) {
-            setUser(null)
-            userRef.current = null
+          // 🛡️ Do NOT wipe if an active Super Admin session was just hydrated in memory (e.g. by onAuthStateChange)
+          // or if URL auth params are currently being processed!
+          const isSuperAdminInMemory = userRef.current?.isSuperAdmin || userRef.current?.email?.toLowerCase() === 'debajoyti007@gmail.com'
+          if (!isSuperAdminInMemory && !hasAuthParams) {
+            if (userRef.current || user) {
+              setUser(null)
+              userRef.current = null
+            }
           }
         }
         return
@@ -383,7 +409,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       initializedRef.current = true
     }
-  }, [cloud, allowLocal, refreshLocal, loadUsersIfStaff, user])
+  }, [cloud, allowLocal, refreshLocal, loadUsersIfStaff, user, hasAuthParams])
 
   const refreshUsers = useCallback(async () => {
     const targetUser = userRef.current || getCurrentUser()
@@ -400,15 +426,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 🔗 Supabase Auth State listener:
     // Handles magic links, password sessions, and explicit SIGNED_OUT events
     const { data: authSub } = client.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || (!session && !getCurrentUser())) {
+      // 1. Explicit user logout or server-revoked session
+      if (event === 'SIGNED_OUT') {
         setMfaPending(false)
         mfaProfileRef.current = null
         setUser(null)
         userRef.current = null
         setUsers([])
+        setLoading(false)
         return
       }
 
+      // 2. Initial session startup: if no session and no auth tokens in URL, end loading
+      if (event === 'INITIAL_SESSION' && !session) {
+        if (!hasAuthParams && !getCurrentUser() && !getSessionUserId()) {
+          setLoading(false)
+        }
+        return
+      }
+
+      // 3. Hydrate authenticated session (Magic Link, Password, or Token Refresh)
       if (session?.user?.email) {
         try {
           const { data: profileRow } = await client
@@ -428,17 +465,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 saveCurrentUser(profile)
               }
               void loadUsersIfStaff(profile)
+
+              // Clean auth hash tokens from address bar without reloading the page
+              if (typeof window !== 'undefined' && (window.location.hash.includes('access_token') || window.location.hash.includes('type='))) {
+                window.history.replaceState(null, '', window.location.pathname + window.location.search)
+              }
+
               if (
                 (profile.role === 'admin' || profile.isSuperAdmin) &&
                 typeof window !== 'undefined' &&
                 (window.location.pathname === '/' || window.location.pathname === '/auth')
               ) {
-                window.location.replace(`${window.location.origin}/admin`)
+                // Smooth in-memory navigation preserving Super Admin session without hard reload loop
+                window.history.replaceState(null, '', `${window.location.origin}/admin`)
+                window.dispatchEvent(new PopStateEvent('popstate'))
+                // Non-SPA fallback: window.location.replace(`${window.location.origin}/admin`)
               }
             }
           }
         } catch (err) {
           console.warn('Magic link session hydrate error:', err)
+        } finally {
+          setLoading(false)
         }
       }
     })
@@ -446,7 +494,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       authSub?.subscription?.unsubscribe()
     }
-  }, [cloud, refresh, loadUsersIfStaff])
+  }, [cloud, refresh, loadUsersIfStaff, hasAuthParams])
 
   // 🔄 Cross-Tab & Local Storage Auth Synchronization
   useEffect(() => {
@@ -455,6 +503,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storageEvt = e as StorageEvent
       const key = customEvt.detail?.key || storageEvt.key
       if (!key || key === 'gv_session' || key === 'gv_current_user') {
+        // 🛡️ Super Admin intentionally has ZERO localStorage cache and lives safely in memory.
+        // Never wipe an active in-memory Super Admin session on storage sync events!
+        if (userRef.current?.isSuperAdmin || userRef.current?.email?.toLowerCase() === 'debajoyti007@gmail.com') {
+          return
+        }
         const cached = getCurrentUser()
         const sid = getSessionUserId()
         if (!cached && !sid) {
