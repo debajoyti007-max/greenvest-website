@@ -2567,4 +2567,10 @@ describe('Suite 44: Seller Product Management Form UX & 3-Card Architecture', ()
     assert.ok(cssContent.includes('.seller-gram-presets'), 'CSS must define .seller-gram-presets')
     assert.ok(cssContent.includes('.seller-grade-grid'), 'CSS must define .seller-grade-grid')
   })
+
+  test('Operates strictly on IN / OUT stock rule with zero numeric stock input fields', () => {
+    assert.ok(!content.includes('value={form.stockQty}'), 'Must not have numeric stock quantity input')
+    assert.ok(content.includes('IN (In Stock') || content.includes('IN (স্টকে আছে'), 'Must have 1-tap IN button')
+    assert.ok(content.includes('OUT (Out of Stock') || content.includes('OUT (স্টক নেই'), 'Must have 1-tap OUT button')
+  })
 })

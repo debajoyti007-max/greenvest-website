@@ -21,7 +21,7 @@ const emptyForm = {
   availableGrades: ['A', 'B', 'C'] as Grade[],
   inStock: true,
   archived: false,
-  stockQty: 20,
+  stockQty: 100,
   season: 'all' as Season,
   category: 'Vegetables',
   unit: 'kg',
@@ -89,7 +89,7 @@ export default function SellerProducts() {
       availableGrades: (p.availableGrades && p.availableGrades.length > 0) ? p.availableGrades : ['A', 'B', 'C'],
       inStock: p.inStock,
       archived: Boolean(p.archived),
-      stockQty: p.stockQty ?? 0,
+      stockQty: p.inStock ? (p.stockQty ?? 100) : 0,
       season: (p.season || 'all') as Season,
       category: p.category,
       unit: p.unit,
@@ -193,6 +193,8 @@ export default function SellerProducts() {
 
     const payload = {
       ...form,
+      inStock: form.inStock,
+      stockQty: form.inStock ? 100 : 0,
       availableGrades: activeGrades,
       pA: activeGrades.includes('A') ? form.pA : (form.pB || form.pC || baseP),
       pB: activeGrades.includes('B') ? form.pB : (form.pA || form.pC || baseP),
@@ -536,25 +538,58 @@ export default function SellerProducts() {
                 </div>
               ) : null}
 
-              {/* Stock Qty */}
-              <div className="seller-field-grid">
-                <label>
-                  {lang === 'bn' ? 'মজুত স্টক পরিমাণ' : 'Stock Quantity'}
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      type="number"
-                      min={0}
-                      value={form.stockQty}
-                      onChange={(e) => setForm({ ...form, stockQty: Number(e.target.value) })}
-                      style={{ maxWidth: '140px' }}
-                    />
-                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: form.stockQty > 0 ? '#15803d' : '#dc2626' }}>
-                      {form.stockQty > 0
-                        ? (lang === 'bn' ? '🟢 বিক্রির জন্য প্রস্তুত' : '🟢 In Stock')
-                        : (lang === 'bn' ? '🔴 স্টক শেষ' : '🔴 Out of Stock')}
-                    </span>
-                  </div>
-                </label>
+              {/* Stock Status (IN / OUT rule only) */}
+              <div style={{ marginTop: '0.25rem' }}>
+                <span style={{ display: 'block', marginBottom: '8px', fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>
+                  ⚡ {lang === 'bn' ? 'স্টক স্ট্যাটাস (ইন / আউট):' : 'Stock Availability (IN / OUT):'}
+                </span>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, inStock: true, stockQty: 100 })}
+                    style={{
+                      padding: '8px 20px',
+                      borderRadius: '8px',
+                      border: '2px solid',
+                      borderColor: form.inStock ? '#15803d' : '#cbd5e1',
+                      background: form.inStock ? '#dcfce7' : '#ffffff',
+                      color: form.inStock ? '#15803d' : '#64748b',
+                      fontWeight: 700,
+                      fontSize: '0.92rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.15s ease',
+                      boxShadow: form.inStock ? '0 2px 8px rgba(21, 128, 61, 0.2)' : 'none',
+                    }}
+                  >
+                    🟢 {lang === 'bn' ? 'IN (স্টকে আছে / আজ বিক্রি হবে)' : 'IN (In Stock / Selling Today)'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, inStock: false, stockQty: 0 })}
+                    style={{
+                      padding: '8px 20px',
+                      borderRadius: '8px',
+                      border: '2px solid',
+                      borderColor: !form.inStock ? '#dc2626' : '#cbd5e1',
+                      background: !form.inStock ? '#fee2e2' : '#ffffff',
+                      color: !form.inStock ? '#dc2626' : '#64748b',
+                      fontWeight: 700,
+                      fontSize: '0.92rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.15s ease',
+                      boxShadow: !form.inStock ? '0 2px 8px rgba(220, 38, 38, 0.2)' : 'none',
+                    }}
+                  >
+                    🔴 {lang === 'bn' ? 'OUT (স্টক নেই / বিক্রি বন্ধ)' : 'OUT (Out of Stock)'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
