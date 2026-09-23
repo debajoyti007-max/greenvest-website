@@ -2693,13 +2693,13 @@ describe('Suite 46: Tiered Role Delegation & Admin Customer PIN Reset', () => {
   })
 })
 
-describe('Suite 47: Super Admin Supabase Magic Link 2FA & OTP Verification', () => {
+describe('Suite 47: Super Admin 1-Tap Magic Link Verification', () => {
   const authContextPath = path.resolve(__dirname, '../src/context/AuthContext.tsx')
   const authContextContent = fs.readFileSync(authContextPath, 'utf8')
   const authPath = path.resolve(__dirname, '../src/pages/Auth.tsx')
   const authContent = fs.readFileSync(authPath, 'utf8')
 
-  test('AuthContext.tsx triggers Supabase Magic Link OTP for Super Admin login', () => {
+  test('AuthContext.tsx requires Supabase Magic Link OTP for Super Admin login and prevents offline bypass', () => {
     assert.ok(
       authContextContent.includes('profile.isSuperAdmin && supabase'),
       'Must check if user is Super Admin'
@@ -2712,16 +2712,9 @@ describe('Suite 47: Super Admin Supabase Magic Link 2FA & OTP Verification', () 
       authContextContent.includes('mfaPending: true'),
       'Must return mfaPending: true'
     )
-  })
-
-  test('AuthContext.tsx validates 6-digit confirmation codes with verifyAdminOtp', () => {
     assert.ok(
-      authContextContent.includes('verifyAdminOtp'),
-      'Must define verifyAdminOtp'
-    )
-    assert.ok(
-      authContextContent.includes('supabase.auth.verifyOtp'),
-      'Must call verifyOtp'
+      authContextContent.includes('Super Admin account requires cloud Magic Link verification and cannot be accessed in offline mode'),
+      'Must block offline login bypass for Super Admin'
     )
   })
 
@@ -2740,18 +2733,50 @@ describe('Suite 47: Super Admin Supabase Magic Link 2FA & OTP Verification', () 
     )
   })
 
-  test('Auth.tsx renders Gmail prompt, launch button, and 6-digit confirmation code verification box', () => {
+  test('Auth.tsx renders Gmail prompt and direct 1-tap Gmail link', () => {
+    assert.ok(authContent.includes("mode === 'mfa'"), 'Must handle mfa mode')
+    assert.ok(authContent.includes('https://mail.google.com'), 'Must provide 1-tap Gmail link')
+    assert.ok(authContent.includes('Open Gmail') || authContent.includes('জিমেইল খুলুন'), 'Must show Open Gmail button')
+  })
+})
+
+describe('Suite 48: Super Admin Eternal Shield & Anti-Deletion Lock', () => {
+  const migrationPath = path.resolve(__dirname, '../supabase/migrations/20260923230500_super_admin_eternal_shield.sql')
+  const migrationContent = fs.readFileSync(migrationPath, 'utf8')
+  const authContextPath = path.resolve(__dirname, '../src/context/AuthContext.tsx')
+  const authContextContent = fs.readFileSync(authContextPath, 'utf8')
+
+  test('Database migration defines BEFORE DELETE trigger blocking deletion of Super Admin under any circumstances', () => {
     assert.ok(
-      authContent.includes('mode === \'mfa\''),
-      'Must handle mfa mode'
+      migrationContent.includes('CREATE TRIGGER trg_prevent_super_admin_delete'),
+      'Must create BEFORE DELETE trigger'
     )
     assert.ok(
-      authContent.includes('https://mail.google.com'),
-      'Must provide 1-tap Gmail link'
+      migrationContent.includes('Super Admin account cannot be deleted under any circumstances'),
+      'Trigger must reject Super Admin deletion'
     )
     assert.ok(
-      authContent.includes('verifyAdminOtp(otpCode)'),
-      'Must allow verifying 6-digit email confirmation code'
+      migrationContent.includes('REVOKE EXECUTE ON FUNCTION public.trg_prevent_super_admin_delete()'),
+      'Must revoke public execution of trigger function'
+    )
+  })
+
+  test('Database migration updates delete_user_admin RPC to protect Super Admin', () => {
+    assert.ok(
+      migrationContent.includes('coalesce(v_target.is_super_admin, false) = true'),
+      'Must verify target is not Super Admin'
+    )
+    assert.ok(
+      migrationContent.includes('Super Admin account cannot be deleted'),
+      'delete_user_admin must return error if target is Super Admin'
+    )
+  })
+
+  test('AuthContext.tsx deleteUser and deleteOwnAccount explicitly block Super Admin account deletion', () => {
+    assert.ok(
+      authContextContent.includes('Master Administrator account cannot be deleted under any circumstances') ||
+      authContextContent.includes('Master Administrator account cannot be deleted'),
+      'Must block Super Admin account deletion in AuthContext'
     )
   })
 })

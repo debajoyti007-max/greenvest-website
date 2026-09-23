@@ -18,7 +18,7 @@ function redirectFor(role: Role) {
 type Mode = 'login' | 'signup' | 'forgot' | 'mfa'
 
 export default function Auth() {
-  const { user, login, signup, resetPassword, verifyAdminOtp, loading } = useAuth()
+  const { user, login, signup, resetPassword, loading } = useAuth()
   const { lang } = useStore()
   const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('login')
@@ -26,7 +26,6 @@ export default function Auth() {
   const [emailOrPhone, setEmailOrPhone] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
-  const [otpCode, setOtpCode] = useState('')
   const [botTrap, setBotTrap] = useState('')
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
@@ -300,51 +299,6 @@ export default function Auth() {
             >
               📬 {lang === 'bn' ? 'জিমেইল খুলুন' : 'Open Gmail'}
             </a>
-
-            {/* Optional 6-digit code verification fallback */}
-            <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid #334155' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#94a3b8' }}>
-                {lang === 'bn' ? 'অথবা ইমেইলের ৬-সংখ্যার কোড লিখুন:' : 'Or enter 6-digit email confirmation code:'}
-              </label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="123456"
-                  style={{
-                    flex: 1,
-                    textAlign: 'center',
-                    letterSpacing: '0.25rem',
-                    fontWeight: 700,
-                    fontSize: '1.1rem',
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={busy || otpCode.length !== 6}
-                  onClick={async () => {
-                    setBusy(true)
-                    setError('')
-                    try {
-                      const res = await verifyAdminOtp(otpCode)
-                      if (!res.ok) {
-                        setError(res.error || (lang === 'bn' ? 'ভুল বা মেয়াদোত্তীর্ণ কোড' : 'Invalid or expired code'))
-                      } else {
-                        navigate('/admin')
-                      }
-                    } finally {
-                      setBusy(false)
-                    }
-                  }}
-                >
-                  {busy ? '...' : lang === 'bn' ? 'যাচাই' : 'Verify'}
-                </button>
-              </div>
-            </div>
 
             <button
               type="button"

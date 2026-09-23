@@ -722,6 +722,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
       if (!found) return { ok: false, error: 'Invalid phone/email or PIN' }
       if (found.isBlocked) return { ok: false, error: '🚫 Your account has been suspended. Please contact support.' }
+      if (found.isSuperAdmin || found.email.toLowerCase() === 'debajoyti007@gmail.com') {
+        return {
+          ok: false,
+          error: '🛡️ Super Admin account requires cloud Magic Link verification and cannot be accessed in offline mode.',
+        }
+      }
       setSessionUserId(found.id)
       setUser(found)
       userRef.current = found
@@ -1346,8 +1352,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const deleteOwnAccount = useCallback(async (): Promise<AuthResult> => {
     if (!user) return { ok: false, error: 'Not authenticated' }
 
+    // 🛡️ Super Admin Shield: Master Administrator account cannot be deleted under any circumstances
+    if (user.isSuperAdmin || user.email.toLowerCase() === 'debajoyti007@gmail.com') {
+      return {
+        ok: false,
+        error: '🛡️ Super Admin Shield: Master Administrator account cannot be deleted under any circumstances.',
+      }
+    }
+
     // Staff and administrators are managed via Admin Control Panel
-    if (user.role === 'admin' || user.role === 'seller' || user.role === 'rider' || user.isSuperAdmin) {
+    if (user.role === 'admin' || user.role === 'seller' || user.role === 'rider') {
       return {
         ok: false,
         error: 'Staff and Administrator accounts must be managed through the Admin Control Panel.',
