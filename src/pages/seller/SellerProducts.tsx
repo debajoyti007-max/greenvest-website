@@ -234,7 +234,7 @@ export default function SellerProducts() {
     { id: 'archived', en: 'Old / archived', bn: 'পুরনো / আর্কাইভ', count: archived.length },
   ]
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+  if (!user || (user.role !== 'seller' && user.role !== 'admin' && !user.isSuperAdmin)) {
     return <Navigate to="/" replace />
   }
 

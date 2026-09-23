@@ -183,7 +183,7 @@ export default function SellerCustomers() {
       .sort((a, b) => b.spent - a.spent || b.lastOrderAt.localeCompare(a.lastOrderAt))
   }, [users, orders, filterMonth, filterYear, spendMode])
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+  if (!user || (user.role !== 'seller' && user.role !== 'admin' && !user.isSuperAdmin)) {
     return <Navigate to="/" replace />
   }
 

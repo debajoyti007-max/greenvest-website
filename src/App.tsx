@@ -62,7 +62,9 @@ function RequireRole({ roles, children }: { roles: Role[]; children: React.React
   const { user, loading } = useAuth()
   if (loading && !user) return <PageSkeleton />
   if (!user) return <Navigate to="/auth" replace />
-  if (!roles.includes(user.role)) return <Navigate to="/" replace />
+  if (!roles.includes(user.role) && !user.isSuperAdmin) {
+    return <Navigate to={user.role === 'rider' ? '/rider' : '/'} replace />
+  }
   return <>{children}</>
 }
 
@@ -146,7 +148,7 @@ function AppRoutes() {
           <Route
             path="rider"
             element={
-              <RequireRole roles={['rider', 'admin']}>
+              <RequireRole roles={['rider', 'admin', 'seller']}>
                 <RiderView />
               </RequireRole>
             }

@@ -13,7 +13,7 @@ import type { Order } from '../types'
 export default function OrderSuccess() {
   const { id } = useParams()
   const location = useLocation()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { orders, lang, updateOrderStatus } = useStore()
   const notified = useRef(false)
   const [copied, setCopied] = useState(false)
@@ -21,7 +21,7 @@ export default function OrderSuccess() {
 
   // Use order passed via navigation state first (instant) — fallback to store lookup
   const navOrder = (location.state as { order?: Order } | null)?.order
-  const isStaff = user?.role === 'seller' || user?.role === 'admin'
+  const isStaff = user?.role === 'seller' || user?.role === 'admin' || user?.isSuperAdmin
   const storeOrder = user
     ? orders.find((o) => o.id === id && (isStaff || o.userId === user.id))
     : orders.find((o) => o.id === id)
@@ -75,6 +75,14 @@ export default function OrderSuccess() {
       } catch {}
     }
     await copySummary()
+  }
+
+  if (authLoading && !user) {
+    return (
+      <div className="page narrow" style={{ padding: '2rem 1rem' }}>
+        <OrderSkeleton count={1} />
+      </div>
+    )
   }
 
   if (!user) return <Navigate to="/auth" replace />

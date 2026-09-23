@@ -196,7 +196,7 @@ export default function SellerSupport() {
     showToast(lang === 'bn' ? `${purged}টি সমাধানকৃত চ্যাট ডাটাবেস থেকে মুছে দেওয়া হয়েছে!` : `Purged ${purged} resolved junk chats from DB!`, '🧹')
   }
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+  if (!user || (user.role !== 'seller' && user.role !== 'admin' && !user.isSuperAdmin)) {
     return <Navigate to="/" replace />
   }
 

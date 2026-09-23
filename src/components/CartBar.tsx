@@ -12,6 +12,7 @@ export default function CartBar() {
     location.pathname === '/checkout' ||
     location.pathname.startsWith('/orders/success') ||
     location.pathname.startsWith('/seller') ||
+    location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/rider')
 
   if (cartCount === 0 || isHidden) return null

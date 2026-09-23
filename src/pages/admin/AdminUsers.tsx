@@ -48,7 +48,7 @@ export default function AdminUsers() {
     }
   }
 
-  if (!user || user.role !== 'admin') {
+  if (!user || (user.role !== 'admin' && !user.isSuperAdmin)) {
     return <Navigate to="/" replace />
   }
 

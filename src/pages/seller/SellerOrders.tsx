@@ -438,7 +438,7 @@ export default function SellerOrders() {
 
   const cs: React.CSSProperties = { background: 'var(--white, #fff)', borderRadius: '12px', border: '1px solid var(--line, #e5e7eb)' }
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+  if (!user || (user.role !== 'seller' && user.role !== 'admin' && !user.isSuperAdmin)) {
     return <Navigate to="/" replace />
   }
 

@@ -11,7 +11,7 @@ import type { Address } from '../types'
 
 export default function Profile() {
   const navigate = useNavigate()
-  const { user, logout, updateUserProfile, updatePassword, deleteOwnAccount } = useAuth()
+  const { user, logout, updateUserProfile, updatePassword, deleteOwnAccount, loading: authLoading } = useAuth()
   const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang, safeCloudSync } = useStore()
 
   const [addresses, setAddresses] = useState<Address[]>([])
@@ -218,6 +218,15 @@ export default function Profile() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5)
   }, [user, orders])
+
+  if (authLoading && !user) {
+    return (
+      <div className="page narrow" style={{ padding: '2rem 1rem' }}>
+        <div className="shimmer" style={{ width: '100%', height: '140px', borderRadius: '16px', marginBottom: '1rem' }} />
+        <div className="shimmer" style={{ width: '100%', height: '220px', borderRadius: '16px' }} />
+      </div>
+    )
+  }
 
   if (!user) return <Navigate to="/auth" replace />
 

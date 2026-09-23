@@ -230,7 +230,7 @@ export default function SellerDeals() {
   const activeCount = promotionalDeals.filter((d) => d.isActive !== false && !isDealExpired(d)).length
   const expiredCount = promotionalDeals.length - activeCount
 
-  if (!user || (user.role !== 'seller' && user.role !== 'admin')) {
+  if (!user || (user.role !== 'seller' && user.role !== 'admin' && !user.isSuperAdmin)) {
     return <Navigate to="/" replace />
   }
 

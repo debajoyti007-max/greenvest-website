@@ -166,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const mfaPinRef = useRef<string>('')
   // Use a ref for initialized so refresh() doesn't re-create itself (Bug 7 fix)
   const initializedRef = useRef(false)
+  const magicLinkNavigatedRef = useRef(false)
   const cloud = isSupabaseConfigured
   const allowLocal = ALLOW_LOCAL_FALLBACK && !cloud
   // Use a ref so applyCloudSession can read the latest user without being recreated every render.
@@ -390,7 +391,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // or if URL auth params are currently being processed!
           const isSuperAdminInMemory = userRef.current?.isSuperAdmin || userRef.current?.email?.toLowerCase() === 'debajoyti007@gmail.com'
           if (!isSuperAdminInMemory && !hasAuthParams) {
-            if (userRef.current || user) {
+            if (userRef.current) {
               setUser(null)
               userRef.current = null
             }
@@ -409,7 +410,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       initializedRef.current = true
     }
-  }, [cloud, allowLocal, refreshLocal, loadUsersIfStaff, user, hasAuthParams])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloud, allowLocal, refreshLocal, loadUsersIfStaff])
 
   const refreshUsers = useCallback(async () => {
     const targetUser = userRef.current || getCurrentUser()
@@ -428,6 +430,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: authSub } = client.auth.onAuthStateChange(async (event, session) => {
       // 1. Explicit user logout or server-revoked session
       if (event === 'SIGNED_OUT') {
+        magicLinkNavigatedRef.current = false
         setMfaPending(false)
         mfaProfileRef.current = null
         setUser(null)
@@ -466,16 +469,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
               void loadUsersIfStaff(profile)
 
+              const hadAuthTokens = typeof window !== 'undefined' && (
+                window.location.hash.includes('access_token') ||
+                window.location.hash.includes('type=') ||
+                window.location.search.includes('code=')
+              )
+
               // Clean auth hash tokens from address bar without reloading the page
               if (typeof window !== 'undefined' && (window.location.hash.includes('access_token') || window.location.hash.includes('type='))) {
                 window.history.replaceState(null, '', window.location.pathname + window.location.search)
               }
 
+              // Only auto-navigate to /admin on initial Magic Link token landing or when completing login on /auth.
+              // Once authenticated and navigated, never hijack subsequent browsing across Shop, Orders, Cart, or Seller portals!
               if (
+                !magicLinkNavigatedRef.current &&
                 (profile.role === 'admin' || profile.isSuperAdmin) &&
                 typeof window !== 'undefined' &&
-                (window.location.pathname === '/' || window.location.pathname === '/auth')
+                (hadAuthTokens || window.location.pathname === '/auth')
               ) {
+                magicLinkNavigatedRef.current = true
                 // Smooth in-memory navigation preserving Super Admin session without hard reload loop
                 window.history.replaceState(null, '', `${window.location.origin}/admin`)
                 window.dispatchEvent(new PopStateEvent('popstate'))
@@ -494,7 +507,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       authSub?.subscription?.unsubscribe()
     }
-  }, [cloud, refresh, loadUsersIfStaff, hasAuthParams])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloud, refresh, loadUsersIfStaff])
 
   // 🔄 Cross-Tab & Local Storage Auth Synchronization
   useEffect(() => {
@@ -547,6 +561,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (payload) => {
           const row = payload.new as any
           if (!row) return
+
+          // 🛡️ Super Admin is immutable and cannot be suspended or demoted via realtime events
+          if (userRef.current?.isSuperAdmin || userRef.current?.email?.toLowerCase() === 'debajoyti007@gmail.com') {
+            const updated = mapProfile(row)
+            if (updated) {
+              setUser(updated)
+              userRef.current = updated
+            }
+            return
+          }
 
           // ── Case 1: Account was BLOCKED by admin ────────────────────────────
           if (row.is_blocked === true) {
@@ -985,6 +1009,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMfaPending(false)
     mfaProfileRef.current = null
     mfaPinRef.current = ''
+    magicLinkNavigatedRef.current = false
   }, [cloud])
 
   const resetPassword = useCallback(

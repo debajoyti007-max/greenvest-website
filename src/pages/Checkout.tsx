@@ -24,7 +24,7 @@ import { queueOfflineOrder } from '../lib/offlineQueue'
 import type { Address } from '../types'
 
 export default function Checkout() {
-  const { user, updateUserProfile, refresh } = useAuth()
+  const { user, updateUserProfile, refresh, loading: authLoading } = useAuth()
   const {
     cart,
     cartTotal,
@@ -402,6 +402,15 @@ export default function Checkout() {
     autoGpsAttempted.current = true
     handleDetectGps(true)
   }, [fulfillmentMode, geoLat, geoLng, handleDetectGps])
+
+  if (authLoading && !user) {
+    return (
+      <div className="page narrow" style={{ padding: '2rem 1rem' }}>
+        <div className="shimmer" style={{ width: '100%', height: '140px', borderRadius: '16px', marginBottom: '1rem' }} />
+        <div className="shimmer" style={{ width: '100%', height: '220px', borderRadius: '16px' }} />
+      </div>
+    )
+  }
 
   if (!user) return <Navigate to="/auth" replace />
   if (cart.length === 0) {

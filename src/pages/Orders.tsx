@@ -14,7 +14,7 @@ import { printOrderInvoice } from '../lib/printOrder'
 import type { Order, OrderItem } from '../types'
 
 export default function Orders() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { orders, lang, loading, reorderFromOrder, updateOrderStatus } = useStore()
 
   const navigate = useNavigate()
@@ -139,6 +139,14 @@ export default function Orders() {
   }, [activeTab, recentOrders, mine, archivedOrders, showCleared, clearedOrders])
 
   const archivedCount = archivedOrders.length + (showCleared ? clearedOrders.length : 0)
+
+  if (authLoading && !user) {
+    return (
+      <div className="page narrow" style={{ padding: '2rem 1rem' }}>
+        <OrderSkeleton count={2} />
+      </div>
+    )
+  }
 
   if (!user) return <Navigate to="/auth" replace />
 

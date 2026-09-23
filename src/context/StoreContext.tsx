@@ -432,7 +432,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!cloud) return
 
-    const isStaff = user && (user.role === 'seller' || user.role === 'admin' || user.role === 'rider')
+    const isStaff = user && (user.role === 'seller' || user.role === 'admin' || user.role === 'rider' || user.isSuperAdmin)
 
     if (isStaff) {
       // ⚡ Staff Realtime Channels: Sellers, Admins, Riders subscribe to Supabase Realtime

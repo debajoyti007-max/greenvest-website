@@ -61,7 +61,7 @@ export default function Layout() {
 
   // Alert audio chime and browser tab title flashing for sellers and admins
   const prevAlertsCountRef = useRef<number>(openAlertsCount)
-  const isPrivileged = user?.role === 'seller' || user?.role === 'admin'
+  const isPrivileged = user?.role === 'seller' || user?.role === 'admin' || user?.isSuperAdmin
 
   useEffect(() => {
     if (!isPrivileged) return
@@ -184,7 +184,7 @@ export default function Layout() {
                   {cartCount > 0 && <span className="badge">{cartCount}</span>}
                 </NavLink>
                 <NotificationBell />
-                {user?.role === 'admin' && (
+                {(user?.role === 'admin' || user?.isSuperAdmin) && (
                   <>
                     <NavLink
                       to="/seller"
@@ -317,7 +317,7 @@ export default function Layout() {
       </header>
 
       {/* 💼 Dedicated Staff Navigation Strip (Shows on seller/admin routes) */}
-      {(user?.role === 'seller' || user?.role === 'admin') &&
+      {(user?.role === 'seller' || user?.role === 'admin' || user?.isSuperAdmin) &&
         (location.pathname.startsWith('/seller') ||
           location.pathname.startsWith('/admin') ||
           location.pathname.startsWith('/rider')) && (
@@ -343,7 +343,7 @@ export default function Layout() {
               { path: '/seller/customers', label: lang === 'bn' ? 'কাস্টমার' : 'Customers', icon: '👥' },
               { path: '/seller/support', label: lang === 'bn' ? 'সাপোর্ট ডেস্ক' : 'Support Desk', icon: '💬' },
               { path: '/rider', label: lang === 'bn' ? 'রাইডার' : 'Rider', icon: '🛵' },
-              ...(user.role === 'admin' ? [{ path: '/admin', label: lang === 'bn' ? 'অ্যাডমিন' : 'Admin', icon: '⚙️' }] : []),
+              ...((user.role === 'admin' || user.isSuperAdmin) ? [{ path: '/admin', label: lang === 'bn' ? 'অ্যাডমিন' : 'Admin', icon: '⚙️' }] : []),
             ].map((tab) => {
               const active = tab.end
                 ? location.pathname === tab.path

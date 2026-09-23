@@ -13,7 +13,7 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0)
 
   const isRider = user?.role === 'rider'
-  const isSellerOrAdmin = user?.role === 'seller' || user?.role === 'admin'
+  const isSellerOrAdmin = user?.role === 'seller' || user?.role === 'admin' || user?.isSuperAdmin
   const todayIso = new Date().toISOString().split('T')[0]
 
   // 1. Order notifications for customer OR rider OR seller/admin

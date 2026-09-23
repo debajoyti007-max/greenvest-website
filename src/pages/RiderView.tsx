@@ -163,7 +163,7 @@ export default function RiderView() {
     showToast(next ? '🔊 নোটিফিকেশন সাউন্ড চালু' : '🔇 সাউন্ড বন্ধ', '🔔')
   }
 
-  if (!user || (user.role !== 'rider' && user.role !== 'seller' && user.role !== 'admin')) {
+  if (!user || (user.role !== 'rider' && user.role !== 'seller' && user.role !== 'admin' && !user.isSuperAdmin)) {
     return <Navigate to="/" replace />
   }
 
