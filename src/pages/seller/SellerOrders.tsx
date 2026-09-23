@@ -4,7 +4,7 @@ import { showToast } from '../../lib/toast'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
-import { isOrderStalePending, formatItemWeightDetail, getOrderDeliveryOtp } from '../../lib/business'
+import { isOrderStalePending, formatItemWeightDetail, getOrderDeliveryOtp, STORE_NAME } from '../../lib/business'
 import OrderChat from '../../components/OrderChat'
 import ItemPackingManifest from '../../components/seller/ItemPackingManifest'
 import { resolveNavDestination, createLocationRequestWhatsAppUrl } from '../../lib/delivery'
@@ -1331,8 +1331,8 @@ function sendOrderWhatsApp(o: Order, lang: string) {
 
   const msg =
     lang === 'bn'
-      ? `🥦 *MS Vegetable Center অর্ডার আপডেট*\n\nনমস্কার ${o.userName}!\nআপনার অর্ডার #${shortId} ${statusLabel}।\n\n${otpLine}🛍️ *পণ্য তালিকা:*\n${itemsSummary}\n\n💰 মোট: ₹${o.total} | অগ্রিম: ₹${o.advanceAmount} | সংগৃহীতব্য বাকি: ₹${balance}\n📍 ঠিকানা: ${o.address}\n\n📲 লাইভ ট্র্যাকিং:\nhttps://greenvest.shop/track?id=${o.id}\n\nMS Vegetable Center-এর সাথে থাকার জন্য ধন্যবাদ! 🌱`
-      : `🥦 *MS Vegetable Center Order Update*\n\nHello ${o.userName}!\nYour order #${shortId} is ${statusLabel}.\n\n${otpLine}🛍️ *Items:*\n${itemsSummary}\n\n💰 Total: ₹${o.total} | Advance: ₹${o.advanceAmount} | Balance to Pay: ₹${balance}\n📍 Address: ${o.address}\n\n📲 Live Tracking:\nhttps://greenvest.shop/track?id=${o.id}\n\nThank you for choosing MS Vegetable Center! 🌱`
+      ? `🥦 *${STORE_NAME} অর্ডার আপডেট*\n\nনমস্কার ${o.userName}!\nআপনার অর্ডার #${shortId} ${statusLabel}।\n\n${otpLine}🛍️ *পণ্য তালিকা:*\n${itemsSummary}\n\n💰 মোট: ₹${o.total} | অগ্রিম: ₹${o.advanceAmount} | সংগৃহীতব্য বাকি: ₹${balance}\n📍 ঠিকানা: ${o.address}\n\n📲 লাইভ ট্র্যাকিং:\nhttps://greenvest.shop/track?id=${o.id}\n\n${STORE_NAME}-এর সাথে থাকার জন্য ধন্যবাদ! 🌱`
+      : `🥦 *${STORE_NAME} Order Update*\n\nHello ${o.userName}!\nYour order #${shortId} is ${statusLabel}.\n\n${otpLine}🛍️ *Items:*\n${itemsSummary}\n\n💰 Total: ₹${o.total} | Advance: ₹${o.advanceAmount} | Balance to Pay: ₹${balance}\n📍 Address: ${o.address}\n\n📲 Live Tracking:\nhttps://greenvest.shop/track?id=${o.id}\n\nThank you for choosing ${STORE_NAME}! 🌱`
 
   const url = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`
   window.open(url, '_blank', 'noopener,noreferrer')

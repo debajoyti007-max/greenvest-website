@@ -42,6 +42,7 @@ const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'))
 const Contact = lazyWithRetry(() => import('./pages/Contact'))
 const Privacy = lazyWithRetry(() => import('./pages/Privacy'))
 const Terms = lazyWithRetry(() => import('./pages/Terms'))
+const Refund = lazyWithRetry(() => import('./pages/Refund'))
 const SellerHome = lazyWithRetry(() => import('./pages/seller/SellerHome'))
 const SellerProducts = lazyWithRetry(() => import('./pages/seller/SellerProducts'))
 const SellerOrders = lazyWithRetry(() => import('./pages/seller/SellerOrders'))
@@ -93,7 +94,7 @@ function AppRoutes() {
           <Route path="support" element={<Support />} />
           <Route path="shop" element={<Navigate to="/" replace />} />
           <Route path="track-order" element={<Navigate to="/track" replace />} />
-          <Route path="refund" element={<Navigate to="/" replace />} />
+          <Route path="refund" element={<Refund />} />
           <Route
             path="seller"
             element={

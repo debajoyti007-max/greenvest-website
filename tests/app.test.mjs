@@ -2369,6 +2369,7 @@ describe('Suite 41: Senior Dev Audit - Cart Wipeout Guard, Canonical Domains & R
     assert.ok(content.includes('useEffect(() => {'), 'Must use useEffect for cleanup')
     assert.ok(content.includes('if (!products || products.length === 0) return'), 'Must guard against empty catalog wipeout')
     assert.ok(!content.includes('const orphanedItems = cart.filter'), 'Must not run orphaned filter directly in render body')
+    assert.ok(content.includes('removeFromCart(item.productId, item.grade, item.weightMultiplier)'), 'Must pass item.weightMultiplier to removeFromCart')
   })
 
   test('CouponGeneratorModal uses canonical greenvest.shop domain with zero vercel.app references', () => {
@@ -2450,6 +2451,62 @@ describe('Suite 42: Complete UTR Purge Verification Across Frontend & Database',
     assert.ok(fs.existsSync(migrationPath), 'Migration 20260921172000 must exist')
     const sql = fs.readFileSync(migrationPath, 'utf8')
     assert.ok(sql.includes('DROP FUNCTION IF EXISTS public.create_order_with_items(jsonb)'), 'Must drop create_order_with_items')
+  })
+})
+
+// 43. Legal Consent Disclaimers, Dedicated Refund Route & Customer Data Deletion
+describe('Suite 43: Legal Consent Disclaimers, Dedicated Refund Route & Customer Data Deletion', () => {
+  test('Checkout.tsx contains 1-line legal consent notice with /terms, /privacy, and /refund', () => {
+    const filePath = path.resolve(__dirname, '../src/pages/Checkout.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.includes('to="/terms"'), 'Checkout must link to terms')
+    assert.ok(content.includes('to="/privacy"'), 'Checkout must link to privacy')
+    assert.ok(content.includes('to="/refund"'), 'Checkout must link to refund')
+  })
+
+  test('Auth.tsx contains signup consent notice with /terms, /privacy, and /refund', () => {
+    const filePath = path.resolve(__dirname, '../src/pages/Auth.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.includes('to="/terms"'), 'Auth signup must link to terms')
+    assert.ok(content.includes('to="/privacy"'), 'Auth signup must link to privacy')
+    assert.ok(content.includes('to="/refund"'), 'Auth signup must link to refund')
+  })
+
+  test('Refund.tsx exists and provides comprehensive bilingual policy clauses', () => {
+    const filePath = path.resolve(__dirname, '../src/pages/Refund.tsx')
+    assert.ok(fs.existsSync(filePath), 'Refund.tsx page file must exist')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.includes('SUPPORT_PHONE'), 'Refund.tsx must reference support phone')
+    assert.ok(content.includes('STORE_NAME'), 'Refund.tsx must reference store name')
+    assert.ok(content.includes('24') && content.includes('48'), 'Refund.tsx must state 24-48h UPI refund turnaround')
+  })
+
+  test('App.tsx mounts /refund route to Refund component and not a redirect', () => {
+    const filePath = path.resolve(__dirname, '../src/App.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.includes('<Route path="refund" element={<Refund />} />'), 'App.tsx must mount Refund component on /refund')
+  })
+
+  test('Layout.tsx footer includes /refund link', () => {
+    const filePath = path.resolve(__dirname, '../src/components/Layout.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.includes('<Link to="/refund"'), 'Layout footer must link to /refund')
+  })
+
+  test('Profile.tsx provides DPDP account deletion option with confirmation modal', () => {
+    const filePath = path.resolve(__dirname, '../src/pages/Profile.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.includes('showDeleteConfirm'), 'Profile must have delete confirmation modal state')
+    assert.ok(content.includes('handleDeleteAccount'), 'Profile must define handleDeleteAccount')
+    assert.ok(content.includes('deleteOwnAccount'), 'Profile must invoke deleteOwnAccount')
+  })
+
+  test('AuthContext.tsx defines deleteOwnAccount with active orders transit guard', () => {
+    const filePath = path.resolve(__dirname, '../src/context/AuthContext.tsx')
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.includes('deleteOwnAccount'), 'AuthContext must export deleteOwnAccount')
+    assert.ok(content.includes('activeOrders'), 'deleteOwnAccount must verify active orders')
+    assert.ok(content.includes('out_for_delivery'), 'deleteOwnAccount must protect active deliveries')
   })
 })
 

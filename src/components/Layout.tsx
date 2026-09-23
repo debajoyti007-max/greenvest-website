@@ -6,7 +6,7 @@ import Toast from './Toast'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { t } from '../lib/i18n'
-import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT } from '../lib/business'
+import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, STORE_NAME } from '../lib/business'
 import { STORE_LOCATION } from '../lib/delivery'
 import { APP_VERSION_LABEL } from '../lib/version'
 
@@ -73,13 +73,13 @@ export default function Layout() {
 
   useEffect(() => {
     if (!isPrivileged || openAlertsCount === 0) {
-      document.title = 'MS Vegetable Center – তাজা শাকসবজি ও বাজার'
+      document.title = `${STORE_NAME} – তাজা শাকসবজি ও বাজার`
       return
     }
 
     let toggle = false
-    const baseTitle = 'MS Vegetable Center – তাজা শাকসবজি ও বাজার'
-    const alertTitle = `🚨 (${openAlertsCount}) Alert | MS Vegetable Center`
+    const baseTitle = `${STORE_NAME} – তাজা শাকসবজি ও বাজার`
+    const alertTitle = `🚨 (${openAlertsCount}) Alert | ${STORE_NAME}`
 
     const timer = setInterval(() => {
       toggle = !toggle
@@ -124,10 +124,10 @@ export default function Layout() {
         <div className="header-inner">
           <Link to={user?.role === 'rider' ? '/rider' : '/'} className="brand" onClick={closeMenu}>
             <span className="brand-mark" aria-hidden style={{ background: '#ffffff', padding: '2px', border: '1.5px solid #16a34a', overflow: 'hidden' }}>
-              <img src="/icon-192.png?v=1.2" alt="MS Vegetable Center" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', display: 'block' }} />
+              <img src="/icon-192.png?v=1.2" alt={STORE_NAME} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px', display: 'block' }} />
             </span>
             <span className="brand-text">
-              <strong>MS Vegetable Center</strong>
+              <strong>{STORE_NAME}</strong>
               <em>{t(lang, 'freshTag')}</em>
             </span>
           </Link>
@@ -452,6 +452,7 @@ export default function Layout() {
                 <Link to="/contact">{t(lang, 'contact')}</Link>
                 <Link to="/privacy">{t(lang, 'privacy')}</Link>
                 <Link to="/terms">{t(lang, 'terms')}</Link>
+                <Link to="/refund">{lang === 'bn' ? 'বাতিল ও রিফান্ড নীতি' : 'Refund & Cancellation'}</Link>
               </nav>
               <p className="footer-hours">
                 {lang === 'bn' ? 'সময়: সকাল ৭টা – রাত ৯টা' : 'Hours: 7:00 am – 9:00 pm'}

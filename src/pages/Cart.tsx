@@ -29,7 +29,7 @@ export default function Cart() {
     if (!products || products.length === 0) return
     const orphaned = cart.filter((item) => !products.some((x) => x.id === item.productId))
     if (orphaned.length > 0) {
-      orphaned.forEach((item) => removeFromCart(item.productId, item.grade))
+      orphaned.forEach((item) => removeFromCart(item.productId, item.grade, item.weightMultiplier))
     }
   }, [products, cart, removeFromCart])
 

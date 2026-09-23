@@ -67,6 +67,7 @@ interface AuthContextValue {
   adminResetUserPin: (userId: string, newPin: string) => Promise<AuthResult>
   toggleBlockUser: (userId: string, isBlocked: boolean) => Promise<AuthResult>
   deleteUser: (userId: string) => Promise<AuthResult>
+  deleteOwnAccount: () => Promise<AuthResult>
   refresh: () => Promise<void>
   refreshUsers: () => Promise<void>
   checkAccountExists: (email: string) => Promise<boolean>
@@ -1310,6 +1311,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [cloud, user, users, executeWithStaffAuth],
   )
 
+  const deleteOwnAccount = useCallback(async (): Promise<AuthResult> => {
+    if (!user) return { ok: false, error: 'Not authenticated' }
+
+    // Staff and administrators are managed via Admin Control Panel
+    if (user.role === 'admin' || user.role === 'seller' || user.role === 'rider' || user.isSuperAdmin) {
+      return {
+        ok: false,
+        error: 'Staff and Administrator accounts must be managed through the Admin Control Panel.',
+      }
+    }
+
+    // Guard: Active orders in transit
+    try {
+      const activeOrders = getOrders().filter(
+        (o) =>
+          (o.userId === user.id || (user.phone && o.phone === user.phone)) &&
+          ['pending', 'advance_paid', 'confirmed', 'out_for_delivery'].includes(o.status),
+      )
+      if (activeOrders.length > 0) {
+        return {
+          ok: false,
+          error: `⚠️ Active orders detected: You have ${activeOrders.length} order(s) currently being processed or delivered. Your account and data cannot be deleted until all orders are completed or cancelled.`,
+        }
+      }
+    } catch {}
+
+    const targetId = user.id
+    const targetEmail = user.email
+
+    // 1. Delete from Supabase cloud if connected
+    if (cloud && supabase) {
+      try {
+        await supabase.from('addresses').delete().eq('user_id', targetId)
+      } catch (e) {
+        console.warn('Addresses deletion notice:', e)
+      }
+      try {
+        await supabase.from('notifications').delete().eq('user_id', targetId)
+      } catch (e) {
+        console.warn('Notifications deletion notice:', e)
+      }
+      try {
+        await supabase.from('profiles').delete().eq('id', targetId)
+      } catch (e) {
+        console.warn('Profile deletion notice:', e)
+      }
+      try {
+        await supabase.auth.signOut({ scope: 'global' })
+      } catch {}
+    }
+
+    // 2. Clear local storage records
+    setUsers((prev) => prev.filter((u) => u.id !== targetId && (!targetEmail || u.email !== targetEmail)))
+    saveUsers(getUsers().filter((u) => u.id !== targetId && (!targetEmail || u.email !== targetEmail)))
+    clearAllAuthSessionData()
+
+    // 3. Clear session and log out
+    await logout()
+    return { ok: true }
+  }, [cloud, user, logout])
+
   const updateUserProfile = useCallback(
     async (data: { name?: string; phone?: string }) => {
       if (!user) return
@@ -1403,6 +1465,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adminResetUserPin,
       toggleBlockUser,
       deleteUser,
+      deleteOwnAccount,
       refresh,
       refreshUsers,
       checkAccountExists,
@@ -1427,6 +1490,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       adminResetUserPin,
       toggleBlockUser,
       deleteUser,
+      deleteOwnAccount,
       refresh,
       refreshUsers,
       checkAccountExists,

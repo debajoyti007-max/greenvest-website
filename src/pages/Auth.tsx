@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { isValidIndianPhone, cleanDigits } from '../lib/phone'
 import { formatAuthIdentifier } from '../lib/authUtils'
+import { STORE_NAME } from '../lib/business'
 import { t } from '../lib/i18n'
 import type { Role } from '../types'
 
@@ -209,7 +210,7 @@ export default function Auth() {
 
   return (
     <div className="page narrow auth-page">
-      <h1 className="brand-hero compact">MS Vegetable Center</h1>
+      <h1 className="brand-hero compact">{STORE_NAME}</h1>
       <p className="lede center">
         {mode === 'mfa' && (lang === 'bn' ? 'সুপার অ্যাডমিন ওটিপি ভেরিফিকেশন' : 'Super Admin 2-Step Verification')}
         {mode === 'login' && (lang === 'bn' ? 'লগইন করুন (মোবাইল/জিমেইল ও ৪-সংখ্যার পিন)' : 'Login with Mobile / Gmail & 4-Digit PIN')}
@@ -490,6 +491,27 @@ export default function Auth() {
                 ? t(lang, 'signup')
                 : (lang === 'bn' ? 'ইউজারনেম যাচাই ও পিন রিসেট করুন' : 'Verify Username & Reset PIN')}
             </button>
+
+            {mode === 'signup' && (
+              <p style={{ fontSize: '0.74rem', color: '#64748b', textAlign: 'center', margin: '0.75rem 0 0', lineHeight: 1.45 }}>
+                {lang === 'bn' ? (
+                  <>
+                    সাইন আপ করে আপনি আমাদের{' '}
+                    <Link to="/terms" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>শর্তাবলী</Link>,{' '}
+                    <Link to="/privacy" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>গোপনীয়তা নীতি</Link> এবং{' '}
+                    <Link to="/refund" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>বাতিল ও রিফান্ড নীতি</Link>
+                    -তে সম্মতি দিচ্ছেন।
+                  </>
+                ) : (
+                  <>
+                    By signing up, you agree to our{' '}
+                    <Link to="/terms" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>Terms</Link>,{' '}
+                    <Link to="/privacy" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>Privacy Policy</Link>, and{' '}
+                    <Link to="/refund" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>Refund Policy</Link>.
+                  </>
+                )}
+              </p>
+            )}
           </>
         )}
       </form>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import {
@@ -1446,6 +1446,25 @@ export default function Checkout() {
               ? (lang === 'bn' ? '⏳ অর্ডার হচ্ছে...' : '⏳ Placing order...')
               : (lang === 'bn' ? '✅ পেমেন্ট সম্পন্ন করেছি · অর্ডার জমা দিন' : '✅ I Have Paid · Place Order')}
           </button>
+
+          <p style={{ fontSize: '0.74rem', color: '#64748b', textAlign: 'center', margin: '0.65rem 0 0 0', lineHeight: 1.45 }}>
+            {lang === 'bn' ? (
+              <>
+                অর্ডার জমা দিয়ে আপনি আমাদের{' '}
+                <Link to="/terms" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>শর্তাবলী</Link>,{' '}
+                <Link to="/privacy" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>গোপনীয়তা নীতি</Link> এবং{' '}
+                <Link to="/refund" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>বাতিল ও রিফান্ড নীতি</Link>
+                -তে সম্মতি দিচ্ছেন।
+              </>
+            ) : (
+              <>
+                By placing this order, you agree to our{' '}
+                <Link to="/terms" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>Terms</Link>,{' '}
+                <Link to="/privacy" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>Privacy Policy</Link>, and{' '}
+                <Link to="/refund" style={{ color: '#166534', textDecoration: 'underline', fontWeight: 600 }}>Refund Policy</Link>.
+              </>
+            )}
+          </p>
         </form>
       </div>
 

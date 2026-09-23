@@ -11,7 +11,7 @@ import type { Address } from '../types'
 
 export default function Profile() {
   const navigate = useNavigate()
-  const { user, logout, updateUserProfile, updatePassword } = useAuth()
+  const { user, logout, updateUserProfile, updatePassword, deleteOwnAccount } = useAuth()
   const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang, safeCloudSync } = useStore()
 
   const [addresses, setAddresses] = useState<Address[]>([])
@@ -30,6 +30,10 @@ export default function Profile() {
 
   const [showPinForm, setShowPinForm] = useState(false)
   const [newPinVal, setNewPinVal] = useState('')
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
 
   useEffect(() => {
@@ -110,6 +114,28 @@ export default function Profile() {
       showToast(err?.message || (lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed'), '❌', 'error')
     }
     setSaving(false)
+  }
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true)
+    setDeleteError('')
+    try {
+      const res = await deleteOwnAccount()
+      if (!res.ok) {
+        setDeleteError(res.error || (lang === 'bn' ? 'অ্যাকাউন্ট মোছা ব্যর্থ হয়েছে' : 'Failed to delete account'))
+        setDeletingAccount(false)
+        return
+      }
+      showToast(
+        lang === 'bn' ? '🗑️ আপনার অ্যাকাউন্ট ও ডেটা সম্পূর্ণ মুছে ফেলা হয়েছে।' : '🗑️ Your account and personal data have been deleted.',
+        'ℹ️',
+      )
+      navigate('/auth')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Deletion failed'
+      setDeleteError(msg)
+      setDeletingAccount(false)
+    }
   }
 
   const handleSaveAddress = async () => {
@@ -611,6 +637,41 @@ export default function Profile() {
           </button>
         </div>
 
+        {/* 🛡️ DPDP Privacy & Data Deletion Option */}
+        <div style={{ ...cardStyle, border: '1.5px dashed #fca5a5', background: '#fff5f5', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🛡️</span> {lang === 'bn' ? 'ব্যক্তিগত ডেটা ও অ্যাকাউন্ট মোছা' : 'Data Privacy & Account Deletion'}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#7f1d1d', marginTop: '3px', lineHeight: 1.4 }}>
+                {lang === 'bn'
+                  ? 'উপভোক্তা ডেটা সুরক্ষা বিধি (DPDP Act) অনুযায়ী আপনার প্রোফাইল ও সমস্ত সংরক্ষিত তথ্য স্থায়ীভাবে মুছুন।'
+                  : 'Permanently remove your saved delivery addresses, profile, and personal data.'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteError('')
+                setShowDeleteConfirm(true)
+              }}
+              style={{
+                padding: '0.45rem 0.9rem',
+                borderRadius: '8px',
+                border: '1px solid #ef4444',
+                background: '#ffffff',
+                color: '#dc2626',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+              }}
+            >
+              {lang === 'bn' ? 'অ্যাকাউন্ট মুছুন' : 'Delete Account'}
+            </button>
+          </div>
+        </div>
+
         <button
           onClick={async () => {
             await logout()
@@ -633,6 +694,87 @@ export default function Profile() {
           {lang === 'bn' ? 'সব ডিভাইস থেকে লগআউট করুন' : 'Logout from all devices'}
         </button>
       </section>
+
+      {/* ⚠️ Delete Account Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="modal-backdrop" role="presentation" onClick={() => !deletingAccount && setShowDeleteConfirm(false)}>
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: 'min(440px, 94vw)', borderRadius: '18px', padding: '1.5rem' }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+              <div style={{ fontSize: '2.8rem', marginBottom: '0.5rem' }}>⚠️</div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#991b1b', margin: '0 0 0.5rem' }}>
+                {lang === 'bn' ? 'অ্যাকাউন্ট মুছে ফেলতে চান?' : 'Delete Your Account?'}
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: '#4b5563', lineHeight: 1.5, margin: 0 }}>
+                {lang === 'bn'
+                  ? 'এটি একটি অপরিবর্তনীয় পদক্ষেপ। আপনার সংরক্ষিত সমস্ত ডেলিভারি ঠিকানা, নোটিফিকেশন এবং প্রোফাইল তথ্য চিরতরে মুছে যাবে।'
+                  : 'This action is permanent and cannot be undone. All your saved addresses, notifications, and profile data will be permanently purged.'}
+              </p>
+            </div>
+
+            {deleteError && (
+              <div
+                style={{
+                  background: '#fef2f2',
+                  border: '1px solid #f87171',
+                  borderRadius: '10px',
+                  padding: '0.75rem',
+                  fontSize: '0.82rem',
+                  color: '#991b1b',
+                  marginBottom: '1rem',
+                  lineHeight: 1.45,
+                }}
+              >
+                {deleteError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  fontSize: '0.95rem',
+                  border: 'none',
+                  cursor: deletingAccount ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {deletingAccount
+                  ? (lang === 'bn' ? '⏳ মুছে ফেলা হচ্ছে...' : '⏳ Deleting Account...')
+                  : (lang === 'bn' ? 'হ্যাঁ, অ্যাকাউন্ট ও ডেটা মুছুন' : 'Yes, Delete My Account & Data')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deletingAccount}
+                style={{
+                  width: '100%',
+                  padding: '0.65rem',
+                  borderRadius: '10px',
+                  background: '#f3f4f6',
+                  color: '#374151',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

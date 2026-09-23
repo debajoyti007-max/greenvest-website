@@ -7,7 +7,7 @@ import OrderSkeleton from '../components/OrderSkeleton'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { t } from '../lib/i18n'
-import { formatItemWeightDetail } from '../lib/business'
+import { formatItemWeightDetail, STORE_NAME } from '../lib/business'
 import { subscribeCustomerOrders } from '../lib/api'
 import { showToast } from '../lib/toast'
 import { printOrderInvoice } from '../lib/printOrder'
@@ -25,11 +25,11 @@ export default function Orders() {
       .map((it) => `• ${it.name} (${it.grade}) × ${it.qty} = ₹${it.unitPrice * it.qty}`)
       .join('\n')
     const trackUrl = `${window.location.origin}/track?id=${o.id}`
-    const text = `🌿 MS Vegetable Center Order #${o.id}\n📅 Date: ${new Date(o.createdAt).toLocaleDateString()}\n\nItems:\n${itemsText}\n\nTotal: ₹${o.total}\nAdvance Paid: ₹${o.advanceAmount}\nBalance Due: ₹${Math.max(0, o.total - o.advanceAmount)}\nAddress: ${o.address} (PIN ${o.pin})\n\nTrack: ${trackUrl}`
+    const text = `🌿 ${STORE_NAME} Order #${o.id}\n📅 Date: ${new Date(o.createdAt).toLocaleDateString()}\n\nItems:\n${itemsText}\n\nTotal: ₹${o.total}\nAdvance Paid: ₹${o.advanceAmount}\nBalance Due: ₹${Math.max(0, o.total - o.advanceAmount)}\nAddress: ${o.address} (PIN ${o.pin})\n\nTrack: ${trackUrl}`
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `MS Vegetable Center Order #${o.id}`,
+          title: `${STORE_NAME} Order #${o.id}`,
           text,
           url: trackUrl,
         })
