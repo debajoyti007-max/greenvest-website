@@ -349,7 +349,7 @@ export default function Orders() {
                     type="button"
                     className="btn btn-secondary"
                     onClick={() => printOrderInvoice(o, lang)}
-                    title={lang === 'bn' ? 'A4 ইনভয়েস প্রিন্ট / PDF' : 'Print A4 Invoice / PDF'}
+                    title={lang === 'bn' ? 'A4 ইনভয়েস প্রিন্ট / PDF (বাংলা বা ইংরেজিতে কাস্টমাইজযোগ্য)' : 'Print A4 Invoice / PDF (Customizable in Bengali or English)'}
                   >
                     🧾 {lang === 'bn' ? 'ইনভয়েস PDF' : 'Invoice PDF'}
                   </button>

@@ -1801,6 +1801,19 @@ describe('Invoice, POS Thermal Slip & Print Engine Engine', () => {
     assert.ok(!features.includes('noopener'), 'Must NOT contain noopener')
     assert.ok(!features.includes('noreferrer'), 'Must NOT contain noreferrer')
   })
+
+  test('printOrder.ts uses Blob URL engine and features live Bengali/English and A4/Slip switcher', () => {
+    const printOrderPath = path.resolve(__dirname, '../src/lib/printOrder.ts')
+    const printOrderContent = fs.readFileSync(printOrderPath, 'utf8')
+
+    assert.ok(printOrderContent.includes('new Blob([html]'), 'Must generate HTML Blob')
+    assert.ok(printOrderContent.includes('URL.createObjectURL(blob)'), 'Must create Blob URL to prevent about:blank')
+    assert.ok(printOrderContent.includes('btn-lang-bn'), 'Must include Bengali language button')
+    assert.ok(printOrderContent.includes('btn-lang-en'), 'Must include English language button')
+    assert.ok(printOrderContent.includes('btn-fmt-a4'), 'Must include A4 format button')
+    assert.ok(printOrderContent.includes('btn-fmt-pos58'), 'Must include POS 58mm format button')
+    assert.ok(printOrderContent.includes('btn-fmt-pos80'), 'Must include POS 80mm format button')
+  })
 })
 
 // 35. Rural Landmark Precision, Android App Intent & Multi-Stop TSP Routing
