@@ -140,7 +140,7 @@ interface StoreContextValue {
   safeCloudSync: () => Promise<void>
   fetchAddresses: (userId: string) => Promise<Address[]>
   saveAddress: (addr: Address) => Promise<void>
-  deleteAddress: (id: number) => Promise<void>
+  deleteAddress: (id: number, userId?: string) => Promise<void>
   validateCoupon: (code: string, orderTotal: number) => Promise<Coupon | null>
   createCoupon: (coupon: { code: string; discount_type: 'flat' | 'percent'; discount_value: number; min_order: number; valid: boolean; expires_at?: string }) => Promise<boolean>
   saveDailyReport: (report: DailyReport) => Promise<void>
@@ -1375,19 +1375,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const fetchAddresses = useCallback(async (userId: string) => {
-    if (!cloud) return []
     return fetchAddressesApi(userId)
-  }, [cloud])
+  }, [])
 
   const saveAddress = useCallback(async (addr: Address) => {
-    if (!cloud) return
     return saveAddressApi(addr)
-  }, [cloud])
+  }, [])
 
-  const deleteAddress = useCallback(async (id: number) => {
-    if (!cloud) return
-    return deleteAddressApi(id)
-  }, [cloud])
+  const deleteAddress = useCallback(async (id: number, userId?: string) => {
+    return deleteAddressApi(id, userId || user?.id)
+  }, [user])
 
   const validateCoupon = useCallback(async (code: string, orderTotal: number) => {
     if (!cloud) return null

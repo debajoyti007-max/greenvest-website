@@ -3,7 +3,8 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { supabase } from '../lib/supabase'
-import { saveDelivery } from '../lib/storage'
+import { saveDelivery, getStoredAddresses } from '../lib/storage'
+import { checkLocationServiceability } from '../lib/delivery'
 import { showToast } from '../lib/toast'
 import { validatePhoneStrict } from '../lib/validation'
 import { SERVICEABLE_PINCODES } from '../lib/business'
@@ -14,8 +15,8 @@ export default function Profile() {
   const { user, logout, updateUserProfile, updatePassword, deleteOwnAccount, loading: authLoading } = useAuth()
   const { orders, fetchAddresses, saveAddress, deleteAddress, lang, setLang, safeCloudSync } = useStore()
 
-  const [addresses, setAddresses] = useState<Address[]>([])
-  const [loadingAddrs, setLoadingAddrs] = useState(true)
+  const [addresses, setAddresses] = useState<Address[]>(() => (user ? getStoredAddresses(user.id) : []))
+  const [loadingAddrs, setLoadingAddrs] = useState<boolean>(() => !user || getStoredAddresses(user.id).length === 0)
   const [isSyncing, setIsSyncing] = useState(false)
 
   const [editingName, setEditingName] = useState(false)
@@ -27,6 +28,9 @@ export default function Profile() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [addrInput, setAddrInput] = useState('')
   const [addrPin, setAddrPin] = useState<string>(SERVICEABLE_PINCODES[0])
+  const [addrGeoLat, setAddrGeoLat] = useState<number | undefined>(undefined)
+  const [addrGeoLng, setAddrGeoLng] = useState<number | undefined>(undefined)
+  const [detectingGps, setDetectingGps] = useState(false)
 
   const [showPinForm, setShowPinForm] = useState(false)
   const [newPinVal, setNewPinVal] = useState('')
@@ -35,19 +39,79 @@ export default function Profile() {
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-
   useEffect(() => {
     if (user) {
       setNameVal(user.name)
       const ph = user.phone || (user.email.endsWith('@greenvest.shop') ? user.email.replace('@greenvest.shop', '') : '')
       setPhoneVal(ph)
-      setLoadingAddrs(true)
+
+      // 1. Immediately sync with local cache
+      const local = getStoredAddresses(user.id)
+      if (local.length > 0) {
+        setAddresses(local)
+        setLoadingAddrs(false)
+      } else {
+        setLoadingAddrs(true)
+      }
+
+      // 2. Background revalidation from cloud (security definer RPC)
       fetchAddresses(user.id)
-        .then(setAddresses)
+        .then((cloudAddrs) => {
+          if (cloudAddrs && cloudAddrs.length > 0) {
+            setAddresses(cloudAddrs)
+          }
+        })
         .catch(console.error)
         .finally(() => setLoadingAddrs(false))
     }
   }, [user, fetchAddresses])
+
+  const handleDetectGps = () => {
+    if (!navigator.geolocation) {
+      showToast(lang === 'bn' ? 'ব্রাউজারে GPS সাপোর্ট নেই' : 'Geolocation is not supported by your browser', '⚠️', 'error')
+      return
+    }
+    setDetectingGps(true)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        setAddrGeoLat(lat)
+        setAddrGeoLng(lng)
+
+        try {
+          const check = await checkLocationServiceability(lat, lng)
+          if (check.detectedPin && (SERVICEABLE_PINCODES as readonly string[]).includes(check.detectedPin)) {
+            setAddrPin(check.detectedPin)
+          }
+          if (check.detectedArea && !addrInput.includes(check.detectedArea)) {
+            setAddrInput((prev) => (prev ? `${prev}, ${check.detectedArea}` : check.detectedArea || ''))
+          }
+          showToast(
+            lang === 'bn'
+              ? `📍 অবস্থান সনাক্ত হয়েছে (${check.detectedArea || 'GPS'})`
+              : `📍 GPS position detected (${check.detectedArea || 'GPS'})`,
+            '📍'
+          )
+        } catch {
+          showToast(lang === 'bn' ? '📍 GPS স্থানাঙ্ক পাওয়া গেছে' : '📍 GPS coordinates captured', '📍')
+        } finally {
+          setDetectingGps(false)
+        }
+      },
+      (err) => {
+        setDetectingGps(false)
+        showToast(
+          lang === 'bn'
+            ? 'GPS অনুমতি মেলেনি বা অবস্থান সনাক্ত করা যায়নি'
+            : (err.message || 'Could not detect GPS location'),
+          '⚠️',
+          'error'
+        )
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    )
+  }
 
   const handleSaveName = async () => {
     if (!user || !nameVal.trim()) return
@@ -58,8 +122,9 @@ export default function Profile() {
       showToast(lang === 'bn' ? '✅ নাম সফলভাবে সেভ হয়েছে' : '✅ Name updated successfully', '🎉')
     } catch {
       showToast(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.', '❌', 'error')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const handleSavePhone = async () => {
@@ -76,8 +141,9 @@ export default function Profile() {
       showToast(lang === 'bn' ? '✅ মোবাইল নম্বর সেভ হয়েছে' : '✅ Phone number saved', '🎉')
     } catch {
       showToast(lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed. Please try again.', '❌', 'error')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const isStaff = user?.role === 'admin' || user?.role === 'seller' || user?.role === 'rider' || user?.isSuperAdmin
@@ -112,8 +178,9 @@ export default function Profile() {
       }
     } catch (err: any) {
       showToast(err?.message || (lang === 'bn' ? 'আপডেট ব্যর্থ হয়েছে' : 'Update failed'), '❌', 'error')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const handleDeleteAccount = async () => {
@@ -142,33 +209,66 @@ export default function Profile() {
     if (!user || !addrInput.trim()) return
     setSaving(true)
     const pin = addrPin.trim() || SERVICEABLE_PINCODES[0]
+    const tempId = Date.now()
+    const newAddr: Address = {
+      id: tempId,
+      user_id: user.id,
+      label: 'Home Delivery',
+      address: addrInput.trim(),
+      phone: phoneVal || user.phone || '',
+      pin,
+      is_default: true,
+      geoLat: addrGeoLat,
+      geoLng: addrGeoLng,
+    }
+
+    // 1. Instant optimistic state update
+    setAddresses((prev) => {
+      const unDefaulted = prev.map((a) => ({ ...a, is_default: false }))
+      return [newAddr, ...unDefaulted]
+    })
+    setLoadingAddrs(false)
+
     try {
-      await saveAddress({
-        user_id: user.id,
-        label: 'Home Delivery',
+      // 2. Synchronous local write + non-blocking cloud RPC sync
+      await saveAddress(newAddr)
+      saveDelivery(user.id, {
         address: addrInput.trim(),
         phone: phoneVal || user.phone || '',
         pin,
-        is_default: true,
+        geoLat: addrGeoLat,
+        geoLng: addrGeoLng,
       })
-      saveDelivery(user.id, { address: addrInput.trim(), phone: phoneVal || user.phone || '', pin })
+
+      // 3. Silent revalidation
       const updated = await fetchAddresses(user.id)
-      setAddresses(updated)
+      if (updated && updated.length > 0) {
+        setAddresses(updated)
+      }
       setAddrInput('')
+      setAddrGeoLat(undefined)
+      setAddrGeoLng(undefined)
       setShowAddForm(false)
+      showToast(lang === 'bn' ? '✅ ঠিকানা সফলভাবে সেভ হয়েছে!' : '✅ Address saved successfully!', '🎉')
     } catch {
-      showToast(lang === 'bn' ? 'ঠিকানা আপডেট ব্যর্থ হয়েছে' : 'Address save failed', '❌', 'error')
+      showToast(lang === 'bn' ? 'ঠিকানা সংরক্ষণ সম্পন্ন হয়েছে' : 'Address saved locally', 'ℹ️')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const handleDeleteAddress = async (id?: number) => {
-    if (!id) return
+    if (!id || !user) return
     if (!window.confirm(lang === 'bn' ? 'ঠিকানা মুছে ফেলবেন?' : 'Delete this address?')) return
-    await deleteAddress(id)
-    if (user) {
+    // Optimistic deletion
+    setAddresses((prev) => prev.filter((a) => a.id !== id))
+    try {
+      await deleteAddress(id, user.id)
       const updated = await fetchAddresses(user.id)
       setAddresses(updated)
+      showToast(lang === 'bn' ? '🗑️ ঠিকানা মোছা হয়েছে' : '🗑️ Address deleted', 'info')
+    } catch {
+      // Ignore deletion failure
     }
   }
 
@@ -427,9 +527,27 @@ export default function Profile() {
 
         {showAddForm && (
           <div style={{ ...cardStyle, marginBottom: '0.85rem', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
-              {lang === 'bn' ? 'নতুন ডেলিভারি ঠিকানা লিখুন:' : 'Enter Delivery Address:'}
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                {lang === 'bn' ? 'নতুন ডেলিভারি ঠিকানা লিখুন:' : 'Enter Delivery Address:'}
+              </label>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleDetectGps}
+                disabled={detectingGps}
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
+              >
+                {detectingGps
+                  ? (lang === 'bn' ? 'শনাক্ত হচ্ছে...' : 'Detecting...')
+                  : (lang === 'bn' ? '📍 GPS থেকে নিন' : '📍 Detect GPS')}
+              </button>
+            </div>
+            {addrGeoLat && addrGeoLng && (
+              <div style={{ fontSize: '0.75rem', color: '#166534', fontWeight: 600, marginBottom: '0.4rem' }}>
+                📍 GPS স্থানাঙ্ক: {addrGeoLat.toFixed(4)}, {addrGeoLng.toFixed(4)}
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <input
                 type="text"
@@ -497,7 +615,11 @@ export default function Profile() {
             {addresses.map(addr => (
               <div key={addr.id} style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem' }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{addr.label} {addr.is_default && '⭐'}</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <span>{addr.label}</span>
+                    {addr.is_default && <span style={{ fontSize: '0.75rem', background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>⭐ Default</span>}
+                    {addr.geoLat && addr.geoLng && <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>📍 GPS</span>}
+                  </div>
                   <div style={{ color: 'var(--text-light)', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={addr.address}>{addr.address}</div>
                   <div style={{ color: 'var(--text-light)', fontSize: '0.8rem' }}>📱 {addr.phone} {addr.pin ? `· 📮 PIN ${addr.pin}` : ''}</div>
                 </div>

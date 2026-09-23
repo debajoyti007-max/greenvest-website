@@ -55,7 +55,7 @@ cp .env.example .env
 # 3. Start development server
 npm run dev
 
-# 4. Run test suite (186 tests across 48 suites)
+# 4. Run test suite (193 tests across 49 suites)
 npm test
 
 # 5. Build and sync for production (/docs + root)

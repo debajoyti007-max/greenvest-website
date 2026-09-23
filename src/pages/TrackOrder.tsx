@@ -194,8 +194,9 @@ export default function TrackOrder() {
         found = (await fetchOrderByIdAndPhone(rawOrderId, rawPhone)) ?? undefined
       } catch {
         // ignore network errors silently
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
 
     if (found) {

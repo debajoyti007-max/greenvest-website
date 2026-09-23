@@ -2837,5 +2837,71 @@ describe('Suite 48: Super Admin Eternal Shield & Anti-Deletion Lock', () => {
   })
 })
 
+describe('Suite 49: Customer Location & Address Resilience, Local-First Sync & Hanging State Protections', () => {
+  const migrationPath = path.resolve(__dirname, '../supabase/migrations/20260924031000_customer_addresses_rpc.sql')
+  const migrationContent = fs.readFileSync(migrationPath, 'utf8')
+  const storagePath = path.resolve(__dirname, '../src/lib/storage.ts')
+  const storageContent = fs.readFileSync(storagePath, 'utf8')
+  const apiPath = path.resolve(__dirname, '../src/lib/api.ts')
+  const apiContent = fs.readFileSync(apiPath, 'utf8')
+  const profilePath = path.resolve(__dirname, '../src/pages/Profile.tsx')
+  const profileContent = fs.readFileSync(profilePath, 'utf8')
+  const trackPath = path.resolve(__dirname, '../src/pages/TrackOrder.tsx')
+  const trackContent = fs.readFileSync(trackPath, 'utf8')
+
+  test('Database migration defines security definer RPCs and grants execute to anon & authenticated', () => {
+    assert.ok(migrationContent.includes('FUNCTION public.save_customer_address'), 'Must define save_customer_address')
+    assert.ok(migrationContent.includes('FUNCTION public.get_customer_addresses'), 'Must define get_customer_addresses')
+    assert.ok(migrationContent.includes('FUNCTION public.delete_customer_address'), 'Must define delete_customer_address')
+    assert.ok(migrationContent.includes('SECURITY DEFINER'), 'Must be SECURITY DEFINER')
+    assert.ok(migrationContent.includes('GRANT EXECUTE ON FUNCTION public.save_customer_address'), 'Must grant execute to save_customer_address')
+    assert.ok(migrationContent.includes('GRANT EXECUTE ON FUNCTION public.get_customer_addresses'), 'Must grant execute to get_customer_addresses')
+    assert.ok(migrationContent.includes('GRANT EXECUTE ON FUNCTION public.delete_customer_address'), 'Must grant execute to delete_customer_address')
+  })
+
+  test('storage.ts exports getStoredAddresses, storeAddress, deleteStoredAddress with auto-seed fallback', () => {
+    assert.ok(storageContent.includes('export function getStoredAddresses'), 'Must export getStoredAddresses')
+    assert.ok(storageContent.includes('export function storeAddress'), 'Must export storeAddress')
+    assert.ok(storageContent.includes('export function deleteStoredAddress'), 'Must export deleteStoredAddress')
+    assert.ok(storageContent.includes('getSavedDelivery'), 'Must check getSavedDelivery fallback')
+  })
+
+  test('api.ts implements fetchAddresses, saveAddress, deleteAddress with withTimeout guards and security definer RPCs', () => {
+    assert.ok(apiContent.includes("supabase.rpc('get_customer_addresses'"), 'Must call get_customer_addresses RPC')
+    assert.ok(apiContent.includes("supabase.rpc('save_customer_address'"), 'Must call save_customer_address RPC')
+    assert.ok(apiContent.includes("supabase.rpc('delete_customer_address'"), 'Must call delete_customer_address RPC')
+    assert.ok(apiContent.includes('getStoredAddresses'), 'Must fallback to getStoredAddresses')
+    assert.ok(apiContent.includes('withTimeout'), 'Must use withTimeout')
+  })
+
+  test('Profile.tsx initializes addresses directly from local cache and prevents infinite shimmer', () => {
+    assert.ok(profileContent.includes('getStoredAddresses(user.id)'), 'Must initialize addresses from local cache')
+    assert.ok(profileContent.includes('loadingAddrs'), 'Must manage loadingAddrs')
+  })
+
+  test('Profile.tsx wraps all mutation handlers in finally blocks to eliminate button freeze', () => {
+    assert.ok(profileContent.includes('handleSaveName'), 'Must have handleSaveName')
+    assert.ok(profileContent.includes('handleSavePhone'), 'Must have handleSavePhone')
+    assert.ok(profileContent.includes('handleUpdateMyPin'), 'Must have handleUpdateMyPin')
+    assert.ok(profileContent.includes('handleSaveAddress'), 'Must have handleSaveAddress')
+    // Check that finally block sets saving back to false
+    const finallyBlocks = profileContent.match(/finally\s*\{[\s\S]*?setSaving\(false\)[\s\S]*?\}/g) || []
+    assert.ok(finallyBlocks.length >= 4, 'Must have at least 4 finally blocks resetting setSaving(false)')
+  })
+
+  test('Profile.tsx includes 1-tap GPS auto-detection button', () => {
+    assert.ok(profileContent.includes('handleDetectGps'), 'Must provide handleDetectGps')
+    assert.ok(profileContent.includes('navigator.geolocation'), 'Must check navigator.geolocation')
+    assert.ok(profileContent.includes('checkLocationServiceability'), 'Must verify serviceability via GPS')
+  })
+
+  test('TrackOrder.tsx wraps setLoading(false) in finally block and fetchOrderByIdAndPhone uses timeout guard', () => {
+    const trackFinally = trackContent.match(/try\s*\{[\s\S]*?fetchOrderByIdAndPhone[\s\S]*?\}\s*catch[\s\S]*?finally\s*\{[\s\S]*?setLoading\(false\)[\s\S]*?\}/)
+    assert.ok(trackFinally, 'TrackOrder.tsx must wrap setLoading(false) in finally')
+    assert.ok(apiContent.includes("'track_order_public'"), 'api.ts must call track_order_public')
+  })
+})
+
+
 
 

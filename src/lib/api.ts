@@ -21,6 +21,7 @@ import type {
 import { SEED_PRODUCTS } from '../data/seed'
 import { isSupabaseConfigured, supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase'
 import type { StaffCredentials } from './staffAuth'
+import { getStoredAddresses, storeAddress, deleteStoredAddress } from './storage'
 
 type ProductRow = {
   id: string
@@ -124,6 +125,18 @@ type ProfileRow = {
 function requireClient() {
   if (!supabase) throw new Error('Supabase is not configured. Add keys to .env')
   return supabase
+}
+
+export async function withTimeout<T>(promiseLike: PromiseLike<T>, ms: number, errorMsg = 'Request timed out'): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(errorMsg)), ms)
+  })
+  try {
+    return await Promise.race([Promise.resolve(promiseLike), timeoutPromise])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 function isBrokenBn(value: string | null | undefined) {
@@ -652,10 +665,14 @@ export async function fetchOrderByIdAndPhone(
   if (!cleanId || cleanPhone.length < 10) return null
 
   try {
-    const { data, error } = await supabase.rpc('track_order_public', {
-      p_order_id: cleanId,
-      p_phone: cleanPhone,
-    })
+    const { data, error } = await withTimeout(
+      supabase.rpc('track_order_public', {
+        p_order_id: cleanId,
+        p_phone: cleanPhone,
+      }),
+      5000,
+      'Order tracking timed out'
+    )
     if (error) return null
     const payload = data as { ok?: boolean; order?: OrderRow } | null
     if (payload?.ok && payload.order) {
@@ -681,19 +698,6 @@ export async function cancelOwnOrderApi(
   if (error) throw new Error(error.message || 'Failed to cancel order')
   const result = data as { ok?: boolean; error?: string } | null
   if (!result?.ok) throw new Error(result?.error || 'Failed to cancel order')
-}
-
-
-async function withTimeout<T>(promiseLike: PromiseLike<T>, ms: number, errorMsg = 'Request timed out'): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(errorMsg)), ms)
-  })
-  try {
-    return await Promise.race([Promise.resolve(promiseLike), timeoutPromise])
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
 }
 
 export async function createOrder(order: Order): Promise<Order> {
@@ -1100,74 +1104,176 @@ export function subscribeSupportMessages(userId: string | undefined, onChange: (
 
 
 export async function fetchAddresses(userId: string): Promise<Address[]> {
-  if (!supabase || !userId) return []
+  if (!userId) return []
+  const local = getStoredAddresses(userId)
+  if (!supabase) return local
+
   try {
-    const { data, error } = await supabase.from('addresses').select('*').eq('user_id', userId)
-    if (error) return []
-    return (data || []).map((r: any) => ({
-      id: r.id,
-      user_id: r.user_id,
-      label: r.label,
-      address: r.address,
-      phone: r.phone,
-      pin: r.pin,
-      is_default: r.is_default,
-      geoLat: r.geo_lat != null ? Number(r.geo_lat) : undefined,
-      geoLng: r.geo_lng != null ? Number(r.geo_lng) : undefined,
-      landmark: r.landmark || undefined,
-    }))
-  } catch { return [] }
+    // 1. Try security definer RPC first (works for all roles including anon PIN users)
+    const { data: rpcData, error: rpcErr } = await withTimeout(
+      supabase.rpc('get_customer_addresses', { p_user_id: userId }),
+      2500,
+      'get_customer_addresses RPC timed out'
+    )
+
+    if (!rpcErr && rpcData && typeof rpcData === 'object') {
+      const payload = rpcData as { ok?: boolean; addresses?: any[] }
+      if (payload.ok && Array.isArray(payload.addresses)) {
+        const cloudAddrs: Address[] = payload.addresses.map((r: any) => ({
+          id: r.id,
+          user_id: r.user_id,
+          label: r.label || 'Home',
+          address: r.address,
+          phone: r.phone || '',
+          pin: r.pin || '',
+          is_default: Boolean(r.is_default),
+          geoLat: r.geo_lat != null ? Number(r.geo_lat) : undefined,
+          geoLng: r.geo_lng != null ? Number(r.geo_lng) : undefined,
+          landmark: r.landmark || undefined,
+        }))
+
+        if (cloudAddrs.length > 0) {
+          cloudAddrs.forEach((a) => storeAddress(userId, a))
+          return getStoredAddresses(userId)
+        }
+
+        // If cloud returned empty array but local has addresses, sync local to cloud
+        if (local.length > 0) {
+          for (const a of local) {
+            void saveAddress(a)
+          }
+          return local
+        }
+        return []
+      }
+    }
+
+    // 2. Direct table fallback if RPC is unavailable
+    const { data, error } = await withTimeout(
+      supabase.from('addresses').select('*').eq('user_id', userId),
+      2000,
+      'addresses table select timed out'
+    )
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const mapped: Address[] = data.map((r: any) => ({
+        id: r.id,
+        user_id: r.user_id,
+        label: r.label || 'Home',
+        address: r.address,
+        phone: r.phone || '',
+        pin: r.pin || '',
+        is_default: Boolean(r.is_default),
+        geoLat: r.geo_lat != null ? Number(r.geo_lat) : undefined,
+        geoLng: r.geo_lng != null ? Number(r.geo_lng) : undefined,
+        landmark: r.landmark || undefined,
+      }))
+      mapped.forEach((a) => storeAddress(userId, a))
+      return getStoredAddresses(userId)
+    }
+  } catch (err) {
+    console.debug('fetchAddresses cloud fetch error, returning local cache:', err)
+  }
+
+  return local
 }
 
 export async function saveAddress(addr: Address): Promise<void> {
-  if (!supabase) return
+  const userId = addr.user_id || ''
+  // 1. Immediately persist locally (instant optimistic UI update, zero latency)
+  if (userId) {
+    storeAddress(userId, addr)
+  }
+
+  if (!supabase || !userId) return
+
+  // 2. Cloud sync via security definer RPC with 3-second timeout guard
   try {
-    const payload: any = {
-      user_id: addr.user_id,
+    const payload = {
+      p_user_id: userId,
+      p_address: addr.address.trim(),
+      p_phone: addr.phone || '',
+      p_label: addr.label || 'Home',
+      p_pin: addr.pin || null,
+      p_is_default: addr.is_default !== false,
+      p_geo_lat: addr.geoLat ?? null,
+      p_geo_lng: addr.geoLng ?? null,
+      p_landmark: addr.landmark || null,
+      p_id: addr.id && typeof addr.id === 'number' && addr.id < 2000000000 ? addr.id : null,
+    }
+
+    const { data: rpcData, error: rpcErr } = await withTimeout(
+      supabase.rpc('save_customer_address', payload),
+      3000,
+      'save_customer_address RPC timed out'
+    )
+
+    if (!rpcErr && rpcData) {
+      const res = rpcData as { ok?: boolean; address?: any }
+      if (res.ok && res.address?.id) {
+        storeAddress(userId, {
+          ...addr,
+          id: res.address.id,
+        })
+      }
+      return
+    }
+
+    // Direct table upsert fallback
+    const directPayload: any = {
+      user_id: userId,
       label: addr.label || 'Home',
       address: addr.address,
       phone: addr.phone,
+      pin: addr.pin,
+      is_default: addr.is_default !== false,
+      geo_lat: addr.geoLat,
+      geo_lng: addr.geoLng,
+      landmark: addr.landmark,
     }
-    if (addr.pin) payload.pin = addr.pin
-    if (addr.is_default !== undefined) payload.is_default = addr.is_default
-    if (addr.geoLat != null) payload.geo_lat = addr.geoLat
-    if (addr.geoLng != null) payload.geo_lng = addr.geoLng
-    if (addr.landmark) payload.landmark = addr.landmark
-
-    if (addr.id) {
-      payload.id = addr.id
-      const { error } = await supabase.from('addresses').upsert(payload)
-      if (error) {
-        // Fallback without extended columns in case database columns aren't migrated yet
-        delete payload.pin
-        delete payload.is_default
-        delete payload.geo_lat
-        delete payload.geo_lng
-        delete payload.landmark
-        await supabase.from('addresses').upsert(payload)
-      }
-    } else {
-      const { error } = await supabase.from('addresses').insert(payload)
-      if (error) {
-        // Fallback without extended columns
-        delete payload.pin
-        delete payload.is_default
-        delete payload.geo_lat
-        delete payload.geo_lng
-        delete payload.landmark
-        await supabase.from('addresses').insert(payload)
-      }
+    if (addr.id && typeof addr.id === 'number' && addr.id < 2000000000) {
+      directPayload.id = addr.id
     }
+    await withTimeout(
+      supabase.from('addresses').upsert(directPayload),
+      3000,
+      'addresses upsert timed out'
+    )
   } catch (err) {
-    console.warn('saveAddress failed:', err)
+    console.warn('saveAddress cloud sync failed (saved locally):', err)
   }
 }
 
-export async function deleteAddress(id: number): Promise<void> {
+export async function deleteAddress(id: number, userId?: string): Promise<void> {
+  // 1. Immediately delete from local storage
+  if (userId) {
+    deleteStoredAddress(userId, id)
+  }
+
   if (!supabase) return
+
+  // 2. Cloud delete with timeout guard
   try {
-    await supabase.from('addresses').delete().eq('id', id)
-  } catch {}
+    if (userId) {
+      const { error } = await withTimeout(
+        supabase.rpc('delete_customer_address', {
+          p_user_id: userId,
+          p_address_id: id,
+        }),
+        3000,
+        'delete_customer_address RPC timed out'
+      )
+      if (!error) return
+    }
+
+    // Direct table delete fallback
+    await withTimeout(
+      supabase.from('addresses').delete().eq('id', id),
+      3000,
+      'addresses delete timed out'
+    )
+  } catch (err) {
+    console.warn('deleteAddress cloud sync error:', err)
+  }
 }
 
 export async function validateCoupon(code: string, orderTotal: number): Promise<Coupon | null> {

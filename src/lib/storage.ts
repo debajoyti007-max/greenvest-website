@@ -1,6 +1,6 @@
 import { SEED_PRODUCTS, ensureAllSeedProducts } from '../data/seed'
 import { initCacheGuard, safeJsonParse } from './cacheManager'
-import type { CartItem, DeliverySlot, Lang, Order, Product, User } from '../types'
+import type { Address, CartItem, DeliverySlot, Lang, Order, Product, User } from '../types'
 
 // Automatically check and clean deprecated/corrupted cache on boot
 initCacheGuard()
@@ -14,6 +14,7 @@ const KEYS = {
   lang: 'gv_lang',
   seeded: 'gv_seeded',
   delivery: 'gv_delivery',
+  addresses: 'gv_addresses',
 } as const
 
 export const STORE_EVENT = 'greenvest-store-update'
@@ -359,6 +360,116 @@ export function saveDelivery(userId: string, data: SavedDelivery) {
     geoLng: data.geoLng,
     landmark: data.landmark?.trim(),
   })
+}
+
+export function getStoredAddresses(userId: string): Address[] {
+  if (!userId) return []
+  const list = read<Address[]>(`${KEYS.addresses}:${userId}`, [])
+  if (Array.isArray(list) && list.length > 0) return list
+
+  // Auto-seed fallback from savedDelivery if no addresses stored yet
+  const saved = getSavedDelivery(userId)
+  if (saved && saved.address && saved.address.trim()) {
+    const initialAddr: Address = {
+      id: 1,
+      user_id: userId,
+      label: 'Home Delivery',
+      address: saved.address.trim(),
+      phone: saved.phone || '',
+      pin: saved.pin || '',
+      is_default: true,
+      geoLat: saved.geoLat,
+      geoLng: saved.geoLng,
+      landmark: saved.landmark,
+    }
+    write(`${KEYS.addresses}:${userId}`, [initialAddr])
+    return [initialAddr]
+  }
+
+  return []
+}
+
+export function storeAddress(userId: string, addr: Address): Address {
+  if (!userId) return addr
+  const list = getStoredAddresses(userId)
+  const isDefault = addr.is_default !== false
+
+  // If this address is marked default, unmark others
+  const updatedList = list.map((a) => (isDefault ? { ...a, is_default: false } : a))
+
+  let target: Address
+  const existingIdx = updatedList.findIndex(
+    (a) =>
+      (addr.id && a.id === addr.id) ||
+      (a.address.trim().toLowerCase() === addr.address.trim().toLowerCase() && a.pin === addr.pin)
+  )
+
+  if (existingIdx >= 0) {
+    target = {
+      ...updatedList[existingIdx],
+      ...addr,
+      user_id: userId,
+      is_default: isDefault,
+    }
+    updatedList[existingIdx] = target
+  } else {
+    target = {
+      ...addr,
+      id: addr.id || Date.now(),
+      user_id: userId,
+      is_default: isDefault,
+    }
+    updatedList.unshift(target)
+  }
+
+  write(`${KEYS.addresses}:${userId}`, updatedList)
+
+  // Keep savedDelivery synchronized so checkout pre-fill is instant
+  if (isDefault || updatedList.length === 1) {
+    saveDelivery(userId, {
+      address: target.address,
+      phone: target.phone,
+      pin: target.pin,
+      geoLat: target.geoLat,
+      geoLng: target.geoLng,
+      landmark: target.landmark,
+    })
+  }
+
+  try {
+    window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: `${KEYS.addresses}:${userId}` } }))
+  } catch {}
+
+  return target
+}
+
+export function deleteStoredAddress(userId: string, id: number | string): void {
+  if (!userId || !id) return
+  const list = getStoredAddresses(userId)
+  const filtered = list.filter((a) => String(a.id) !== String(id))
+
+  // If we deleted the default and there are remaining addresses, make the first one default
+  if (filtered.length > 0 && !filtered.some((a) => a.is_default)) {
+    filtered[0].is_default = true
+  }
+
+  write(`${KEYS.addresses}:${userId}`, filtered)
+
+  if (filtered.length > 0) {
+    const def = filtered.find((a) => a.is_default) || filtered[0]
+    saveDelivery(userId, {
+      address: def.address,
+      phone: def.phone,
+      pin: def.pin,
+      geoLat: def.geoLat,
+      geoLng: def.geoLng,
+      landmark: def.landmark,
+    })
+  }
+
+  try {
+    window.dispatchEvent(new CustomEvent(STORE_EVENT, { detail: { key: `${KEYS.addresses}:${userId}` } }))
+  } catch {}
 }
 
 export function uid(prefix = 'id') {
