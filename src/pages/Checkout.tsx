@@ -74,11 +74,51 @@ export default function Checkout() {
   const [couponError, setCouponError] = useState('')
 
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([])
-  const [saveAddressToDb, setSaveAddressToDb] = useState(false)
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null)
   const [fulfillmentMode, setFulfillmentMode] = useState<'delivery' | 'pickup'>('delivery')
   const [deliveryDateChoice, setDeliveryDateChoice] = useState<'standard' | 'custom'>('standard')
   const [customDate, setCustomDate] = useState('')
   const [showDeliveryModal, setShowDeliveryModal] = useState(false)
+
+  const loadAddressIntoForm = useCallback((addr: {
+    address: string
+    phone?: string
+    pin?: string
+    landmark?: string
+    geoLat?: number
+    geoLng?: number
+  }) => {
+    let landmarkVal = addr.landmark || ''
+    let cleanedAddr = addr.address || ''
+
+    const nearMatch = cleanedAddr.match(/\(Near:\s*([^)]+)\)/i)
+    if (nearMatch) {
+      if (!landmarkVal) landmarkVal = nearMatch[1].trim()
+      cleanedAddr = cleanedAddr.replace(/\(Near:[^)]+\)/gi, '').trim()
+    }
+
+    const parts = cleanedAddr.split(',').map((s) => s.trim()).filter(Boolean)
+    if (parts.length >= 2) {
+      setHouse(parts.slice(0, parts.length - 1).join(', '))
+      setArea(parts[parts.length - 1])
+    } else {
+      setHouse(cleanedAddr)
+      setArea(parts[0] || 'Nandakumar')
+    }
+
+    if (landmarkVal) setLandmark(landmarkVal)
+    if (addr.pin) setPin(addr.pin)
+    if (addr.phone) setPhone(addr.phone)
+
+    if (addr.geoLat && addr.geoLng) {
+      setGeoLat(addr.geoLat)
+      setGeoLng(addr.geoLng)
+      setGeoCoords(`https://www.google.com/maps/search/?api=1&query=${addr.geoLat},${addr.geoLng}`)
+    }
+
+    userEditedAddress.current = true
+    setPrefilled(true)
+  }, [])
 
   const quickDates = useMemo(() => {
     const today = new Date()
@@ -223,28 +263,28 @@ export default function Checkout() {
     if (!user) return
     let active = true
     fetchAddresses(user.id).then((addrs) => {
-      if (active) setSavedAddresses(addrs)
+      if (active) {
+        setSavedAddresses(addrs)
+        if (!userEditedAddress.current && addrs.length > 0) {
+          const def = addrs.find((a) => a.is_default) || addrs[0]
+          setSelectedAddressId(def.id || null)
+          loadAddressIntoForm(def)
+        }
+      }
     })
     return () => {
       active = false
     }
-  }, [user, fetchAddresses])
+  }, [user, fetchAddresses, loadAddressIntoForm])
 
   useEffect(() => {
     if (userEditedAddress.current) return
     if (!user) return
+    if (savedAddresses.length > 0) return
+
     const saved = getSavedDelivery(user.id)
     if (saved?.address) {
-      setHouse(saved.address)
-      setPhone(saved.phone || '')
-      setPin(saved.pin || '721632')
-      if (saved.landmark) setLandmark(saved.landmark)
-      if (saved.geoLat && saved.geoLng) {
-        setGeoLat(saved.geoLat)
-        setGeoLng(saved.geoLng)
-        setGeoCoords(`https://www.google.com/maps/search/?api=1&query=${saved.geoLat},${saved.geoLng}`)
-      }
-      setPrefilled(true)
+      loadAddressIntoForm(saved)
       return
     }
     const last = orders
@@ -255,20 +295,17 @@ export default function Checkout() {
       const cleaned = last.address
         .replace(/Store Pickup.*?\)/gi, '')
         .replace(/Pickup - .*?\)/gi, '')
-        .replace(/\(Near:.*?\)/gi, '')
         .replace(/\[Maps:.*?\]/gi, '')
         .replace(/GPS অবস্থান.*/gi, '')
         .trim()
-      setHouse(cleaned || last.address)
-      setPhone(last.phone)
-      setPin(last.pin || '721632')
-      if (last.deliveryNotes) setLandmark(last.deliveryNotes)
-      if (last.geoLat && last.geoLng) {
-        setGeoLat(last.geoLat)
-        setGeoLng(last.geoLng)
-        setGeoCoords(`https://www.google.com/maps/search/?api=1&query=${last.geoLat},${last.geoLng}`)
-      }
-      setPrefilled(true)
+      loadAddressIntoForm({
+        address: cleaned || last.address,
+        phone: last.phone,
+        pin: last.pin || '721632',
+        landmark: last.deliveryNotes,
+        geoLat: last.geoLat,
+        geoLng: last.geoLng,
+      })
       return
     }
     try {
@@ -288,7 +325,7 @@ export default function Checkout() {
       const raw = user.email.replace('@greenvest.shop', '')
       if (/^\d{10}$/.test(raw)) setPhone(raw)
     }
-  }, [user, orders])
+  }, [user, orders, savedAddresses.length, loadAddressIntoForm])
 
   const handleDetectGps = useCallback((isAuto = false) => {
     if (!navigator.geolocation) {
@@ -483,22 +520,28 @@ export default function Checkout() {
     }, 2500)
 
     try {
-      // 3. Save address if opted
-      if (saveAddressToDb) {
+      // 3. Auto-save address to user's profile and database (Supabase addresses table)
+      if (user && !isPickup) {
         try {
+          const existing = savedAddresses.find(
+            (a) => a.address.trim().toLowerCase() === fullAddress.toLowerCase() ||
+                   (a.address.trim().toLowerCase() === house.trim().toLowerCase() && a.pin === pin.trim())
+          )
           await saveAddress({
+            id: existing?.id,
             user_id: user.id,
-            label: 'Saved',
+            label: area.trim() ? `${area.trim()} (Home)` : 'Home Delivery',
             address: fullAddress,
             phone: phoneVal.cleanedValue,
             pin: pin.trim(),
-            is_default: savedAddresses.length === 0,
+            is_default: true,
             geoLat,
             geoLng,
             landmark: landmark.trim() || undefined,
           })
+          fetchAddresses(user.id).then((updated) => setSavedAddresses(updated)).catch(() => {})
         } catch (addrErr) {
-          console.warn('Address save failed:', addrErr)
+          console.warn('Address auto-save to profile failed:', addrErr)
         }
       }
 
@@ -532,7 +575,7 @@ export default function Checkout() {
       if (order) {
         if (!isPickup) {
           saveDelivery(user.id, {
-            address: house.trim(),
+            address: fullAddress,
             phone: phoneVal.cleanedValue,
             pin: pin.trim(),
             geoLat,
@@ -1018,32 +1061,119 @@ export default function Checkout() {
                 </div>
               )}
 
-              {savedAddresses.length > 0 && (
-                <label>
-                  {lang === 'bn' ? 'সংরক্ষিত ঠিকানা নির্বাচন করুন' : 'Select a saved address'}
-                  <select onChange={e => {
-                    if (!e.target.value) return
-                    const addr = savedAddresses.find(a => a.id === Number(e.target.value))
-                    if (addr) {
-                      setHouse(addr.address)
-                      setPhone(addr.phone)
-                      if (addr.pin) setPin(addr.pin)
-                      if (addr.landmark) setLandmark(addr.landmark)
-                      if (addr.geoLat && addr.geoLng) {
-                        setGeoLat(addr.geoLat)
-                        setGeoLng(addr.geoLng)
-                        setGeoCoords(`https://www.google.com/maps/search/?api=1&query=${addr.geoLat},${addr.geoLng}`)
-                      }
-                      setPrefilled(true)
-                    }
-                  }}>
-                    <option value="">{lang === 'bn' ? 'নতুন ঠিকানা লিখুন...' : 'Enter new address...'}</option>
-                    {savedAddresses.map(a => (
-                      <option key={a.id} value={a.id}>{a.label || a.address.slice(0, 35)}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
+              {/* 📍 1-Tap Saved Addresses Selector (Auto-fill & Switch) */}
+              {savedAddresses.length > 0 ? (
+                <div
+                  style={{
+                    background: '#f8fafc',
+                    border: '1.5px solid #cbd5e1',
+                    borderRadius: '12px',
+                    padding: '0.85rem 1rem',
+                    marginBottom: '0.85rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.86rem', color: '#1e293b' }}>
+                      📍 {lang === 'bn' ? 'সংরক্ষিত ঠিকানা (১-ট্যাপে নির্বাচন করুন):' : 'Saved Addresses (1-Tap Auto Fill):'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAddressId(null)
+                        setHouse('')
+                        setArea('')
+                        setLandmark('')
+                        userEditedAddress.current = true
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#166534',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      ➕ {lang === 'bn' ? 'নতুন ঠিকানা লিখুন' : 'New Address'}
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {savedAddresses.map((a) => {
+                      const isSelected = selectedAddressId === a.id
+                      return (
+                        <div
+                          key={a.id}
+                          onClick={() => {
+                            setSelectedAddressId(a.id || null)
+                            loadAddressIntoForm(a)
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            border: isSelected ? '2px solid #166534' : '1px solid #e2e8f0',
+                            background: isSelected ? '#f0fdf4' : '#ffffff',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '8px',
+                            transition: 'all 0.15s ease',
+                            boxShadow: isSelected ? '0 2px 6px rgba(22, 101, 52, 0.12)' : 'none',
+                          }}
+                        >
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 700, fontSize: '0.84rem', color: isSelected ? '#166534' : '#1e293b' }}>
+                                {a.label || (lang === 'bn' ? 'হোম ডেলিভারি' : 'Home Delivery')}
+                              </span>
+                              {a.is_default && (
+                                <span style={{ fontSize: '0.68rem', background: '#dcfce7', color: '#15803d', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                                  {lang === 'bn' ? 'ডিফল্ট' : 'Default'}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.address}>
+                              {a.address} {a.pin ? `(PIN ${a.pin})` : ''}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '0.9rem', color: isSelected ? '#166534' : '#cbd5e1', fontWeight: 800 }}>
+                            {isSelected ? '✓' : '○'}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : user && getSavedDelivery(user.id)?.address ? (
+                <div style={{ marginBottom: '0.85rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const saved = getSavedDelivery(user.id)
+                      if (saved) loadAddressIntoForm(saved)
+                    }}
+                    style={{
+                      width: '100%',
+                      background: '#f0fdf4',
+                      border: '1.5px dashed #86efac',
+                      borderRadius: '10px',
+                      padding: '8px 12px',
+                      color: '#166534',
+                      fontWeight: 700,
+                      fontSize: '0.84rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    ⚡ {lang === 'bn' ? 'শেষ ব্যবহৃত ঠিকানা অটো-ফিল করুন' : 'Auto-fill Last Used Address'}
+                  </button>
+                </div>
+              ) : null}
 
               {/* 📍 Minimal Doorstep Auto-Location Card */}
               <div
@@ -1203,10 +1333,25 @@ export default function Checkout() {
                 </div>
               </div>
 
-              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '-0.25rem' }}>
-                <input type="checkbox" checked={saveAddressToDb} onChange={e => setSaveAddressToDb(e.target.checked)} />
-                {lang === 'bn' ? 'ভবিষ্যতের জন্য এই ঠিকানা সেভ রাখুন' : 'Save this address for future'}
-              </label>
+              {/* 🛡️ Auto-Save Assurance Badge */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.78rem',
+                  color: '#166534',
+                  fontWeight: 600,
+                  marginTop: '-0.25rem',
+                }}
+              >
+                <span>🛡️</span>
+                <span>
+                  {lang === 'bn'
+                    ? 'আপনার ডেলিভারি ঠিকানা পরবর্তী অর্ডারের জন্য প্রোফাইলে অটো-সেভ হবে'
+                    : 'Address will automatically save to your profile for future 1-tap orders'}
+                </span>
+              </div>
             </>
           )}
 

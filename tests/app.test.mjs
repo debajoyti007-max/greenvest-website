@@ -2574,3 +2574,43 @@ describe('Suite 44: Seller Product Management Form UX & 3-Card Architecture', ()
     assert.ok(content.includes('OUT (Out of Stock') || content.includes('OUT (স্টক নেই'), 'Must have 1-tap OUT button')
   })
 })
+
+describe('Suite 45: Customer Delivery Address Auto-Save & 1-Tap Selector', () => {
+  const checkoutPath = path.resolve(__dirname, '../src/pages/Checkout.tsx')
+  const checkoutContent = fs.readFileSync(checkoutPath, 'utf8')
+
+  test('Checkout.tsx automatically calls saveAddress to persist location in Supabase on order submission', () => {
+    assert.ok(checkoutContent.includes('await saveAddress('), 'Must invoke saveAddress on order placement')
+    assert.ok(checkoutContent.includes('fetchAddresses(user.id)'), 'Must refresh addresses from Supabase')
+    assert.ok(checkoutContent.includes('saveDelivery(user.id,'), 'Must persist delivery details to localStorage cache')
+  })
+
+  test('Checkout.tsx stores full compound address in localStorage saveDelivery to prevent empty area validation errors', () => {
+    assert.ok(
+      checkoutContent.includes('saveDelivery(user.id, {\n            address: fullAddress,') ||
+      checkoutContent.includes('address: fullAddress,'),
+      'Must store fullAddress in saveDelivery instead of just house'
+    )
+  })
+
+  test('Checkout.tsx renders 1-Tap Saved Addresses selector card list and New Address reset', () => {
+    assert.ok(checkoutContent.includes('📍 সংরক্ষিত ঠিকানা (১-ট্যাপে নির্বাচন করুন):') || checkoutContent.includes('Saved Addresses (1-Tap Auto Fill):'), 'Must render saved addresses header')
+    assert.ok(checkoutContent.includes('loadAddressIntoForm(a)'), 'Must populate form on 1-tap selection')
+    assert.ok(checkoutContent.includes('setSelectedAddressId(null)'), 'Must allow resetting to new address')
+  })
+
+  test('Checkout.tsx provides fallback 1-tap auto-fill button for cached last delivery address', () => {
+    assert.ok(checkoutContent.includes('⚡ শেষ ব্যবহৃত ঠিকানা অটো-ফিল করুন') || checkoutContent.includes('Auto-fill Last Used Address'), 'Must render 1-tap fallback button')
+  })
+
+  test('Checkout.tsx features customer-facing auto-save reassurance badge', () => {
+    assert.ok(checkoutContent.includes('আপনার ডেলিভারি ঠিকানা পরবর্তী অর্ডারের জন্য প্রোফাইলে অটো-সেভ হবে') || checkoutContent.includes('Address will automatically save to your profile'), 'Must show auto-save assurance badge')
+  })
+
+  test('loadAddressIntoForm splits compound addresses into house and area to satisfy mandatory field validation', () => {
+    assert.ok(checkoutContent.includes('loadAddressIntoForm'), 'Must define loadAddressIntoForm')
+    assert.ok(checkoutContent.includes('setHouse(parts.slice(0, parts.length - 1).join('), 'Must split house from compound address')
+    assert.ok(checkoutContent.includes('setArea(parts[parts.length - 1])'), 'Must split area from compound address')
+  })
+})
+
