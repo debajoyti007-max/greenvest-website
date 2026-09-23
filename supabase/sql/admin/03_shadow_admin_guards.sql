@@ -7,7 +7,7 @@
 -- Core security triggers for database ownership:
 -- 1. protect_super_admin_trigger: Prevents altering owner is_super_admin status
 -- 2. trg_prevent_profile_escalation: Blocks self-promotion from customer to admin,
---    self-approving Khata credit limits, or unblocking oneself without admin RPC
+--    or unblocking oneself without admin RPC
 -- ============================================================
 
 -- 1. SUPER ADMIN COLUMN INTEGRITY TRIGGER
@@ -55,18 +55,6 @@ BEGIN
     IF NEW.role IN ('admin', 'seller', 'rider') AND OLD.role = 'customer' THEN
       RAISE EXCEPTION 'Role escalation denied. Use the admin panel to change roles.';
     END IF;
-  END IF;
-
-  -- Khata self-approval guard
-  IF NEW.khata_approved IS DISTINCT FROM OLD.khata_approved
-     AND NEW.khata_approved = TRUE AND OLD.khata_approved = FALSE THEN
-    RAISE EXCEPTION 'Khata self-approval denied. Admin approval required.';
-  END IF;
-
-  -- Khata credit limit increase guard
-  IF NEW.khata_credit_limit IS DISTINCT FROM OLD.khata_credit_limit
-     AND NEW.khata_credit_limit > COALESCE(OLD.khata_credit_limit, 0) THEN
-    RAISE EXCEPTION 'Khata credit limit increase denied. Admin approval required.';
   END IF;
 
   -- Self-unblock guard

@@ -56,7 +56,6 @@ CREATE POLICY notifications_all_public ON public.notifications FOR ALL TO anon, 
 -- ------------------------------------------------------------
 ALTER TABLE IF EXISTS public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.promotional_deals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.khata_ledger ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS products_staff_insert ON public.products;
 DROP POLICY IF EXISTS products_staff_update ON public.products;
@@ -85,11 +84,6 @@ CREATE POLICY promotional_deals_select_public ON public.promotional_deals FOR SE
 CREATE POLICY promotional_deals_insert_public ON public.promotional_deals FOR INSERT TO anon, authenticated WITH CHECK (true);
 CREATE POLICY promotional_deals_update_public ON public.promotional_deals FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY promotional_deals_delete_public ON public.promotional_deals FOR DELETE TO anon, authenticated USING (true);
-
-DROP POLICY IF EXISTS khata_select_public ON public.khata_ledger;
-DROP POLICY IF EXISTS khata_insert_public ON public.khata_ledger;
-CREATE POLICY khata_select_public ON public.khata_ledger FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY khata_insert_public ON public.khata_ledger FOR INSERT TO anon, authenticated WITH CHECK (true);
 
 -- ------------------------------------------------------------
 -- PART 3: ADMIN & PROFILES POLICIES
@@ -137,12 +131,10 @@ GRANT EXECUTE ON FUNCTION public.verify_delivery_handover(text, text) TO anon, a
 GRANT EXECUTE ON FUNCTION public.save_product_admin(text, text, text, numeric, numeric, numeric, boolean, text, text, text, text, boolean, numeric, text[], text, integer[], numeric) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.update_order_status_admin(text, text, text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_staff_orders(text, text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.get_staff_khata_ledger(text, text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_order_admin(text) TO anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.update_user_role_admin(text, text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.update_user_block_admin(text, boolean) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.update_user_khata_admin(text, boolean, integer) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_user_admin(text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_staff_customers(text, text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.save_coupon_admin(text, text, numeric, numeric, boolean, timestamp with time zone) TO anon, authenticated;

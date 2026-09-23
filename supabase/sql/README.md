@@ -33,7 +33,7 @@ Use these files if a delivery executive reports issue viewing assigned orders or
 ---
 
 ### 3. 🏪 Seller Role (`supabase/sql/seller/`)
-Use these files if a store manager or seller reports issues with inventory, order processing, or the Khata book:
+Use these files if a store manager or seller reports issues with inventory or order processing:
 - **`01_seller_products_deals.sql`**:
   - `products` and `promotional_deals` RLS policies (INSERT, UPDATE, DELETE).
   - `save_product_admin`: Atomic vegetable price, stock, grade, and dynamic MRP updater.
@@ -41,9 +41,6 @@ Use these files if a store manager or seller reports issues with inventory, orde
   - `update_order_status_admin`: Order status transitions (pending ➔ confirmed ➔ delivered).
   - `get_staff_orders`: Live seller order dashboard stream.
   - `delete_order_admin`: Cancelled order cleanup.
-- **`03_seller_khata_ledger.sql`**:
-  - `khata_ledger` append-only policies.
-  - `get_staff_khata_ledger`: Seller Khata credit view.
 
 ---
 
@@ -52,8 +49,7 @@ Use these files for staff permissions, discount vouchers, or account security:
 - **`01_admin_user_roles.sql`**:
   - `update_user_role_admin`: Promote or demote users between customer, rider, seller, admin.
   - `update_user_block_admin`: Suspend abusive accounts.
-  - `update_user_khata_admin`: Approve or adjust customer Khata credit limits.
-  - `delete_user_admin`: Safe account deletion guarded against active orders and unpaid debts.
+  - `delete_user_admin`: Safe account deletion guarded against active orders and Super Admin shield.
   - `get_staff_customers`: PIN-stripped customer directory.
 - **`02_admin_coupons.sql`**:
   - `coupons` table RLS and `save_coupon_admin` RPC.

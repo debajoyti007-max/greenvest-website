@@ -7,9 +7,8 @@
 -- Administrator functions for managing store users:
 -- 1. update_user_role_admin (Promote customer to rider/seller/admin)
 -- 2. update_user_block_admin (Suspend abusive accounts)
--- 3. update_user_khata_admin (Approve Khata credit limits)
--- 4. delete_user_admin (Safe account deletion with balance guards)
--- 5. get_staff_customers (PIN-stripped customer list)
+-- 3. delete_user_admin (Safe account deletion with Super Admin and order guards)
+-- 4. get_staff_customers (PIN-stripped customer list)
 -- ============================================================
 
 -- 1. UPDATE USER ROLE
@@ -102,44 +101,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.update_user_block_admin(text, boolean) TO anon, authenticated;
 
 
--- 3. APPROVE KHATA CREDIT & LIMIT
-CREATE OR REPLACE FUNCTION public.update_user_khata_admin(
-  p_user_id text,
-  p_approved boolean,
-  p_credit_limit integer DEFAULT 2000
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_clean_phone text;
-BEGIN
-  v_clean_phone := right(regexp_replace(p_user_id, '\D', '', 'g'), 10);
-
-  PERFORM set_config('app.allow_profile_change', 'true', true);
-
-  UPDATE public.profiles
-  SET khata_approved = p_approved,
-      khata_credit_limit = p_credit_limit,
-      updated_at = now()
-  WHERE (id = p_user_id
-     OR (email IS NOT NULL AND email = lower(p_user_id))
-     OR (phone IS NOT NULL AND v_clean_phone != '' AND phone = v_clean_phone));
-
-  IF FOUND THEN
-    RETURN jsonb_build_object('success', true, 'khata_approved', p_approved, 'credit_limit', p_credit_limit);
-  END IF;
-
-  RETURN jsonb_build_object('success', false, 'error', 'User not found');
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.update_user_khata_admin(text, boolean, integer) TO anon, authenticated;
-
-
--- 4. SAFE USER DELETION WITH FINANCIAL GUARD
+-- 3. SAFE USER DELETION WITH FINANCIAL AND SUPER ADMIN GUARD
 CREATE OR REPLACE FUNCTION public.delete_user_admin(p_user_id text)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -150,7 +112,6 @@ DECLARE
   v_phone text;
   v_email text;
   v_is_super boolean := false;
-  v_due numeric := 0;
   v_active_orders int := 0;
 BEGIN
   SELECT email, phone, coalesce(is_super_admin, false) INTO v_email, v_phone, v_is_super
@@ -162,18 +123,7 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', '🛡️ Super Admin Shield: Master Administrator account cannot be deleted.');
   END IF;
 
-  -- 2. Safety Check: Block deletion if customer owes money
-  SELECT coalesce(
-    sum(CASE WHEN type = 'debit' THEN amount ELSE -amount END), 0
-  ) INTO v_due
-  FROM public.khata_ledger
-  WHERE user_id = p_user_id;
-
-  IF v_due > 0 THEN
-    RETURN jsonb_build_object('ok', false, 'error', '⚠️ Cannot delete: Customer has an unpaid Khata balance of ₹' || v_due || '. Settle dues first.');
-  END IF;
-
-  -- 3. Safety Check: Block deletion if customer has orders in transit
+  -- 2. Safety Check: Block deletion if customer has orders in transit
   SELECT count(*) INTO v_active_orders
   FROM public.orders
   WHERE user_id = p_user_id
@@ -183,7 +133,7 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', '⚠️ Cannot delete: Customer has ' || v_active_orders || ' active order(s) in transit.');
   END IF;
 
-  -- 4. Safe Cleanup: Clean addresses, notifications, and profile
+  -- 3. Safe Cleanup: Clean addresses, notifications, and profile
   DELETE FROM public.addresses WHERE user_id = p_user_id;
   DELETE FROM public.notifications WHERE user_id = p_user_id;
   DELETE FROM public.profiles WHERE id = p_user_id;
@@ -209,8 +159,6 @@ RETURNS TABLE(
   is_super_admin boolean,
   is_blocked boolean,
   tier text,
-  khata_approved boolean,
-  khata_credit_limit numeric,
   created_at timestamp with time zone,
   updated_at timestamp with time zone
 )
@@ -252,8 +200,6 @@ BEGIN
     p.is_super_admin,
     p.is_blocked,
     p.tier,
-    p.khata_approved,
-    p.khata_credit_limit,
     p.created_at,
     p.updated_at
   FROM public.profiles p
