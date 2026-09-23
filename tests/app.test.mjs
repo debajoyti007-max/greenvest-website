@@ -2693,4 +2693,68 @@ describe('Suite 46: Tiered Role Delegation & Admin Customer PIN Reset', () => {
   })
 })
 
+describe('Suite 47: Super Admin Supabase Magic Link 2FA & OTP Verification', () => {
+  const authContextPath = path.resolve(__dirname, '../src/context/AuthContext.tsx')
+  const authContextContent = fs.readFileSync(authContextPath, 'utf8')
+  const authPath = path.resolve(__dirname, '../src/pages/Auth.tsx')
+  const authContent = fs.readFileSync(authPath, 'utf8')
+
+  test('AuthContext.tsx triggers Supabase Magic Link OTP for Super Admin login', () => {
+    assert.ok(
+      authContextContent.includes('profile.isSuperAdmin && supabase'),
+      'Must check if user is Super Admin'
+    )
+    assert.ok(
+      authContextContent.includes('supabase.auth.signInWithOtp'),
+      'Must call signInWithOtp for Super Admin'
+    )
+    assert.ok(
+      authContextContent.includes('mfaPending: true'),
+      'Must return mfaPending: true'
+    )
+  })
+
+  test('AuthContext.tsx validates 6-digit confirmation codes with verifyAdminOtp', () => {
+    assert.ok(
+      authContextContent.includes('verifyAdminOtp'),
+      'Must define verifyAdminOtp'
+    )
+    assert.ok(
+      authContextContent.includes('supabase.auth.verifyOtp'),
+      'Must call verifyOtp'
+    )
+  })
+
+  test('AuthContext.tsx onAuthStateChange captures magic link session and hydrates Super Admin profile', () => {
+    assert.ok(
+      authContextContent.includes('client.auth.onAuthStateChange'),
+      'Must listen for auth state changes'
+    )
+    assert.ok(
+      authContextContent.includes('saveCurrentUser(profile)'),
+      'Must persist authenticated profile'
+    )
+    assert.ok(
+      authContextContent.includes("window.location.replace(`${window.location.origin}/admin`)"),
+      'Must navigate Super Admin to /admin'
+    )
+  })
+
+  test('Auth.tsx renders Gmail prompt, launch button, and 6-digit confirmation code verification box', () => {
+    assert.ok(
+      authContent.includes('mode === \'mfa\''),
+      'Must handle mfa mode'
+    )
+    assert.ok(
+      authContent.includes('https://mail.google.com'),
+      'Must provide 1-tap Gmail link'
+    )
+    assert.ok(
+      authContent.includes('verifyAdminOtp(otpCode)'),
+      'Must allow verifying 6-digit email confirmation code'
+    )
+  })
+})
+
+
 

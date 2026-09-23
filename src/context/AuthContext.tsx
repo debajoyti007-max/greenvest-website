@@ -382,6 +382,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(profile)
               userRef.current = profile
               setSessionUserId(profile.id)
+              saveCurrentUser(profile)
               void loadUsersIfStaff(profile)
               if (
                 (profile.role === 'admin' || profile.isSuperAdmin) &&
@@ -671,6 +672,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } catch (authErr) {
               console.debug('Supabase session signin optional:', authErr)
             }
+          }
+
+          // 🔐 Super Admin 2FA: Trigger Supabase Magic Link / Email OTP
+          if (profile.isSuperAdmin && supabase) {
+            try {
+              const { error: otpErr } = await supabase.auth.signInWithOtp({
+                email: profile.email,
+                options: {
+                  shouldCreateUser: true,
+                  emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/admin` : undefined,
+                },
+              })
+              if (otpErr) {
+                console.error('Super Admin OTP send failed:', otpErr)
+                return {
+                  ok: false,
+                  error: `❌ জিমেইলে সাইন-ইন লিংক পাঠানো যায়নি: ${otpErr.message}। Supabase ইমেইল রেট লিমিট বা কনফিগারেশন চেক করুন।`,
+                }
+              }
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err)
+              return { ok: false, error: `❌ Magic link error: ${msg}` }
+            }
+            mfaPinRef.current = usedPin
+            mfaProfileRef.current = profile
+            setMfaPending(true)
+            return { ok: true, mfaPending: true, user: profile }
           }
 
           setUser(profile)
