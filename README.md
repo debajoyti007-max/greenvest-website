@@ -1,7 +1,7 @@
 # 🥬 GreenVest – Fresh Farm Produce & Fish (Production)
 
 Hyperlocal Mandi-Fresh Daily Vegetables & Fish E-Commerce Platform.  
-**10% Advance UPI** · **Min order ₹500** · **Delivery 12–24 hours** · **Doorstep Delivery**  
+**10% Advance or 100% Full UPI** · **1-Tap Payment (No manual UTR needed)** · **Min order ₹500** · **Delivery 12–24 hours** · **Doorstep Delivery**  
 Live database via **Supabase**. Hosted on **GitHub Pages** with custom domain.
 
 **Live URL:** [https://greenvest.shop](https://greenvest.shop/)
@@ -36,7 +36,8 @@ update public.profiles set role = 'admin' where email = 'YOUR_EMAIL@gmail.com';
 ### Core Workflows:
 - **Seller Procurement**: Daily mandi sheet aggregates exact net kg with Grade A/B/C breakdown.
 - **Order Confirmation**: 1-tap accept with double-tap lock and in-flight idempotency guards.
-- **Rider Handover**: Customer provides their unique 4-digit delivery handover OTP upon receiving produce.
+- **Rider Handover**: Customer provides their unique 4-digit delivery handover OTP upon receiving produce (works for both 10% advance and 100% prepaid orders).
+- **Direct UPI (No UTR Friction)**: Customers scan dynamic UPI QR code with exact amount and tap "I Have Paid" — no manual 12-digit UTR bank code entry required.
 - **Promotional Deals & Announcements**: Realtime WebSocket broadcast over `gv-broadcasts` with 1-tap `[ 🎟️ CODE ]` claim and customer `[ ✕ Ignore ]` permanent dismissal.
 
 ---
@@ -54,7 +55,7 @@ cp .env.example .env
 # 3. Start development server
 npm run dev
 
-# 4. Run test suite (99 tests across 31 suites)
+# 4. Run test suite (186 tests across 48 suites)
 npm test
 
 # 5. Build and sync for production (/docs + root)

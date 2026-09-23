@@ -82,7 +82,7 @@ If you prefer creating the `.env` file manually without running `npm run setup`:
 | `npm run setup` | Automatically provisions `.env` and tests live Supabase database connectivity. |
 | `npm run check:env` | Verifies existing `.env` and Supabase health without modifying any files. |
 | `npm run dev` | Auto-checks environment, syncs template, and launches Vite local dev server at `http://localhost:3000`. |
-| `npm test` | Runs the automated Node.js test suite (**127+ tests across 37 suites**). |
+| `npm test` | Runs the automated Node.js test suite (**186 tests across 48 suites**). |
 | `npm run build` | Compiles production bundle and dual-syncs to `/dist`, `/docs`, and root. |
 
 ---
