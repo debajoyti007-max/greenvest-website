@@ -2514,3 +2514,57 @@ describe('Suite 43: Legal Consent Disclaimers, Dedicated Refund Route & Customer
   })
 })
 
+describe('Suite 44: Seller Product Management Form UX & 3-Card Architecture', () => {
+  const sellerProductsPath = path.resolve(__dirname, '../src/pages/seller/SellerProducts.tsx')
+  const cssPath = path.resolve(__dirname, '../src/index.css')
+  const content = fs.readFileSync(sellerProductsPath, 'utf8')
+  const cssContent = fs.readFileSync(cssPath, 'utf8')
+
+  test('SellerProducts.tsx utilizes the structured 3-card architecture', () => {
+    assert.ok(content.includes('seller-product-form'), 'Must use seller-product-form class')
+    assert.ok(content.includes('seller-form-cards'), 'Must group into seller-form-cards')
+    assert.ok(content.includes('seller-card'), 'Must render seller-card components')
+    assert.ok(content.includes('Basic Information') || content.includes('১. মৌলিক তথ্য'), 'Card 1 must be Basic Information')
+    assert.ok(content.includes('Packaging') || content.includes('২. প্যাকেজিং'), 'Card 2 must be Packaging & Stock')
+    assert.ok(content.includes('Pricing & Quality Grades') || content.includes('৩. মূল্য ও কোয়ালিটি গ্রেড'), 'Card 3 must be Pricing & Quality Grades')
+  })
+
+  test('Features quick emoji palette with 1-tap produce presets', () => {
+    assert.ok(content.includes('COMMON_EMOJIS'), 'Must define COMMON_EMOJIS palette')
+    assert.ok(content.includes('seller-emoji-palette'), 'Must render seller-emoji-palette container')
+    assert.ok(content.includes('seller-emoji-btn'), 'Must render 1-tap emoji buttons')
+  })
+
+  test('Features 1-tap gram preset buttons and custom gram adder replacing raw comma strings', () => {
+    assert.ok(content.includes('COMMON_GRAM_PRESETS'), 'Must define COMMON_GRAM_PRESETS')
+    assert.ok(content.includes('seller-preset-chip'), 'Must render 1-tap preset chips')
+    assert.ok(content.includes('toggleGramPreset'), 'Must provide toggleGramPreset helper')
+    assert.ok(content.includes('customGramInput'), 'Must manage customGramInput state')
+    assert.ok(content.includes('addCustomGram'), 'Must provide addCustomGram helper')
+    assert.ok(content.includes('seller-active-tags'), 'Must show active removable tags')
+  })
+
+  test('Dynamic grade toggles and conditional price inputs for active grades only', () => {
+    assert.ok(content.includes('seller-grade-grid'), 'Must render seller-grade-grid')
+    assert.ok(content.includes('seller-grade-card'), 'Must render seller-grade-card')
+    assert.ok(content.includes('toggleGrade'), 'Must provide toggleGrade helper')
+    assert.ok(content.includes("form.availableGrades?.includes('A')"), 'Must conditionally check Grade A')
+    assert.ok(content.includes("form.availableGrades?.includes('B')"), 'Must conditionally check Grade B')
+    assert.ok(content.includes("form.availableGrades?.includes('C')"), 'Must conditionally check Grade C')
+  })
+
+  test('Features Auto MRP calculation and live storefront discount preview', () => {
+    assert.ok(content.includes('handleAutoMrp'), 'Must provide handleAutoMrp helper')
+    assert.ok(content.includes('computeMarketMrp'), 'Must call computeMarketMrp')
+    assert.ok(content.includes('seller-discount-preview'), 'Must render storefront preview')
+    assert.ok(content.includes('seller-discount-pill'), 'Must render discount pill')
+  })
+
+  test('index.css includes responsive styling rules for seller form', () => {
+    assert.ok(cssContent.includes('.seller-product-form'), 'CSS must define .seller-product-form')
+    assert.ok(cssContent.includes('.seller-card'), 'CSS must define .seller-card')
+    assert.ok(cssContent.includes('.seller-emoji-palette'), 'CSS must define .seller-emoji-palette')
+    assert.ok(cssContent.includes('.seller-gram-presets'), 'CSS must define .seller-gram-presets')
+    assert.ok(cssContent.includes('.seller-grade-grid'), 'CSS must define .seller-grade-grid')
+  })
+})

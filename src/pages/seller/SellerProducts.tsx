@@ -30,6 +30,16 @@ const emptyForm = {
   gramOptions: [] as number[],
 }
 
+const COMMON_EMOJIS = ['🥬', '🥦', '🥔', '🧅', '🍅', '🥕', '🍆', '🥒', '🌶️', '🐟', '🍎', '🍌', '🥭', '🍋', '🌽', '🥜']
+
+const COMMON_GRAM_PRESETS = [
+  { val: 250, label: '250g' },
+  { val: 500, label: '500g' },
+  { val: 1000, label: '1 kg (1000g)' },
+  { val: 2000, label: '2 kg (2000g)' },
+  { val: 5000, label: '5 kg (5000g)' },
+]
+
 type Section = 'active' | 'restock' | 'archived'
 
 export default function SellerProducts() {
@@ -37,6 +47,7 @@ export default function SellerProducts() {
   const { products, lang, updateProduct, addProduct, deleteProduct, toggleStock } = useStore()
   const [editing, setEditing] = useState<Product | null>(null)
   const [form, setForm] = useState(emptyForm)
+  const [customGramInput, setCustomGramInput] = useState('')
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoError, setPhotoError] = useState('')
   const [query, setQuery] = useState('')
@@ -66,6 +77,7 @@ export default function SellerProducts() {
   const startEdit = (p: Product) => {
     setEditing(p)
     setPhotoError('')
+    setCustomGramInput('')
     setForm({
       emoji: p.emoji,
       name: p.name,
@@ -87,6 +99,13 @@ export default function SellerProducts() {
     })
   }
 
+  const cancelEdit = () => {
+    setEditing(null)
+    setForm(emptyForm)
+    setCustomGramInput('')
+    setPhotoError('')
+  }
+
   const onPhoto = async (file: File | null) => {
     if (!file) return
     setPhotoError('')
@@ -102,11 +121,82 @@ export default function SellerProducts() {
     }
   }
 
+  const toggleGramPreset = (val: number) => {
+    const cur = form.gramOptions || []
+    let next: number[]
+    if (cur.includes(val)) {
+      next = cur.filter((x) => x !== val)
+    } else {
+      next = [...cur, val].sort((a, b) => a - b)
+    }
+    setForm({ ...form, gramOptions: next })
+  }
+
+  const addCustomGram = (e?: FormEvent) => {
+    if (e) e.preventDefault()
+    const val = parseInt(customGramInput.trim(), 10)
+    if (val && !isNaN(val) && val > 0) {
+      const cur = form.gramOptions || []
+      if (!cur.includes(val)) {
+        setForm({ ...form, gramOptions: [...cur, val].sort((a, b) => a - b) })
+      }
+      setCustomGramInput('')
+    }
+  }
+
+  const removeGram = (val: number) => {
+    setForm({ ...form, gramOptions: (form.gramOptions || []).filter((x) => x !== val) })
+  }
+
+  const toggleGrade = (g: Grade) => {
+    const cur: Grade[] = form.availableGrades && form.availableGrades.length > 0 ? form.availableGrades : (['A', 'B', 'C'] as Grade[])
+    let next: Grade[]
+    if (cur.includes(g)) {
+      next = cur.filter((x): x is Grade => x !== g)
+      if (next.length === 0) {
+        showToast(lang === 'bn' ? 'অন্তত একটি গ্রেড সক্রিয় রাখা আবশ্যক' : 'At least one grade must remain active', 'warning')
+        return
+      }
+    } else {
+      next = [...cur, g]
+    }
+    setForm({ ...form, availableGrades: next })
+  }
+
+  const effectiveBasePrice = useMemo(() => {
+    const activeGrades: Grade[] = form.availableGrades && form.availableGrades.length > 0 ? form.availableGrades : (['A', 'B', 'C'] as Grade[])
+    if (activeGrades.includes('A') && form.pA > 0) return form.pA
+    if (activeGrades.includes('B') && form.pB > 0) return form.pB
+    if (activeGrades.includes('C') && form.pC > 0) return form.pC
+    return form.pA || form.pB || form.pC || 0
+  }, [form.availableGrades, form.pA, form.pB, form.pC])
+
+  const handleAutoMrp = () => {
+    if (effectiveBasePrice <= 0) {
+      showToast(lang === 'bn' ? 'আগে গ্রেডের বিক্রয় মূল্য লিখুন' : 'Enter a selling price first', 'warning')
+      return
+    }
+    const computed = computeMarketMrp(effectiveBasePrice, undefined, form.name || 'item')
+    setForm((f) => ({ ...f, mrp: computed }))
+    showToast(lang === 'bn' ? `MRP নির্ধারণ করা হয়েছে: ₹${computed}` : `Calculated Market MRP: ₹${computed}`, '⚡')
+  }
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!form.name.trim()) return
+
+    const activeGrades = form.availableGrades && form.availableGrades.length > 0 ? form.availableGrades : (['A'] as Grade[])
+    const baseP = (activeGrades.includes('A') ? form.pA : 0) ||
+                  (activeGrades.includes('B') ? form.pB : 0) ||
+                  (activeGrades.includes('C') ? form.pC : 0) ||
+                  form.pA || form.pB || form.pC || 0
+
     const payload = {
       ...form,
+      availableGrades: activeGrades,
+      pA: activeGrades.includes('A') ? form.pA : (form.pB || form.pC || baseP),
+      pB: activeGrades.includes('B') ? form.pB : (form.pA || form.pC || baseP),
+      pC: activeGrades.includes('C') ? form.pC : (form.pA || form.pB || baseP),
       imageUrl: form.imageUrl.trim() || undefined,
     }
     try {
@@ -119,6 +209,7 @@ export default function SellerProducts() {
         showToast(lang === 'bn' ? `✅ "${payload.bnName || payload.name}" সফলভাবে যোগ হয়েছে!` : `✅ "${payload.name}" added successfully!`, '🎉')
       }
       setForm(emptyForm)
+      setCustomGramInput('')
       setPhotoError('')
     } catch (err: any) {
       showToast(err.message || 'Error saving product', 'error')
@@ -175,204 +266,466 @@ export default function SellerProducts() {
           : 'Out-of-stock items auto-move to Restock. Archive old season items to hide from shop.'}
       </p>
 
-      <form className="form product-form" onSubmit={onSubmit}>
-        <h2>
-          {editing
-            ? lang === 'bn'
-              ? 'এডিট'
-              : 'Edit product'
-            : lang === 'bn'
-              ? 'নতুন আইটেম'
-              : 'Add product'}
-        </h2>
-        <div className="form-grid">
-          <label>
-            Emoji
-            <input value={form.emoji} onChange={(e) => setForm({ ...form, emoji: e.target.value })} />
-          </label>
-          <label>
-            {lang === 'bn' ? 'নাম (ইংরেজি)' : 'Name'}
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          </label>
-          <label>
-            {lang === 'bn' ? 'বাংলা নাম' : 'Bangla name'}
-            <input value={form.bnName} onChange={(e) => setForm({ ...form, bnName: e.target.value })} />
-          </label>
-          <label>
-            {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-              <option value="Vegetables">🥦 Vegetables (শাকসবজি)</option>
-              <option value="Leafy">🤬 Leafy Greens (শাক)</option>
-              <option value="Spices">🌶️ Spices (মশলা)</option>
-              <option value="Fish">🐟 Fish (মাছ)</option>
-              <option value="Fruits">🥭 Fruits (ফল)</option>
-              <option value="Dairy">🥛 Dairy (দুগ্ধজাত)</option>
-            </select>
-          </label>
-          <label>
-            {lang === 'bn' ? 'ইউনিট' : 'Unit'}
-            <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
-              <option value="kg">kg (কিলো)</option>
-              <option value="pc">pc (পিস)</option>
-              <option value="bunch">bunch (ডাঁটা)</option>
-              <option value="litre">litre (লিটার)</option>
-              <option value="packet">packet (প্যাকেট)</option>
-            </select>
-          </label>
-          <label>
-            {lang === 'bn' ? 'বিক্রয় পদ্ধতি' : 'Sold As'}
-            <select value={form.soldAs || 'loose'} onChange={(e) => setForm({ ...form, soldAs: e.target.value as 'loose' | 'packet' | 'both' })}>
-              <option value="loose">⚖️ Loose by weight ({lang === 'bn' ? 'ওজনে বিক্রয়' : 'e.g. 1 kg, 2 kg'})</option>
-              <option value="packet">📦 Fixed Packets only ({lang === 'bn' ? 'প্যাকেটে বিক্রয়' : 'e.g. 250g, 500g'})</option>
-              <option value="both">♾️ Both loose & packet ({lang === 'bn' ? 'দুটোই বিক্রয় হয়' : 'customer can choose'})</option>
-            </select>
-          </label>
-          {(form.soldAs === 'packet' || form.soldAs === 'both') && (
-            <label>
-              {lang === 'bn' ? 'গ্রাম অপশন (কমা দিয়ে বিভক্ত করুন)' : 'Gram options (comma-separated)'}
-              <input
-                placeholder="e.g. 250,500,1000"
-                value={(form.gramOptions || []).join(',')}
-                onChange={(e) => setForm({ ...form, gramOptions: e.target.value.split(',').map(v => parseInt(v.trim())).filter(n => !isNaN(n)) })}
-              />
-              <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>{lang === 'bn' ? 'যেমন: 250,500,1000 মানে তিনটি সাইজে বিক্রয় হবে' : 'e.g. 250,500,1000 means 3 packet sizes'}</span>
-            </label>
-          )}
-          <label className="span-2">
-            {t(lang, 'uploadPhoto')}
-            <input
-              type="file"
-              accept="image/*"
-              disabled={photoBusy}
-              onChange={(e) => void onPhoto(e.target.files?.[0] || null)}
-            />
-          </label>
-          {preview && (
-            <div className="span-2 seller-photo-preview">
-              <img src={preview} alt="" />
+      <form className="seller-product-form" onSubmit={onSubmit}>
+        {editing && (
+          <div className="seller-form-top-banner">
+            <div>
+              <strong style={{ fontSize: '0.95rem', color: '#166534' }}>
+                ✏️ {lang === 'bn' ? 'এডিট করা হচ্ছে:' : 'Editing:'} {editing.name} {editing.bnName ? `(${editing.bnName})` : ''}
+              </strong>
+              <div style={{ fontSize: '0.8rem', color: '#4b5563' }}>
+                {lang === 'bn' ? 'তথ্য পরিবর্তন করে সেভ করুন অথবা বাতিল করুন' : 'Update the fields below and click Save Changes'}
+              </div>
             </div>
-          )}
-          {photoError && <p className="form-error span-2">{photoError}</p>}
-          <label>
-            {lang === 'bn' ? 'স্টক পরিমাণ' : 'Stock qty'}
-            <input
-              type="number"
-              min={0}
-              value={form.stockQty}
-              onChange={(e) => setForm({ ...form, stockQty: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            {lang === 'bn' ? 'সিজন' : 'Season'}
-            <select
-              value={form.season}
-              onChange={(e) => setForm({ ...form, season: e.target.value as Season })}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={cancelEdit}
+              style={{ padding: '4px 10px', fontSize: '0.85rem' }}
             >
-              {(Object.keys(SEASON_LABELS) as Season[]).map((s) => (
-                <option key={s} value={s}>
-                  {SEASON_LABELS[s][lang]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="span-2" style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '10px', border: '1.5px solid #cbd5e1', margin: '0.25rem 0' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '0.45rem', color: '#1e293b' }}>
-              🔘 {lang === 'bn' ? 'ক্রেতাদের কোন কোন অপশন/গ্রেড দেখাবেন? (Option A, B, C Toggle):' : 'Which Grades to show customers? (Option A, B, C Toggle):'}
-            </span>
-            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-              {(['A', 'B', 'C'] as Grade[]).map((g) => {
-                const isChecked = form.availableGrades?.includes(g) ?? true
-                return (
-                  <label key={g} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem', color: isChecked ? '#166534' : '#64748b' }}>
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={(e) => {
-                        const cur = form.availableGrades || ['A', 'B', 'C']
-                        let next: Grade[]
-                        if (e.target.checked) {
-                          next = [...cur, g]
-                        } else {
-                          next = cur.filter((x) => x !== g)
-                          if (next.length === 0) next = [g] // Keep at least 1 grade active
-                        }
-                        setForm({ ...form, availableGrades: next })
-                      }}
-                    />
-                    Grade {g}
+              ✕ {t(lang, 'cancel')}
+            </button>
+          </div>
+        )}
+
+        <div className="seller-form-cards">
+          {/* Card 1: 📝 Basic Information */}
+          <div className="seller-card">
+            <div className="seller-card-head">
+              <span className="seller-card-icon">📝</span>
+              <div>
+                <h3>{lang === 'bn' ? '১. মৌলিক তথ্য' : '1. Basic Information'}</h3>
+                <p>{lang === 'bn' ? 'নাম, আইকন, ক্যাটাগরি ও ফটো যোগ করুন' : 'Product name, icon, category, season & photo'}</p>
+              </div>
+            </div>
+
+            <div className="seller-card-body">
+              {/* Emoji Selection */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                  <label style={{ margin: 0, fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>
+                    Emoji / {lang === 'bn' ? 'আইকন' : 'Icon'}
                   </label>
-                )
-              })}
+                  <input
+                    value={form.emoji}
+                    onChange={(e) => setForm({ ...form, emoji: e.target.value })}
+                    style={{ width: '56px', textAlign: 'center', fontSize: '1.25rem', padding: '4px 6px' }}
+                    title="Type custom emoji or tap one below"
+                  />
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    {lang === 'bn' ? 'নিচের আইকনে ট্যাপ করে নির্বাচন করুন:' : '1-tap quick palette:'}
+                  </span>
+                </div>
+                <div className="seller-emoji-palette">
+                  {COMMON_EMOJIS.map((em) => (
+                    <button
+                      key={em}
+                      type="button"
+                      className={`seller-emoji-btn ${form.emoji === em ? 'active' : ''}`}
+                      onClick={() => setForm({ ...form, emoji: em })}
+                      title={em}
+                    >
+                      {em}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Names */}
+              <div className="seller-field-grid">
+                <label>
+                  {lang === 'bn' ? 'ইংরেজি নাম *' : 'Name (English) *'}
+                  <input
+                    placeholder="e.g. Fresh Potato"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    required
+                  />
+                </label>
+                <label>
+                  {lang === 'bn' ? 'বাংলা নাম' : 'Bangla Name'}
+                  <input
+                    placeholder="যেমন: নতুন গোল আলু"
+                    value={form.bnName}
+                    onChange={(e) => setForm({ ...form, bnName: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              {/* Category & Season */}
+              <div className="seller-field-grid">
+                <label>
+                  {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
+                  <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                    <option value="Vegetables">🥦 Vegetables (শাকসবজি)</option>
+                    <option value="Leafy">🥗 Leafy Greens (শাক)</option>
+                    <option value="Spices">🌶️ Spices (মশলা)</option>
+                    <option value="Fish">🐟 Fish (মাছ)</option>
+                    <option value="Fruits">🥭 Fruits (ফল)</option>
+                    <option value="Dairy">🥛 Dairy (দুগ্ধজাত)</option>
+                  </select>
+                </label>
+
+                <label>
+                  {lang === 'bn' ? 'সিজন' : 'Season'}
+                  <select
+                    value={form.season}
+                    onChange={(e) => setForm({ ...form, season: e.target.value as Season })}
+                  >
+                    {(Object.keys(SEASON_LABELS) as Season[]).map((s) => (
+                      <option key={s} value={s}>
+                        {SEASON_LABELS[s][lang]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {/* Photo Upload & Preview */}
+              <div>
+                <label>
+                  {t(lang, 'uploadPhoto')}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={photoBusy}
+                    onChange={(e) => void onPhoto(e.target.files?.[0] || null)}
+                  />
+                </label>
+                {photoBusy && (
+                  <span style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 600, display: 'block', marginTop: '4px' }}>
+                    ⏳ {lang === 'bn' ? 'ছবি আপলোড হচ্ছে...' : 'Uploading photo...'}
+                  </span>
+                )}
+                {preview && (
+                  <div className="seller-photo-preview" style={{ marginTop: '8px' }}>
+                    <img
+                      src={preview}
+                      alt=""
+                      style={{ maxWidth: '90px', maxHeight: '90px', borderRadius: '8px', border: '1px solid #cbd5e1', objectFit: 'cover' }}
+                    />
+                  </div>
+                )}
+                {photoError && <p className="form-error">{photoError}</p>}
+              </div>
             </div>
           </div>
 
-          <label>
-            Grade A ₹
-            <input
-              type="number"
-              value={form.pA}
-              onChange={(e) => setForm({ ...form, pA: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            Grade B ₹
-            <input
-              type="number"
-              value={form.pB}
-              onChange={(e) => setForm({ ...form, pB: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            Grade C ₹
-            <input
-              type="number"
-              value={form.pC}
-              onChange={(e) => setForm({ ...form, pC: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            {lang === 'bn' ? 'বাজারের MRP (কাটা দাম ₹)' : 'Market MRP (Strikethrough ₹)'}
-            <input
-              type="number"
-              min={0}
-              value={form.mrp || ''}
-              placeholder={lang === 'bn' ? 'অটো হিসাব (স্বয়ংক্রিয়)' : 'Auto calculated'}
-              onChange={(e) => setForm({ ...form, mrp: Number(e.target.value) || 0 })}
-            />
-            {form.pA > 0 && (
-              <span style={{ display: 'block', marginTop: '4px', fontSize: '0.76rem', color: '#166534', fontWeight: 600 }}>
-                ✨ {lang === 'bn' ? 'ডিসকাউন্ট দেখাবে:' : 'Storefront preview:'}{' '}
-                <strong style={{ background: '#dcfce7', color: '#15803d', padding: '1px 5px', borderRadius: '4px', border: '1px solid #86efac' }}>
-                  {computeDiscountPercent(form.mrp || computeMarketMrp(form.pA, undefined, form.name || 'preview'), form.pA)}% OFF
-                </strong>{' '}
-                (MRP: ₹{form.mrp || computeMarketMrp(form.pA, undefined, form.name || 'preview')})
-              </span>
-            )}
-          </label>
+          {/* Card 2: 📦 Packaging & Inventory */}
+          <div className="seller-card">
+            <div className="seller-card-head">
+              <span className="seller-card-icon">📦</span>
+              <div>
+                <h3>{lang === 'bn' ? '২. প্যাকেজিং ও ইনভেন্টরি' : '2. Packaging & Stock'}</h3>
+                <p>{lang === 'bn' ? 'ইউনিট, সাইজ ও মজুত পরিমাণ নির্ধারণ করুন' : 'Unit, packet sizes & available stock'}</p>
+              </div>
+            </div>
+
+            <div className="seller-card-body">
+              <div className="seller-field-grid">
+                <label>
+                  {lang === 'bn' ? 'ইউনিট' : 'Base Unit'}
+                  <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
+                    <option value="kg">kg (কিলো)</option>
+                    <option value="pc">pc (পিস)</option>
+                    <option value="bunch">bunch (ডাঁটা / আঁটি)</option>
+                    <option value="litre">litre (লিটার)</option>
+                    <option value="packet">packet (প্যাকেট)</option>
+                  </select>
+                </label>
+
+                <label>
+                  {lang === 'bn' ? 'বিক্রয় পদ্ধতি' : 'Selling Method'}
+                  <select
+                    value={form.soldAs || 'loose'}
+                    onChange={(e) => setForm({ ...form, soldAs: e.target.value as 'loose' | 'packet' | 'both' })}
+                  >
+                    <option value="loose">⚖️ Loose by weight ({lang === 'bn' ? 'ওজনে বিক্রয় - e.g. 1 kg, 2 kg' : 'Loose by weight'})</option>
+                    <option value="packet">📦 Fixed Packets only ({lang === 'bn' ? 'প্যাকেটে বিক্রয় - e.g. 250g, 500g' : 'Fixed packets only'})</option>
+                    <option value="both">♾️ Both loose & packet ({lang === 'bn' ? 'উভয় পদ্ধতি - ক্রেতা পছন্দ করতে পারে' : 'Both loose & packets'})</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* Gram Options / Packet Sizes (Show only for kg unit with packet/both) */}
+              {form.unit === 'kg' && (form.soldAs === 'packet' || form.soldAs === 'both') ? (
+                <div className="seller-gram-box">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                    <strong style={{ fontSize: '0.88rem', color: '#1e293b' }}>
+                      ⚖️ {lang === 'bn' ? 'প্যাকেট সাইজ অপশন (1-ট্যাপ প্রিসেট):' : 'Available Packet Sizes (1-Tap Presets):'}
+                    </strong>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                      {lang === 'bn' ? 'ট্যাপ করে অন/অফ করুন' : 'Tap preset to toggle'}
+                    </span>
+                  </div>
+
+                  {/* 1-Tap Presets */}
+                  <div className="seller-gram-presets">
+                    {COMMON_GRAM_PRESETS.map((preset) => {
+                      const isActive = (form.gramOptions || []).includes(preset.val)
+                      return (
+                        <button
+                          key={preset.val}
+                          type="button"
+                          className={`seller-preset-chip ${isActive ? 'active' : ''}`}
+                          onClick={() => toggleGramPreset(preset.val)}
+                        >
+                          {isActive ? '✓' : '+'} {preset.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Active Selected Tags */}
+                  {(form.gramOptions || []).length > 0 && (
+                    <div style={{ marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                        {lang === 'bn' ? 'বর্তমানে সক্রিয় প্যাকেট সাইজ:' : 'Active packet options on store:'}
+                      </span>
+                      <div className="seller-active-tags">
+                        {(form.gramOptions || []).map((val) => (
+                          <span key={val} className="seller-active-tag">
+                            {val < 1000 ? `${val}g` : `${val / 1000} kg (${val}g)`}
+                            <button
+                              type="button"
+                              onClick={() => removeGram(val)}
+                              title={lang === 'bn' ? 'মুছুন' : 'Remove size'}
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom Gram Adder */}
+                  <div style={{ marginTop: '4px', borderTop: '1px dashed #cbd5e1', paddingTop: '8px' }}>
+                    <div className="seller-custom-gram-row">
+                      <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600 }}>
+                        {lang === 'bn' ? 'কাস্টম সাইজ (গ্রাম):' : 'Add custom size (grams):'}
+                      </span>
+                      <input
+                        type="number"
+                        min={10}
+                        step={10}
+                        placeholder="e.g. 750"
+                        value={customGramInput}
+                        onChange={(e) => setCustomGramInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addCustomGram()
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => addCustomGram()}
+                        style={{ padding: '5px 12px', fontSize: '0.82rem' }}
+                      >
+                        + {lang === 'bn' ? 'যোগ' : 'Add'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : form.unit !== 'kg' && (form.soldAs === 'packet' || form.soldAs === 'both') ? (
+                <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem', color: '#64748b' }}>
+                  ℹ️ {lang === 'bn' ? 'প্যাকেট গ্রাম অপশন শুধুমাত্র kg ইউনিটের ক্ষেত্রে প্রযোজ্য।' : 'Packet gram sizes are tailored for kg units.'}
+                </div>
+              ) : null}
+
+              {/* Stock Qty */}
+              <div className="seller-field-grid">
+                <label>
+                  {lang === 'bn' ? 'মজুত স্টক পরিমাণ' : 'Stock Quantity'}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.stockQty}
+                      onChange={(e) => setForm({ ...form, stockQty: Number(e.target.value) })}
+                      style={{ maxWidth: '140px' }}
+                    />
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: form.stockQty > 0 ? '#15803d' : '#dc2626' }}>
+                      {form.stockQty > 0
+                        ? (lang === 'bn' ? '🟢 বিক্রির জন্য প্রস্তুত' : '🟢 In Stock')
+                        : (lang === 'bn' ? '🔴 স্টক শেষ' : '🔴 Out of Stock')}
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: 💰 Pricing & Quality Grades */}
+          <div className="seller-card">
+            <div className="seller-card-head">
+              <span className="seller-card-icon">💰</span>
+              <div>
+                <h3>{lang === 'bn' ? '৩. মূল্য ও কোয়ালিটি গ্রেড' : '3. Pricing & Quality Grades'}</h3>
+                <p>{lang === 'bn' ? 'সক্রিয় গ্রেড নির্বাচন, গ্রেডের দাম ও MRP' : 'Select active grades, set prices & MRP'}</p>
+              </div>
+            </div>
+
+            <div className="seller-card-body">
+              {/* Quality Grades Toggle Grid */}
+              <div>
+                <span style={{ fontSize: '0.88rem', fontWeight: 700, display: 'block', marginBottom: '8px', color: '#1e293b' }}>
+                  🔘 {lang === 'bn' ? 'কোন কোন গ্রেড ক্রেতাদের দেখাবেন?' : 'Which Grades to offer customers?'}
+                </span>
+                <div className="seller-grade-grid">
+                  {(['A', 'B', 'C'] as Grade[]).map((g) => {
+                    const isChecked = form.availableGrades?.includes(g) ?? true
+                    const label = g === 'A'
+                      ? (lang === 'bn' ? 'Grade A (প্রিমিয়াম)' : 'Grade A (Premium)')
+                      : g === 'B'
+                        ? (lang === 'bn' ? 'Grade B (স্ট্যান্ডার্ড)' : 'Grade B (Standard)')
+                        : (lang === 'bn' ? 'Grade C (সাশ্রয়ী)' : 'Grade C (Economy)')
+                    return (
+                      <label
+                        key={g}
+                        className={`seller-grade-card ${isChecked ? 'active' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleGrade(g)}
+                        />
+                        <span style={{ fontWeight: 700, fontSize: '0.88rem', color: isChecked ? '#166534' : '#64748b' }}>
+                          {label}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Dynamic Prices for ACTIVE Grades Only */}
+              <div className="seller-field-grid">
+                {(form.availableGrades?.includes('A') ?? true) && (
+                  <label>
+                    {lang === 'bn' ? 'Grade A বিক্রয় মূল্য (₹)' : 'Grade A Price (₹)'}
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.pA || ''}
+                      placeholder="e.g. 40"
+                      onChange={(e) => setForm({ ...form, pA: Number(e.target.value) || 0 })}
+                    />
+                  </label>
+                )}
+
+                {(form.availableGrades?.includes('B') ?? true) && (
+                  <label>
+                    {lang === 'bn' ? 'Grade B বিক্রয় মূল্য (₹)' : 'Grade B Price (₹)'}
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.pB || ''}
+                      placeholder="e.g. 32"
+                      onChange={(e) => setForm({ ...form, pB: Number(e.target.value) || 0 })}
+                    />
+                  </label>
+                )}
+
+                {(form.availableGrades?.includes('C') ?? true) && (
+                  <label>
+                    {lang === 'bn' ? 'Grade C বিক্রয় মূল্য (₹)' : 'Grade C Price (₹)'}
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.pC || ''}
+                      placeholder="e.g. 25"
+                      onChange={(e) => setForm({ ...form, pC: Number(e.target.value) || 0 })}
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* Market MRP & Live Discount Preview */}
+              <div>
+                <label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <span>{lang === 'bn' ? 'বাজারের MRP (কাটা দাম ₹)' : 'Market MRP (Strikethrough ₹)'}</span>
+                    <button
+                      type="button"
+                      onClick={handleAutoMrp}
+                      style={{
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        border: '1px solid #bfdbfe',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                      title="Automatically calculate market MRP (+20% markup)"
+                    >
+                      ⚡ {lang === 'bn' ? 'অটো MRP (+20%)' : 'Auto MRP (+20%)'}
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.mrp || ''}
+                    placeholder={lang === 'bn' ? 'ফাঁকা রাখলে স্বয়ংক্রিয় হিসাব হবে' : 'Auto calculated if left blank'}
+                    onChange={(e) => setForm({ ...form, mrp: Number(e.target.value) || 0 })}
+                  />
+                </label>
+
+                {effectiveBasePrice > 0 && (
+                  <div className="seller-discount-preview">
+                    <span>✨ {lang === 'bn' ? 'স্টোরে ডিসকাউন্ট দেখাবে:' : 'Storefront preview:'}</span>
+                    <span className="seller-discount-pill">
+                      {computeDiscountPercent(form.mrp || computeMarketMrp(effectiveBasePrice, undefined, form.name || 'preview'), effectiveBasePrice)}% OFF
+                    </span>
+                    <span style={{ color: '#475569' }}>
+                      (MRP: <del>₹{form.mrp || computeMarketMrp(effectiveBasePrice, undefined, form.name || 'preview')}</del> · {lang === 'bn' ? 'আপনার বিক্রয়:' : 'You sell:'} <strong>₹{effectiveBasePrice}</strong>)
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="form-actions">
-          <button type="submit" className="btn btn-primary" disabled={photoBusy}>
-            {editing
-              ? lang === 'bn'
-                ? 'সেভ'
-                : 'Save'
-              : lang === 'bn'
-                ? 'যোগ করুন'
-                : 'Add'}
-          </button>
+
+        {/* Form Actions Footer */}
+        <div className="seller-form-footer">
           {editing && (
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => {
-                setEditing(null)
-                setForm(emptyForm)
-                setPhotoError('')
-              }}
+              onClick={cancelEdit}
             >
               {t(lang, 'cancel')}
             </button>
           )}
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={photoBusy}
+            style={{
+              padding: '0.65rem 1.5rem',
+              fontSize: '0.95rem',
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #166534 0%, #15803d 100%)',
+              boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            {editing
+              ? lang === 'bn'
+                ? '💾 পরিবর্তন সেভ করুন'
+                : '💾 Save Changes'
+              : lang === 'bn'
+                ? '✨ প্রোডাক্ট যোগ করুন'
+                : '✨ Add Product'}
+          </button>
         </div>
       </form>
 
