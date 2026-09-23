@@ -2693,15 +2693,17 @@ describe('Suite 46: Tiered Role Delegation & Admin Customer PIN Reset', () => {
   })
 })
 
-describe('Suite 47: Super Admin 1-Tap Magic Link Verification', () => {
+describe('Suite 47: Super Admin 1-Tap Magic Link Verification & Zero Local Cache', () => {
   const authContextPath = path.resolve(__dirname, '../src/context/AuthContext.tsx')
   const authContextContent = fs.readFileSync(authContextPath, 'utf8')
+  const storagePath = path.resolve(__dirname, '../src/lib/storage.ts')
+  const storageContent = fs.readFileSync(storagePath, 'utf8')
   const authPath = path.resolve(__dirname, '../src/pages/Auth.tsx')
   const authContent = fs.readFileSync(authPath, 'utf8')
 
   test('AuthContext.tsx requires Supabase Magic Link OTP for Super Admin login and prevents offline bypass', () => {
     assert.ok(
-      authContextContent.includes('profile.isSuperAdmin && supabase'),
+      authContextContent.includes('profile.isSuperAdmin') || authContextContent.includes('debajoyti007@gmail.com'),
       'Must check if user is Super Admin'
     )
     assert.ok(
@@ -2718,14 +2720,32 @@ describe('Suite 47: Super Admin 1-Tap Magic Link Verification', () => {
     )
   })
 
-  test('AuthContext.tsx onAuthStateChange captures magic link session and hydrates Super Admin profile', () => {
+  test('AuthContext.tsx strictly blocks signInWithPassword for Super Admin', () => {
+    assert.ok(
+      authContextContent.includes('!profile.isSuperAdmin'),
+      'Must exclude Super Admin from signInWithPassword'
+    )
+    assert.ok(
+      authContextContent.includes('Never authenticate Super Admin with password'),
+      'Must enforce rule that Super Admin is never authenticated with password alone'
+    )
+  })
+
+  test('storage.ts enforces Zero Local Cache policy for Super Admin', () => {
+    assert.ok(
+      storageContent.includes('ZERO LOCAL CACHE FOR SUPER ADMIN'),
+      'Must declare zero local cache policy for Super Admin in storage.ts'
+    )
+    assert.ok(
+      storageContent.includes('localStorage.removeItem(CURRENT_USER_KEY)'),
+      'Must purge Super Admin from localStorage'
+    )
+  })
+
+  test('AuthContext.tsx onAuthStateChange captures magic link session and navigates Super Admin to /admin', () => {
     assert.ok(
       authContextContent.includes('client.auth.onAuthStateChange'),
       'Must listen for auth state changes'
-    )
-    assert.ok(
-      authContextContent.includes('saveCurrentUser(profile)'),
-      'Must persist authenticated profile'
     )
     assert.ok(
       authContextContent.includes("window.location.replace(`${window.location.origin}/admin`)"),

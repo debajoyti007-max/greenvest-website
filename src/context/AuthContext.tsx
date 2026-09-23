@@ -125,7 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     ensureSeeded()
     const cached = getCurrentUser()
-    if (cached) return cached
+    if (cached) {
+      // 🛡️ Super Admin CANNOT be restored blindly from localStorage!
+      // Requires an active, verified Supabase cloud session validated in refresh().
+      if (cached.isSuperAdmin || cached.email?.toLowerCase() === 'debajoyti007@gmail.com') {
+        return null
+      }
+      return cached
+    }
     const sessionUserId = getSessionUserId()
     if (!sessionUserId) return null
     const all = getUsers()
@@ -144,7 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Must be initialized lazily to match whatever user useState resolved to.
   const userRef = useRef<User | null>((() => {
     const cached = getCurrentUser()
-    if (cached) return cached
+    if (cached) {
+      if (cached.isSuperAdmin || cached.email?.toLowerCase() === 'debajoyti007@gmail.com') {
+        return null
+      }
+      return cached
+    }
     const sessionUserId = getSessionUserId()
     if (!sessionUserId) return null
     const all = getUsers()
@@ -245,7 +257,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (profile) {
                 setUser(profile)
                 userRef.current = profile
-                setSessionUserId(profile.id)
+                if (!profile.isSuperAdmin && profile.email?.toLowerCase() !== 'debajoyti007@gmail.com') {
+                  setSessionUserId(profile.id)
+                }
                 // Secondary staff customer list hydration must NEVER block authentication
                 void loadUsersIfStaff(profile)
                 return
@@ -268,6 +282,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (localId) {
           // PIN-auth users have no JWT — restore from local cache (RLS blocks anon profile reads)
           if (cachedProfile && cachedProfile.id === localId) {
+            // 🛡️ Super Admin CANNOT be restored from localStorage without an active Supabase cloud session!
+            if (cachedProfile.isSuperAdmin || cachedProfile.email?.toLowerCase() === 'debajoyti007@gmail.com') {
+              const { data: activeSessionData } = await supabase.auth.getSession()
+              if (
+                !activeSessionData?.session?.user?.email ||
+                activeSessionData.session.user.email.toLowerCase() !== cachedProfile.email.toLowerCase()
+              ) {
+                // No active Supabase cloud session! Wipe stale local cache and force fresh Magic Link login
+                saveCurrentUser(null)
+                setSessionUserId(null)
+                setUser(null)
+                userRef.current = null
+                return
+              }
+            }
+
             if (cachedProfile.isBlocked) {
               saveCurrentUser(null)
               setUser(null)
@@ -315,6 +345,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setSessionUserId(null)
           }
         } else if (cachedProfile) {
+          if (cachedProfile.isSuperAdmin || cachedProfile.email?.toLowerCase() === 'debajoyti007@gmail.com') {
+            const { data: activeSessionData } = await supabase.auth.getSession()
+            if (
+              !activeSessionData?.session?.user?.email ||
+              activeSessionData.session.user.email.toLowerCase() !== cachedProfile.email.toLowerCase()
+            ) {
+              saveCurrentUser(null)
+              setUser(null)
+              userRef.current = null
+              return
+            }
+          }
           if (!userRef.current || userRef.current.id !== cachedProfile.id || userRef.current.role !== cachedProfile.role) {
             setUser(cachedProfile)
             userRef.current = cachedProfile
@@ -381,8 +423,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               mfaProfileRef.current = null
               setUser(profile)
               userRef.current = profile
-              setSessionUserId(profile.id)
-              saveCurrentUser(profile)
+              if (!profile.isSuperAdmin && profile.email?.toLowerCase() !== 'debajoyti007@gmail.com') {
+                setSessionUserId(profile.id)
+                saveCurrentUser(profile)
+              }
               void loadUsersIfStaff(profile)
               if (
                 (profile.role === 'admin' || profile.isSuperAdmin) &&
@@ -662,8 +706,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             profile.needsPasswordUpgrade = true
           }
 
-          // Seamless Supabase session establishment for accounts present in auth.users
-          if (supabase && profile.email && usedPin && usedPin.length >= 6) {
+          // Seamless Supabase session establishment for normal accounts present in auth.users
+          // 🛡️ STRICT RULE: Never authenticate Super Admin with password — Magic Link ONLY!
+          if (
+            supabase &&
+            profile.email &&
+            usedPin &&
+            usedPin.length >= 6 &&
+            !profile.isSuperAdmin &&
+            profile.email.toLowerCase() !== 'debajoyti007@gmail.com'
+          ) {
             try {
               await supabase.auth.signInWithPassword({
                 email: profile.email,
@@ -674,8 +726,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          // 🔐 Super Admin 2FA: Trigger Supabase Magic Link / Email OTP
-          if (profile.isSuperAdmin && supabase) {
+          // 🔐 Super Admin 2FA: Trigger Supabase Magic Link ONLY
+          if ((profile.isSuperAdmin || profile.email.toLowerCase() === 'debajoyti007@gmail.com') && supabase) {
+            // Force invalidate any stale local Supabase sessions first so ONLY the new Magic Link grants access
+            try {
+              await supabase.auth.signOut({ scope: 'local' })
+            } catch {}
+
             try {
               const { error: otpErr } = await supabase.auth.signInWithOtp({
                 email: profile.email,
@@ -698,6 +755,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             mfaPinRef.current = usedPin
             mfaProfileRef.current = profile
             setMfaPending(true)
+            // 🛡️ ZERO LOCAL CACHE: Do NOT set user, do NOT saveCurrentUser, do NOT setSessionUserId!
+            // Super Admin CANNOT open the account until they tap the Magic Link in Gmail!
             return { ok: true, mfaPending: true, user: profile }
           }
 

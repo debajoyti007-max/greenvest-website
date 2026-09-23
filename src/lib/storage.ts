@@ -236,11 +236,29 @@ export function saveCart(cart: CartItem[], userId?: string | null) {
 const CURRENT_USER_KEY = 'gv_current_user'
 
 export function getCurrentUser(): User | null {
-  return read<User | null>(CURRENT_USER_KEY, null)
+  const u = read<User | null>(CURRENT_USER_KEY, null)
+  // 🛡️ ZERO LOCAL CACHE FOR SUPER ADMIN: Super Admin must NEVER be read from storage!
+  if (u && (u.isSuperAdmin || u.email?.toLowerCase() === 'debajoyti007@gmail.com')) {
+    try {
+      localStorage.removeItem(CURRENT_USER_KEY)
+    } catch {}
+    void idbDelete(CURRENT_USER_KEY)
+    return null
+  }
+  return u
 }
 
 export function saveCurrentUser(user: User | null): void {
   if (user) {
+    // 🛡️ ZERO LOCAL CACHE FOR SUPER ADMIN: Force fresh Magic Link login every time
+    if (user.isSuperAdmin || user.email?.toLowerCase() === 'debajoyti007@gmail.com') {
+      try {
+        localStorage.removeItem(CURRENT_USER_KEY)
+      } catch {}
+      void idbDelete(CURRENT_USER_KEY)
+      setSessionUserId(null)
+      return
+    }
     write(CURRENT_USER_KEY, user)
     setSessionUserId(user.id)
   } else {
