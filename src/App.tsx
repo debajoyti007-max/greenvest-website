@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import Layout from './components/Layout'
 import SetupRequired from './components/SetupRequired'
 import { shouldBlockApp } from './lib/runtime'
@@ -174,6 +175,7 @@ export default function App() {
       <StoreProvider>
         <BrowserRouter basename={routerBasename}>
           <AppRoutes />
+          <SpeedInsights />
         </BrowserRouter>
       </StoreProvider>
     </AuthProvider>
