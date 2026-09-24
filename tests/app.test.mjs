@@ -2940,3 +2940,51 @@ describe('Suite 50: Mobile UX Resilience, Stepper Overflow Prevention & UI Colli
     assert.ok(cssContent.includes('padding-bottom: calc(148px + env(safe-area-inset-bottom, 0px)) !important;'), 'main-content must have 148px bottom clearance')
   })
 })
+
+// 51. Order Time Decoration, Delivery Slot Formatting & Staff Menu Architecture
+describe('Suite 51: Order Time Decoration, Delivery Slot Formatting & Staff Menu Architecture', () => {
+  const sellerPath = path.join(__dirname, '..', 'src', 'pages', 'seller', 'SellerOrders.tsx')
+  const sellerContent = fs.readFileSync(sellerPath, 'utf8')
+  const ordersPath = path.join(__dirname, '..', 'src', 'pages', 'Orders.tsx')
+  const ordersContent = fs.readFileSync(ordersPath, 'utf8')
+  const trackPath = path.join(__dirname, '..', 'src', 'pages', 'TrackOrder.tsx')
+  const trackContent = fs.readFileSync(trackPath, 'utf8')
+  const layoutPath = path.join(__dirname, '..', 'src', 'components', 'Layout.tsx')
+  const layoutContent = fs.readFileSync(layoutPath, 'utf8')
+  const businessPath = path.join(__dirname, '..', 'src', 'lib', 'business.ts')
+  const businessContent = fs.readFileSync(businessPath, 'utf8')
+
+  test('business.ts exports formatOrderTime, formatOrderDate, formatRelativeTime, formatDeliverySlot, formatOrderTimestamp', () => {
+    assert.ok(businessContent.includes('export function formatOrderTime'), 'Must export formatOrderTime')
+    assert.ok(businessContent.includes('export function formatOrderDate'), 'Must export formatOrderDate')
+    assert.ok(businessContent.includes('export function formatRelativeTime'), 'Must export formatRelativeTime')
+    assert.ok(businessContent.includes('export function formatDeliverySlot'), 'Must export formatDeliverySlot')
+    assert.ok(businessContent.includes('export function formatOrderTimestamp'), 'Must export formatOrderTimestamp')
+  })
+
+  test('SellerOrders.tsx decorates order timestamp and delivery slot without raw military time', () => {
+    assert.ok(sellerContent.includes('formatOrderTimestamp(o.createdAt, lang)'), 'Must use formatOrderTimestamp')
+    assert.ok(sellerContent.includes('formatDeliverySlot(o.deliveryDate, lang)'), 'Must use formatDeliverySlot')
+    // Must NOT use raw military toLocaleTimeString without decorator badge
+    assert.ok(!sellerContent.includes("<span>·</span>\n                      <span>{new Date(o.createdAt).toLocaleTimeString"), 'Must not render unstyled raw time')
+  })
+
+  test('SellerOrders.tsx removes Cancel button from delivered orders and provides quick Invoice button', () => {
+    assert.ok(sellerContent.includes("o.status !== 'cancelled' && o.status !== 'delivered'"), 'Must guard cancel button so it never renders on delivered orders')
+    assert.ok(sellerContent.includes('Delivered & Completed'), 'Must render Delivered & Completed indicator')
+    assert.ok(sellerContent.includes('printOrderInvoice(o, lang)'), 'Must provide 1-tap print invoice button')
+  })
+
+  test('Layout.tsx wraps staff role links in staff-portal-cluster to prevent navbar multi-line wrapping', () => {
+    assert.ok(layoutContent.includes('staff-portal-cluster'), 'Must wrap staff portals in staff-portal-cluster')
+    assert.ok(layoutContent.includes("whiteSpace: 'nowrap'"), 'Staff portal cluster must be whitespace nowrap')
+  })
+
+  test('Orders.tsx and TrackOrder.tsx decorate order time and delivery slots', () => {
+    assert.ok(ordersContent.includes('formatOrderTimestamp(o.createdAt, lang)'), 'Orders.tsx must use formatOrderTimestamp')
+    assert.ok(ordersContent.includes('formatDeliverySlot(o.deliveryDate, lang)'), 'Orders.tsx must use formatDeliverySlot')
+    assert.ok(trackContent.includes('formatOrderTimestamp(matched.createdAt, lang)'), 'TrackOrder.tsx must use formatOrderTimestamp')
+    assert.ok(trackContent.includes('formatDeliverySlot(matched.deliveryDate, lang)'), 'TrackOrder.tsx must use formatDeliverySlot')
+  })
+})
+

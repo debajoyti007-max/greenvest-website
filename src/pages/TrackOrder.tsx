@@ -5,7 +5,7 @@ import OrderChat from '../components/OrderChat'
 import OrderSkeleton from '../components/OrderSkeleton'
 import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
-import { formatOrderId, SUPPORT_PHONE } from '../lib/business'
+import { formatOrderId, SUPPORT_PHONE, formatOrderTimestamp, formatDeliverySlot } from '../lib/business'
 import { fetchOrderByIdAndPhone, subscribeSingleOrder } from '../lib/api'
 
 
@@ -278,9 +278,54 @@ export default function TrackOrder() {
       {!loading && searched && matched && (
         <article className="order-card" style={{ marginTop: '1.5rem' }}>
           <header>
-            <div>
-              <strong style={{ fontSize: '1.1rem', color: '#166534' }}>{formatOrderId(matched.id)}</strong>
-              <span className="muted"> · {new Date(matched.createdAt).toLocaleDateString()}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <strong style={{ fontSize: '1.1rem', color: '#166534' }}>{formatOrderId(matched.id)}</strong>
+                {(() => {
+                  const { timeStr, dateStr, relativeStr } = formatOrderTimestamp(matched.createdAt, lang)
+                  const deliverySlot = formatDeliverySlot(matched.deliveryDate, lang)
+                  return (
+                    <>
+                      <span
+                        title={lang === 'bn' ? `অর্ডারের সময়: ${dateStr}, ${timeStr} (${relativeStr})` : `Order placed: ${dateStr}, ${timeStr} (${relativeStr})`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: '#f8fafc',
+                          color: '#334155',
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          fontSize: '0.74rem',
+                          border: '1px solid #e2e8f0',
+                        }}
+                      >
+                        <span>🕐</span>
+                        <span>{timeStr}</span>
+                        <span style={{ color: '#64748b', fontSize: '0.7rem' }}>({dateStr})</span>
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          background: deliverySlot.isScheduled ? '#eff6ff' : '#f0fdf4',
+                          color: deliverySlot.isScheduled ? '#1d4ed8' : '#15803d',
+                          border: '1px solid',
+                          borderColor: deliverySlot.isScheduled ? '#bfdbfe' : '#bbf7d0',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                        }}
+                      >
+                        {deliverySlot.label}
+                      </span>
+                    </>
+                  )
+                })()}
+              </div>
             </div>
             <span className={`status status-${matched.status}`}>{matched.status.replace('_', ' ')}</span>
           </header>

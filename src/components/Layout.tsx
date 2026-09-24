@@ -184,25 +184,39 @@ export default function Layout() {
                   {cartCount > 0 && <span className="badge">{cartCount}</span>}
                 </NavLink>
                 <NotificationBell />
-                {(user?.role === 'admin' || user?.isSuperAdmin) && (
-                  <>
+                {(user?.role === 'admin' || user?.isSuperAdmin || user?.role === 'seller') && (
+                  <div
+                    className="staff-portal-cluster"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      background: 'rgba(15, 23, 42, 0.05)',
+                      padding: '3px',
+                      borderRadius: '24px',
+                      gap: '3px',
+                      marginLeft: '0.4rem',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     <NavLink
                       to="/seller"
                       onClick={closeMenu}
-                      style={{
-                        backgroundColor: '#166534',
-                        background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
-                        color: '#ffffff',
-                        padding: '4px 12px',
+                      style={({ isActive }) => ({
+                        backgroundColor: isActive ? '#15803d' : 'transparent',
+                        color: isActive ? '#ffffff' : '#166534',
+                        padding: '4px 10px',
                         borderRadius: '20px',
                         fontWeight: 700,
+                        fontSize: '0.78rem',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
-                      }}
+                        gap: '4px',
+                        textDecoration: 'none',
+                        transition: 'all 0.15s ease',
+                      })}
                     >
-                      <span aria-hidden="true">💼</span> {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
+                      <span aria-hidden="true">💼</span>
+                      <span>{lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}</span>
                       {openAlertsCount > 0 && (
                         <span
                           title={lang === 'bn' ? `${openAlertsCount}টি সক্রিয় সাপোর্ট টিকিট` : `${openAlertsCount} active support alerts`}
@@ -210,8 +224,8 @@ export default function Layout() {
                             background: '#dc2626',
                             color: '#ffffff',
                             borderRadius: '10px',
-                            padding: '1px 6px',
-                            fontSize: '0.72rem',
+                            padding: '0 5px',
+                            fontSize: '0.68rem',
                             fontWeight: 800,
                             lineHeight: 1.2,
                           }}
@@ -221,63 +235,51 @@ export default function Layout() {
                         </span>
                       )}
                     </NavLink>
-                    <NavLink
-                      to="/admin"
-                      onClick={closeMenu}
-                      style={{
-                        background: '#7c3aed',
-                        color: '#ffffff',
-                        padding: '4px 12px',
-                        borderRadius: '20px',
-                        fontWeight: 700,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                      }}
-                    >
-                      <span aria-hidden="true">👑</span> {lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}
-                    </NavLink>
-                    <NavLink to="/rider" onClick={closeMenu}>
-                      <span aria-hidden="true">🛵</span> {lang === 'bn' ? 'রাইডার' : 'Rider'}
-                    </NavLink>
-                  </>
-                )}
-                {user?.role === 'seller' && (
-                  <NavLink
-                    to="/seller"
-                    onClick={closeMenu}
-                    style={{
-                      backgroundColor: '#166534',
-                      background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
-                      color: '#ffffff',
-                      padding: '4px 12px',
-                      borderRadius: '20px',
-                      fontWeight: 700,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 2px 8px rgba(22, 101, 52, 0.25)',
-                    }}
-                  >
-                    <span aria-hidden="true">💼</span> {lang === 'bn' ? 'সেলার হাব' : 'Seller Hub'}
-                    {openAlertsCount > 0 && (
-                      <span
-                        title={lang === 'bn' ? `${openAlertsCount}টি সক্রিয় সাপোর্ট টিকিট` : `${openAlertsCount} active support alerts`}
-                        style={{
-                          background: '#dc2626',
-                          color: '#ffffff',
-                          borderRadius: '10px',
-                          padding: '1px 6px',
-                          fontSize: '0.72rem',
-                          fontWeight: 800,
-                          lineHeight: 1.2,
-                        }}
+                    {(user?.role === 'admin' || user?.isSuperAdmin) && (
+                      <NavLink
+                        to="/admin"
+                        onClick={closeMenu}
+                        style={({ isActive }) => ({
+                          backgroundColor: isActive ? '#7c3aed' : 'transparent',
+                          color: isActive ? '#ffffff' : '#6d28d9',
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          fontWeight: 700,
+                          fontSize: '0.78rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          textDecoration: 'none',
+                          transition: 'all 0.15s ease',
+                        })}
                       >
-                        <span className="sr-only">{openAlertsCount} active alerts</span>
-                        <span aria-hidden="true">{openAlertsCount}</span>
-                      </span>
+                        <span aria-hidden="true">👑</span>
+                        <span>{lang === 'bn' ? 'অ্যাডমিন' : 'Admin'}</span>
+                      </NavLink>
                     )}
-                  </NavLink>
+                    {(user?.role === 'admin' || user?.isSuperAdmin) && (
+                      <NavLink
+                        to="/rider"
+                        onClick={closeMenu}
+                        style={({ isActive }) => ({
+                          backgroundColor: isActive ? '#0284c7' : 'transparent',
+                          color: isActive ? '#ffffff' : '#0369a1',
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          fontWeight: 700,
+                          fontSize: '0.78rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          textDecoration: 'none',
+                          transition: 'all 0.15s ease',
+                        })}
+                      >
+                        <span aria-hidden="true">🛵</span>
+                        <span>{lang === 'bn' ? 'রাইডার' : 'Rider'}</span>
+                      </NavLink>
+                    )}
+                  </div>
                 )}
               </>
             )}

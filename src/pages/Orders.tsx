@@ -7,7 +7,7 @@ import OrderSkeleton from '../components/OrderSkeleton'
 import { useAuth } from '../context/useAuth'
 import { useStore } from '../context/useStore'
 import { t } from '../lib/i18n'
-import { formatItemWeightDetail, STORE_NAME } from '../lib/business'
+import { formatItemWeightDetail, STORE_NAME, formatOrderTimestamp, formatDeliverySlot, formatOrderId } from '../lib/business'
 import { subscribeCustomerOrders } from '../lib/api'
 import { showToast } from '../lib/toast'
 import { printOrderInvoice } from '../lib/printOrder'
@@ -245,22 +245,54 @@ export default function Orders() {
           {displayOrders.map((o: Order) => (
             <article key={o.id} className={`order-card${o.status === 'delivered' ? ' delivered' : ''}`}>
               <header>
-                <div>
-                  <strong>{o.id}</strong>
-                  <span className="muted">{new Date(o.createdAt).toLocaleString()}</span>
-                  <span style={{
-                    marginLeft: '8px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    padding: '2px 7px',
-                    borderRadius: '6px',
-                    background: o.deliveryDate && o.deliveryDate !== 'standard' ? '#eff6ff' : '#f0fdf4',
-                    color: o.deliveryDate && o.deliveryDate !== 'standard' ? '#1d4ed8' : '#15803d',
-                    border: '1px solid',
-                    borderColor: o.deliveryDate && o.deliveryDate !== 'standard' ? '#bfdbfe' : '#bbf7d0',
-                  }}>
-                    {o.deliveryDate && o.deliveryDate !== 'standard' ? `📅 ${o.deliveryDate}` : `⚡ 12–24h`}
-                  </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: '1rem', color: '#14532d' }}>{formatOrderId(o.id)}</strong>
+                    {(() => {
+                      const { timeStr, dateStr, relativeStr } = formatOrderTimestamp(o.createdAt, lang)
+                      const deliverySlot = formatDeliverySlot(o.deliveryDate, lang)
+                      return (
+                        <>
+                          <span
+                            title={lang === 'bn' ? `অর্ডারের সময়: ${dateStr}, ${timeStr} (${relativeStr})` : `Order placed: ${dateStr}, ${timeStr} (${relativeStr})`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              background: '#f8fafc',
+                              color: '#334155',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontWeight: 600,
+                              fontSize: '0.74rem',
+                              border: '1px solid #e2e8f0',
+                            }}
+                          >
+                            <span>🕐</span>
+                            <span>{timeStr}</span>
+                            <span style={{ color: '#64748b', fontSize: '0.7rem' }}>({dateStr})</span>
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              background: deliverySlot.isScheduled ? '#eff6ff' : '#f0fdf4',
+                              color: deliverySlot.isScheduled ? '#1d4ed8' : '#15803d',
+                              border: '1px solid',
+                              borderColor: deliverySlot.isScheduled ? '#bfdbfe' : '#bbf7d0',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                            }}
+                          >
+                            {deliverySlot.label}
+                          </span>
+                        </>
+                      )
+                    })()}
+                  </div>
                 </div>
                 <span className={`status-pill ${o.status}`}>
                   {o.status === 'pending'

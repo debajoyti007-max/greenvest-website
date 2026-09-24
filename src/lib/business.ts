@@ -412,3 +412,144 @@ export function createBulkOrderWhatsAppUrl(params: {
 
   return `https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(lines.join('\n'))}`
 }
+
+// ── Premium Order Date, Time & Delivery Slot Decorators ───────────────
+const BN_MONTHS = ['জানু', 'ফেব্রু', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টে', 'অক্টো', 'নভে', 'ডিসে']
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const BN_DAYS = ['রবি', 'সোম', 'মঙ্গল', 'বুধ', 'বৃহঃ', 'শুক্র', 'শনি']
+const EN_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** Formats timestamp to clean 12-hour AM/PM string (e.g. "03:27 PM" or "০৩:২৭ PM") */
+export function formatOrderTime(isoOrDate: string | Date | undefined, lang: 'en' | 'bn' = 'en'): string {
+  if (!isoOrDate) return ''
+  const d = new Date(isoOrDate)
+  if (isNaN(d.getTime())) return ''
+  let hours = d.getHours()
+  const mins = d.getMinutes()
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  hours = hours % 12
+  if (hours === 0) hours = 12
+  const formattedHours = hours < 10 ? `0${hours}` : `${hours}`
+  const formattedMins = mins < 10 ? `0${mins}` : `${mins}`
+  const timeStr = `${formattedHours}:${formattedMins} ${ampm}`
+  return lang === 'bn' ? toBnDigits(timeStr) : timeStr
+}
+
+/** Formats date into contextual calendar label (e.g. "Today", "Yesterday", "24 Sep", or Bengali) */
+export function formatOrderDate(isoOrDate: string | Date | undefined, lang: 'en' | 'bn' = 'en'): string {
+  if (!isoOrDate) return ''
+  const d = new Date(isoOrDate)
+  if (isNaN(d.getTime())) return ''
+  const now = new Date()
+
+  const isSameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  if (isSameDay) {
+    return lang === 'bn' ? 'আজ' : 'Today'
+  }
+
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const isYesterday =
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate()
+  if (isYesterday) {
+    return lang === 'bn' ? 'গতকাল' : 'Yesterday'
+  }
+
+  const day = d.getDate()
+  const monthIdx = d.getMonth()
+  const year = d.getFullYear()
+  if (lang === 'bn') {
+    return `${toBnDigits(day)} ${BN_MONTHS[monthIdx]}${year !== now.getFullYear() ? ` ${toBnDigits(year)}` : ''}`
+  }
+  return `${day} ${EN_MONTHS[monthIdx]}${year !== now.getFullYear() ? ` ${year}` : ''}`
+}
+
+/** Formats relative time (e.g. "Just now", "5m ago", "2h ago", or Bengali) */
+export function formatRelativeTime(isoOrDate: string | Date | undefined, lang: 'en' | 'bn' = 'en'): string {
+  if (!isoOrDate) return ''
+  const d = new Date(isoOrDate)
+  if (isNaN(d.getTime())) return ''
+  const diffSecs = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
+  if (diffSecs < 60) {
+    return lang === 'bn' ? 'এইমাত্র' : 'Just now'
+  }
+  const diffMins = Math.floor(diffSecs / 60)
+  if (diffMins < 60) {
+    return lang === 'bn' ? `${toBnDigits(diffMins)} মি আগে` : `${diffMins}m ago`
+  }
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) {
+    return lang === 'bn' ? `${toBnDigits(diffHours)} ঘণ্টা আগে` : `${diffHours}h ago`
+  }
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays < 7) {
+    return lang === 'bn' ? `${toBnDigits(diffDays)} দিন আগে` : `${diffDays}d ago`
+  }
+  return formatOrderDate(d, lang)
+}
+
+/** Formats delivery slot date into human-readable decorated pill */
+export function formatDeliverySlot(deliveryDate: string | undefined, lang: 'en' | 'bn' = 'en'): { label: string; isScheduled: boolean } {
+  if (!deliveryDate || deliveryDate === 'standard') {
+    return {
+      label: lang === 'bn' ? '⚡ দ্রুত (১২–২৪ ঘণ্টা)' : '⚡ Standard (12–24h)',
+      isScheduled: false,
+    }
+  }
+
+  const parts = deliveryDate.split('-').map(Number)
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    const d = new Date(parts[0], parts[1] - 1, parts[2])
+    if (!isNaN(d.getTime())) {
+      const now = new Date()
+      now.setHours(0, 0, 0, 0)
+      const target = new Date(d)
+      target.setHours(0, 0, 0, 0)
+      const diffDays = Math.round((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+
+      const day = d.getDate()
+      const mIdx = d.getMonth()
+      const dayOfWeek = d.getDay()
+
+      if (diffDays === 0) {
+        return {
+          label: lang === 'bn' ? '📅 আজ ডেলিভারি' : '📅 Today Delivery',
+          isScheduled: true,
+        }
+      } else if (diffDays === 1) {
+        return {
+          label: lang === 'bn' ? '📅 আগামীকাল ডেলিভারি' : '📅 Tomorrow Delivery',
+          isScheduled: true,
+        }
+      } else {
+        const formattedDate = lang === 'bn'
+          ? `📅 ${toBnDigits(day)} ${BN_MONTHS[mIdx]} (${BN_DAYS[dayOfWeek]})`
+          : `📅 ${day} ${EN_MONTHS[mIdx]} (${EN_DAYS[dayOfWeek]})`
+        return {
+          label: formattedDate,
+          isScheduled: true,
+        }
+      }
+    }
+  }
+
+  return {
+    label: `📅 ${deliveryDate}`,
+    isScheduled: true,
+  }
+}
+
+/** Comprehensive order timestamp decorator returning all display facets */
+export function formatOrderTimestamp(isoOrDate: string | Date | undefined, lang: 'en' | 'bn' = 'en') {
+  const timeStr = formatOrderTime(isoOrDate, lang)
+  const dateStr = formatOrderDate(isoOrDate, lang)
+  const relativeStr = formatRelativeTime(isoOrDate, lang)
+  const fullDecorated = `${dateStr}, ${timeStr}`
+  return { timeStr, dateStr, relativeStr, fullDecorated }
+}
+

@@ -4,7 +4,7 @@ import { showToast } from '../../lib/toast'
 import { useAuth } from '../../context/useAuth'
 import { useStore } from '../../context/useStore'
 import { printOrderInvoice, printThermalReceipt } from '../../lib/printOrder'
-import { isOrderStalePending, formatItemWeightDetail, getOrderDeliveryOtp, STORE_NAME } from '../../lib/business'
+import { isOrderStalePending, formatItemWeightDetail, getOrderDeliveryOtp, STORE_NAME, formatOrderTimestamp, formatDeliverySlot } from '../../lib/business'
 import OrderChat from '../../components/OrderChat'
 import ItemPackingManifest from '../../components/seller/ItemPackingManifest'
 import { resolveNavDestination, createLocationRequestWhatsAppUrl } from '../../lib/delivery'
@@ -733,23 +733,49 @@ export default function SellerOrders() {
 
       {/* Bulk toolbar */}
       {filtered.length > 0 && (
-        <div style={{ ...cs, padding: '0.5rem 0.75rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontWeight: 600 }}>
-            <input type="checkbox" checked={selectedIds.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} />
-            {selectedIds.length > 0 ? `${selectedIds.length} selected` : (lang === 'bn' ? 'সব নির্বাচন' : 'Select all')}
-          </label>
-          {selectedIds.length > 0 && (
-            <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-              <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => void handleBulkStatus('confirmed')}>
+        <div style={{ ...cs, padding: '0.65rem 1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', fontWeight: 700, color: '#1e293b' }}>
+              <input type="checkbox" checked={selectedIds.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} />
+              {selectedIds.length > 0 ? `${selectedIds.length} ${lang === 'bn' ? 'টি নির্বাচিত' : 'selected'}` : (lang === 'bn' ? `সব নির্বাচন (${filtered.length})` : `Select all (${filtered.length})`)}
+            </label>
+            <span style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>·</span>
+            <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+              {lang === 'bn' ? `মোট মূল্য: ₹${filtered.reduce((sum, o) => sum + o.total, 0)}` : `Total: ₹${filtered.reduce((sum, o) => sum + o.total, 0)}`}
+            </span>
+          </div>
+          {selectedIds.length > 0 ? (
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }} onClick={() => void handleBulkStatus('confirmed')}>
                 ✅ {lang === 'bn' ? 'কনফার্ম' : 'Confirm'}
               </button>
-              <button type="button" className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }} onClick={() => void handleBulkStatus('delivered')}>
+              <button type="button" className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }} onClick={() => void handleBulkStatus('delivered')}>
                 🚚 {lang === 'bn' ? 'ডেলিভারড' : 'Delivered'}
               </button>
-              <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem', background: '#fef2f2', borderColor: '#fca5a5', color: '#dc2626' }} onClick={handleBulkDelete}>
+              <button type="button" className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem', background: '#fef2f2', borderColor: '#fca5a5', color: '#dc2626' }} onClick={handleBulkDelete}>
                 🗑️ {lang === 'bn' ? 'ডিলিট' : 'Delete'}
               </button>
             </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => exportOrdersToCSV(filtered, lang)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#15803d',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 4px',
+              }}
+              title={lang === 'bn' ? 'এক্সেল CSV এক্সপোর্ট করুন' : 'Export orders to CSV'}
+            >
+              📊 {lang === 'bn' ? 'CSV এক্সপোর্ট' : 'Export CSV'}
+            </button>
           )}
         </div>
       )}
@@ -778,13 +804,32 @@ export default function SellerOrders() {
                 >
                   <input type="checkbox" checked={selectedIds.includes(o.id)} onChange={(e) => { e.stopPropagation(); toggleSelect(o.id) }} style={{ cursor: 'pointer' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{o.userName}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a' }}>{o.userName}</span>
                       {renderOrderAgeBadge(o.createdAt, o.status, lang)}
                       {/* S8: Quick call */}
-                      <a href={`tel:${o.phone}`} onClick={e => e.stopPropagation()} style={{ fontSize: '0.85rem', textDecoration: 'none' }}>📞</a>
+                      <a
+                        href={`tel:${o.phone}`}
+                        onClick={e => e.stopPropagation()}
+                        title={lang === 'bn' ? `কল করুন: ${o.phone}` : `Call customer: ${o.phone}`}
+                        style={{
+                          fontSize: '0.8rem',
+                          textDecoration: 'none',
+                          background: '#f1f5f9',
+                          padding: '1px 6px',
+                          borderRadius: '8px',
+                          border: '1px solid #e2e8f0',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px',
+                        }}
+                      >
+                        📞
+                      </a>
                       {historyCount <= 1 ? (
-                        <span style={{ fontSize: '0.7rem', padding: '1px 6px', background: '#dcfce7', color: '#166534', borderRadius: '10px' }}>🆕</span>
+                        <span style={{ fontSize: '0.68rem', padding: '1px 6px', background: '#dcfce7', color: '#166534', borderRadius: '10px', fontWeight: 700 }}>
+                          🆕 {lang === 'bn' ? 'নতুন ক্রেতা' : 'New'}
+                        </span>
                       ) : (
                         <button
                           type="button"
@@ -793,30 +838,68 @@ export default function SellerOrders() {
                             setCustomerFilter(o.phone || o.userId || null)
                           }}
                           title={lang === 'bn' ? 'এই কাস্টমারের পূর্বের সব অর্ডার দেখুন' : 'Click to see all orders from this customer'}
-                          style={{ fontSize: '0.7rem', padding: '1px 6px', background: '#e0e7ff', color: '#3730a3', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                          style={{
+                            fontSize: '0.7rem',
+                            padding: '1px 7px',
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            borderRadius: '10px',
+                            border: '1px solid #bfdbfe',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                          }}
                         >
-                          🔁 {historyCount}{suffix(historyCount)} (History)
+                          📦 {historyCount}{suffix(historyCount)} {lang === 'bn' ? 'অর্ডার' : 'Order'}
                         </button>
                       )}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: '#6b7280', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <span>{o.items.map(i => i.emoji).join('')} ₹{o.total}</span>
-                      <span>·</span>
-                      <span>{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span>·</span>
-                      <span style={{
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        padding: '1px 6px',
-                        borderRadius: '6px',
-                        background: o.deliveryDate && o.deliveryDate !== 'standard' ? '#eff6ff' : '#f0fdf4',
-                        color: o.deliveryDate && o.deliveryDate !== 'standard' ? '#1d4ed8' : '#15803d',
-                        border: '1px solid',
-                        borderColor: o.deliveryDate && o.deliveryDate !== 'standard' ? '#bfdbfe' : '#bbf7d0',
-                      }}>
-                        {o.deliveryDate && o.deliveryDate !== 'standard' ? `📅 ${o.deliveryDate}` : `⚡ 12–24h`}
-                      </span>
-                    </div>
+                    {(() => {
+                      const { timeStr, dateStr, relativeStr } = formatOrderTimestamp(o.createdAt, lang)
+                      const deliverySlot = formatDeliverySlot(o.deliveryDate, lang)
+                      return (
+                        <div style={{ fontSize: '0.8rem', color: '#475569', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.25rem' }}>
+                          <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                            {o.items.map(i => i.emoji).join('')} {o.items.length} {lang === 'bn' ? 'আইটেম' : 'items'} · ₹{o.total}
+                          </span>
+                          <span style={{ color: '#cbd5e1' }}>•</span>
+                          <span
+                            title={lang === 'bn' ? `অর্ডারের সময়: ${dateStr}, ${timeStr} (${relativeStr})` : `Order placed: ${dateStr}, ${timeStr} (${relativeStr})`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              background: '#f8fafc',
+                              color: '#334155',
+                              padding: '1px 7px',
+                              borderRadius: '6px',
+                              fontWeight: 600,
+                              fontSize: '0.74rem',
+                              border: '1px solid #e2e8f0',
+                            }}
+                          >
+                            <span>🕐</span>
+                            <span>{timeStr}</span>
+                            <span style={{ color: '#64748b', fontSize: '0.7rem' }}>({dateStr})</span>
+                          </span>
+                          <span style={{ color: '#cbd5e1' }}>•</span>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '1px 7px',
+                            borderRadius: '6px',
+                            background: deliverySlot.isScheduled ? '#eff6ff' : '#f0fdf4',
+                            color: deliverySlot.isScheduled ? '#1d4ed8' : '#15803d',
+                            border: '1px solid',
+                            borderColor: deliverySlot.isScheduled ? '#bfdbfe' : '#bbf7d0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}>
+                            {deliverySlot.label}
+                          </span>
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
                     <span style={{
@@ -944,7 +1027,25 @@ export default function SellerOrders() {
                         : `🚚 ${lang === 'bn' ? 'ডেলিভারি সম্পন্ন করুন' : 'Mark Delivered'}`}
                     </button>
                   )}
-                  {o.status !== 'cancelled' && (
+                  {o.status === 'delivered' && (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '0.45rem 0.85rem',
+                        borderRadius: '8px',
+                        background: '#f0fdf4',
+                        color: '#15803d',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        border: '1px solid #bbf7d0',
+                      }}
+                    >
+                      ✓ {lang === 'bn' ? 'ডেলিভারি সম্পন্ন' : 'Delivered & Completed'}
+                    </span>
+                  )}
+                  {o.status !== 'cancelled' && o.status !== 'delivered' && (
                     <button
                       type="button"
                       onClick={() => void handleCancel(o)}
@@ -963,6 +1064,26 @@ export default function SellerOrders() {
                       ✕ {lang === 'bn' ? 'বাতিল' : 'Cancel'}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => printOrderInvoice(o, lang)}
+                    title={lang === 'bn' ? 'ট্যাক্স ইনভয়েস প্রিন্ট / PDF' : 'Print Tax Invoice'}
+                    style={{
+                      padding: '0.55rem 0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '0.82rem',
+                      background: '#f8fafc',
+                      color: '#334155',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    🖨️ {lang === 'bn' ? 'ইনভয়েস' : 'Invoice'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => sendOrderWhatsApp(o, lang)}

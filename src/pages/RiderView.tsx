@@ -5,7 +5,7 @@ import { useStore } from '../context/useStore'
 import { showToast } from '../lib/toast'
 import { verifyDeliveryOtpApi } from '../lib/api'
 import { generateDynamicUpiQr } from '../lib/payment'
-import { formatItemWeightDetail } from '../lib/business'
+import { formatItemWeightDetail, formatDeliverySlot } from '../lib/business'
 import {
   STORE_LOCATION,
   resolveNavDestination,
@@ -474,7 +474,7 @@ export default function RiderView() {
                       borderColor: o.deliveryDate && o.deliveryDate !== 'standard' ? '#bfdbfe' : undefined,
                     }}
                   >
-                    {o.status === 'delivered' ? '✅ Delivered' : (o.deliveryDate && o.deliveryDate !== 'standard' ? `📅 ${o.deliveryDate}` : '⚡ 12–24h')}
+                    {o.status === 'delivered' ? '✅ Delivered' : formatDeliverySlot(o.deliveryDate, lang).label}
                   </span>
                 </div>
 
