@@ -84,6 +84,12 @@ export default function SellerHome() {
     orders.filter((o) => o.status !== 'cancelled').map((o) => o.userId || o.phone),
   ).size
 
+  const todayIso = new Date().toISOString().split('T')[0]
+  const scheduledOrders = orders.filter(
+    (o) => o.deliveryDate && o.deliveryDate !== 'standard' && o.deliveryDate !== todayIso && o.status !== 'cancelled'
+  )
+  const scheduledCount = scheduledOrders.length
+
   const sourcingLines = useMemo(() => {
     const map = new Map<string, number>()
     orders
@@ -244,6 +250,52 @@ export default function SellerHome() {
             }}
           >
             {lang === 'bn' ? 'যাচাই করুন' : 'Verify Now'} <span aria-hidden="true">→</span>
+          </Link>
+        </div>
+      )}
+
+      {scheduledCount > 0 && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
+            border: '1.5px solid #93c5fd',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '1.2rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span aria-hidden="true" style={{ fontSize: '1.2rem' }}>🗓️</span>
+            <div>
+              <strong style={{ color: '#1e40af', fontSize: '0.95rem', display: 'block' }}>
+                {lang === 'bn' ? 'শিডিউল্ড অর্ডার সতর্কতা:' : 'Scheduled Orders:'}
+              </strong>
+              <span style={{ color: '#1d4ed8', fontSize: '0.85rem' }}>
+                {scheduledCount} {lang === 'bn' ? 'টি ভবিষ্যতের ডেলিভারি অর্ডার বুক করা রয়েছে।' : 'upcoming future delivery order(s) booked.'}
+              </span>
+            </div>
+          </div>
+          <Link
+            to="/seller/orders?filter=scheduled"
+            style={{
+              background: '#1d4ed8',
+              color: '#ffffff',
+              padding: '6px 14px',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            {lang === 'bn' ? 'শিডিউল্ড দেখুন' : 'View Scheduled'} <span aria-hidden="true">→</span>
           </Link>
         </div>
       )}
@@ -518,6 +570,28 @@ export default function SellerHome() {
             >
               <span aria-hidden="true">📊 </span>{lang === 'bn' ? 'মালামাল সোর্সিং শিট (কেজি ও পিস)' : '12–24h Item Sourcing (kg / pcs)'}
             </Link>
+            {scheduledCount > 0 && (
+              <Link
+                to="/seller/orders?filter=scheduled"
+                style={{
+                  background: '#eff6ff',
+                  border: '1.5px solid #93c5fd',
+                  color: '#1d4ed8',
+                  textAlign: 'center',
+                  padding: '8px',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span aria-hidden="true">🗓️ </span>{lang === 'bn' ? `শিডিউল্ড অর্ডার (${scheduledCount})` : `Scheduled Orders (${scheduledCount})`}
+              </Link>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
               <button
                 type="button"

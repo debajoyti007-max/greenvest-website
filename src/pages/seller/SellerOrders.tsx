@@ -258,7 +258,21 @@ export default function SellerOrders() {
   const [viewMode, setViewMode] = useState<'orders' | 'manifest'>(() => {
     return searchParams.get('view') === 'manifest' ? 'manifest' : 'orders'
   })
-  const [filter, setFilter] = useState<Filter>('active')
+  const [filter, setFilter] = useState<Filter>(() => {
+    const f = searchParams.get('filter')
+    if (f === 'scheduled' || f === 'today_delivery' || f === 'to_pack' || f === 'done' || f === 'archived' || f === 'cancelled' || f === 'all') {
+      return f as Filter
+    }
+    return 'active'
+  })
+
+  // Sync filter when URL search params change
+  useEffect(() => {
+    const f = searchParams.get('filter')
+    if (f === 'scheduled' || f === 'today_delivery' || f === 'to_pack' || f === 'done' || f === 'archived' || f === 'cancelled' || f === 'all') {
+      setFilter(f as Filter)
+    }
+  }, [searchParams])
   const [searchQuery, setSearchQuery] = useState('')
   const [customerFilter, setCustomerFilter] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -385,9 +399,8 @@ export default function SellerOrders() {
     }
 
     // Category / Status Filter
-    return sorted.filter(o => {
-      const todayIso = new Date().toISOString().split('T')[0]
-
+    const todayIso = new Date().toISOString().split('T')[0]
+    const res = sorted.filter(o => {
       if (filter === 'all') return true
       if (filter === 'archived') return isArchivedOld(o)
       if (filter === 'done') return o.status === 'delivered' && !isArchivedOld(o)
@@ -403,6 +416,18 @@ export default function SellerOrders() {
       if (filter === 'active') return o.status !== 'delivered' && o.status !== 'cancelled'
       return true
     })
+
+    // 🗓️ Nearest Scheduled Delivery Date on Top (ascending order)
+    if (filter === 'scheduled') {
+      res.sort((a, b) => {
+        const dateA = a.deliveryDate || '9999-99-99'
+        const dateB = b.deliveryDate || '9999-99-99'
+        if (dateA !== dateB) return dateA.localeCompare(dateB)
+        return b.createdAt.localeCompare(a.createdAt)
+      })
+    }
+
+    return res
   }, [orders, filter, customerFilter, searchQuery])
 
   const toggleSelect = (id: string) => setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
@@ -727,6 +752,33 @@ export default function SellerOrders() {
             style={{ background: '#dc2626', borderColor: '#dc2626', fontSize: '0.82rem', padding: '0.4rem 0.8rem' }}
           >
             {purging ? '⏳...' : `🗑️ ${lang === 'bn' ? 'সকল বাতিল সাফ করুন' : 'Purge All Cancelled'}`}
+          </button>
+        </div>
+      )}
+
+      {/* 🗓️ Scheduled Orders Informational Banner (When in scheduled tab) */}
+      {filter === 'scheduled' && (
+        <div style={{ ...cs, padding: '0.75rem 1rem', marginBottom: '0.75rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <strong style={{ color: '#1e40af', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              🗓️ {lang === 'bn' ? `ভবিষ্যতের শিডিউল্ড ডেলিভারি অর্ডার (${filtered.length}টি)` : `Upcoming Scheduled Orders (${filtered.length})`}
+            </strong>
+            <span style={{ fontSize: '0.78rem', color: '#1d4ed8', marginTop: '2px', display: 'block' }}>
+              {lang === 'bn'
+                ? 'নিকটতম ডেলিভারির তারিখ সবার উপরে সাজানো রয়েছে। নির্দিষ্ট দিনে প্যাক ও রাইডারকে হ্যান্ডওভার করুন।'
+                : 'Sorted with nearest delivery date on top. Prepare & dispatch each order on its scheduled day.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setViewMode('manifest')
+              setSearchParams({ view: 'manifest' })
+            }}
+            style={{ fontSize: '0.8rem', background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', fontWeight: 700 }}
+          >
+            📦 {lang === 'bn' ? 'মালামাল শিট দেখুন' : 'View Packing Manifest'}
           </button>
         </div>
       )}

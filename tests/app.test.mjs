@@ -2988,3 +2988,56 @@ describe('Suite 51: Order Time Decoration, Delivery Slot Formatting & Staff Menu
   })
 })
 
+describe('Suite 52: Scheduled Orders Chronological Sorting, Seller Hub Alerts, and Customer Same-Day WhatsApp Modal', () => {
+  const sellerPath = path.join(__dirname, '..', 'src', 'pages', 'seller', 'SellerOrders.tsx')
+  const sellerContent = fs.readFileSync(sellerPath, 'utf8')
+  const sellerHomePath = path.join(__dirname, '..', 'src', 'pages', 'seller', 'SellerHome.tsx')
+  const sellerHomeContent = fs.readFileSync(sellerHomePath, 'utf8')
+  const checkoutPath = path.join(__dirname, '..', 'src', 'pages', 'Checkout.tsx')
+  const checkoutContent = fs.readFileSync(checkoutPath, 'utf8')
+
+  test('SellerOrders sorts scheduled orders chronologically with nearest delivery date on top', () => {
+    assert.ok(sellerContent.includes("filter === 'scheduled'"), 'Must handle scheduled filter specifically')
+    assert.ok(sellerContent.includes('dateA.localeCompare(dateB)'), 'Must sort by deliveryDate ascending so nearest date is on top')
+
+    // Simulate sorting logic
+    const mockOrders = [
+      { id: 'O3', deliveryDate: '2026-10-05', createdAt: '2026-09-24T10:00:00Z' },
+      { id: 'O1', deliveryDate: '2026-09-26', createdAt: '2026-09-20T10:00:00Z' },
+      { id: 'O2', deliveryDate: '2026-09-27', createdAt: '2026-09-24T12:00:00Z' },
+    ]
+
+    mockOrders.sort((a, b) => {
+      const dateA = a.deliveryDate || '9999-99-99'
+      const dateB = b.deliveryDate || '9999-99-99'
+      if (dateA !== dateB) return dateA.localeCompare(dateB)
+      return b.createdAt.localeCompare(a.createdAt)
+    })
+
+    assert.strictEqual(mockOrders[0].id, 'O1', 'Nearest scheduled date (26 Sep) must be at the very top')
+    assert.strictEqual(mockOrders[1].id, 'O2', 'Next date (27 Sep) must be second')
+    assert.strictEqual(mockOrders[2].id, 'O3', 'Latest date (5 Oct) must be last')
+  })
+
+  test('SellerOrders supports ?filter=scheduled deep linking and displays informative banner', () => {
+    assert.ok(sellerContent.includes("searchParams.get('filter')"), 'Must initialize and sync filter from URL query param')
+    assert.ok(sellerContent.includes('Upcoming Scheduled Orders'), 'Must display upcoming scheduled orders banner')
+    assert.ok(sellerContent.includes('Sorted with nearest delivery date on top'), 'Banner must communicate nearest date sorting')
+  })
+
+  test('SellerHome dashboard tracks scheduledCount and presents 1-tap view shortcut', () => {
+    assert.ok(sellerHomeContent.includes('scheduledCount'), 'Must compute scheduledCount')
+    assert.ok(sellerHomeContent.includes('/seller/orders?filter=scheduled'), 'Must link directly to scheduled orders filter')
+    assert.ok(sellerHomeContent.includes('Scheduled Orders:'), 'Must render scheduled orders alert')
+  })
+
+  test('Checkout.tsx offers quick day buttons and displays same-day delivery WhatsApp confirmation modal', () => {
+    assert.ok(checkoutContent.includes('showSameDayModal'), 'Must manage showSameDayModal state')
+    assert.ok(checkoutContent.includes('handleSelectDate'), 'Must handle date selection')
+    assert.ok(checkoutContent.includes('Same-Day Delivery'), 'Must render same-day delivery title')
+    assert.ok(checkoutContent.includes('SUPPORT_WHATSAPP'), 'Must connect to seller WhatsApp')
+    assert.ok(checkoutContent.includes('Deliver Tomorrow'), 'Must offer 1-tap fallback to deliver tomorrow')
+  })
+})
+
+

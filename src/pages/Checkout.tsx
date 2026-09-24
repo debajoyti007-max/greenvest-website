@@ -9,6 +9,7 @@ import {
   MAX_ORDERS_PER_HOUR,
   checkOrderRateLimit,
   createBulkOrderWhatsAppUrl,
+  SUPPORT_WHATSAPP,
 } from '../lib/business'
 import { calcDeliveryFee, isServiceablePin, STORE_LOCATION, checkLocationServiceability } from '../lib/delivery'
 import { t } from '../lib/i18n'
@@ -79,6 +80,7 @@ export default function Checkout() {
   const [deliveryDateChoice, setDeliveryDateChoice] = useState<'standard' | 'custom'>('standard')
   const [customDate, setCustomDate] = useState('')
   const [showDeliveryModal, setShowDeliveryModal] = useState(false)
+  const [showSameDayModal, setShowSameDayModal] = useState(false)
 
   const loadAddressIntoForm = useCallback((addr: {
     address: string
@@ -151,6 +153,14 @@ export default function Checkout() {
     const dayName = lang === 'bn' ? daysBn[d.getDay()] : d.toLocaleDateString('en-US', { weekday: 'short' })
     const month = monthsBn[d.getMonth()]
     return `${d.getDate()} ${month} (${dayName})`
+  }
+
+  const handleSelectDate = (dateIso: string) => {
+    setDeliveryDateChoice('custom')
+    setCustomDate(dateIso)
+    if (dateIso === quickDates.minDate) {
+      setShowSameDayModal(true)
+    }
   }
 
   const effectiveDeliveryDate = useMemo(() => {
@@ -1671,15 +1681,69 @@ export default function Checkout() {
 
                 {deliveryDateChoice === 'custom' && (
                   <div style={{ marginTop: '0.25rem', paddingTop: '0.65rem', borderTop: '1px dashed #bbf7d0' }} onClick={(e) => e.stopPropagation()}>
+                    {/* Quick Day Selector Pills */}
+                    <div style={{ display: 'flex', gap: '0.45rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleSelectDate(quickDates.minDate)
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '8px',
+                          border: customDate === quickDates.minDate ? '2px solid #166534' : '1px solid #cbd5e1',
+                          background: customDate === quickDates.minDate ? '#dcfce7' : '#f8fafc',
+                          color: customDate === quickDates.minDate ? '#166534' : '#334155',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        ⚡ {lang === 'bn' ? `আজ (${formatSelectedDate(quickDates.minDate)})` : `Today (${formatSelectedDate(quickDates.minDate)})`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleSelectDate(quickDates.defaultDate)
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '0.45rem 0.6rem',
+                          borderRadius: '8px',
+                          border: customDate === quickDates.defaultDate ? '2px solid #166534' : '1px solid #cbd5e1',
+                          background: customDate === quickDates.defaultDate ? '#dcfce7' : '#f8fafc',
+                          color: customDate === quickDates.defaultDate ? '#166534' : '#334155',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        📅 {lang === 'bn' ? `কাল (${formatSelectedDate(quickDates.defaultDate)})` : `Tomorrow (${formatSelectedDate(quickDates.defaultDate)})`}
+                      </button>
+                    </div>
+
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#166534', marginBottom: '0.35rem' }}>
-                      {lang === 'bn' ? 'তারিখ বেছে নিন:' : 'Select preferred date:'}
+                      {lang === 'bn' ? 'অথবা ক্যালেন্ডার থেকে দিন বেছে নিন:' : 'Or pick any future date:'}
                     </label>
                     <input
                       type="date"
                       min={quickDates.minDate}
                       max={quickDates.maxDate}
                       value={customDate || quickDates.defaultDate}
-                      onChange={(e) => setCustomDate(e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value) handleSelectDate(e.target.value)
+                      }}
                       style={{
                         width: '100%',
                         padding: '0.55rem 0.75rem',
@@ -1704,6 +1768,116 @@ export default function Checkout() {
             >
               ✓ {lang === 'bn' ? 'নিশ্চিত করুন' : 'Confirm'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ⚡ Same-Day Delivery WhatsApp Confirmation Modal */}
+      {showSameDayModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 1100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+          onClick={() => setShowSameDayModal(false)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              padding: '1.4rem',
+              maxWidth: '380px',
+              width: '100%',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.25)',
+              border: '1px solid #e2e8f0',
+              textAlign: 'center',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>⚡</div>
+            <h3 style={{ margin: '0 0 0.4rem', fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+              {lang === 'bn' ? `আজকের ডেলিভারি (${formatSelectedDate(quickDates.minDate)})` : `Same-Day Delivery (${formatSelectedDate(quickDates.minDate)})`}
+            </h3>
+            <p style={{ margin: '0 0 1.25rem', fontSize: '0.86rem', color: '#475569', lineHeight: 1.5 }}>
+              {lang === 'bn'
+                ? 'আজকেই তাজা ডেলিভারি নিশ্চিত করতে সেলারের সাথে WhatsApp-এ কথা বলে স্টক ও রাইডার প্রাপ্যতা জেনে নিন।'
+                : 'For delivery today, please confirm with seller on WhatsApp for stock & rider availability.'}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              <a
+                href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(
+                  lang === 'bn'
+                    ? `নমস্কার, আমি GreenVest-এ আজ (${formatSelectedDate(quickDates.minDate)}) ডেলিভারি নিতে চাই। আজ কি ডেলিভারি দেওয়া সম্ভব?`
+                    : `Hi, I would like delivery today (${formatSelectedDate(quickDates.minDate)}) on GreenVest. Is stock & rider available?`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setShowSameDayModal(false)}
+                style={{
+                  background: '#25D366',
+                  color: '#ffffff',
+                  padding: '0.75rem 1rem',
+                  borderRadius: '10px',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 6px rgba(37, 211, 102, 0.35)',
+                }}
+              >
+                <span>💬</span>
+                <span>{lang === 'bn' ? 'সেলারকে WhatsApp করুন' : 'Chat on WhatsApp with Seller'}</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomDate(quickDates.defaultDate)
+                  setShowSameDayModal(false)
+                }}
+                style={{
+                  background: '#f8fafc',
+                  border: '1.5px solid #cbd5e1',
+                  color: '#334155',
+                  padding: '0.65rem 1rem',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                }}
+              >
+                📅 {lang === 'bn' ? `কাল ডেলিভারি নিন (${formatSelectedDate(quickDates.defaultDate)})` : `Deliver Tomorrow (${formatSelectedDate(quickDates.defaultDate)})`}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSameDayModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  padding: '0.3rem',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  marginTop: '0.15rem',
+                }}
+              >
+                {lang === 'bn' ? 'বন্ধ করুন' : 'Dismiss'}
+              </button>
+            </div>
           </div>
         </div>
       )}
