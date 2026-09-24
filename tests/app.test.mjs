@@ -2902,6 +2902,41 @@ describe('Suite 49: Customer Location & Address Resilience, Local-First Sync & H
   })
 })
 
+// 50. Mobile UX Resilience, Stepper Overflow Prevention & Floating Widget Clearances
+describe('Suite 50: Mobile UX Resilience, Stepper Overflow Prevention & UI Collisions', () => {
+  const shopPath = path.join(__dirname, '..', 'src', 'pages', 'Shop.tsx')
+  const shopContent = fs.readFileSync(shopPath, 'utf8')
+  const supportPath = path.join(__dirname, '..', 'src', 'components', 'SupportChatWidget.tsx')
+  const supportContent = fs.readFileSync(supportPath, 'utf8')
+  const cssPath = path.join(__dirname, '..', 'src', 'index.css')
+  const cssContent = fs.readFileSync(cssPath, 'utf8')
 
+  test('Shop.tsx wraps stepper in flexShrink: 0 and uses standardized compact button dimensions', () => {
+    assert.ok(shopContent.includes("flexShrink: 0"), 'Stepper wrapper must have flexShrink: 0')
+    assert.ok(shopContent.includes("width: '26px'"), 'Stepper buttons must have width 26px')
+    assert.ok(shopContent.includes("height: '30px'"), 'Stepper buttons must have height 30px')
+    assert.ok(shopContent.includes("minWidth: '22px'"), 'Quantity span must have minWidth 22px')
+    // Ensure awkward multiline kg text is removed from inside the stepper button
+    assert.ok(!shopContent.includes("toBnDigits(Number((cartQty * weightMultiplier).toFixed(2)))}কেজি"), 'Must not wrap multiline kg text inside stepper button')
+  })
 
+  test('Shop.tsx price block prevents text expansion and gracefully truncates', () => {
+    assert.ok(shopContent.includes("flex: 1, minWidth: 0, overflow: 'hidden'"), 'Price container must have flex: 1, minWidth: 0')
+    assert.ok(shopContent.includes("textOverflow: 'ellipsis'"), 'Unit and savings line must use textOverflow ellipsis')
+  })
 
+  test('Shop.tsx weight chips use smooth single-row horizontal scroll track without vertical bloating', () => {
+    assert.ok(shopContent.includes("overflowX: 'auto'"), 'Weight chips must support horizontal scroll')
+    assert.ok(shopContent.includes("flexWrap: 'nowrap'"), 'Weight chips must not wrap across multiple lines')
+    assert.ok(shopContent.includes("scrollbarWidth: 'none'"), 'Weight chips must hide scrollbars')
+  })
+
+  test('SupportChatWidget.tsx offsets above CartBar to prevent click collision', () => {
+    assert.ok(supportContent.includes('hasCartBar'), 'SupportChatWidget must detect if CartBar is active')
+    assert.ok(supportContent.includes('+ 84px'), 'Support bubble must float 84px above bottom nav when CartBar is present')
+  })
+
+  test('index.css provides 148px bottom clearance for mobile BottomNav and CartBar stack', () => {
+    assert.ok(cssContent.includes('padding-bottom: calc(148px + env(safe-area-inset-bottom, 0px)) !important;'), 'main-content must have 148px bottom clearance')
+  })
+})

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useStore } from '../context/useStore'
 import { useAuth } from '../context/useAuth'
 import { subscribeSupportMessages } from '../lib/api'
@@ -9,10 +9,23 @@ import { showToast } from '../lib/toast'
 export default function SupportChatWidget() {
   const { lang, orders, supportMessages, sendSupportMessage, resolveSupportTicket, cartCount, refreshSupportMessages } = useStore()
   const { user } = useAuth()
+  const location = useLocation()
   const [open, setOpen] = useState(false)
   const [inputMsg, setInputMsg] = useState('')
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Detect whether floating CartBar is actively rendered on this view
+  const hasCartBar =
+    cartCount > 0 &&
+    location.pathname !== '/checkout' &&
+    location.pathname !== '/cart' &&
+    !location.pathname.startsWith('/order/') &&
+    !location.pathname.startsWith('/admin') &&
+    !location.pathname.startsWith('/seller') &&
+    !location.pathname.startsWith('/delivery') &&
+    !location.pathname.startsWith('/picker') &&
+    !location.pathname.startsWith('/manager')
 
   // Filter messages for current user
   const userThread = useMemo(() => {
@@ -81,8 +94,8 @@ export default function SupportChatWidget() {
           className={`support-bubble${userThread.some((m) => m.status === 'open' && m.senderRole === 'seller') ? ' has-unread' : ''}`}
           style={{
             position: 'fixed',
-            bottom: cartCount > 0
-              ? 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 68px)'
+            bottom: hasCartBar
+              ? 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 84px)'
               : 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 12px)',
             right: '16px',
             zIndex: 9999,

@@ -5310,10 +5310,10 @@ button.linkish {
     display: none !important; /* Mobile users logout inside /profile */
   }
 
-  /* Push main content below sticky header + clear bottom nav */
+  /* Push main content below sticky header + clear bottom nav & floating CartBar */
   .main-content {
     padding-top: 0.25rem !important;
-    padding-bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: calc(148px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   /* Hide hamburger on mobile — bottom nav replaces it */

@@ -238,10 +238,22 @@ const ProductCard = memo(function ProductCard({
           </p>
         )}
 
-        {/* Quick Weight Chips (for kg items) */}
+        {/* Quick Weight Chips (for kg items) - Single row horizontal scroll track */}
         {isKg && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '2px 0 8px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              margin: '2px 0 8px',
+              overflowX: 'auto',
+              flexWrap: 'nowrap',
+              scrollbarWidth: 'none',
+              WebkitOverflowScrolling: 'touch',
+              paddingBottom: '2px',
+            }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)', flexShrink: 0 }}>
               {lang === 'bn' ? 'ওজন:' : 'Size:'}
             </span>
             {[
@@ -256,7 +268,7 @@ const ProductCard = memo(function ProductCard({
                 type="button"
                 className={`weight-chip ${weightMultiplier === chip.val ? 'active' : ''}`}
                 onClick={() => setWeightMultiplier(chip.val)}
-                style={{ padding: '2px 8px', fontSize: 'var(--text-xs)', borderRadius: 'var(--radius-sm)' }}
+                style={{ padding: '2px 8px', fontSize: 'var(--text-xs)', borderRadius: 'var(--radius-sm)', flexShrink: 0 }}
                 aria-pressed={weightMultiplier === chip.val}
               >
                 {chip.label}
@@ -279,19 +291,19 @@ const ProductCard = memo(function ProductCard({
         )}
 
         {/* Unified Bottom Price & Action Footer (NO DUPLICATE PRICES!) */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px' }}>
-              <span style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--color-text-brand)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #f1f5f9', gap: '6px' }}>
+          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--color-text-brand)', whiteSpace: 'nowrap' }}>
                 ₹{calculatedPrice}
               </span>
               {calculatedMrp > calculatedPrice && (
-                <span style={{ textDecoration: 'line-through', color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
+                <span style={{ textDecoration: 'line-through', color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                   <span className="sr-only">Original price: </span>₹{calculatedMrp}
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               /{weightMultiplier === 1 ? p.unit : weightMultiplier === 0.25 ? '250g' : weightMultiplier === 0.5 ? '500g' : `${weightMultiplier}kg`}
               {calculatedMrp > calculatedPrice && (
                 <span style={{ color: 'var(--green-700)', marginLeft: '4px', fontWeight: 700 }}>
@@ -301,34 +313,74 @@ const ProductCard = memo(function ProductCard({
             </div>
           </div>
 
-          <div>
+          <div style={{ flexShrink: 0 }}>
             {cartQty > 0 ? (
-              <div style={{ display: 'inline-flex', alignItems: 'center', background: 'var(--color-text-brand)', color: 'white', borderRadius: 'var(--radius-md)', overflow: 'hidden', boxShadow: '0 2px 6px rgba(22, 101, 52, 0.3)' }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'var(--color-text-brand)',
+                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  overflow: 'hidden',
+                  boxShadow: '0 2px 6px rgba(22, 101, 52, 0.3)',
+                  height: '30px',
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => onUpdateQty(p.id, cardGrade, cartQty - 1, weightMultiplier)}
-                  style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: 800, fontSize: 'var(--text-base)', cursor: 'pointer', padding: '4px 10px' }}
+                  style={{
+                    width: '26px',
+                    height: '30px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    fontWeight: 800,
+                    fontSize: '1rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
                   aria-label="Decrease quantity"
                 >
                   −
                 </button>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '32px', padding: '0 4px' }}>
-                  <span style={{ fontWeight: 800, fontSize: 'var(--text-sm)', lineHeight: 1.2 }}>
-                    {cartQty}
-                  </span>
-                  {isKg && (
-                    <span style={{ fontSize: 'var(--text-xs)', color: '#bbf7d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>
-                      {lang === 'bn'
-                        ? `${toBnDigits(Number((cartQty * weightMultiplier).toFixed(2)))}কেজি`
-                        : `${Number((cartQty * weightMultiplier).toFixed(2))}kg`}
-                    </span>
-                  )}
-                </div>
+                <span
+                  style={{
+                    minWidth: '22px',
+                    textAlign: 'center',
+                    fontWeight: 800,
+                    fontSize: 'var(--text-sm)',
+                    lineHeight: 1,
+                    padding: '0 2px',
+                  }}
+                >
+                  {lang === 'bn' ? toBnDigits(cartQty) : cartQty}
+                </span>
                 <button
                   type="button"
                   disabled={isBulkCapReached}
                   onClick={() => onUpdateQty(p.id, cardGrade, cartQty + 1, weightMultiplier)}
-                  style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: 800, fontSize: 'var(--text-base)', cursor: 'pointer', padding: '4px 10px' }}
+                  style={{
+                    width: '26px',
+                    height: '30px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    fontWeight: 800,
+                    fontSize: '1rem',
+                    cursor: isBulkCapReached ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
+                    lineHeight: 1,
+                    opacity: isBulkCapReached ? 0.5 : 1,
+                  }}
                   aria-label="Increase quantity"
                 >
                   +
@@ -353,18 +405,21 @@ const ProductCard = memo(function ProductCard({
                   color: 'white',
                   border: 'none',
                   borderRadius: 'var(--radius-md)',
-                  padding: '7px 16px',
+                  padding: '0 12px',
+                  height: '30px',
                   fontWeight: 800,
                   fontSize: 'var(--text-sm)',
                   cursor: p.inStock ? 'pointer' : 'not-allowed',
                   boxShadow: p.inStock ? '0 2px 8px rgba(22, 163, 74, 0.3)' : 'none',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '4px',
+                  justifyContent: 'center',
+                  gap: '2px',
+                  whiteSpace: 'nowrap',
                   transition: 'all 0.15s ease',
                 }}
               >
-                {p.inStock ? (lang === 'bn' ? '+ যোগ করুন' : '+ ADD') : t(lang, 'outOfStock')}
+                {p.inStock ? (lang === 'bn' ? '+ যোগ' : '+ ADD') : t(lang, 'outOfStock')}
               </button>
             )}
           </div>
