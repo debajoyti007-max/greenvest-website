@@ -50,7 +50,12 @@ const CategoryBar = memo(function CategoryBar({
               key={cat}
               type="button"
               className={`category-chip ${isSelected ? 'active' : ''}`}
-              onClick={() => onSelectCategory(cat)}
+              onClick={(e) => {
+                onSelectCategory(cat)
+                try {
+                  e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+                } catch {}
+              }}
               aria-pressed={isSelected}
               aria-label={`${meta.labelEn}, ${count ?? 0} items`}
             >

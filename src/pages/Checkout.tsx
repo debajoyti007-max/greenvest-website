@@ -690,7 +690,7 @@ export default function Checkout() {
   }
 
   return (
-    <div className="page narrow">
+    <div className="page narrow checkout-page-with-sticky">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <h1 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 800 }}>{lang === 'bn' ? 'চেকআউট' : 'Checkout'}</h1>
         <div style={{ display: 'flex', gap: '6px' }}>
@@ -968,7 +968,7 @@ export default function Checkout() {
           </div>
         </div>
 
-        <form className="form" onSubmit={onSubmit}>
+        <form className="form" id="checkout-form" onSubmit={onSubmit}>
           {/* 🚚 Fulfillment Option: Home Delivery vs Store Pickup */}
           <div style={{ marginBottom: '1rem', background: '#f8fafc', border: '1.5px solid #cbd5e1', borderRadius: '14px', padding: '0.75rem' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: '0.45rem' }}>
@@ -1570,6 +1570,49 @@ export default function Checkout() {
             )}
           </p>
         </form>
+      </div>
+
+      {/* 📱 Mobile Floating Sticky Place Order Bar */}
+      <div className="mobile-checkout-sticky-bar">
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#166534' }}>
+              ₹{payableAmount}
+            </span>
+            <span style={{ fontSize: '0.74rem', color: paymentMode === 'full' ? '#047857' : '#1d4ed8', fontWeight: 700 }}>
+              {paymentMode === 'full' ? (lang === 'bn' ? 'ফুল পে' : 'Full Pay') : (lang === 'bn' ? '১০% অগ্রিম' : '10% Adv')}
+            </span>
+          </div>
+          <span style={{ fontSize: '0.72rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {fulfillmentMode === 'pickup'
+              ? (lang === 'bn' ? '🏪 ফ্রি স্টোর পিকআপ' : '🏪 Free Store Pickup')
+              : delivery.fee > 0
+                ? (lang === 'bn' ? `ডেলিভারি ফি: ₹${delivery.fee}` : `Delivery: ₹${delivery.fee}`)
+                : (lang === 'bn' ? 'ফ্রি ডেলিভারি' : 'Free Delivery')}
+          </span>
+        </div>
+
+        <button
+          type="submit"
+          form="checkout-form"
+          disabled={submitting || !isOnline || rateLimitStatus.isExceeded}
+          className="btn btn-primary"
+          style={{
+            padding: '0.65rem 1.25rem',
+            fontSize: '0.92rem',
+            fontWeight: 800,
+            borderRadius: '10px',
+            boxShadow: '0 3px 12px rgba(22, 101, 52, 0.35)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            flexShrink: 0,
+          }}
+        >
+          {submitting
+            ? '⏳...'
+            : (lang === 'bn' ? 'অর্ডার জমা দিন ➔' : 'Place Order ➔')}
+        </button>
       </div>
 
       {/* 🚚 Pop-Up Delivery Schedule Modal */}

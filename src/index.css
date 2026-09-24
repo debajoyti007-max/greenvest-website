@@ -2850,6 +2850,43 @@ button.linkish {
   transform: scale(0.96);
 }
 
+/* ── Mobile Sticky Action Bars for Cart & Checkout ── */
+.mobile-cart-sticky-bar,
+.mobile-checkout-sticky-bar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-cart-sticky-bar,
+  .mobile-checkout-sticky-bar {
+    position: fixed;
+    bottom: calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px));
+    left: 0;
+    right: 0;
+    z-index: 98;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1.5px solid #e2e8f0;
+    padding: 0.65rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .mobile-checkout-sticky-bar {
+    border-top-color: #bbf7d0;
+    box-shadow: 0 -4px 20px rgba(22, 101, 52, 0.12);
+  }
+
+  .cart-page-with-sticky,
+  .checkout-page-with-sticky {
+    padding-bottom: calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 84px) !important;
+  }
+}
+
 /* ── Card Stepper Buttons ────────────────────────── */
 .card-stepper {
   display: flex;

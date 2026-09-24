@@ -3040,4 +3040,41 @@ describe('Suite 52: Scheduled Orders Chronological Sorting, Seller Hub Alerts, a
   })
 })
 
+describe('Suite 53: Mobile Scroll Fatigue Elimination & Floating Sticky Action Bars', () => {
+  const cartPath = path.join(__dirname, '..', 'src', 'pages', 'Cart.tsx')
+  const cartContent = fs.readFileSync(cartPath, 'utf8')
+  const checkoutPath = path.join(__dirname, '..', 'src', 'pages', 'Checkout.tsx')
+  const checkoutContent = fs.readFileSync(checkoutPath, 'utf8')
+  const categoryBarPath = path.join(__dirname, '..', 'src', 'components', 'CategoryBar.tsx')
+  const categoryBarContent = fs.readFileSync(categoryBarPath, 'utf8')
+  const cssPath = path.join(__dirname, '..', 'src', 'index.css')
+  const cssContent = fs.readFileSync(cssPath, 'utf8')
+
+  test('Cart.tsx renders mobile-cart-sticky-bar with real-time total and 1-tap checkout', () => {
+    assert.ok(cartContent.includes('mobile-cart-sticky-bar'), 'Cart must render mobile-cart-sticky-bar')
+    assert.ok(cartContent.includes('cart-page-with-sticky'), 'Cart must apply cart-page-with-sticky container class')
+    assert.ok(cartContent.includes('₹{cartTotal}'), 'Must display live cart total in sticky bar')
+    assert.ok(cartContent.includes('to="/checkout"'), 'Must provide direct checkout link in sticky bar')
+  })
+
+  test('Checkout.tsx renders mobile-checkout-sticky-bar attached to HTML5 form', () => {
+    assert.ok(checkoutContent.includes('mobile-checkout-sticky-bar'), 'Checkout must render mobile-checkout-sticky-bar')
+    assert.ok(checkoutContent.includes('checkout-page-with-sticky'), 'Checkout must apply checkout-page-with-sticky container class')
+    assert.ok(checkoutContent.includes('form="checkout-form"'), 'Place order button must be attached to checkout-form')
+    assert.ok(checkoutContent.includes('₹{payableAmount}'), 'Must display live payable amount in sticky bar')
+  })
+
+  test('CategoryBar.tsx centers active category chip with smooth scroll', () => {
+    assert.ok(categoryBarContent.includes("scrollIntoView({ behavior: 'smooth', inline: 'center'"), 'Must smooth-scroll active chip into center')
+  })
+
+  test('index.css specifies mobile sticky positioning above bottom navigation', () => {
+    assert.ok(cssContent.includes('.mobile-cart-sticky-bar'), 'index.css must style mobile-cart-sticky-bar')
+    assert.ok(cssContent.includes('.mobile-checkout-sticky-bar'), 'index.css must style mobile-checkout-sticky-bar')
+    assert.ok(cssContent.includes('bottom: calc(var(--bottom-nav-h, 68px)'), 'Must clear mobile bottom nav height')
+    assert.ok(cssContent.includes('.cart-page-with-sticky'), 'Must provide padding bottom clearance')
+  })
+})
+
+
 

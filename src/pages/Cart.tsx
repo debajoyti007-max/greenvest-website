@@ -58,7 +58,7 @@ export default function Cart() {
   }
 
   return (
-    <div className="page narrow">
+    <div className="page narrow cart-page-with-sticky">
       <h1>{t(lang, 'yourCart')}</h1>
       <p className="hint">
         {lang === 'bn'
@@ -388,6 +388,85 @@ export default function Cart() {
           <span>💬</span>
           <span>{lang === 'bn' ? 'কার্ট নিয়ে ইন-অ্যাপ সাপোর্টে কথা বলুন' : 'Ask In-App Support About Cart'}</span>
         </button>
+      </div>
+
+      {/* 📱 Mobile Floating Sticky Checkout Bar */}
+      <div className="mobile-cart-sticky-bar">
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#166534' }}>
+              ₹{cartTotal}
+            </span>
+            <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+              ({lang === 'bn' ? '১০% অগ্রিম' : '10% Adv'}: ₹{cartTotal > 0 ? Math.max(1, Math.ceil(cartTotal * 0.1)) : 0})
+            </span>
+          </div>
+          {!canCheckout ? (
+            <span style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 700 }}>
+              {lang === 'bn' ? `আরও ₹${shortfall} যোগ করুন (মিনিমাম ₹${MIN_ORDER_AMOUNT})` : `Add ₹${shortfall} more for min order`}
+            </span>
+          ) : (
+            <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700 }}>
+              {totalSavings > 0
+                ? (lang === 'bn' ? `🎉 সাশ্রয় ₹${totalSavings}` : `🎉 Saved ₹${totalSavings}`)
+                : (lang === 'bn' ? '✓ চেকআউটের জন্য প্রস্তুত' : '✓ Ready for checkout')}
+            </span>
+          )}
+        </div>
+
+        {canCheckout ? (
+          user ? (
+            <Link
+              to="/checkout"
+              className="btn btn-primary"
+              style={{
+                padding: '0.65rem 1.25rem',
+                fontSize: '0.9rem',
+                fontWeight: 800,
+                borderRadius: '10px',
+                boxShadow: '0 3px 10px rgba(22, 101, 52, 0.35)',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              {lang === 'bn' ? 'চেকআউট ➔' : 'Checkout ➔'}
+            </Link>
+          ) : (
+            <Link
+              to="/auth"
+              className="btn btn-primary"
+              style={{
+                padding: '0.65rem 1.2rem',
+                fontSize: '0.86rem',
+                fontWeight: 800,
+                borderRadius: '10px',
+                boxShadow: '0 3px 10px rgba(22, 101, 52, 0.35)',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              {lang === 'bn' ? 'লগইন ➔' : 'Login ➔'}
+            </Link>
+          )
+        ) : (
+          <Link
+            to="/"
+            className="btn btn-secondary"
+            style={{
+              padding: '0.65rem 1rem',
+              fontSize: '0.84rem',
+              fontWeight: 700,
+              borderRadius: '10px',
+              textDecoration: 'none',
+            }}
+          >
+            {t(lang, 'addMore')}
+          </Link>
+        )}
       </div>
     </div>
   )
