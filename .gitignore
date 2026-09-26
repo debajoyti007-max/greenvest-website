@@ -33,6 +33,7 @@ scripts/*inject*
 scripts/cdp-payload.json
 scripts/continue-schema.sql
 .cursor/
+.agents/
 
 # Internal blueprints & docs (keep local only)
 PROJECT_BLUEPRINT.md

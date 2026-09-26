@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import SetupRequired from './components/SetupRequired'
+import MontageBlockGate from './components/MontageBlockGate'
 import { shouldBlockApp } from './lib/runtime'
 import { AuthProvider } from './context/AuthContext'
 import { useAuth } from './context/useAuth'
@@ -170,12 +171,15 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <StoreProvider>
-        <BrowserRouter basename={routerBasename}>
-          <AppRoutes />
-        </BrowserRouter>
-      </StoreProvider>
-    </AuthProvider>
+    <MontageBlockGate>
+      <AuthProvider>
+        <StoreProvider>
+          <BrowserRouter basename={routerBasename}>
+            <AppRoutes />
+          </BrowserRouter>
+        </StoreProvider>
+      </AuthProvider>
+    </MontageBlockGate>
   )
 }
+

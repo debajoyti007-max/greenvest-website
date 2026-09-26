@@ -3076,5 +3076,35 @@ describe('Suite 53: Mobile Scroll Fatigue Elimination & Floating Sticky Action B
   })
 })
 
+describe('Suite 54: Montage Permission Gate & Full-Screen Access Interceptor', () => {
+  const gatePath = path.join(__dirname, '..', 'src', 'components', 'MontageBlockGate.tsx')
+  const libPath = path.join(__dirname, '..', 'src', 'lib', 'montageGate.ts')
+  const appPath = path.join(__dirname, '..', 'src', 'App.tsx')
 
+  test('MontageBlockGate.tsx exists and presents exact user warning headline', () => {
+    assert.ok(fs.existsSync(gatePath), 'MontageBlockGate.tsx must exist')
+    const gateContent = fs.readFileSync(gatePath, 'utf8')
+    assert.ok(
+      gateContent.includes('Fuck off first, permission by Montage'),
+      'Gate must display exact headline: Fuck off first, permission by Montage'
+    )
+    assert.ok(gateContent.includes('MONTAGE PROTOCOL'), 'Gate must display Montage security badge')
+    assert.ok(gateContent.includes('montageGateShake'), 'Gate must provide security rejection feedback')
+  })
 
+  test('montageGate.ts provides storage keys, valid clearance tokens, and reactive sync helpers', () => {
+    assert.ok(fs.existsSync(libPath), 'montageGate.ts must exist')
+    const libContent = fs.readFileSync(libPath, 'utf8')
+    assert.ok(libContent.includes('MONTAGE_STORAGE_KEY'), 'Must export MONTAGE_STORAGE_KEY')
+    assert.ok(libContent.includes('VALID_MONTAGE_KEYS'), 'Must export VALID_MONTAGE_KEYS')
+    assert.ok(libContent.includes('subscribeToMontageAuth'), 'Must export subscribeToMontageAuth')
+    assert.ok(libContent.includes('lockMontageGate'), 'Must export lockMontageGate')
+    assert.ok(libContent.includes('unlockMontageGate'), 'Must export unlockMontageGate')
+  })
+
+  test('App.tsx mounts MontageBlockGate wrapping the application root', () => {
+    const appContent = fs.readFileSync(appPath, 'utf8')
+    assert.ok(appContent.includes('import MontageBlockGate from'), 'App.tsx must import MontageBlockGate')
+    assert.ok(appContent.includes('<MontageBlockGate>'), 'App.tsx must wrap tree with MontageBlockGate')
+  })
+})
