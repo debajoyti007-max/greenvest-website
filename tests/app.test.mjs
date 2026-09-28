@@ -3081,14 +3081,15 @@ describe('Suite 54: Montage Permission Gate & Full-Screen Access Interceptor', (
   const libPath = path.join(__dirname, '..', 'src', 'lib', 'montageGate.ts')
   const appPath = path.join(__dirname, '..', 'src', 'App.tsx')
 
-  test('MontageBlockGate.tsx exists and presents exact user warning headline', () => {
+  test('MontageBlockGate.tsx exists and presents professional contact Montage headline', () => {
     assert.ok(fs.existsSync(gatePath), 'MontageBlockGate.tsx must exist')
     const gateContent = fs.readFileSync(gatePath, 'utf8')
     assert.ok(
-      gateContent.includes('Fuck off first, permission by Montage'),
-      'Gate must display exact headline: Fuck off first, permission by Montage'
+      gateContent.includes('To unlock this website, please contact Montage'),
+      'Gate must display professional headline: To unlock this website, please contact Montage'
     )
-    assert.ok(gateContent.includes('MONTAGE PROTOCOL'), 'Gate must display Montage security badge')
+    assert.ok(!gateContent.includes('wa.me'), 'Gate must not include external WhatsApp message link')
+    assert.ok(gateContent.includes('MONTAGE ACCESS CONTROL'), 'Gate must display Montage security badge')
     assert.ok(gateContent.includes('montageGateShake'), 'Gate must provide security rejection feedback')
   })
 
