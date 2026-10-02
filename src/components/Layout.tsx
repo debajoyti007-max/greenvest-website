@@ -8,7 +8,6 @@ import { useStore } from '../context/useStore'
 import { t } from '../lib/i18n'
 import { DELIVERY_WINDOW, DELIVERY_WINDOW_BN, MIN_ORDER_AMOUNT, STORE_NAME } from '../lib/business'
 import { STORE_LOCATION } from '../lib/delivery'
-import { APP_VERSION_LABEL } from '../lib/version'
 
 import NotificationBell from './NotificationBell'
 import CustomerNotificationBanner from './CustomerNotificationBanner'
@@ -470,7 +469,6 @@ export default function Layout() {
             </span>
             <span className="footer-copy" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <span>© {new Date().getFullYear()} MS Vegetable Center</span>
-              <span style={{ background: 'rgba(255,255,255,0.12)', color: '#86efac', padding: '1px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700 }}>{APP_VERSION_LABEL}</span>
               <span>· FSSAI Hygiene Compliant · Purba Medinipur, West Bengal</span>
             </span>
           </div>

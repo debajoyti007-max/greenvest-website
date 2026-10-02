@@ -3,7 +3,6 @@ import {
   VALID_MONTAGE_KEYS,
   subscribeToMontageAuth,
   getMontageAuthSnapshot,
-  lockMontageGate,
   unlockMontageGate
 } from '../lib/montageGate'
 
@@ -54,46 +53,7 @@ export default function MontageBlockGate({ children }: { children: React.ReactNo
   }
 
   if (isAuthorized) {
-    return (
-      <>
-        {children}
-        {/* Floating discrete re-lock button for Montage admin testing */}
-        <button
-          type="button"
-          onClick={lockMontageGate}
-          title="Lock portal with Montage Gate"
-          style={{
-            position: 'fixed',
-            bottom: '14px',
-            right: '14px',
-            zIndex: 99999,
-            background: 'rgba(15, 23, 42, 0.88)',
-            backdropFilter: 'blur(10px)',
-            color: '#38bdf8',
-            border: '1px solid rgba(56, 189, 248, 0.3)',
-            borderRadius: '9999px',
-            padding: '6px 12px',
-            fontSize: '11px',
-            fontWeight: 600,
-            letterSpacing: '0.04em',
-            cursor: 'pointer',
-            opacity: 0.45,
-            transition: 'opacity 0.2s ease, transform 0.15s ease',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.35)'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.opacity = '1'
-            e.currentTarget.style.transform = 'scale(1.05)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.opacity = '0.45'
-            e.currentTarget.style.transform = 'scale(1)'
-          }}
-        >
-          🔒 Lock Gate
-        </button>
-      </>
-    )
+    return <>{children}</>
   }
 
   return (
@@ -344,19 +304,6 @@ export default function MontageBlockGate({ children }: { children: React.ReactNo
             {successMsg}
           </div>
         )}
-      </div>
-
-      {/* Footer System Signature */}
-      <div
-        style={{
-          marginTop: '28px',
-          fontSize: '11px',
-          color: '#475569',
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase'
-        }}
-      >
-        MONTAGE CORPORATION • PRIVATE SECURITY GATEWAY
       </div>
 
       {/* Inject Keyframe Shake Animation */}
