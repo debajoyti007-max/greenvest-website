@@ -35,6 +35,16 @@ export default function MontageBlockGate({ children }: { children: React.ReactNo
     return () => clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    if (!isAuthorized && typeof document !== 'undefined') {
+      const prevTitle = document.title
+      document.title = 'Private Portal • Access Required'
+      return () => {
+        document.title = prevTitle
+      }
+    }
+  }, [isAuthorized])
+
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMsg('')
