@@ -54,6 +54,11 @@ const Support = lazyWithRetry(() => import('./pages/Support'))
 const SellerSupport = lazyWithRetry(() => import('./pages/seller/SellerSupport'))
 const NotFound = lazyWithRetry(() => import('./pages/NotFound'))
 
+// ── Two Bhai Travels routes
+const TwoBhaiHome = lazyWithRetry(() => import('./travel/TwoBhaiHome'))
+const TwoBhaiPass = lazyWithRetry(() => import('./travel/TwoBhaiPass'))
+const TravelDispatch = lazyWithRetry(() => import('./travel/TravelDispatch'))
+
 import PageSkeleton from './components/PageSkeleton'
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
@@ -158,6 +163,17 @@ function AppRoutes() {
             element={
               <RequireRole roles={['admin']}>
                 <AdminUsers />
+              </RequireRole>
+            }
+          />
+          {/* ── Two Bhai Travels ── */}
+          <Route path="travel" element={<TwoBhaiHome />} />
+          <Route path="trip/:code" element={<TwoBhaiPass />} />
+          <Route
+            path="travel/dispatch"
+            element={
+              <RequireRole roles={['seller', 'admin']}>
+                <TravelDispatch />
               </RequireRole>
             }
           />
