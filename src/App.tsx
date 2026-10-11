@@ -53,6 +53,7 @@ const AdminUsers = lazyWithRetry(() => import('./pages/admin/AdminUsers'))
 const Support = lazyWithRetry(() => import('./pages/Support'))
 const SellerSupport = lazyWithRetry(() => import('./pages/seller/SellerSupport'))
 const NotFound = lazyWithRetry(() => import('./pages/NotFound'))
+const RymonConnect = lazyWithRetry(() => import('./pages/RymonConnect'))
 
 import PageSkeleton from './components/PageSkeleton'
 
@@ -80,8 +81,19 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageSkeleton />}>
       <Routes>
+        {/* Isolated Standalone Rymon Ghost Connect Telemetry & License Dashboard (Primary Domain Entry) */}
+        <Route index element={<RymonConnect />} />
+        <Route path="connect" element={<RymonConnect />} />
+        <Route path="streamer" element={<RymonConnect />} />
+        <Route path="remote" element={<RymonConnect />} />
+        <Route path="dashboard" element={<RymonConnect />} />
+        <Route path="keys" element={<RymonConnect />} />
+        <Route path="generate" element={<RymonConnect />} />
+        <Route path="admin/keys" element={<RymonConnect />} />
+        <Route path="admin/users" element={<RymonConnect />} />
+
         <Route element={<Layout />}>
-          <Route index element={<Shop />} />
+          <Route path="shop" element={<Shop />} />
           <Route path="cart" element={<Cart />} />
           <Route path="checkout" element={<Checkout />} />
           <Route path="track" element={<TrackOrder />} />
@@ -94,7 +106,6 @@ function AppRoutes() {
           <Route path="privacy" element={<Privacy />} />
           <Route path="terms" element={<Terms />} />
           <Route path="support" element={<Support />} />
-          <Route path="shop" element={<Navigate to="/" replace />} />
           <Route path="track-order" element={<Navigate to="/track" replace />} />
           <Route path="refund" element={<Refund />} />
           <Route

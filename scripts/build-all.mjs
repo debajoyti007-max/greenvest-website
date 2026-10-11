@@ -41,7 +41,7 @@ fs.writeFileSync(path.join(ROOT, 'CNAME'), 'greenvest.shop')
 fs.writeFileSync(path.join(ROOT, '.nojekyll'), '')
 
 // Ensure search crawlers and PWA files are present in root
-const publicFiles = ['robots.txt', 'sitemap.xml', 'manifest.webmanifest', 'sw.js', 'favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.png', 'logo-transparent.png', 'logo.jpg']
+const publicFiles = ['robots.txt', 'sitemap.xml', 'manifest.webmanifest', 'sw.js', 'favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.png', 'logo-transparent.png', 'logo.jpg', 'rymon_logo.jpg']
 for (const file of publicFiles) {
   const distFile = path.join(DIST, file)
   if (fs.existsSync(distFile)) {

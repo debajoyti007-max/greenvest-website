@@ -34,6 +34,7 @@ scripts/cdp-payload.json
 scripts/continue-schema.sql
 .cursor/
 .agents/
+supabase/.temp/
 
 # Internal blueprints & docs (keep local only)
 PROJECT_BLUEPRINT.md

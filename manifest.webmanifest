@@ -1,28 +1,22 @@
 {
-  "name": "MS Vegetable Center – তাজা সবজি ও বাজার",
-  "short_name": "MS Vegetable Center",
-  "description": "MS Vegetable Center — তাজা শাকসবজি, মাছ ও দৈনিক বাজার, সরাসরি আপনার ঘরে। সহজে ১-ট্যাপ UPI ও খাতা পেমেন্ট।",
+  "name": "RYMON GHOST CONNECT — Streamer Telemetry Remote",
+  "short_name": "Ghost Connect",
+  "description": "Hardware Telemetry Remote & KeyAuth License Dashboard for Rymon Corporation",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#166534",
+  "background_color": "#07090e",
+  "theme_color": "#07090e",
   "icons": [
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-192.png",
+      "src": "/rymon_logo.jpg",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/jpeg",
+      "purpose": "any maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/rymon_logo.jpg",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     }
   ]

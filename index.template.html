@@ -1,16 +1,15 @@
 <!doctype html>
-<html lang="bn">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/icon-192.png?v=1.2" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=1.2" />
-    <link rel="apple-touch-icon" href="/icon-192.png?v=1.2" />
+    <link rel="icon" type="image/jpeg" href="/rymon_logo.jpg" />
+    <link rel="apple-touch-icon" href="/rymon_logo.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Online Service & Booking Portal | greenvest.shop"
+      content="RYMON GHOST CONNECT — Hardware Telemetry & License Management Dashboard | greenvest.shop"
     />
-    <meta name="theme-color" content="#166534" />
+    <meta name="theme-color" content="#07090e" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -21,101 +20,65 @@
     <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
 
     <!-- ⚡ Preconnect: Fonts + Supabase — opens TCP+TLS handshake BEFORE React starts -->
-    <!-- Saves 150–300ms on every first visit by eliminating connection setup latency -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://zvjqpigduyvczidzafus.supabase.co" crossorigin />
 
-    <!-- ⚡ Instant LCP: Responsive mobile and desktop hero image preloads -->
+    <!-- Google Fonts: Inter & DM Sans -->
     <link
       rel="preload"
-      as="image"
-      href="/veg/hero_veggies_mobile.webp"
-      media="(max-width: 640px)"
-      type="image/webp"
-      fetchpriority="high"
-    />
-    <link
-      rel="preload"
-      as="image"
-      href="/veg/hero_veggies.webp"
-      media="(min-width: 641px)"
-      type="image/webp"
-      fetchpriority="high"
-    />
-
-    <!-- Google Fonts: Hind Siliguri (Bengali) & DM Sans (UI) -->
-    <link
-      rel="preload"
-      href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=DM+Sans:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;700&display=swap"
       as="style"
     />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=DM+Sans:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;700&display=swap"
       media="print"
       onload="this.media='all'"
     />
     <noscript>
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=DM+Sans:wght@400;500;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;700&display=swap"
       />
     </noscript>
 
-    <title>Online Service Portal | greenvest.shop</title>
+    <title>RYMON GHOST CONNECT — Telemetry Remote & License Dashboard</title>
     <link rel="canonical" href="https://greenvest.shop/" />
     <meta
       name="keywords"
-      content="Online Service Portal, greenvest.shop, vehicle service, booking"
+      content="RYMON GHOST CONNECT, greenvest.shop, KeyAuth, Telemetry Remote, GhostPanel, Streamer Controller"
     />
 
-    <!-- ── Open Graph (Facebook, WhatsApp, Google) ── -->
+    <!-- ── Open Graph ── -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://greenvest.shop/" />
-    <meta property="og:site_name" content="MS Vegetable Center" />
-    <meta property="og:title" content="MS Vegetable Center – তাজা সবজি ও দৈনিক বাজার | greenvest.shop" />
-    <meta property="og:description" content="MS Vegetable Center — তাজা শাকসবজি, মাছ ও দৈনিক বাজার সরাসরি আপনার ঘরে। সহজে ১-ট্যাপ UPI ও খাতা পেমেন্ট।" />
-    <meta property="og:image" content="https://greenvest.shop/logo.png?v=1.2" />
+    <meta property="og:site_name" content="RYMON GHOST CONNECT" />
+    <meta property="og:title" content="RYMON GHOST CONNECT — Telemetry Remote & License Dashboard" />
+    <meta property="og:description" content="Next-generation hardware telemetry remote and KeyAuth license manager for Rymon Corporation." />
+    <meta property="og:image" content="https://greenvest.shop/rymon_logo.jpg" />
     <meta property="og:image:width" content="800" />
     <meta property="og:image:height" content="800" />
-    <meta property="og:locale" content="bn_IN" />
-    <meta property="og:locale:alternate" content="en_IN" />
+    <meta property="og:locale" content="en_US" />
 
     <!-- ── Twitter / X Card ── -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="MS Vegetable Center – তাজা সবজি ও বাজার | greenvest.shop" />
-    <meta name="twitter:description" content="MS Vegetable Center — তাজা শাকসবজি, মাছ ও দৈনিক বাজার সরাসরি আপনার ঘরে। সহজে ১-ট্যাপ UPI ও খাতা পেমেন্ট।" />
-    <meta name="twitter:image" content="https://greenvest.shop/logo.png?v=1.2" />
+    <meta name="twitter:title" content="RYMON GHOST CONNECT — Telemetry Remote & License Dashboard" />
+    <meta name="twitter:description" content="Next-generation hardware telemetry remote and KeyAuth license manager for Rymon Corporation." />
+    <meta name="twitter:image" content="https://greenvest.shop/rymon_logo.jpg" />
 
-    <!-- ── JSON-LD: WebSite & GroceryStore Structured Data for Google ── -->
+    <!-- ── JSON-LD Structured Data ── -->
     <script type="application/ld+json">
-    [
-      {
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "MS Vegetable Center",
-        "alternateName": ["greenvest.shop", "GreenVest"],
-        "url": "https://greenvest.shop/"
-      },
-      {
-        "@context": "https://schema.org",
-        "@type": "GroceryStore",
-        "name": "MS Vegetable Center",
-        "alternateName": ["greenvest.shop", "GreenVest"],
-        "description": "MS Vegetable Center: Fresh Grade A/B/C vegetables, fish and daily groceries with fast doorstep delivery. Supports instant UPI and cash on delivery.",
-        "url": "https://greenvest.shop/",
-        "logo": "https://greenvest.shop/logo.png",
-        "image": "https://greenvest.shop/logo.png",
-        "priceRange": "₹₹",
-        "currenciesAccepted": "INR",
-        "paymentAccepted": "Cash, UPI",
-        "areaServed": {
-          "@type": "Country",
-          "name": "India"
-        }
-      }
-    ]
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "RYMON GHOST CONNECT",
+      "alternateName": ["greenvest.shop", "GhostConnect"],
+      "url": "https://greenvest.shop/",
+      "description": "Hardware Telemetry Remote & License Dashboard for Rymon Corporation",
+      "applicationCategory": "UtilityApplication",
+      "operatingSystem": "Android, Web"
+    }
     </script>
   </head>
   <body>

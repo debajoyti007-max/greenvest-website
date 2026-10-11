@@ -1,18 +1,12 @@
-// MS Vegetable Center Service Worker (v1.3.0 - Performance Optimized)
-const CACHE_NAME = 'msveg-static-v1.3'
-const FONT_CACHE_NAME = 'msveg-fonts-v1.3'
+// RYMON GHOST CONNECT Service Worker (v2.0.0 - Sovereign Telemetry Edition)
+const CACHE_NAME = 'rymon-ghost-v2.0'
+const FONT_CACHE_NAME = 'rymon-fonts-v2.0'
 
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/favicon.svg',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/logo.png',
-  '/logo-transparent.png',
-  '/veg/hero_veggies_mobile.webp',
-  '/veg/hero_veggies.webp',
+  '/rymon_logo.jpg',
 ]
 
 // Install: pre-cache core shell
@@ -25,7 +19,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
 
-// Activate: clean up old version caches
+// Activate: purge ALL old version caches (including legacy msveg-* caches)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -99,9 +93,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 5. Immutable Content-Hashed Vite Assets (/assets/*) & Static Images:
-  // Cache First - if present in cache, return INSTANTLY (0ms latency, zero network traffic)
   const isHashedAsset = url.pathname.startsWith('/assets/')
-  const isImageOrMedia = url.pathname.startsWith('/veg/') || /\.(webp|png|jpg|jpeg|svg|ico)$/i.test(url.pathname)
+  const isImageOrMedia = /\.(webp|png|jpg|jpeg|svg|ico)$/i.test(url.pathname)
 
   if (isHashedAsset || isImageOrMedia) {
     event.respondWith(
