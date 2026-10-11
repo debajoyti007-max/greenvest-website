@@ -32,8 +32,10 @@ dist-ssr
 scripts/*inject*
 scripts/cdp-payload.json
 scripts/continue-schema.sql
+scripts/deploy-rymon-sql.mjs
 .cursor/
 .agents/
+.mcp.json
 supabase/.temp/
 
 # Internal blueprints & docs (keep local only)
