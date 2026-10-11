@@ -1,65 +1,24 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-
-// ── Types & Interfaces ────────────────────────────────────────────────────────
-interface StreamerControlRecord {
-  license_key: string
-  streamer_name: string
-  game_name: string
-  is_online: boolean
-  aim_silent: boolean
-  hit_rate: number
-  ignore_knocked: boolean
-  show_aim_line: boolean
-  show_aim_fov: boolean
-  aim_fov: number
-  esp_box: boolean
-  esp_line: boolean
-  esp_skeleton: boolean
-  esp_name: boolean
-  esp_distance: boolean
-  esp_health: boolean
-  esp_count: boolean
-  esp_radar: boolean
-  speed_hack: boolean
-  speed_multiplier: number
-  ghost_hack: boolean
-  no_reload: boolean
-  no_recoil: boolean
-  theme_color_index: number
-  emergency_purge: boolean
-}
-
-interface LicenseKeyItem {
-  id: string
-  game: string
-  key: string
-  devicesUsed: number
-  devicesMax: number
-  plan: string
-  creator: string
-  status: 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED'
-  expiresAt: string
-}
-
-interface GhostUserItem {
-  id: string
-  name: string
-  email: string
-  role: 'OWNER' | 'ADMIN' | 'RESELLER'
-  uplink: string
-  balance: number
-  expires: string
-  status: 'ACTIVE' | 'BANNED'
-}
-
-interface ActivityItem {
-  id: string
-  title: string
-  game: string
-  details: string
-  timestamp: string
-}
+import {
+  type RymonAccount,
+  type RymonLicense,
+  type RymonActivity,
+  type StreamerControlRecord,
+  loginWithCredentials,
+  verifyLicenseKey,
+  fetchAllLicenses,
+  fetchAllAccounts,
+  fetchAllActivities,
+  generateLicenseKeyBackend,
+  topUpUserBalanceBackend,
+  resetHwidBackend,
+  deleteLicenseBackend,
+  bulkDeleteKeysBackend,
+  toggleBanStatusBackend,
+  extendLicenseBackend,
+  checkSupabaseSchemaStatus
+} from '../lib/rymonBackend'
 
 type TabType =
   | 'overview'
@@ -67,191 +26,40 @@ type TabType =
   | 'generate'
   | 'keys'
   | 'users'
+  | 'add-balance'
   | 'ban'
   | 'delete'
   | 'extend'
   | 'advance'
+  | 'sql-setup'
 
 const THEME_NAMES = ['Cyber Blue', 'Neon Pink', 'Emerald', 'Violet', 'Amber']
-
-// Starter dataset matching the real Rymon GhostPanel architecture
-const INITIAL_KEYS: LicenseKeyItem[] = [
-  {
-    id: '#38505',
-    game: 'Free Fire MAX',
-    key: 'RYMON-FF-94A2-9981',
-    devicesUsed: 1,
-    devicesMax: 1,
-    plan: '30 Days',
-    creator: 'rymon',
-    status: 'ACTIVE',
-    expiresAt: '12/11/26 15:10'
-  },
-  {
-    id: '#38504',
-    game: 'PUBG',
-    key: 'RYMON-PB-4482-1092',
-    devicesUsed: 2,
-    devicesMax: 300,
-    plan: '1 Day',
-    creator: 'rymon',
-    status: 'ACTIVE',
-    expiresAt: '12/10/26 15:10'
-  },
-  {
-    id: '#38503',
-    game: 'BGMI',
-    key: 'RYMON-BG-7719-2041',
-    devicesUsed: 0,
-    devicesMax: 1,
-    plan: '30 Days',
-    creator: 'rymon',
-    status: 'WAITING',
-    expiresAt: 'Not activated'
-  },
-  {
-    id: '#38502',
-    game: 'Free Fire MAX',
-    key: 'RYMON-FF-3108-8842',
-    devicesUsed: 1,
-    devicesMax: 1,
-    plan: '1 Day',
-    creator: 'SK2020',
-    status: 'ACTIVE',
-    expiresAt: '11/10/26 23:46'
-  },
-  {
-    id: '#38501',
-    game: 'Free Fire MAX',
-    key: 'RYMON-FF-8491-3004',
-    devicesUsed: 1,
-    devicesMax: 1,
-    plan: '30 Days',
-    creator: 'rymon',
-    status: 'ACTIVE',
-    expiresAt: '09/11/26 23:42'
-  },
-  {
-    id: '#38500',
-    game: 'PUBG',
-    key: 'RYMON-PB-1190-7734',
-    devicesUsed: 0,
-    devicesMax: 1,
-    plan: '7 Days',
-    creator: 'ROGER',
-    status: 'WAITING',
-    expiresAt: 'Not activated'
-  },
-  {
-    id: '#38499',
-    game: 'BGMI',
-    key: 'RYMON-BG-9920-4100',
-    devicesUsed: 1,
-    devicesMax: 1,
-    plan: '1 Day',
-    creator: 'REVERSE_EXE',
-    status: 'ACTIVE',
-    expiresAt: '11/10/26 22:57'
-  }
-]
-
-const INITIAL_USERS: GhostUserItem[] = [
-  {
-    id: '#2358',
-    name: 'ROGER',
-    email: 'amarogerxd07@gmail.com',
-    role: 'RESELLER',
-    uplink: 'rymon',
-    balance: 9629,
-    expires: '09 Nov, 2026',
-    status: 'ACTIVE'
-  },
-  {
-    id: '#2356',
-    name: 'Satan',
-    email: 'saranshshrivastava7@gmail.com',
-    role: 'RESELLER',
-    uplink: 'rymon',
-    balance: 20,
-    expires: '08 Dec, 2026',
-    status: 'ACTIVE'
-  },
-  {
-    id: '#2355',
-    name: 'SK2020',
-    email: 'spvk202008@gmail.com',
-    role: 'RESELLER',
-    uplink: 'rymon',
-    balance: 315,
-    expires: '07 Dec, 2026',
-    status: 'ACTIVE'
-  },
-  {
-    id: '#2354',
-    name: 'REVERSE_EXE',
-    email: 'harissnkardebnath02@gmail.com',
-    role: 'RESELLER',
-    uplink: 'rymon',
-    balance: 99999,
-    expires: '04 Dec, 2026',
-    status: 'ACTIVE'
-  },
-  {
-    id: '#2351',
-    name: 'Ashwani',
-    email: 'PandaXe23@gmail.com',
-    role: 'RESELLER',
-    uplink: 'ASHWANIxTHOR',
-    balance: 99999999,
-    expires: '01 Oct, 2027',
-    status: 'ACTIVE'
-  }
-]
-
-const INITIAL_ACTIVITIES: ActivityItem[] = [
-  {
-    id: 'act-1',
-    title: 'Ticket #387',
-    game: 'PUBG',
-    details: '1 Day • 300 Device(s)',
-    timestamp: '31 minutes ago'
-  },
-  {
-    id: 'act-2',
-    title: 'Ticket #386',
-    game: 'Free Fire MAX',
-    details: '30 Days • 1 Device(s)',
-    timestamp: '10 hours ago'
-  },
-  {
-    id: 'act-3',
-    title: 'Ticket #385',
-    game: 'BGMI',
-    details: '30 Days • 1 Device(s)',
-    timestamp: '11 hours ago'
-  },
-  {
-    id: 'act-4',
-    title: 'Ticket #384',
-    game: 'PUBG',
-    details: '7 Days • 1 Device(s)',
-    timestamp: '13 hours ago'
-  }
-]
 
 export default function RymonConnect() {
   // Navigation
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  // Auth & Session
+  // Auth Gateway State (Dual Mode: Staff Username/Password vs Streamer Key)
+  const [authMode, setAuthMode] = useState<'staff' | 'key'>('staff')
+  const [staffUsername, setStaffUsername] = useState('')
+  const [staffPassword, setStaffPassword] = useState('')
   const [keyInput, setKeyInput] = useState('')
-  const [currentKey, setCurrentKey] = useState('')
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState('')
-  const [isMasterAdmin, setIsMasterAdmin] = useState(false)
-  const [walletBalance, setWalletBalance] = useState(999628464)
+
+  // Authenticated Session State
+  const [currentUser, setCurrentUser] = useState<RymonAccount | null>(null)
+  const [currentKey, setCurrentKey] = useState('')
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [walletBalance, setWalletBalance] = useState(0)
+
+  // Database Health & Sync
+  const [dbStatus, setDbStatus] = useState<{ isOnline: boolean; tablesCreated: boolean; errorMsg?: string }>({
+    isOnline: true,
+    tablesCreated: true
+  })
+  const [copiedSql, setCopiedSql] = useState(false)
 
   // Streamer Telemetry State
   const [record, setRecord] = useState<StreamerControlRecord | null>(null)
@@ -262,26 +70,25 @@ export default function RymonConnect() {
   const [showPurgeModal, setShowPurgeModal] = useState(false)
   const sliderTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // KeyAuth & User System Data
-  const [keysList, setKeysList] = useState<LicenseKeyItem[]>(() => {
-    const saved = localStorage.getItem('rymon_panel_keys')
-    return saved ? JSON.parse(saved) : INITIAL_KEYS
-  })
-  const [usersList, setUsersList] = useState<GhostUserItem[]>(() => {
-    const saved = localStorage.getItem('rymon_panel_users')
-    return saved ? JSON.parse(saved) : INITIAL_USERS
-  })
-  const [activities, setActivities] = useState<ActivityItem[]>(() => {
-    const saved = localStorage.getItem('rymon_panel_activities')
-    return saved ? JSON.parse(saved) : INITIAL_ACTIVITIES
-  })
+  // Live Database Collections
+  const [keysList, setKeysList] = useState<RymonLicense[]>([])
+  const [usersList, setUsersList] = useState<RymonAccount[]>([])
+  const [activities, setActivities] = useState<RymonActivity[]>([])
 
   // Generate Key Form State
   const [genGame, setGenGame] = useState('Free Fire MAX')
   const [genDuration, setGenDuration] = useState('1 Day')
   const [genCustomPrefix, setGenCustomPrefix] = useState('')
+  const [genDevicesMax, setGenDevicesMax] = useState(1)
   const [genLastCreated, setGenLastCreated] = useState<string | null>(null)
+  const [genError, setGenError] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+
+  // Top Up Balance Form State
+  const [topUpTargetUser, setTopUpTargetUser] = useState('')
+  const [topUpAmount, setTopUpAmount] = useState<number | ''>('')
+  const [topUpMode, setTopUpMode] = useState<'set' | 'add'>('set')
+  const [topUpLoading, setTopUpLoading] = useState(false)
 
   // Search & Filter
   const [searchKeyQuery, setSearchKeyQuery] = useState('')
@@ -289,11 +96,11 @@ export default function RymonConnect() {
 
   // Management Action State
   const [targetBanUser, setTargetBanUser] = useState('')
-  const [banActionType, setBanActionType] = useState('ban')
+  const [banActionType, setBanActionType] = useState<'ban' | 'unban'>('ban')
   const [targetDeleteUser, setTargetDeleteUser] = useState('')
-  const [deleteKeyType, setDeleteKeyType] = useState('expired')
+  const [deleteKeyType, setDeleteKeyType] = useState<'expired' | 'unused' | 'all'>('expired')
   const [targetExtendKey, setTargetExtendKey] = useState('')
-  const [extendAmount, setExtendAmount] = useState('30')
+  const [extendAmount, setExtendAmount] = useState(30)
   const [actionSuccessMsg, setActionSuccessMsg] = useState('')
 
   // Advanced System Toggles
@@ -302,55 +109,137 @@ export default function RymonConnect() {
   const [trialAdmin, setTrialAdmin] = useState(true)
   const [trialReseller, setTrialReseller] = useState(false)
 
-  // 1. Persist Lists to LocalStorage
+  // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
-    localStorage.setItem('rymon_panel_keys', JSON.stringify(keysList))
-  }, [keysList])
+    // Check Supabase Database health
+    checkSupabaseSchemaStatus().then(setDbStatus)
 
-  useEffect(() => {
-    localStorage.setItem('rymon_panel_users', JSON.stringify(usersList))
-  }, [usersList])
-
-  useEffect(() => {
-    localStorage.setItem('rymon_panel_activities', JSON.stringify(activities))
-  }, [activities])
-
-  // 2. Check Persisted Session on Mount
-  useEffect(() => {
+    // Restore saved session
+    const savedUserJson = localStorage.getItem('rymon_session_user')
     const savedKey = localStorage.getItem('rymon_remote_key')
     const savedExp = localStorage.getItem('rymon_remote_expiry')
-    if (savedKey) {
-      setKeyInput(savedKey)
+
+    if (savedUserJson) {
+      try {
+        const u = JSON.parse(savedUserJson) as RymonAccount
+        setCurrentUser(u)
+        setWalletBalance(u.balance || 0)
+        setIsAuthenticated(true)
+        if (savedKey) setCurrentKey(savedKey)
+      } catch {}
+    } else if (savedKey) {
       setCurrentKey(savedKey)
-      const exp = savedExp ? new Date(savedExp) : new Date(Date.now() + 14 * 86400000)
-      setExpiryDate(exp)
       setIsAuthenticated(true)
-      setIsMasterAdmin(
-        savedKey.toUpperCase().includes('MASTER') ||
-        savedKey.toUpperCase().includes('OWNER') ||
-        savedKey.toUpperCase().includes('RYMON')
-      )
+      const exp = savedExp ? new Date(savedExp) : new Date(Date.now() + 30 * 86400000)
+      setExpiryDate(exp)
+      setCurrentUser({
+        id: 'usr-streamer',
+        username: 'Streamer VIP',
+        email: 'streamer@rymon.vip',
+        role: 'streamer',
+        balance: 0,
+        uplink: 'rymon',
+        status: 'ACTIVE'
+      })
+      setActiveTab('remote')
     }
   }, [])
 
-  // 3. Telemetry Realtime WebSocket Listener (Phoenix Channel)
+  // 2. Fetch Live Supabase Data when Authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    let isMounted = true
+
+    async function loadLiveData() {
+      const [lcs, usrs, acts] = await Promise.all([
+        fetchAllLicenses(currentUser),
+        fetchAllAccounts(),
+        fetchAllActivities()
+      ])
+
+      if (isMounted) {
+        setKeysList(lcs)
+        setUsersList(usrs)
+        setActivities(acts)
+
+        // Sync fresh balance if currentUser in list
+        if (currentUser) {
+          const freshMe = usrs.find(
+            (u) => u.username.toLowerCase() === currentUser.username.toLowerCase()
+          )
+          if (freshMe) {
+            setWalletBalance(freshMe.balance)
+            setCurrentUser(freshMe)
+            localStorage.setItem('rymon_session_user', JSON.stringify(freshMe))
+          }
+        }
+      }
+    }
+
+    loadLiveData()
+
+    // Setup Realtime Phoenix Subscriptions
+    if (supabase) {
+      const channel = supabase
+        .channel('rymon-global-sync')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'rymon_licenses' },
+          () => {
+            fetchAllLicenses(currentUser).then((l) => isMounted && setKeysList(l))
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'rymon_accounts' },
+          () => {
+            fetchAllAccounts().then((u) => {
+              if (isMounted) {
+                setUsersList(u)
+                if (currentUser) {
+                  const me = u.find(
+                    (x) => x.username.toLowerCase() === currentUser.username.toLowerCase()
+                  )
+                  if (me) {
+                    setWalletBalance(me.balance)
+                    setCurrentUser(me)
+                  }
+                }
+              }
+            })
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'rymon_activities' },
+          () => {
+            fetchAllActivities().then((a) => isMounted && setActivities(a))
+          }
+        )
+        .subscribe()
+
+      return () => {
+        isMounted = false
+        if (supabase) supabase.removeChannel(channel)
+      }
+    }
+  }, [isAuthenticated, currentUser?.username, currentUser?.role])
+
+  // 3. Telemetry Realtime Subscription for Current Key
   useEffect(() => {
     if (!isAuthenticated || !currentKey || !supabase) return
 
     let isMounted = true
 
-    async function loadData() {
+    async function loadTelemetry() {
       if (!supabase) return
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('rymon_streamer_controls')
           .select('*')
           .eq('license_key', currentKey)
           .maybeSingle()
-
-        if (error && error.code !== 'PGRST116' && error.code !== 'PGRST205') {
-          console.warn('[Rymon Remote] Query warning:', error)
-        }
 
         if (data && isMounted) {
           setRecord(data as StreamerControlRecord)
@@ -359,9 +248,10 @@ export default function RymonConnect() {
           // Initialize fresh local fallback record
           const initialRow: StreamerControlRecord = {
             license_key: currentKey,
-            streamer_name: isMasterAdmin ? 'Rymon Owner' : 'VIP Streamer',
+            streamer_name: currentUser?.role === 'owner' ? 'Rymon Owner' : 'VIP Streamer',
             game_name: 'Free Fire MAX',
             is_online: true,
+            is_active: true,
             aim_silent: false,
             hit_rate: 80,
             ignore_knocked: false,
@@ -384,60 +274,44 @@ export default function RymonConnect() {
             theme_color_index: 0,
             emergency_purge: false
           }
-
-          try {
-            const { data: inserted } = await supabase
-              .from('rymon_streamer_controls')
-              .upsert(initialRow)
-              .select()
-              .single()
-
-            setRecord((inserted as StreamerControlRecord) || initialRow)
-          } catch {
-            setRecord(initialRow)
-          }
+          setRecord(initialRow)
           setIsLiveConnected(true)
         }
-      } catch (err) {
-        console.error('[Rymon Remote] Load Error:', err)
+      } catch {
+        // Fallback
       }
     }
 
-    loadData()
+    loadTelemetry()
 
-    // Realtime Phoenix WebSocket Subscription
-    try {
-      const channel = supabase
-        .channel(`streamer-remote-${currentKey}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'rymon_streamer_controls',
-            filter: `license_key=eq.${currentKey}`
-          },
-          (payload) => {
-            if (payload.new && isMounted) {
-              setRecord(payload.new as StreamerControlRecord)
-              setIsLiveConnected(true)
-            }
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED' && isMounted) {
+    const channel = supabase
+      .channel(`streamer-remote-${currentKey}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'rymon_streamer_controls',
+          filter: `license_key=eq.${currentKey}`
+        },
+        (payload) => {
+          if (payload.new && isMounted) {
+            setRecord(payload.new as StreamerControlRecord)
             setIsLiveConnected(true)
           }
-        })
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED' && isMounted) {
+          setIsLiveConnected(true)
+        }
+      })
 
-      return () => {
-        isMounted = false
-        if (supabase) supabase.removeChannel(channel)
-      }
-    } catch {
-      // Graceful fallback
+    return () => {
+      isMounted = false
+      if (supabase) supabase.removeChannel(channel)
     }
-  }, [isAuthenticated, currentKey, isMasterAdmin])
+  }, [isAuthenticated, currentKey, currentUser?.role])
 
   // 4. Live Countdown Clock
   useEffect(() => {
@@ -465,165 +339,166 @@ export default function RymonConnect() {
     return () => clearInterval(interval)
   }, [])
 
-  // 6. Native Sovereign Rymon Key Authentication Engine (Zero External Dependencies)
-  const handleKeyAuth = async (e: React.FormEvent) => {
+  // 6. REAL AUTHENTICATION HANDLERS
+  const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    const cleanKey = keyInput.trim().toUpperCase()
-    if (!cleanKey) return
-
     setAuthLoading(true)
     setAuthError('')
 
-    try {
-      // Step A: Sovereign Master Admin & Owner Key Bypass
-      const isMaster =
-        cleanKey.includes('MASTER') ||
-        cleanKey.includes('OWNER') ||
-        cleanKey === 'RYMON-MASTER-KEY'
+    const res = await loginWithCredentials(staffUsername, staffPassword)
+    setAuthLoading(false)
 
-      if (isMaster) {
-        const exp = new Date(Date.now() + 365 * 86400000)
-        setCurrentKey(cleanKey)
-        setExpiryDate(exp)
-        setIsMasterAdmin(true)
-        setIsAuthenticated(true)
-        localStorage.setItem('rymon_remote_key', cleanKey)
-        localStorage.setItem('rymon_remote_expiry', exp.toISOString())
-        showToast('Authenticated as Sovereign Owner!')
-        return
-      }
-
-      // Generate or retrieve persistent local HWID
-      let clientHwid = localStorage.getItem('rymon_client_hwid')
-      if (!clientHwid) {
-        clientHwid = 'HWID-' + Math.random().toString(36).substring(2, 10).toUpperCase()
-        localStorage.setItem('rymon_client_hwid', clientHwid)
-      }
-
-      let exp = new Date(Date.now() + 30 * 86400000)
-      let foundRecord = false
-
-      // Step B: Query Native Supabase Controls Table
-      if (supabase) {
-        try {
-          const { data: dbRow, error: dbErr } = await supabase
-            .from('rymon_streamer_controls')
-            .select('*')
-            .eq('license_key', cleanKey)
-            .maybeSingle()
-
-          if (dbRow && !dbErr) {
-            // Check ban status
-            if (dbRow.is_active === false) {
-              setAuthError('⚠️ License key has been revoked/banned by administrator.')
-              return
-            }
-
-            // Check expiration
-            if (dbRow.expires_at && new Date(dbRow.expires_at).getTime() < Date.now()) {
-              setAuthError(`⚠️ License key expired on ${new Date(dbRow.expires_at).toLocaleDateString()}.`)
-              return
-            }
-
-            // Check device HWID binding
-            if (dbRow.device_hwid && dbRow.device_hwid !== clientHwid && (dbRow.devices_used || 0) >= (dbRow.devices_max || 1)) {
-              setAuthError('⚠️ HWID mismatch! Key is bound to another device. Reset HWID in dashboard.')
-              return
-            }
-
-            // Bind HWID on initial activation
-            if (!dbRow.device_hwid) {
-              await supabase
-                .from('rymon_streamer_controls')
-                .update({
-                  device_hwid: clientHwid,
-                  devices_used: 1,
-                  is_online: true
-                })
-                .eq('license_key', cleanKey)
-            }
-
-            if (dbRow.expires_at) {
-              exp = new Date(dbRow.expires_at)
-            }
-
-            foundRecord = true
-          }
-        } catch {
-          // Graceful fallback to local registry
-        }
-      }
-
-      // Step C: Check Local In-Memory & LocalStorage Keys Registry
-      const localKeyItem = keysList.find((k) => k.key.toUpperCase() === cleanKey)
-      if (localKeyItem) {
-        if (localKeyItem.status === 'BANNED') {
-          setAuthError('⚠️ License key has been revoked/banned by administrator.')
-          return
-        }
-
-        if (localKeyItem.status === 'EXPIRED') {
-          setAuthError('⚠️ License key has expired.')
-          return
-        }
-
-        // Calculate duration offset based on plan
-        let durationDays = 30
-        if (localKeyItem.plan.includes('2 Hours')) durationDays = 2 / 24
-        else if (localKeyItem.plan.includes('1 Day')) durationDays = 1
-        else if (localKeyItem.plan.includes('3 Day')) durationDays = 3
-        else if (localKeyItem.plan.includes('7 Day')) durationDays = 7
-        else if (localKeyItem.plan.includes('15 Day')) durationDays = 15
-        else if (localKeyItem.plan.includes('30 Day')) durationDays = 30
-
-        exp = new Date(Date.now() + durationDays * 86400000)
-
-        // Mark active and bind device usage
-        setKeysList(
-          keysList.map((k) =>
-            k.key.toUpperCase() === cleanKey
-              ? { ...k, status: 'ACTIVE', devicesUsed: 1, expiresAt: exp.toLocaleDateString() }
-              : k
-          )
-        )
-      } else {
-        // Step D: Cryptographic Pattern Validation (Format: RYMON-[GAME]-[CODE1]-[CODE2])
-        const RYMON_KEY_REGEX = /^RYMON-[A-Z0-9]{2,4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i
-        if (RYMON_KEY_REGEX.test(cleanKey)) {
-          const newKeyItem: LicenseKeyItem = {
-            id: `#${Math.floor(38506 + keysList.length)}`,
-            game: cleanKey.includes('-FF-') ? 'Free Fire MAX' : cleanKey.includes('-BG-') ? 'BGMI' : 'PUBG',
-            key: cleanKey,
-            devicesUsed: 1,
-            devicesMax: 1,
-            plan: '30 Days',
-            creator: 'rymon',
-            status: 'ACTIVE',
-            expiresAt: exp.toLocaleDateString()
-          }
-          setKeysList([newKeyItem, ...keysList])
-        } else if (!foundRecord) {
-          setAuthError('Invalid license key. Check format (e.g. RYMON-FF-XXXX-YYYY) or generate a new key.')
-          return
-        }
-      }
-
-      // Step E: Session Established
-      setCurrentKey(cleanKey)
-      setExpiryDate(exp)
-      setIsMasterAdmin(false)
+    if (res.success && res.user) {
+      setCurrentUser(res.user)
+      setWalletBalance(res.user.balance)
       setIsAuthenticated(true)
-      localStorage.setItem('rymon_remote_key', cleanKey)
-      localStorage.setItem('rymon_remote_expiry', exp.toISOString())
-      showToast(`Connected to ${cleanKey}!`)
-    } catch (err: any) {
-      setAuthError(err.message || 'Authentication error')
-    } finally {
-      setAuthLoading(false)
+      localStorage.setItem('rymon_session_user', JSON.stringify(res.user))
+
+      if (res.user.role === 'owner') {
+        setCurrentKey('RYMON-MASTER-KEY')
+        localStorage.setItem('rymon_remote_key', 'RYMON-MASTER-KEY')
+      }
+
+      showToast(`Welcome back, ${res.user.username} (${res.user.role.toUpperCase()})!`)
+      setActiveTab('overview')
+    } else {
+      setAuthError(res.error || 'Authentication failed. Please verify credentials.')
     }
   }
 
-  // 7. Telemetry Mutations
+  const handleKeyAuth = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAuthLoading(true)
+    setAuthError('')
+
+    const res = await verifyLicenseKey(keyInput)
+    setAuthLoading(false)
+
+    if (res.valid && res.key) {
+      const cleanKey = res.key
+      setCurrentKey(cleanKey)
+      const exp = res.expiresAt ? new Date(res.expiresAt) : new Date(Date.now() + 30 * 86400000)
+      setExpiryDate(exp)
+      setIsAuthenticated(true)
+
+      const streamerUser: RymonAccount = {
+        id: 'usr-streamer',
+        username: res.isMaster ? 'rymon' : 'Streamer VIP',
+        email: 'streamer@rymon.vip',
+        role: res.isMaster ? 'owner' : 'streamer',
+        balance: res.isMaster ? 999628464 : 0,
+        uplink: 'rymon',
+        status: 'ACTIVE'
+      }
+      setCurrentUser(streamerUser)
+      setWalletBalance(streamerUser.balance)
+      localStorage.setItem('rymon_session_user', JSON.stringify(streamerUser))
+      localStorage.setItem('rymon_remote_key', cleanKey)
+      localStorage.setItem('rymon_remote_expiry', exp.toISOString())
+
+      showToast(`Connected license ${cleanKey}!`)
+      setActiveTab('remote')
+    } else {
+      setAuthError(res.error || 'Invalid license key.')
+    }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('rymon_session_user')
+    localStorage.removeItem('rymon_remote_key')
+    localStorage.removeItem('rymon_remote_expiry')
+    setIsAuthenticated(false)
+    setCurrentUser(null)
+    setCurrentKey('')
+    setRecord(null)
+    setActiveTab('overview')
+  }
+
+  // 7. KEY GENERATION ENGINE WITH REAL BALANCE DEDUCTION
+  const priceMap: Record<string, number> = {
+    '2 Hours': 20,
+    '1 Day': 35,
+    '3 Day': 50,
+    '3 Days': 50,
+    '7 Day': 100,
+    '7 Days': 100,
+    '15 Day': 180,
+    '15 Days': 180,
+    '30 Day': 350,
+    '30 Days': 350
+  }
+
+  const projectedInvoice = priceMap[genDuration] || 35
+
+  const handleGenerateKey = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!currentUser) return
+    setGenError('')
+
+    setAuthLoading(true)
+    const res = await generateLicenseKeyBackend({
+      creator: currentUser,
+      game: genGame,
+      duration: genDuration,
+      customPrefix: genCustomPrefix,
+      devicesMax: genDevicesMax
+    })
+    setAuthLoading(false)
+
+    if (res.success && res.key) {
+      setGenLastCreated(res.key)
+      if (res.remainingBalance !== undefined) {
+        setWalletBalance(res.remainingBalance)
+        setCurrentUser({ ...currentUser, balance: res.remainingBalance })
+      }
+      showToast(`Key ${res.key} generated! Wallet balance updated.`)
+      // Refresh list
+      fetchAllLicenses(currentUser).then(setKeysList)
+      fetchAllActivities().then(setActivities)
+    } else {
+      setGenError(res.error || 'Failed to generate key.')
+    }
+  }
+
+  // 8. TOP UP USER BALANCE HANDLER (MEDIA_1791705436374_5F17E828.PNG)
+  const handleTopUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!topUpTargetUser) {
+      alert('Please select a target user.')
+      return
+    }
+    if (topUpAmount === '' || topUpAmount < 0) {
+      alert('Please enter a valid amount.')
+      return
+    }
+
+    setTopUpLoading(true)
+    const res = await topUpUserBalanceBackend(
+      topUpTargetUser,
+      Number(topUpAmount),
+      topUpMode,
+      currentUser?.username || 'rymon'
+    )
+    setTopUpLoading(false)
+
+    if (res.success && res.newBalance !== undefined) {
+      showToast(`Success! Balance for ${topUpTargetUser} set to ₹${res.newBalance.toLocaleString('en-IN')}`)
+      setTopUpAmount('')
+      // Refresh accounts
+      fetchAllAccounts().then((u) => {
+        setUsersList(u)
+        if (currentUser?.username.toLowerCase() === topUpTargetUser.toLowerCase()) {
+          setWalletBalance(res.newBalance!)
+          setCurrentUser({ ...currentUser, balance: res.newBalance! })
+        }
+      })
+      fetchAllActivities().then(setActivities)
+    } else {
+      alert(res.error || 'Failed to update balance.')
+    }
+  }
+
+  // 9. TELEMETRY MUTATIONS
   const toggleFeature = async (field: keyof StreamerControlRecord) => {
     if (!record) return
     const newVal = !record[field]
@@ -684,143 +559,64 @@ export default function RymonConnect() {
       } catch {}
     }
     alert(
-      '⚠️ Emergency Purge Signal Dispatched!\nTarget device instructed to kill stranger daemon and wipe /data/local/tmp.'
+      '🚨 Emergency Purge Dispatched!\nTarget device instructed to kill Stranger daemon and wipe /data/local/tmp.'
     )
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('rymon_remote_key')
-    localStorage.removeItem('rymon_remote_expiry')
-    setIsAuthenticated(false)
-    setCurrentKey('')
-    setRecord(null)
-  }
-
-  // 8. Key Generation Engine
-  const priceMap: Record<string, number> = {
-    '2 Hours': 20,
-    '1 Day': 35,
-    '3 Day': 50,
-    '7 Day': 100,
-    '15 Day': 180,
-    '30 Day': 350
-  }
-
-  const projectedInvoice = priceMap[genDuration] || 35
-
-  const handleGenerateKey = (e: React.FormEvent) => {
-    e.preventDefault()
-    const prefix = genCustomPrefix.trim().toUpperCase() || 'RYMON'
-    const gameCode =
-      genGame === 'Free Fire MAX' ? 'FF' : genGame === 'BGMI' ? 'BG' : 'PB'
-    const randomBlock1 = Math.random().toString(36).substring(2, 6).toUpperCase()
-    const randomBlock2 = Math.random().toString(36).substring(2, 6).toUpperCase()
-    const newKeyCode = `${prefix}-${gameCode}-${randomBlock1}-${randomBlock2}`
-
-    const newKeyItem: LicenseKeyItem = {
-      id: `#${Math.floor(38506 + keysList.length)}`,
-      game: genGame,
-      key: newKeyCode,
-      devicesUsed: 0,
-      devicesMax: 1,
-      plan: genDuration,
-      creator: 'rymon',
-      status: 'WAITING',
-      expiresAt: 'Not activated'
-    }
-
-    setKeysList([newKeyItem, ...keysList])
-    setWalletBalance((prev) => Math.max(0, prev - projectedInvoice))
-    setGenLastCreated(newKeyCode)
-
-    // Log Activity
-    const newAct: ActivityItem = {
-      id: `act-${Date.now()}`,
-      title: `Generated ${newKeyItem.id}`,
-      game: genGame,
-      details: `${genDuration} • 1 Device(s)`,
-      timestamp: 'Just now'
-    }
-    setActivities([newAct, ...activities.slice(0, 7)])
-
-    // If Supabase connected, also insert row
-    if (supabase) {
-      supabase
-        .from('rymon_streamer_controls')
-        .upsert({
-          license_key: newKeyCode,
-          streamer_name: 'VIP Streamer',
-          game_name: genGame,
-          is_online: false,
-          is_active: true
-        })
-        .then(() => {}, () => {})
-    }
-  }
-
-  // 9. Key Action Handlers (HWID Reset, Delete, Copy)
+  // 10. MANAGEMENT ACTION HANDLERS
   const handleCopyKey = (keyString: string) => {
     navigator.clipboard.writeText(keyString)
     setCopiedKey(keyString)
     setTimeout(() => setCopiedKey(null), 2000)
   }
 
-  const handleResetHWID = (keyString: string) => {
-    setKeysList(
-      keysList.map((k) =>
-        k.key === keyString ? { ...k, devicesUsed: 0, status: 'WAITING' } : k
-      )
-    )
+  const handleResetHWID = async (keyString: string) => {
+    await resetHwidBackend(keyString, currentUser?.username || 'rymon')
     showToast(`HWID successfully reset for ${keyString}!`)
+    fetchAllLicenses(currentUser).then(setKeysList)
   }
 
-  const handleDeleteKey = (keyString: string) => {
-    if (confirm(`Are you sure you want to delete license key ${keyString}?`)) {
-      setKeysList(keysList.filter((k) => k.key !== keyString))
+  const handleDeleteKey = async (keyString: string) => {
+    if (confirm(`Delete license key ${keyString}?`)) {
+      await deleteLicenseBackend(keyString)
       showToast(`Key ${keyString} deleted.`)
+      fetchAllLicenses(currentUser).then(setKeysList)
     }
   }
 
-  const handleApplyBanStatus = () => {
+  const handleApplyBanStatus = async () => {
     if (!targetBanUser) {
       alert('Please select a target user.')
       return
     }
     const isBan = banActionType === 'ban'
-    setUsersList(
-      usersList.map((u) =>
-        u.name === targetBanUser ? { ...u, status: isBan ? 'BANNED' : 'ACTIVE' } : u
-      )
-    )
+    await toggleBanStatusBackend(targetBanUser, 'user', isBan, currentUser?.username || 'rymon')
     showToast(`User ${targetBanUser} has been ${isBan ? 'BANNED' : 'UNBANNED'}.`)
+    fetchAllAccounts().then(setUsersList)
   }
 
-  const handleApplyDeleteUserKeys = () => {
+  const handleApplyDeleteUserKeys = async () => {
     if (!targetDeleteUser) {
       alert('Please select a target user.')
       return
     }
-    setKeysList(keysList.filter((k) => k.creator !== targetDeleteUser))
-    showToast(`Keys associated with user ${targetDeleteUser} have been purged.`)
+    const count = await bulkDeleteKeysBackend(
+      targetDeleteUser,
+      deleteKeyType,
+      currentUser?.username || 'rymon'
+    )
+    showToast(`Purged ${count} ${deleteKeyType} keys for user ${targetDeleteUser}.`)
+    fetchAllLicenses(currentUser).then(setKeysList)
   }
 
-  const handleApplyExtendKey = () => {
+  const handleApplyExtendKey = async () => {
     if (!targetExtendKey) {
       alert('Please select a target key.')
       return
     }
-    setKeysList(
-      keysList.map((k) =>
-        k.key === targetExtendKey
-          ? {
-              ...k,
-              plan: `${parseInt(k.plan) + parseInt(extendAmount)} Days`,
-              status: 'ACTIVE'
-            }
-          : k
-      )
-    )
+    await extendLicenseBackend(targetExtendKey, extendAmount, currentUser?.username || 'rymon')
     showToast(`License ${targetExtendKey} extended by ${extendAmount} days!`)
+    fetchAllLicenses(currentUser).then(setKeysList)
   }
 
   const showToast = (msg: string) => {
@@ -834,9 +630,9 @@ export default function RymonConnect() {
     const q = searchKeyQuery.toLowerCase()
     return keysList.filter(
       (k) =>
-        k.key.toLowerCase().includes(q) ||
+        k.license_key.toLowerCase().includes(q) ||
         k.game.toLowerCase().includes(q) ||
-        k.creator.toLowerCase().includes(q)
+        k.creator_username.toLowerCase().includes(q)
     )
   }, [keysList, searchKeyQuery])
 
@@ -845,9 +641,10 @@ export default function RymonConnect() {
     const q = searchUserQuery.toLowerCase()
     return usersList.filter(
       (u) =>
-        u.name.toLowerCase().includes(q) ||
+        u.username.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q)
+        u.role.toLowerCase().includes(q) ||
+        u.uplink.toLowerCase().includes(q)
     )
   }, [usersList, searchUserQuery])
 
@@ -857,9 +654,13 @@ export default function RymonConnect() {
     const active = keysList.filter((k) => k.status === 'ACTIVE').length
     const unused = keysList.filter((k) => k.status === 'WAITING').length
     const expired = keysList.filter((k) => k.status === 'EXPIRED').length
-    const reset = keysList.filter((k) => k.devicesUsed === 0 && k.status === 'ACTIVE').length
+    const reset = keysList.filter((k) => k.devices_used === 0 && k.status === 'ACTIVE').length
     return { total, active, unused, expired, reset }
   }, [keysList])
+
+  const isOwner = currentUser?.role === 'owner'
+  const isAdmin = currentUser?.role === 'admin'
+  const isStaff = isOwner || isAdmin || currentUser?.role === 'reseller'
 
   return (
     <div style={styles.appShell}>
@@ -891,19 +692,25 @@ export default function RymonConnect() {
               <div style={styles.brandTitleText}>
                 RYMON <span style={styles.brandCyanPill}>GHOST CONNECT</span>
               </div>
-              <div style={styles.brandSubText}>CONTROL PANEL & TELEMETRY REMOTE</div>
+              <div style={styles.brandSubText}>SOVEREIGN KEYAUTH & TELEMETRY REMOTE</div>
             </div>
           </div>
         </div>
 
         <div style={styles.headerRight}>
           {/* Wallet Balance Pill */}
-          <div style={styles.balancePill}>
-            <span style={{ color: '#00d9ff', fontSize: '13px' }}>💼</span>
-            <span style={styles.balanceAmount}>₹{walletBalance.toLocaleString('en-IN')}</span>
-          </div>
+          {isAuthenticated && currentUser?.role !== 'streamer' && (
+            <div
+              style={styles.balancePill}
+              onClick={() => isOwner && setActiveTab('add-balance')}
+              title={isOwner ? 'Click to manage balances' : 'Wallet balance'}
+            >
+              <span style={{ color: '#00d9ff', fontSize: '13px' }}>💳</span>
+              <span style={styles.balanceAmount}>₹{walletBalance.toLocaleString('en-IN')}</span>
+            </div>
+          )}
 
-          {/* WebSocket Link Status */}
+          {/* Database & WebSocket Link Status */}
           <div style={styles.telemetryPill}>
             <span
               style={{
@@ -912,7 +719,7 @@ export default function RymonConnect() {
               }}
             />
             <span style={styles.telemetryText}>
-              {isLiveConnected ? 'LIVE WS' : 'STANDBY'}
+              {isLiveConnected ? 'LIVE SUPABASE' : 'STANDBY'}
             </span>
             <span style={styles.pingText}>{ping}ms</span>
           </div>
@@ -921,27 +728,26 @@ export default function RymonConnect() {
           {isAuthenticated ? (
             <div style={styles.userProfilePill}>
               <div style={styles.userAvatarSquare}>
-                {isMasterAdmin ? 'R' : 'S'}
+                {currentUser?.username.charAt(0).toUpperCase() || 'U'}
               </div>
               <div style={styles.userNameBlock}>
                 <span style={styles.userNameText}>
-                  {isMasterAdmin ? 'rymon' : 'Streamer VIP'}
+                  {currentUser?.username || 'VIP Streamer'}
                 </span>
                 <span style={styles.userRoleTag}>
-                  {isMasterAdmin ? 'Owner' : 'VIP'}
+                  {currentUser?.role.toUpperCase() || 'VIP'}
                 </span>
               </div>
               <button onClick={handleLogout} style={styles.headerLogoutBtn} title="Logout">
-                ⏻
+                🚪
               </button>
             </div>
           ) : (
             <button
               onClick={() => {
-                setKeyInput('RYMON-MASTER-KEY')
-                setIsAuthenticated(true)
-                setCurrentKey('RYMON-MASTER-KEY')
-                setIsMasterAdmin(true)
+                setStaffUsername('rymon')
+                setStaffPassword('rymon@2026')
+                setAuthMode('staff')
               }}
               style={styles.quickLoginBtn}
             >
@@ -954,462 +760,1395 @@ export default function RymonConnect() {
       {/* ── NOTIFICATION TOAST ──────────────────────────────────────────────── */}
       {actionSuccessMsg && (
         <div style={styles.toastBanner}>
-          <span>✨ {actionSuccessMsg}</span>
+          <span>✓ {actionSuccessMsg}</span>
         </div>
       )}
 
-      {/* ── CONDITIONAL VIEW: AUTH GATEWAY VS MAIN WORKSPACE ─────────────────── */}
+      {/* ── CONDITIONAL VIEW: AUTH GATEWAY VS MAIN WORKSPACE ────────────────── */}
       {!isAuthenticated ? (
         <div style={styles.authGateBox}>
           <div style={styles.authBadge}>
             <span style={{ fontSize: '10px', marginRight: '6px' }}>🔒</span> SECURE RYMON SOVEREIGN GATEWAY
           </div>
-          <h2 style={styles.authHead}>Connect Streamer Remote</h2>
-          <p style={styles.authDesc}>
-            Enter your registered Rymon license key to synchronize hardware controls in real-time with your Android device.
-          </p>
 
-          <form onSubmit={handleKeyAuth} style={styles.authForm}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: '#94a3b8' }}>
-              <span>LICENSE KEY</span>
-              <span
-                style={{ color: '#00d9ff', cursor: 'pointer' }}
-                onClick={() => setKeyInput('RYMON-MASTER-KEY')}
-              >
-                Use Master Key
-              </span>
-            </div>
-            <input
-              type="text"
-              value={keyInput}
-              onChange={(e) => setKeyInput(e.target.value)}
-              placeholder="e.g. RYMON-XXXX-YYYY"
-              style={styles.keyInput}
-              required
-            />
-
-            <button type="submit" disabled={authLoading} style={styles.submitBtn}>
-              {authLoading ? 'AUTHENTICATING...' : 'CONNECT GHOST REMOTE'}
+          {/* Dual Gateway Tabs: Staff Portal vs Streamer Key */}
+          <div style={styles.authTabSelector}>
+            <button
+              onClick={() => {
+                setAuthMode('staff')
+                setAuthError('')
+              }}
+              style={{
+                ...styles.authTabBtn,
+                ...(authMode === 'staff' ? styles.authTabBtnActive : {})
+              }}
+            >
+              👤 Staff Portal (Owner / Reseller)
             </button>
+            <button
+              onClick={() => {
+                setAuthMode('key')
+                setAuthError('')
+              }}
+              style={{
+                ...styles.authTabBtn,
+                ...(authMode === 'key' ? styles.authTabBtnActive : {})
+              }}
+            >
+              ⚡ Streamer Remote (License Key)
+            </button>
+          </div>
 
-            {authError && <div style={styles.errorBox}>{authError}</div>}
-          </form>
+          {authMode === 'staff' ? (
+            <div>
+              <h2 style={styles.authHead}>Staff Control Login</h2>
+              <p style={styles.authDesc}>
+                Authenticate with your sovereign account to manage licenses, generate keys, and oversee user balances.
+              </p>
+
+              <form onSubmit={handleStaffLogin} style={styles.authForm}>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>USERNAME</label>
+                  <input
+                    type="text"
+                    value={staffUsername}
+                    onChange={(e) => setStaffUsername(e.target.value)}
+                    placeholder="e.g. rymon, ROGER, SK2020"
+                    style={styles.keyInput}
+                    required
+                  />
+                </div>
+
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>PASSWORD</label>
+                  <input
+                    type="password"
+                    value={staffPassword}
+                    onChange={(e) => setStaffPassword(e.target.value)}
+                    placeholder="Enter account password"
+                    style={styles.keyInput}
+                    required
+                  />
+                </div>
+
+                <div style={styles.quickAccountsRow}>
+                  <span style={styles.quickLabel}>Quick Sign-in:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStaffUsername('rymon')
+                      setStaffPassword('rymon@2026')
+                    }}
+                    style={styles.chipBtn}
+                  >
+                    rymon (Owner)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStaffUsername('ROGER')
+                      setStaffPassword('roger')
+                    }}
+                    style={styles.chipBtn}
+                  >
+                    ROGER (Reseller)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStaffUsername('SK2020')
+                      setStaffPassword('sk2020')
+                    }}
+                    style={styles.chipBtn}
+                  >
+                    SK2020 (Reseller)
+                  </button>
+                </div>
+
+                <button type="submit" disabled={authLoading} style={styles.submitBtn}>
+                  {authLoading ? 'AUTHENTICATING SUPABASE...' : 'SIGN IN TO DASHBOARD'}
+                </button>
+
+                {authError && <div style={styles.errorBox}>{authError}</div>}
+              </form>
+            </div>
+          ) : (
+            <div>
+              <h2 style={styles.authHead}>Connect Streamer Remote</h2>
+              <p style={styles.authDesc}>
+                Enter your registered Rymon license key to synchronize hardware telemetry and aim assistance in real-time.
+              </p>
+
+              <form onSubmit={handleKeyAuth} style={styles.authForm}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: '#94a3b8' }}>
+                  <span>LICENSE KEY</span>
+                  <span
+                    style={{ color: '#00d9ff', cursor: 'pointer' }}
+                    onClick={() => setKeyInput('RYMON-MASTER-KEY')}
+                  >
+                    Use Master Key
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                  placeholder="e.g. RYMON-FF-XXXX-YYYY"
+                  style={styles.keyInput}
+                  required
+                />
+
+                <div style={styles.quickAccountsRow}>
+                  <span style={styles.quickLabel}>Valid Sample Keys:</span>
+                  <button
+                    type="button"
+                    onClick={() => setKeyInput('RYMON-MASTER-KEY')}
+                    style={styles.chipBtn}
+                  >
+                    RYMON-MASTER-KEY
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKeyInput('RYMON-FF-94A2-9981')}
+                    style={styles.chipBtn}
+                  >
+                    RYMON-FF-94A2-9981
+                  </button>
+                </div>
+
+                <button type="submit" disabled={authLoading} style={styles.submitBtn}>
+                  {authLoading ? 'VERIFYING KEYAUTH...' : 'CONNECT GHOST REMOTE'}
+                </button>
+
+                {authError && <div style={styles.errorBox}>{authError}</div>}
+              </form>
+            </div>
+          )}
         </div>
       ) : (
         <div style={styles.mainLayout}>
-        {/* LEFT SIDEBAR NAVIGATION */}
-        <aside
-          style={{
-            ...styles.sidebar,
-            ...(mobileMenuOpen ? styles.sidebarMobileOpen : {})
-          }}
-        >
-          {/* User mini status */}
-          <div style={styles.sidebarUserCard}>
-            <div style={styles.sidebarUserRow}>
-              <div style={styles.sidebarUserAvatar}>
-                {isMasterAdmin ? 'R' : 'S'}
-              </div>
-              <div>
-                <div style={styles.sidebarUserName}>
-                  {isMasterAdmin ? 'rymon' : 'VIP Streamer'}
+          {/* LEFT SIDEBAR NAVIGATION */}
+          <aside
+            style={{
+              ...styles.sidebar,
+              ...(mobileMenuOpen ? styles.sidebarMobileOpen : {})
+            }}
+          >
+            {/* User mini status */}
+            <div style={styles.sidebarUserCard}>
+              <div style={styles.sidebarUserRow}>
+                <div style={styles.sidebarUserAvatar}>
+                  {currentUser?.username.charAt(0).toUpperCase() || 'U'}
                 </div>
-                <div style={styles.sidebarUserSub}>
-                  <span style={styles.activeDot} /> Owner (Level 1)
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Nav Categories */}
-          <nav style={styles.navStack}>
-            {/* 1. Streamer Telemetry Remote */}
-            <div style={styles.navCategoryHeader}>TELEMETRY & HARDWARE</div>
-            <button
-              onClick={() => {
-                setActiveTab('remote')
-                setMobileMenuOpen(false)
-              }}
-              style={{
-                ...styles.navItem,
-                ...(activeTab === 'remote' ? styles.navItemActive : {})
-              }}
-            >
-              <span style={styles.navIcon}>📡</span>
-              <span>Streamer Remote</span>
-              <span style={styles.liveNavBadge}>LIVE</span>
-            </button>
-
-            {/* 2. Dashboards */}
-            <div style={styles.navCategoryHeader}>DASHBOARDS</div>
-            <button
-              onClick={() => {
-                setActiveTab('overview')
-                setMobileMenuOpen(false)
-              }}
-              style={{
-                ...styles.navItem,
-                ...(activeTab === 'overview' ? styles.navItemActive : {})
-              }}
-            >
-              <span style={styles.navIcon}>📊</span>
-              <span>Overview</span>
-            </button>
-
-            {/* 3. Key System */}
-            <div style={styles.navCategoryHeader}>USER SYSTEM</div>
-            <button
-              onClick={() => {
-                setActiveTab('generate')
-                setMobileMenuOpen(false)
-              }}
-              style={{
-                ...styles.navItem,
-                ...(activeTab === 'generate' ? styles.navItemActive : {})
-              }}
-            >
-              <span style={styles.navIcon}>⚡</span>
-              <span>Generate Key</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('keys')
-                setMobileMenuOpen(false)
-              }}
-              style={{
-                ...styles.navItem,
-                ...(activeTab === 'keys' ? styles.navItemActive : {})
-              }}
-            >
-              <span style={styles.navIcon}>🔑</span>
-              <span>License Keys</span>
-              <span style={styles.navCounterBadge}>{keysList.length}</span>
-            </button>
-
-            {/* 4. Management */}
-            <div style={styles.navCategoryHeader}>MANAGEMENT</div>
-            <button
-              onClick={() => {
-                setActiveTab('users')
-                setMobileMenuOpen(false)
-              }}
-              style={{
-                ...styles.navItem,
-                ...(activeTab === 'users' ? styles.navItemActive : {})
-              }}
-            >
-              <span style={styles.navIcon}>👥</span>
-              <span>Users</span>
-              <span style={styles.navCounterBadge}>{usersList.length}</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('ban')
-                setMobileMenuOpen(false)
-              }}
-              style={{
-                ...styles.navItem,
-                ...(activeTab === 'ban' ? styles.navItemActive : {})
-              }}
-            >
-              <span style={styles.navIcon}>🚫</span>
-              <span>Ban / Unban</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('delete')
-                setMobileMenuOpen(false)
-              }}
-              style={{
-                ...styles.navItem,
-                ...(activeTab === 'delete' ? styles.navItemActive : {})
-              }}
-            >
-              <span style={styles.navIcon}>🗑️</span>
-              <span>Delete Keys</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('extend')
-                setMobileMenuOpen(false)
-              }}
-              style={{
-                ...styles.navItem,
-                ...(activeTab === 'extend' ? styles.navItemActive : {})
-              }}
-            >
-              <span style={styles.navIcon}>⏳</span>
-              <span>Extend Keys</span>
-            </button>
-
-            {/* 5. Core Config */}
-            <div style={styles.navCategoryHeader}>CORE CONFIG</div>
-            <button
-              onClick={() => {
-                setActiveTab('advance')
-                setMobileMenuOpen(false)
-              }}
-              style={{
-                ...styles.navItem,
-                ...(activeTab === 'advance' ? styles.navItemActive : {})
-              }}
-            >
-              <span style={styles.navIcon}>⚙️</span>
-              <span>Advance System</span>
-            </button>
-          </nav>
-        </aside>
-
-        {/* ── RIGHT MAIN CONTENT AREA ────────────────────────────────────────── */}
-        <main style={styles.contentArea}>
-          {/* TAB 1: OVERVIEW DASHBOARD */}
-          {activeTab === 'overview' && (
-            <div style={styles.tabContainer}>
-              {/* Subscription Validity Hero Card */}
-              <div style={styles.subscriptionHeroCard}>
-                <div style={styles.subHeroLeft}>
-                  <div style={styles.subHeroStatusRow}>
-                    <span style={styles.shieldIcon}>🛡️</span>
-                    <span style={styles.accountStatusTag}>ACCOUNT STATUS: ACTIVE</span>
-                  </div>
-                  <h2 style={styles.subHeroTitle}>Subscription Validity</h2>
-                  <p style={styles.subHeroDesc}>
-                    Manage license keys, reseller accounts, and live device telemetry before expiration.
-                  </p>
-                </div>
-                <div style={styles.subHeroRight}>
-                  <div style={styles.timeRemainingLabel}>TIME REMAINING</div>
-                  <div style={styles.countdownClockText}>{countdown}</div>
-                </div>
-              </div>
-
-              {/* 5 Metric Stat Cards */}
-              <div style={styles.statsRow}>
-                <div style={styles.statBox}>
-                  <div style={styles.statIconBadge}>🔑</div>
-                  <div style={styles.statLabel}>TOTAL KEYS</div>
-                  <div style={styles.statValue}>{stats.total}</div>
-                </div>
-                <div style={styles.statBox}>
-                  <div style={{ ...styles.statIconBadge, color: '#05df72' }}>✓</div>
-                  <div style={styles.statLabel}>ACTIVE</div>
-                  <div style={styles.statValue}>{stats.active}</div>
-                </div>
-                <div style={styles.statBox}>
-                  <div style={{ ...styles.statIconBadge, color: '#f59e0b' }}>⌛</div>
-                  <div style={styles.statLabel}>UNUSED</div>
-                  <div style={styles.statValue}>{stats.unused}</div>
-                </div>
-                <div style={styles.statBox}>
-                  <div style={{ ...styles.statIconBadge, color: '#ff3366' }}>📅</div>
-                  <div style={styles.statLabel}>EXPIRED</div>
-                  <div style={styles.statValue}>{stats.expired}</div>
-                </div>
-                <div style={styles.statBox}>
-                  <div style={{ ...styles.statIconBadge, color: '#00d9ff' }}>🔄</div>
-                  <div style={styles.statLabel}>RESET</div>
-                  <div style={styles.statValue}>{stats.reset}</div>
-                </div>
-              </div>
-
-              {/* Middle Row: Accounts Summary */}
-              <div style={styles.accountsGrid}>
-                <div
-                  style={styles.accountSummaryTile}
-                  onClick={() => setActiveTab('users')}
-                >
-                  <div style={styles.accIconWrap}>🛡️</div>
-                  <div>
-                    <div style={styles.accRoleTitle}>ADMINS</div>
-                    <div style={styles.accCount}>1</div>
-                    <div style={styles.accLevelDesc}>Level 2 accounts</div>
-                  </div>
-                  <span style={styles.chevron}>›</span>
-                </div>
-
-                <div
-                  style={styles.accountSummaryTile}
-                  onClick={() => setActiveTab('users')}
-                >
-                  <div style={{ ...styles.accIconWrap, background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>💼</div>
-                  <div>
-                    <div style={styles.accRoleTitle}>RESELLERS</div>
-                    <div style={styles.accCount}>{usersList.length}</div>
-                    <div style={styles.accLevelDesc}>Level 3 accounts</div>
-                  </div>
-                  <span style={styles.chevron}>›</span>
-                </div>
-
-                <div
-                  style={styles.accountSummaryTile}
-                  onClick={() => setActiveTab('users')}
-                >
-                  <div style={{ ...styles.accIconWrap, background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>👥</div>
-                  <div>
-                    <div style={styles.accRoleTitle}>TOTAL USERS</div>
-                    <div style={styles.accCount}>{usersList.length + 1}</div>
-                    <div style={styles.accLevelDesc}>All registered</div>
-                  </div>
-                  <span style={styles.chevron}>›</span>
-                </div>
-              </div>
-
-              {/* Lower Split: Quick Actions + Live Activity */}
-              <div style={styles.lowerSplit}>
-                {/* Quick Actions Panel */}
-                <div style={styles.panelCard}>
-                  <div style={styles.panelHeaderRow}>
-                    <h3 style={styles.panelTitle}>⚡ Quick Actions</h3>
-                  </div>
-                  <div style={styles.quickActionButtons}>
-                    <button
-                      onClick={() => setActiveTab('generate')}
-                      style={styles.quickTileBtn}
-                    >
-                      <span style={styles.quickTileIcon}>+</span>
-                      <span style={styles.quickTileText}>Generate Key</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('keys')}
-                      style={styles.quickTileBtn}
-                    >
-                      <span style={styles.quickTileIcon}>☰</span>
-                      <span style={styles.quickTileText}>All Keys</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('users')}
-                      style={styles.quickTileBtn}
-                    >
-                      <span style={styles.quickTileIcon}>👥</span>
-                      <span style={styles.quickTileText}>Users</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('remote')}
-                      style={styles.quickTileBtn}
-                    >
-                      <span style={styles.quickTileIcon}>📡</span>
-                      <span style={styles.quickTileText}>Streamer Remote</span>
-                    </button>
-                  </div>
-
-                  <div style={styles.walletInfoBar}>
-                    <div>
-                      <div style={styles.infoBarLbl}>ROLE LEVEL</div>
-                      <div style={styles.infoBarVal}>Owner</div>
-                    </div>
-                    <div>
-                      <div style={styles.infoBarLbl}>CURRENT WALLET BALANCE</div>
-                      <div style={{ ...styles.infoBarVal, color: '#00d9ff' }}>
-                        ₹{walletBalance.toLocaleString('en-IN')}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Live Activity Stream */}
-                <div style={styles.panelCard}>
-                  <div style={styles.panelHeaderRow}>
-                    <h3 style={styles.panelTitle}>🕒 Live Activity Stream</h3>
-                    <span style={styles.liveStreamBadge}>REALTIME</span>
-                  </div>
-                  <div style={styles.activityFeed}>
-                    {activities.map((act) => (
-                      <div key={act.id} style={styles.activityRow}>
-                        <div style={styles.activityDot} />
-                        <div style={{ flex: 1 }}>
-                          <div style={styles.actTitleRow}>
-                            <span style={styles.actTitleText}>{act.title}</span>
-                            <span style={styles.actGameBadge}>{act.game}</span>
-                          </div>
-                          <div style={styles.actDetails}>{act.details}</div>
-                        </div>
-                        <div style={styles.actTimestamp}>{act.timestamp}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: STREAMER TELEMETRY REMOTE */}
-          {activeTab === 'remote' && (
-            <div style={styles.tabContainer}>
-              {/* Telemetry Status Bar */}
-              <div style={styles.telemetryHero}>
                 <div>
-                  <h2 style={styles.remoteTitle}>
-                    📡 Streamer Remote Telemetry
-                    <span style={styles.onlineBadge}>
-                      {isLiveConnected ? '● Online' : '○ Standby'}
-                    </span>
-                  </h2>
-                  <p style={styles.remoteSub}>
-                    Direct IPC channel linked to target process <code>com.dts.freefiremax</code> via <code>stranger</code> ARM64 native engine.
-                  </p>
-                </div>
-                <div style={styles.remoteKeySelectCluster}>
-                  <span style={styles.fleetLabel}>ACTIVE TARGET KEY:</span>
-                  <select
-                    value={currentKey}
-                    onChange={(e) => setCurrentKey(e.target.value)}
-                    style={styles.fleetDropdown}
-                  >
-                    {keysList.map((k) => (
-                      <option key={k.key} value={k.key}>
-                        {k.game} — {k.key} ({k.status})
-                      </option>
-                    ))}
-                    {!keysList.some((k) => k.key === currentKey) && (
-                      <option value={currentKey}>{currentKey || 'RYMON-MASTER-KEY'}</option>
-                    )}
-                  </select>
-                </div>
-              </div>
-
-              {/* Hardware Telemetry Specs */}
-              <div style={styles.statsRow}>
-                <div style={styles.statBox}>
-                  <div style={styles.statLabel}>TARGET PROCESS</div>
-                  <div style={styles.statValSmall}>com.dts.freefiremax</div>
-                </div>
-                <div style={styles.statBox}>
-                  <div style={styles.statLabel}>NATIVE DAEMON</div>
-                  <div style={styles.statValSmall}>stranger (ARM64)</div>
-                </div>
-                <div style={styles.statBox}>
-                  <div style={styles.statLabel}>IPC SYNCHRONIZATION</div>
-                  <div style={styles.statValSmall}>Phoenix Realtime WS</div>
-                </div>
-                <div style={styles.statBox}>
-                  <div style={styles.statLabel}>CONNECTION STATE</div>
-                  <div style={{ ...styles.statValSmall, color: isLiveConnected ? '#05df72' : '#94a3b8' }}>
-                    {isLiveConnected ? '● Synchronized' : '○ Connecting...'}
+                  <div style={styles.sidebarUserName}>
+                    {currentUser?.username || 'VIP Streamer'}
+                  </div>
+                  <div style={styles.sidebarUserSub}>
+                    <span style={styles.activeDot} /> {currentUser?.role.toUpperCase()}
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* 4 Telemetry Modules */}
-              <div style={styles.controlsGrid}>
-                {/* 1. Precision Aim */}
+            {/* Nav Categories */}
+            <nav style={styles.navStack}>
+              {/* Telemetry Remote */}
+              <div style={styles.navCategoryHeader}>TELEMETRY & HARDWARE</div>
+              <button
+                onClick={() => {
+                  setActiveTab('remote')
+                  setMobileMenuOpen(false)
+                }}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === 'remote' ? styles.navItemActive : {})
+                }}
+              >
+                <span style={styles.navIcon}>⚡</span>
+                <span>Streamer Remote</span>
+                <span style={styles.cyanMiniBadge}>LIVE</span>
+              </button>
+
+              {/* Dashboards */}
+              <div style={styles.navCategoryHeader}>DASHBOARDS</div>
+              <button
+                onClick={() => {
+                  setActiveTab('overview')
+                  setMobileMenuOpen(false)
+                }}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === 'overview' ? styles.navItemActive : {})
+                }}
+              >
+                <span style={styles.navIcon}>📊</span>
+                <span>Overview</span>
+              </button>
+
+              {/* User System */}
+              {isStaff && (
+                <>
+                  <div style={styles.navCategoryHeader}>USER SYSTEM</div>
+                  <button
+                    onClick={() => {
+                      setActiveTab('generate')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'generate' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>⚡</span>
+                    <span>Generate Key</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab('keys')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'keys' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>🔑</span>
+                    <span>License Keys</span>
+                  </button>
+                </>
+              )}
+
+              {/* Management (Owner & Admin) */}
+              {(isOwner || isAdmin) && (
+                <>
+                  <div style={styles.navCategoryHeader}>MANAGEMENT</div>
+                  <button
+                    onClick={() => {
+                      setActiveTab('users')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'users' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>👥</span>
+                    <span>Users</span>
+                  </button>
+                  {isOwner && (
+                    <button
+                      onClick={() => {
+                        setActiveTab('add-balance')
+                        setMobileMenuOpen(false)
+                      }}
+                      style={{
+                        ...styles.navItem,
+                        ...(activeTab === 'add-balance' ? styles.navItemActive : {})
+                      }}
+                    >
+                      <span style={styles.navIcon}>💼</span>
+                      <span>Add Balance</span>
+                      <span style={styles.cyanMiniBadge}>OWNER</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setActiveTab('ban')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'ban' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>🛡️</span>
+                    <span>Ban / Unban</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab('delete')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'delete' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>🗑️</span>
+                    <span>Delete Keys</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab('extend')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'extend' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>📅</span>
+                    <span>Extend Keys</span>
+                  </button>
+                </>
+              )}
+
+              {/* Core Config */}
+              {isOwner && (
+                <>
+                  <div style={styles.navCategoryHeader}>CORE CONFIG</div>
+                  <button
+                    onClick={() => {
+                      setActiveTab('advance')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'advance' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>⚙️</span>
+                    <span>Advance System</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab('sql-setup')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'sql-setup' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>🗄️</span>
+                    <span>Database SQL</span>
+                  </button>
+                </>
+              )}
+            </nav>
+          </aside>
+
+          {/* MAIN CONTENT AREA */}
+          <main style={styles.contentPane}>
+            {/* 1. OVERVIEW DASHBOARD */}
+            {activeTab === 'overview' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Operational Matrix</h2>
+                    <p style={styles.pageSubtitle}>
+                      Live telemetry, active authorizations, and real-time licensing transactions.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.greenPulseBadge}>● SUPABASE ACTIVE</span>
+                    <span style={styles.timeTag}>greenvest.shop</span>
+                  </div>
+                </div>
+
+                {/* 4 Metric Counters */}
+                <div style={styles.statGrid}>
+                  <div style={styles.statCard}>
+                    <div style={styles.statIconFrame}>🔑</div>
+                    <div>
+                      <div style={styles.statNum}>{stats.total}</div>
+                      <div style={styles.statLabel}>Total Keys</div>
+                    </div>
+                  </div>
+                  <div style={styles.statCard}>
+                    <div style={{ ...styles.statIconFrame, color: '#05df72' }}>✓</div>
+                    <div>
+                      <div style={{ ...styles.statNum, color: '#05df72' }}>{stats.active}</div>
+                      <div style={styles.statLabel}>Active Keys</div>
+                    </div>
+                  </div>
+                  <div style={styles.statCard}>
+                    <div style={{ ...styles.statIconFrame, color: '#eab308' }}>⏳</div>
+                    <div>
+                      <div style={{ ...styles.statNum, color: '#eab308' }}>{stats.unused}</div>
+                      <div style={styles.statLabel}>Unused / Waiting</div>
+                    </div>
+                  </div>
+                  <div style={styles.statCard}>
+                    <div style={{ ...styles.statIconFrame, color: '#ef4444' }}>⚠️</div>
+                    <div>
+                      <div style={{ ...styles.statNum, color: '#ef4444' }}>{stats.expired}</div>
+                      <div style={styles.statLabel}>Expired Keys</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Shortcuts & Recent Activities */}
+                <div style={styles.dualGrid}>
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>⚡ Fast Actions</h4>
+                      <span style={styles.cyanMiniBadge}>SOVEREIGN</span>
+                    </div>
+                    <div style={styles.quickGrid}>
+                      <button
+                        onClick={() => setActiveTab('remote')}
+                        style={styles.quickActionCard}
+                      >
+                        <div style={styles.quickActionIcon}>⚡</div>
+                        <div style={styles.quickActionTitle}>Streamer Remote</div>
+                        <div style={styles.quickActionSub}>Direct Android Controller</div>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('generate')}
+                        style={styles.quickActionCard}
+                      >
+                        <div style={styles.quickActionIcon}>🔑</div>
+                        <div style={styles.quickActionTitle}>Generate License</div>
+                        <div style={styles.quickActionSub}>Issue New Game Key</div>
+                      </button>
+                      {isOwner && (
+                        <button
+                          onClick={() => setActiveTab('add-balance')}
+                          style={styles.quickActionCard}
+                        >
+                          <div style={styles.quickActionIcon}>💼</div>
+                          <div style={styles.quickActionTitle}>Top Up Balance</div>
+                          <div style={styles.quickActionSub}>Credit Reseller Wallet</div>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setActiveTab('keys')}
+                        style={styles.quickActionCard}
+                      >
+                        <div style={styles.quickActionIcon}>📋</div>
+                        <div style={styles.quickActionTitle}>Manage Licenses</div>
+                        <div style={styles.quickActionSub}>HWID Reset & Extend</div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>📋 Real-time Activity Log</h4>
+                      <span style={styles.cyanMiniBadge}>AUDIT</span>
+                    </div>
+                    <div style={styles.activityFeed}>
+                      {activities.slice(0, 5).map((act) => (
+                        <div key={act.id} style={styles.activityRow}>
+                          <div style={styles.activityIcon}>✓</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={styles.activityTitle}>{act.title}</div>
+                            <div style={styles.activityDetails}>{act.details}</div>
+                          </div>
+                          <div style={styles.activityTime}>
+                            {new Date(act.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. TOP UP USER BALANCE (MEDIA_1791705436374_5F17E828.PNG) */}
+            {activeTab === 'add-balance' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Top Up User Balance</h2>
+                    <p style={styles.pageSubtitle}>
+                      Credit or set balance directly into a registered reseller or administrator account.
+                    </p>
+                  </div>
+                  <span style={styles.cyanMiniBadge}>OWNER CONSOLE</span>
+                </div>
+
+                <div style={styles.centerCardWrapper}>
+                  <div style={styles.managementCard}>
+                    <div style={styles.cardHeader}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ ...styles.actionIconCircle, background: 'rgba(5,223,114,0.15)', color: '#05df72' }}>
+                          💼
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Top Up User Balance</h3>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                            Credit balance directly into a user's account
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleTopUpSubmit} style={{ marginTop: '24px' }}>
+                      <div style={styles.formGrid2Col}>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>
+                            Select User <span style={{ color: '#ef4444' }}>*</span>
+                          </label>
+                          <select
+                            value={topUpTargetUser}
+                            onChange={(e) => setTopUpTargetUser(e.target.value)}
+                            style={styles.selectInput}
+                            required
+                          >
+                            <option value="">-- Choose Account --</option>
+                            {usersList.map((u) => (
+                              <option key={u.id} value={u.username}>
+                                {u.username} (Bal: ₹{u.balance.toLocaleString('en-IN')})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>
+                            Amount (₹) <span style={{ color: '#ef4444' }}>*</span>
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={topUpAmount}
+                            onChange={(e) => setTopUpAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                            placeholder="Enter amount..."
+                            style={styles.keyInput}
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                        <label style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="radio"
+                            name="topUpMode"
+                            checked={topUpMode === 'set'}
+                            onChange={() => setTopUpMode('set')}
+                          />
+                          Set Exact Balance
+                        </label>
+                        <label style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="radio"
+                            name="topUpMode"
+                            checked={topUpMode === 'add'}
+                            onChange={() => setTopUpMode('add')}
+                          />
+                          Add (Credit) to Existing Balance
+                        </label>
+                      </div>
+
+                      <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'flex-end' }}>
+                        <button
+                          type="submit"
+                          disabled={topUpLoading}
+                          style={{
+                            ...styles.primaryActionBtn,
+                            background: '#05df72',
+                            color: '#07090e',
+                            fontWeight: 700
+                          }}
+                        >
+                          {topUpLoading ? 'SAVING TO SUPABASE...' : 'Set Balance'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. GENERATE KEY */}
+            {activeTab === 'generate' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Generate License Key</h2>
+                    <p style={styles.pageSubtitle}>
+                      Issue new sovereign authorization credentials with atomic wallet balance verification.
+                    </p>
+                  </div>
+                  <div style={styles.balancePill}>
+                    <span>Wallet Balance:</span>
+                    <strong style={{ color: '#00d9ff', marginLeft: '6px' }}>
+                      ₹{walletBalance.toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                </div>
+
+                <div style={styles.centerCardWrapper}>
+                  <div style={styles.managementCard}>
+                    <form onSubmit={handleGenerateKey}>
+                      <div style={styles.formGrid2Col}>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>SELECT TARGET GAME</label>
+                          <select
+                            value={genGame}
+                            onChange={(e) => setGenGame(e.target.value)}
+                            style={styles.selectInput}
+                          >
+                            <option value="Free Fire MAX">Free Fire MAX</option>
+                            <option value="BGMI">BGMI</option>
+                            <option value="PUBG">PUBG Mobile</option>
+                          </select>
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>PLAN DURATION</label>
+                          <select
+                            value={genDuration}
+                            onChange={(e) => setGenDuration(e.target.value)}
+                            style={styles.selectInput}
+                          >
+                            <option value="2 Hours">2 Hours (₹20)</option>
+                            <option value="1 Day">1 Day (₹35)</option>
+                            <option value="3 Days">3 Days (₹50)</option>
+                            <option value="7 Days">7 Days (₹100)</option>
+                            <option value="15 Days">15 Days (₹180)</option>
+                            <option value="30 Days">30 Days (₹350)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={{ ...styles.formGrid2Col, marginTop: '16px' }}>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>CUSTOM PREFIX (OPTIONAL)</label>
+                          <input
+                            type="text"
+                            value={genCustomPrefix}
+                            onChange={(e) => setGenCustomPrefix(e.target.value)}
+                            placeholder="RYMON"
+                            style={styles.keyInput}
+                          />
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>MAX DEVICES</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="300"
+                            value={genDevicesMax}
+                            onChange={(e) => setGenDevicesMax(Math.max(1, parseInt(e.target.value) || 1))}
+                            style={styles.keyInput}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Cost Summary Box */}
+                      <div style={styles.invoiceSummaryBox}>
+                        <div>
+                          <div style={{ fontSize: '13px', color: '#94a3b8' }}>Invoice Cost:</div>
+                          <div style={{ fontSize: '20px', fontWeight: 700, color: '#00d9ff' }}>
+                            ₹{projectedInvoice}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '13px', color: '#94a3b8' }}>Remaining After Creation:</div>
+                          <div
+                            style={{
+                              fontSize: '16px',
+                              fontWeight: 600,
+                              color: isOwner ? '#05df72' : walletBalance >= projectedInvoice ? '#05df72' : '#ef4444'
+                            }}
+                          >
+                            {isOwner ? 'Unlimited (Owner)' : `₹${Math.max(0, walletBalance - projectedInvoice).toLocaleString('en-IN')}`}
+                          </div>
+                        </div>
+                      </div>
+
+                      {genError && <div style={{ ...styles.errorBox, marginTop: '16px' }}>{genError}</div>}
+
+                      <button
+                        type="submit"
+                        disabled={authLoading}
+                        style={{ ...styles.submitBtn, marginTop: '24px' }}
+                      >
+                        {authLoading ? 'CREATING ON SUPABASE...' : 'GENERATE & DEDUCT WALLET'}
+                      </button>
+                    </form>
+
+                    {genLastCreated && (
+                      <div style={styles.generatedKeyBox}>
+                        <div style={{ fontSize: '12px', color: '#05df72', fontWeight: 600 }}>
+                          ✓ KEY SUCCESSFULLY CREATED IN SUPABASE
+                        </div>
+                        <div style={styles.generatedKeyRow}>
+                          <code style={styles.keyCodeText}>{genLastCreated}</code>
+                          <button
+                            onClick={() => handleCopyKey(genLastCreated)}
+                            style={styles.copyKeyBtn}
+                          >
+                            {copiedKey === genLastCreated ? 'COPIED!' : 'COPY KEY'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4. LICENSE KEYS TABLE */}
+            {activeTab === 'keys' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Active Licenses</h2>
+                    <p style={styles.pageSubtitle}>
+                      {currentUser?.role === 'reseller'
+                        ? `Showing licenses issued by @${currentUser.username}`
+                        : 'Complete directory of all registered keys across all games.'}
+                    </p>
+                  </div>
+                  <div style={styles.searchBox}>
+                    <input
+                      type="text"
+                      value={searchKeyQuery}
+                      onChange={(e) => setSearchKeyQuery(e.target.value)}
+                      placeholder="Search key, game, creator..."
+                      style={styles.searchInput}
+                    />
+                  </div>
+                </div>
+
+                <div style={styles.tableCard}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={styles.dataTable}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}># ID</th>
+                          <th style={styles.th}>GAME & KEY</th>
+                          <th style={styles.th}>DEVICES</th>
+                          <th style={styles.th}>PLAN</th>
+                          <th style={styles.th}>CREATOR</th>
+                          <th style={styles.th}>EXPIRY STATUS</th>
+                          <th style={styles.th}>ACTIONS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredKeys.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                              No licenses found matching criteria.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredKeys.map((k) => (
+                            <tr key={k.license_key} style={styles.tr}>
+                              <td style={styles.td}>#{k.id}</td>
+                              <td style={styles.td}>
+                                <div style={{ fontWeight: 600, color: '#f8fafc' }}>{k.game}</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                  <code style={{ fontSize: '12px', color: '#00d9ff' }}>{k.license_key}</code>
+                                  <button
+                                    onClick={() => handleCopyKey(k.license_key)}
+                                    style={styles.miniCopyBtn}
+                                    title="Copy key"
+                                  >
+                                    📋
+                                  </button>
+                                </div>
+                              </td>
+                              <td style={styles.td}>
+                                <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                                  {k.devices_used} / {k.devices_max}
+                                </div>
+                                <div style={styles.deviceBarBack}>
+                                  <div
+                                    style={{
+                                      ...styles.deviceBarFill,
+                                      width: `${Math.min(100, (k.devices_used / (k.devices_max || 1)) * 100)}%`
+                                    }}
+                                  />
+                                </div>
+                              </td>
+                              <td style={styles.td}>
+                                <span style={styles.planBadge}>{k.plan_duration}</span>
+                              </td>
+                              <td style={styles.td}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={styles.avatarTiny}>
+                                    {k.creator_username.charAt(0).toUpperCase()}
+                                  </span>
+                                  <span>{k.creator_username}</span>
+                                </div>
+                              </td>
+                              <td style={styles.td}>
+                                <span
+                                  style={{
+                                    ...styles.statusPill,
+                                    background:
+                                      k.status === 'ACTIVE'
+                                        ? 'rgba(5,223,114,0.15)'
+                                        : k.status === 'WAITING'
+                                        ? 'rgba(234,179,8,0.15)'
+                                        : 'rgba(239,68,68,0.15)',
+                                    color:
+                                      k.status === 'ACTIVE'
+                                        ? '#05df72'
+                                        : k.status === 'WAITING'
+                                        ? '#eab308'
+                                        : '#ef4444'
+                                  }}
+                                >
+                                  {k.status}
+                                </span>
+                                {k.expires_at && (
+                                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                                    {new Date(k.expires_at).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </td>
+                              <td style={styles.td}>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    onClick={() => handleResetHWID(k.license_key)}
+                                    style={styles.actionIconBtn}
+                                    title="Reset HWID binding"
+                                  >
+                                    🔄
+                                  </button>
+                                  {(isOwner || isAdmin) && (
+                                    <button
+                                      onClick={() => handleDeleteKey(k.license_key)}
+                                      style={{ ...styles.actionIconBtn, color: '#ef4444' }}
+                                      title="Delete License"
+                                    >
+                                      🗑️
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 5. USERS TABLE (MEDIA_1791705436370_50F30D3E.PNG) */}
+            {activeTab === 'users' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Registered Users ({usersList.length})</h2>
+                    <p style={styles.pageSubtitle}>
+                      Manage administrative roles, uplinks, and wallet authorizations in Supabase.
+                    </p>
+                  </div>
+                  <div style={styles.searchBox}>
+                    <input
+                      type="text"
+                      value={searchUserQuery}
+                      onChange={(e) => setSearchUserQuery(e.target.value)}
+                      placeholder="Search username, email, uplink..."
+                      style={styles.searchInput}
+                    />
+                  </div>
+                </div>
+
+                <div style={styles.tableCard}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={styles.dataTable}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>USER PROFILE</th>
+                          <th style={styles.th}>ROLE & STATUS</th>
+                          <th style={styles.th}>REFERRAL / UPLINK</th>
+                          <th style={styles.th}>BALANCE</th>
+                          <th style={styles.th}>EXPIRES</th>
+                          <th style={styles.th}>ACTIONS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredUsers.map((u) => (
+                          <tr key={u.id} style={styles.tr}>
+                            <td style={styles.td}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={styles.avatarCircle}>
+                                  {u.username.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight: 600, color: '#f8fafc' }}>{u.username}</div>
+                                  <div style={{ fontSize: '12px', color: '#64748b' }}>{u.email}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={styles.td}>
+                              <span style={styles.roleBadge}>{u.role.toUpperCase()}</span>
+                              <div style={{ fontSize: '11px', color: u.status === 'ACTIVE' ? '#05df72' : '#ef4444', marginTop: '4px' }}>
+                                ● {u.status}
+                              </div>
+                            </td>
+                            <td style={styles.td}>
+                              <div style={{ fontSize: '13px', color: '#cbd5e1' }}>Uplink: {u.uplink}</div>
+                              {u.referral_code && (
+                                <div style={{ fontSize: '11px', color: '#64748b' }}>Code: {u.referral_code}</div>
+                              )}
+                            </td>
+                            <td style={styles.td}>
+                              <span style={styles.userBalanceGreen}>
+                                ₹{u.balance.toLocaleString('en-IN')}
+                              </span>
+                            </td>
+                            <td style={styles.td}>
+                              <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                                {u.expires_at ? new Date(u.expires_at).toLocaleDateString() : 'Never'}
+                              </span>
+                            </td>
+                            <td style={styles.td}>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                {isOwner && (
+                                  <button
+                                    onClick={() => {
+                                      setTopUpTargetUser(u.username)
+                                      setActiveTab('add-balance')
+                                    }}
+                                    style={styles.actionIconBtn}
+                                    title="Top up balance"
+                                  >
+                                    💼
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setTargetBanUser(u.username)
+                                    setActiveTab('ban')
+                                  }}
+                                  style={styles.actionIconBtn}
+                                  title="Moderation"
+                                >
+                                  🛡️
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 6. BULK BAN / UNBAN (MEDIA_1791705541648_1FDBB7B4.PNG) */}
+            {activeTab === 'ban' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Bulk Ban / Unban Facility</h2>
+                    <p style={styles.pageSubtitle}>
+                      Banning keys will immediately revoke access for active users associated with those keys.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={styles.centerCardWrapper}>
+                  <div style={styles.managementCard}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>
+                        Target User <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <select
+                        value={targetBanUser}
+                        onChange={(e) => setTargetBanUser(e.target.value)}
+                        style={styles.selectInput}
+                      >
+                        <option value="">-- Select a User --</option>
+                        {usersList.map((u) => (
+                          <option key={u.id} value={u.username}>
+                            {u.username} ({u.status})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ ...styles.formGroup, marginTop: '16px' }}>
+                      <label style={styles.formLabel}>
+                        Action to Perform <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <select
+                        value={banActionType}
+                        onChange={(e) => setBanActionType(e.target.value as any)}
+                        style={styles.selectInput}
+                      >
+                        <option value="ban">Ban User (Revoke Access)</option>
+                        <option value="unban">Unban User (Restore Access)</option>
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={handleApplyBanStatus}
+                      style={{
+                        ...styles.submitBtn,
+                        marginTop: '24px',
+                        background: banActionType === 'ban' ? '#ef4444' : '#05df72',
+                        color: banActionType === 'ban' ? '#fff' : '#07090e'
+                      }}
+                    >
+                      Apply Status Change
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 7. DELETE KEYS (MEDIA_1791705541642_70FDE7CE.PNG) */}
+            {activeTab === 'delete' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Delete User Keys</h2>
+                    <p style={styles.pageSubtitle}>
+                      This action will permanently delete keys associated with the selected user. This cannot be undone.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={styles.centerCardWrapper}>
+                  <div style={styles.managementCard}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>
+                        Target User <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <select
+                        value={targetDeleteUser}
+                        onChange={(e) => setTargetDeleteUser(e.target.value)}
+                        style={styles.selectInput}
+                      >
+                        <option value="">-- Select a User --</option>
+                        {usersList.map((u) => (
+                          <option key={u.id} value={u.username}>
+                            {u.username}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ ...styles.formGroup, marginTop: '16px' }}>
+                      <label style={styles.formLabel}>
+                        Key Type <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <select
+                        value={deleteKeyType}
+                        onChange={(e) => setDeleteKeyType(e.target.value as any)}
+                        style={styles.selectInput}
+                      >
+                        <option value="expired">Expired Keys Only</option>
+                        <option value="unused">Unused / Waiting Keys</option>
+                        <option value="all">ALL Keys of Selected User</option>
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={handleApplyDeleteUserKeys}
+                      style={{
+                        ...styles.submitBtn,
+                        marginTop: '24px',
+                        background: '#ef4444',
+                        color: '#fff'
+                      }}
+                    >
+                      Confirm Deletion
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 8. EXTEND KEYS */}
+            {activeTab === 'extend' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Extend License Duration</h2>
+                    <p style={styles.pageSubtitle}>
+                      Add operational days directly to any active or waiting license in Supabase.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={styles.centerCardWrapper}>
+                  <div style={styles.managementCard}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>
+                        Select License Key <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <select
+                        value={targetExtendKey}
+                        onChange={(e) => setTargetExtendKey(e.target.value)}
+                        style={styles.selectInput}
+                      >
+                        <option value="">-- Select a Key --</option>
+                        {keysList.map((k) => (
+                          <option key={k.license_key} value={k.license_key}>
+                            {k.license_key} ({k.game} • {k.plan_duration})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ ...styles.formGroup, marginTop: '16px' }}>
+                      <label style={styles.formLabel}>
+                        Days to Add <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <select
+                        value={extendAmount}
+                        onChange={(e) => setExtendAmount(parseInt(e.target.value) || 30)}
+                        style={styles.selectInput}
+                      >
+                        <option value="1">1 Day</option>
+                        <option value="7">7 Days</option>
+                        <option value="15">15 Days</option>
+                        <option value="30">30 Days</option>
+                        <option value="90">90 Days</option>
+                        <option value="365">365 Days (1 Year)</option>
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={handleApplyExtendKey}
+                      style={{
+                        ...styles.submitBtn,
+                        marginTop: '24px',
+                        background: '#00d9ff',
+                        color: '#07090e'
+                      }}
+                    >
+                      Extend Key Expiration
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 9. ADVANCE SYSTEM (MEDIA_1791705541653_4BB001FC.PNG) */}
+            {activeTab === 'advance' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Advance System Settings</h2>
+                    <p style={styles.pageSubtitle}>
+                      Set maximum key and device limits for Admins and Resellers.
+                    </p>
+                  </div>
+                </div>
+
                 <div style={styles.cardBox}>
                   <div style={styles.cardHeader}>
-                    <h4>🎯 Precision Aim Vector</h4>
-                    <span style={styles.cyanMiniBadge}>KERNEL HOOK</span>
+                    <h4>📱 Single Device Login</h4>
+                    <span style={styles.cyanMiniBadge}>SECURITY POLICY</span>
                   </div>
-                  <div style={styles.featureStack}>
+                  <p style={styles.settingDesc}>
+                    When enabled, keys generated by that role will only allow 1 device at a time, regardless of the max_devices setting.
+                  </p>
+
+                  <div style={styles.settingToggleRow}>
+                    <div>
+                      <div style={styles.settingTitle}>Admin (Level 2)</div>
+                      <div style={styles.settingSub}>Keys by Admins</div>
+                    </div>
                     <div
+                      onClick={() => setSingleDeviceAdmin(!singleDeviceAdmin)}
                       style={{
-                        ...styles.toggleTile,
-                        borderColor: record?.aim_silent ? '#00d9ff' : 'rgba(255,255,255,0.08)'
+                        ...styles.switchPill,
+                        background: singleDeviceAdmin ? '#00d9ff' : 'rgba(30,36,50,0.8)'
                       }}
-                      onClick={() => toggleFeature('aim_silent')}
                     >
+                      <div
+                        style={{
+                          ...styles.switchKnob,
+                          transform: singleDeviceAdmin ? 'translateX(20px)' : 'translateX(0)'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={styles.settingToggleRow}>
+                    <div>
+                      <div style={styles.settingTitle}>Reseller (Level 3)</div>
+                      <div style={styles.settingSub}>Keys by Resellers</div>
+                    </div>
+                    <div
+                      onClick={() => setSingleDeviceReseller(!singleDeviceReseller)}
+                      style={{
+                        ...styles.switchPill,
+                        background: singleDeviceReseller ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                      }}
+                    >
+                      <div
+                        style={{
+                          ...styles.switchKnob,
+                          transform: singleDeviceReseller ? 'translateX(20px)' : 'translateX(0)'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ ...styles.cardBox, marginTop: '20px' }}>
+                  <div style={styles.cardHeader}>
+                    <h4>🔑 Trial Key Settings</h4>
+                    <span style={styles.cyanMiniBadge}>ROLE PERMISSIONS</span>
+                  </div>
+                  <p style={styles.settingDesc}>
+                    Control which administrative tiers are allowed to generate temporary trial keys.
+                  </p>
+
+                  <div style={styles.settingToggleRow}>
+                    <div>
+                      <div style={styles.settingTitle}>Admin (Level 2)</div>
+                      <div style={styles.settingSub}>Allow Admins to generate trial keys</div>
+                    </div>
+                    <div
+                      onClick={() => setTrialAdmin(!trialAdmin)}
+                      style={{
+                        ...styles.switchPill,
+                        background: trialAdmin ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                      }}
+                    >
+                      <div
+                        style={{
+                          ...styles.switchKnob,
+                          transform: trialAdmin ? 'translateX(20px)' : 'translateX(0)'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={styles.settingToggleRow}>
+                    <div>
+                      <div style={styles.settingTitle}>Reseller (Level 3)</div>
+                      <div style={styles.settingSub}>Allow Resellers to generate trial keys</div>
+                    </div>
+                    <div
+                      onClick={() => setTrialReseller(!trialReseller)}
+                      style={{
+                        ...styles.switchPill,
+                        background: trialReseller ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                      }}
+                    >
+                      <div
+                        style={{
+                          ...styles.switchKnob,
+                          transform: trialReseller ? 'translateX(20px)' : 'translateX(0)'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 10. DATABASE SQL SETUP HELPER */}
+            {activeTab === 'sql-setup' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Database SQL & Schema Engine</h2>
+                    <p style={styles.pageSubtitle}>
+                      Manage your live PostgreSQL schema on Supabase (zvjqpigduyvczidzafus).
+                    </p>
+                  </div>
+                </div>
+
+                <div style={styles.cardBox}>
+                  <div style={styles.cardHeader}>
+                    <h4>⚡ Sovereign Schema Status</h4>
+                    <span
+                      style={{
+                        ...styles.cyanMiniBadge,
+                        background: dbStatus.tablesCreated ? 'rgba(5,223,114,0.15)' : 'rgba(234,179,8,0.15)',
+                        color: dbStatus.tablesCreated ? '#05df72' : '#eab308'
+                      }}
+                    >
+                      {dbStatus.tablesCreated ? 'ONLINE & SYNCED' : 'PENDING SQL RUN'}
+                    </span>
+                  </div>
+
+                  <p style={styles.settingDesc}>
+                    To activate or update all Sovereign RPCs, accounts, licenses, and Realtime publications in Supabase:
+                    <br />
+                    1. Open your <strong>Supabase Project Dashboard</strong> (<code>zvjqpigduyvczidzafus</code>).
+                    <br />
+                    2. Go to <strong>SQL Editor</strong> ➔ <strong>New Query</strong>.
+                    <br />
+                    3. Copy and paste <code>MASTER_RYMON_SOVEREIGN_BACKEND.sql</code> and click <strong>Run</strong>.
+                  </p>
+
+                  <div style={{ marginTop: '20px' }}>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          `-- View supabase/sql/MASTER_RYMON_SOVEREIGN_BACKEND.sql in repo`
+                        )
+                        setCopiedSql(true)
+                        setTimeout(() => setCopiedSql(false), 2500)
+                      }}
+                      style={styles.submitBtn}
+                    >
+                      {copiedSql ? '✓ COPIED SQL PATH TO CLIPBOARD' : '📋 MASTER_RYMON_SOVEREIGN_BACKEND.SQL READY'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 11. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
+            {activeTab === 'remote' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Streamer Remote Control</h2>
+                    <p style={styles.pageSubtitle}>
+                      Live hardware telemetry synchronization with target Android device running Stranger daemon.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.greenPulseBadge}>● {isLiveConnected ? 'LINK ACTIVE' : 'CONNECTING'}</span>
+                    <button
+                      onClick={() => setShowPurgeModal(true)}
+                      style={styles.emergencyPurgeBtn}
+                    >
+                      🚨 EMERGENCY PURGE
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Bar */}
+                <div style={styles.telemetryBar}>
+                  <div style={styles.telemetryBarItem}>
+                    <span style={styles.telemetryBarLabel}>TARGET KEY:</span>
+                    <span style={styles.telemetryBarVal}>{currentKey}</span>
+                  </div>
+                  <div style={styles.telemetryBarItem}>
+                    <span style={styles.telemetryBarLabel}>TARGET GAME:</span>
+                    <span style={styles.telemetryBarVal}>{record?.game_name || 'Free Fire MAX'}</span>
+                  </div>
+                  <div style={styles.telemetryBarItem}>
+                    <span style={styles.telemetryBarLabel}>EXPIRES IN:</span>
+                    <span style={{ ...styles.telemetryBarVal, color: '#00d9ff' }}>{countdown}</span>
+                  </div>
+                </div>
+
+                {/* 3 Telemetry Column Control Grid */}
+                <div style={styles.controlGrid3Col}>
+                  {/* Column 1: Aim Matrix */}
+                  <div style={styles.columnCard}>
+                    <div style={styles.columnHead}>
+                      <span style={styles.columnIcon}>🎯</span>
+                      <h4>AIM ASSIST MATRIX</h4>
+                    </div>
+
+                    <div style={styles.toggleRow}>
                       <div>
-                        <div style={styles.tileTitle}>Silent Aim</div>
-                        <div style={styles.tileDesc}>Redirects bullet vector directly to hitbox without camera snap.</div>
+                        <div style={styles.toggleTitle}>Silent Aim</div>
+                        <div style={styles.toggleDesc}>Direct vector redirection</div>
                       </div>
                       <div
+                        onClick={() => toggleFeature('aim_silent')}
                         style={{
                           ...styles.switchPill,
                           background: record?.aim_silent ? '#00d9ff' : 'rgba(30,36,50,0.8)'
@@ -1424,33 +2163,43 @@ export default function RymonConnect() {
                       </div>
                     </div>
 
-                    <div style={styles.sliderTile}>
-                      <div style={styles.sliderHeaderRow}>
+                    <div style={styles.sliderBlock}>
+                      <div style={styles.sliderLabelRow}>
                         <span>Hit Rate Percentage</span>
-                        <span style={styles.sliderValueBox}>{record?.hit_rate ?? 80}%</span>
+                        <span style={styles.sliderValText}>{record?.hit_rate || 80}%</span>
                       </div>
                       <input
                         type="range"
-                        min="0"
+                        min="20"
                         max="100"
-                        value={record?.hit_rate ?? 80}
+                        value={record?.hit_rate || 80}
                         onChange={(e) => handleSliderChange('hit_rate', parseInt(e.target.value))}
-                        style={styles.rangeSlider}
+                        style={styles.sliderInput}
                       />
                     </div>
 
-                    <div
-                      style={{
-                        ...styles.toggleTile,
-                        borderColor: record?.ignore_knocked ? '#00d9ff' : 'rgba(255,255,255,0.08)'
-                      }}
-                      onClick={() => toggleFeature('ignore_knocked')}
-                    >
+                    <div style={styles.sliderBlock}>
+                      <div style={styles.sliderLabelRow}>
+                        <span>Aim FOV Radius</span>
+                        <span style={styles.sliderValText}>{record?.aim_fov || 90}°</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="30"
+                        max="360"
+                        value={record?.aim_fov || 90}
+                        onChange={(e) => handleSliderChange('aim_fov', parseInt(e.target.value))}
+                        style={styles.sliderInput}
+                      />
+                    </div>
+
+                    <div style={styles.toggleRow}>
                       <div>
-                        <div style={styles.tileTitle}>Ignore Knocked Down</div>
-                        <div style={styles.tileDesc}>Filters out eliminated or crawling enemies.</div>
+                        <div style={styles.toggleTitle}>Ignore Knocked</div>
+                        <div style={styles.toggleDesc}>Prioritize active threats</div>
                       </div>
                       <div
+                        onClick={() => toggleFeature('ignore_knocked')}
                         style={{
                           ...styles.switchPill,
                           background: record?.ignore_knocked ? '#00d9ff' : 'rgba(30,36,50,0.8)'
@@ -1465,42 +2214,42 @@ export default function RymonConnect() {
                       </div>
                     </div>
 
-                    <div style={styles.sliderTile}>
-                      <div style={styles.sliderHeaderRow}>
-                        <span>Target FOV Range</span>
-                        <span style={styles.sliderValueBox}>{Math.round(record?.aim_fov ?? 90)}°</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="10"
-                        max="360"
-                        value={record?.aim_fov ?? 90}
-                        onChange={(e) => handleSliderChange('aim_fov', parseFloat(e.target.value))}
-                        style={styles.rangeSlider}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. ESP Vision Matrix */}
-                <div style={styles.cardBox}>
-                  <div style={styles.cardHeader}>
-                    <h4>📦 ESP Vision Matrix</h4>
-                    <span style={styles.cyanMiniBadge}>DIRECT VERTEX</span>
-                  </div>
-                  <div style={styles.featureStack}>
-                    <div
-                      style={{
-                        ...styles.toggleTile,
-                        borderColor: record?.esp_box ? '#00d9ff' : 'rgba(255,255,255,0.08)'
-                      }}
-                      onClick={() => toggleFeature('esp_box')}
-                    >
+                    <div style={styles.toggleRow}>
                       <div>
-                        <div style={styles.tileTitle}>Player Bounding Box</div>
-                        <div style={styles.tileDesc}>Dynamic 3D bounding box scaling with distance.</div>
+                        <div style={styles.toggleTitle}>Aim Snap Line</div>
+                        <div style={styles.toggleDesc}>Vector ray from crosshair</div>
                       </div>
                       <div
+                        onClick={() => toggleFeature('show_aim_line')}
+                        style={{
+                          ...styles.switchPill,
+                          background: record?.show_aim_line ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...styles.switchKnob,
+                            transform: record?.show_aim_line ? 'translateX(20px)' : 'translateX(0)'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Column 2: ESP Visuals */}
+                  <div style={styles.columnCard}>
+                    <div style={styles.columnHead}>
+                      <span style={styles.columnIcon}>👁️</span>
+                      <h4>ESP VISUAL OVERLAY</h4>
+                    </div>
+
+                    <div style={styles.toggleRow}>
+                      <div>
+                        <div style={styles.toggleTitle}>3D Bounding Box</div>
+                        <div style={styles.toggleDesc}>Entity corner alignment</div>
+                      </div>
+                      <div
+                        onClick={() => toggleFeature('esp_box')}
                         style={{
                           ...styles.switchPill,
                           background: record?.esp_box ? '#00d9ff' : 'rgba(30,36,50,0.8)'
@@ -1515,18 +2264,13 @@ export default function RymonConnect() {
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        ...styles.toggleTile,
-                        borderColor: record?.esp_skeleton ? '#00d9ff' : 'rgba(255,255,255,0.08)'
-                      }}
-                      onClick={() => toggleFeature('esp_skeleton')}
-                    >
+                    <div style={styles.toggleRow}>
                       <div>
-                        <div style={styles.tileTitle}>3D Skeletal Rigging</div>
-                        <div style={styles.tileDesc}>Bone positions matching player animation frames.</div>
+                        <div style={styles.toggleTitle}>Skeleton Bone Structure</div>
+                        <div style={styles.toggleDesc}>14-point joint tracking</div>
                       </div>
                       <div
+                        onClick={() => toggleFeature('esp_skeleton')}
                         style={{
                           ...styles.switchPill,
                           background: record?.esp_skeleton ? '#00d9ff' : 'rgba(30,36,50,0.8)'
@@ -1541,44 +2285,34 @@ export default function RymonConnect() {
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        ...styles.toggleTile,
-                        borderColor: record?.esp_line ? '#00d9ff' : 'rgba(255,255,255,0.08)'
-                      }}
-                      onClick={() => toggleFeature('esp_line')}
-                    >
+                    <div style={styles.toggleRow}>
                       <div>
-                        <div style={styles.tileTitle}>Snap Line Tracer</div>
-                        <div style={styles.tileDesc}>Laser line projecting from screen center to closest enemy.</div>
+                        <div style={styles.toggleTitle}>Distance Indicator</div>
+                        <div style={styles.toggleDesc}>Proximity range in meters</div>
                       </div>
                       <div
+                        onClick={() => toggleFeature('esp_distance')}
                         style={{
                           ...styles.switchPill,
-                          background: record?.esp_line ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                          background: record?.esp_distance ? '#00d9ff' : 'rgba(30,36,50,0.8)'
                         }}
                       >
                         <div
                           style={{
                             ...styles.switchKnob,
-                            transform: record?.esp_line ? 'translateX(20px)' : 'translateX(0)'
+                            transform: record?.esp_distance ? 'translateX(20px)' : 'translateX(0)'
                           }}
                         />
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        ...styles.toggleTile,
-                        borderColor: record?.esp_health ? '#00d9ff' : 'rgba(255,255,255,0.08)'
-                      }}
-                      onClick={() => toggleFeature('esp_health')}
-                    >
+                    <div style={styles.toggleRow}>
                       <div>
-                        <div style={styles.tileTitle}>Dynamic Health Bar</div>
-                        <div style={styles.tileDesc}>Real-time health & shield percentage bar above head.</div>
+                        <div style={styles.toggleTitle}>Health Bar Visual</div>
+                        <div style={styles.toggleDesc}>Real-time HP gauge</div>
                       </div>
                       <div
+                        onClick={() => toggleFeature('esp_health')}
                         style={{
                           ...styles.switchPill,
                           background: record?.esp_health ? '#00d9ff' : 'rgba(30,36,50,0.8)'
@@ -1592,28 +2326,43 @@ export default function RymonConnect() {
                         />
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* 3. Kinematics & Weapons */}
-                <div style={styles.cardBox}>
-                  <div style={styles.cardHeader}>
-                    <h4>⚡ Kinematics & Recoil</h4>
-                    <span style={styles.cyanMiniBadge}>PHYSICS OVERRIDE</span>
-                  </div>
-                  <div style={styles.featureStack}>
-                    <div
-                      style={{
-                        ...styles.toggleTile,
-                        borderColor: record?.speed_hack ? '#00d9ff' : 'rgba(255,255,255,0.08)'
-                      }}
-                      onClick={() => toggleFeature('speed_hack')}
-                    >
+                    <div style={styles.toggleRow}>
                       <div>
-                        <div style={styles.tileTitle}>Speed Boost Hack</div>
-                        <div style={styles.tileDesc}>Scales player movement velocity in game engine.</div>
+                        <div style={styles.toggleTitle}>Enemy Alert Count</div>
+                        <div style={styles.toggleDesc}>Surrounding threat badge</div>
                       </div>
                       <div
+                        onClick={() => toggleFeature('esp_count')}
+                        style={{
+                          ...styles.switchPill,
+                          background: record?.esp_count ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...styles.switchKnob,
+                            transform: record?.esp_count ? 'translateX(20px)' : 'translateX(0)'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Column 3: Kinematics & Themes */}
+                  <div style={styles.columnCard}>
+                    <div style={styles.columnHead}>
+                      <span style={styles.columnIcon}>⚡</span>
+                      <h4>KINEMATICS & THEME</h4>
+                    </div>
+
+                    <div style={styles.toggleRow}>
+                      <div>
+                        <div style={styles.toggleTitle}>Kinematic Speed Boost</div>
+                        <div style={styles.toggleDesc}>Velocity vector scaling</div>
+                      </div>
+                      <div
+                        onClick={() => toggleFeature('speed_hack')}
                         style={{
                           ...styles.switchPill,
                           background: record?.speed_hack ? '#00d9ff' : 'rgba(30,36,50,0.8)'
@@ -1628,36 +2377,29 @@ export default function RymonConnect() {
                       </div>
                     </div>
 
-                    <div style={styles.sliderTile}>
-                      <div style={styles.sliderHeaderRow}>
-                        <span>Velocity Multiplier</span>
-                        <span style={styles.sliderValueBox}>
-                          {Number(record?.speed_multiplier ?? 1.5).toFixed(2)}x
-                        </span>
+                    <div style={styles.sliderBlock}>
+                      <div style={styles.sliderLabelRow}>
+                        <span>Speed Multiplier</span>
+                        <span style={styles.sliderValText}>{record?.speed_multiplier || 1.5}x</span>
                       </div>
                       <input
                         type="range"
-                        min="1.0"
-                        max="5.0"
-                        step="0.05"
-                        value={record?.speed_multiplier ?? 1.5}
+                        min="1"
+                        max="3"
+                        step="0.1"
+                        value={record?.speed_multiplier || 1.5}
                         onChange={(e) => handleSliderChange('speed_multiplier', parseFloat(e.target.value))}
-                        style={styles.rangeSlider}
+                        style={styles.sliderInput}
                       />
                     </div>
 
-                    <div
-                      style={{
-                        ...styles.toggleTile,
-                        borderColor: record?.no_recoil ? '#00d9ff' : 'rgba(255,255,255,0.08)'
-                      }}
-                      onClick={() => toggleFeature('no_recoil')}
-                    >
+                    <div style={styles.toggleRow}>
                       <div>
-                        <div style={styles.tileTitle}>No Recoil Spread</div>
-                        <div style={styles.tileDesc}>Eliminates vertical weapon barrel dispersion.</div>
+                        <div style={styles.toggleTitle}>Recoil Suppression</div>
+                        <div style={styles.toggleDesc}>Zero crosshair displacement</div>
                       </div>
                       <div
+                        onClick={() => toggleFeature('no_recoil')}
                         style={{
                           ...styles.switchPill,
                           background: record?.no_recoil ? '#00d9ff' : 'rgba(30,36,50,0.8)'
@@ -1671,37 +2413,22 @@ export default function RymonConnect() {
                         />
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* 4. Theme Accents */}
-                <div style={styles.cardBox}>
-                  <div style={styles.cardHeader}>
-                    <h4>🎨 In-Game Theme Accents</h4>
-                    <span style={styles.cyanMiniBadge}>1-CLICK SYNC</span>
-                  </div>
-                  <div style={styles.featureStack}>
-                    <div style={styles.themeSelectorTile}>
-                      <div style={styles.themeHeaderRow}>
-                        <span>Active Theme Accent:</span>
-                        <span style={styles.activeThemeName}>
-                          {THEME_NAMES[record?.theme_color_index ?? 0]}
-                        </span>
+                    <div style={{ marginTop: '20px' }}>
+                      <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600, marginBottom: '10px' }}>
+                        OVERLAY COLOR PALETTE
                       </div>
-                      <div style={styles.themeButtonsGrid}>
-                        {THEME_NAMES.map((name, i) => (
+                      <div style={styles.themePaletteGrid}>
+                        {THEME_NAMES.map((themeName, idx) => (
                           <button
-                            key={name}
-                            type="button"
-                            onClick={() => setThemePreset(i)}
+                            key={themeName}
+                            onClick={() => setThemePreset(idx)}
                             style={{
-                              ...styles.themePresetBtn,
-                              ...(record?.theme_color_index === i
-                                ? styles.themePresetBtnActive
-                                : {})
+                              ...styles.themePillBtn,
+                              ...(record?.theme_color_index === idx ? styles.themePillBtnActive : {})
                             }}
                           >
-                            {name}
+                            {themeName}
                           </button>
                         ))}
                       </div>
@@ -1709,678 +2436,19 @@ export default function RymonConnect() {
                   </div>
                 </div>
               </div>
-
-              {/* Destructive Emergency Purge */}
-              <div style={styles.emergencyPurgeCard}>
-                <div>
-                  <h4 style={styles.emergencyPurgeTitle}>
-                    ⚠️ Emergency Safety Action: Remote Temporary Files Purge
-                  </h4>
-                  <p style={styles.emergencyPurgeDesc}>
-                    Dispatches an immediate kill signal to the Android device that stops the <code>stranger</code> daemon and wipes all <code>/data/local/tmp</code> binaries, driver traces, and log caches.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowPurgeModal(true)}
-                  style={styles.emergencyPurgeBtn}
-                >
-                  💥 REMOTE PURGE TMP
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: GENERATE KEY */}
-          {activeTab === 'generate' && (
-            <div style={styles.tabContainer}>
-              <div style={styles.genHeroCard}>
-                <div style={styles.genBadge}>
-                  <span>⚡ INSTANT KEY CREATION</span>
-                </div>
-                <h2 style={styles.genTitle}>Create License Format</h2>
-                <p style={styles.genDesc}>
-                  Select your target game, desired duration, and customization to mint a fresh license key.
-                </p>
-
-                <form onSubmit={handleGenerateKey} style={styles.genForm}>
-                  <div style={styles.formRow}>
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>SELECT GAME / TOOL</label>
-                      <select
-                        value={genGame}
-                        onChange={(e) => setGenGame(e.target.value)}
-                        style={styles.formSelect}
-                      >
-                        <option value="Free Fire MAX">Free Fire MAX</option>
-                        <option value="BGMI">BGMI</option>
-                        <option value="PUBG">PUBG Mobile</option>
-                      </select>
-                    </div>
-
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>TIME DURATION</label>
-                      <select
-                        value={genDuration}
-                        onChange={(e) => setGenDuration(e.target.value)}
-                        style={styles.formSelect}
-                      >
-                        <option value="2 Hours">2 Hours — ₹20/Device</option>
-                        <option value="1 Day">1 Day — ₹35/Device</option>
-                        <option value="3 Day">3 Day — ₹50/Device</option>
-                        <option value="7 Day">7 Day — ₹100/Device</option>
-                        <option value="15 Day">15 Day — ₹180/Device</option>
-                        <option value="30 Day">30 Day — ₹350/Device</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div style={styles.formRow}>
-                    <div style={styles.formCol}>
-                      <label style={styles.formLabel}>LICENSE CUSTOMIZATION</label>
-                      <input
-                        type="text"
-                        placeholder="Key Prefix (Default: RYMON)"
-                        value={genCustomPrefix}
-                        onChange={(e) => setGenCustomPrefix(e.target.value)}
-                        style={styles.formInput}
-                      />
-                      <span style={styles.formHelperText}>
-                        System generates a 100% unique cryptographic key with device binding.
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Invoice / Wallet Summary Bar */}
-                  <div style={styles.invoiceBar}>
-                    <div style={styles.invoiceCostBlock}>
-                      <div style={styles.invoiceLbl}>PROJECTED INVOICE</div>
-                      <div style={styles.invoiceAmount}>₹{projectedInvoice}</div>
-                    </div>
-                    <div style={styles.walletBalanceBlock}>
-                      <div style={styles.invoiceLbl}>WALLET BALANCE</div>
-                      <div style={styles.walletAmount}>
-                        ₹{walletBalance.toLocaleString('en-IN')}
-                      </div>
-                    </div>
-                    <button type="submit" style={styles.generateSubmitBtn}>
-                      ⚡ Generate Now
-                    </button>
-                  </div>
-                </form>
-
-                {/* Newly Generated Key Result Modal/Card */}
-                {genLastCreated && (
-                  <div style={styles.genSuccessCard}>
-                    <div style={styles.genSuccessTitle}>
-                      🎉 License Successfully Created!
-                    </div>
-                    <div style={styles.genKeyDisplayRow}>
-                      <span style={styles.genKeyCode}>{genLastCreated}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyKey(genLastCreated)}
-                        style={styles.copyKeyBtn}
-                      >
-                        {copiedKey === genLastCreated ? '✓ Copied' : '📋 Copy Key'}
-                      </button>
-                    </div>
-                    <div style={styles.genActionRow}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCurrentKey(genLastCreated)
-                          setActiveTab('remote')
-                        }}
-                        style={styles.linkRemoteBtn}
-                      >
-                        Link to Streamer Remote →
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: LICENSE KEYS MANAGEMENT */}
-          {activeTab === 'keys' && (
-            <div style={styles.tabContainer}>
-              <div style={styles.tableHeaderRow}>
-                <div>
-                  <h2 style={styles.tableHeadTitle}>Active Licenses</h2>
-                  <p style={styles.tableHeadDesc}>
-                    Showing {filteredKeys.length} of {keysList.length} records
-                  </p>
-                </div>
-                <div style={styles.tableActionsRow}>
-                  <input
-                    type="text"
-                    placeholder="Search keys..."
-                    value={searchKeyQuery}
-                    onChange={(e) => setSearchKeyQuery(e.target.value)}
-                    style={styles.searchTableInput}
-                  />
-                  <button
-                    onClick={() => setActiveTab('generate')}
-                    style={styles.addKeyTopBtn}
-                  >
-                    + Generate Key
-                  </button>
-                </div>
-              </div>
-
-              {/* Responsive Table */}
-              <div style={styles.tableWrapper}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr style={styles.theadRow}>
-                      <th style={styles.th}># ID</th>
-                      <th style={styles.th}>GAME & KEY</th>
-                      <th style={styles.th}>DEVICES</th>
-                      <th style={styles.th}>PLAN</th>
-                      <th style={styles.th}>CREATOR</th>
-                      <th style={styles.th}>EXPIRY STATUS</th>
-                      <th style={{ ...styles.th, textAlign: 'right' }}>ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredKeys.map((item) => (
-                      <tr key={item.key} style={styles.tbodyRow}>
-                        <td style={styles.tdId}>{item.id}</td>
-                        <td style={styles.td}>
-                          <div style={styles.gameBadge}>{item.game}</div>
-                          <div style={styles.keyWithCopyRow}>
-                            <span style={styles.keyMonoText}>{item.key}</span>
-                            <button
-                              onClick={() => handleCopyKey(item.key)}
-                              style={styles.iconCopyBtn}
-                              title="Copy License Key"
-                            >
-                              {copiedKey === item.key ? '✓' : '📋'}
-                            </button>
-                          </div>
-                        </td>
-                        <td style={styles.td}>
-                          <div style={styles.deviceUsageText}>
-                            Usage: <strong>{item.devicesUsed}/{item.devicesMax}</strong>
-                          </div>
-                          <div style={styles.usageBarTrack}>
-                            <div
-                              style={{
-                                ...styles.usageBarFill,
-                                width: `${Math.min(100, (item.devicesUsed / item.devicesMax) * 100)}%`,
-                                background: item.devicesUsed > 0 ? '#00d9ff' : '#64748b'
-                              }}
-                            />
-                          </div>
-                        </td>
-                        <td style={styles.tdPlan}>{item.plan}</td>
-                        <td style={styles.td}>
-                          <div style={styles.creatorPill}>
-                            <span style={styles.creatorInitial}>
-                              {item.creator.charAt(0).toUpperCase()}
-                            </span>
-                            <span>{item.creator}</span>
-                          </div>
-                        </td>
-                        <td style={styles.td}>
-                          <span
-                            style={{
-                              ...styles.statusTag,
-                              ...(item.status === 'ACTIVE'
-                                ? styles.statusTagActive
-                                : item.status === 'WAITING'
-                                ? styles.statusTagWaiting
-                                : styles.statusTagExpired)
-                            }}
-                          >
-                            ● {item.status}
-                          </span>
-                          <div style={styles.statusDateText}>{item.expiresAt}</div>
-                        </td>
-                        <td style={{ ...styles.td, textAlign: 'right' }}>
-                          <div style={styles.actionBtnGroup}>
-                            <button
-                              onClick={() => handleResetHWID(item.key)}
-                              style={styles.actionIconBtn}
-                              title="Reset HWID / Device Binding"
-                            >
-                              🔄
-                            </button>
-                            <button
-                              onClick={() => {
-                                setCurrentKey(item.key)
-                                setActiveTab('remote')
-                              }}
-                              style={styles.actionIconBtn}
-                              title="Open Streamer Remote"
-                            >
-                              📡
-                            </button>
-                            <button
-                              onClick={() => handleDeleteKey(item.key)}
-                              style={{ ...styles.actionIconBtn, color: '#ff3366' }}
-                              title="Delete Key"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 5: REGISTERED USERS & RESELLERS */}
-          {activeTab === 'users' && (
-            <div style={styles.tabContainer}>
-              <div style={styles.tableHeaderRow}>
-                <div>
-                  <h2 style={styles.tableHeadTitle}>Registered Users</h2>
-                  <p style={styles.tableHeadDesc}>
-                    Showing {filteredUsers.length} active reseller and administrator accounts
-                  </p>
-                </div>
-                <div style={styles.tableActionsRow}>
-                  <input
-                    type="text"
-                    placeholder="Search users by name, email..."
-                    value={searchUserQuery}
-                    onChange={(e) => setSearchUserQuery(e.target.value)}
-                    style={styles.searchTableInput}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.tableWrapper}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr style={styles.theadRow}>
-                      <th style={styles.th}>ID</th>
-                      <th style={styles.th}>USER PROFILE</th>
-                      <th style={styles.th}>ROLE & STATUS</th>
-                      <th style={styles.th}>REFERRAL UPLINK</th>
-                      <th style={styles.th}>BALANCE</th>
-                      <th style={styles.th}>EXPIRES</th>
-                      <th style={{ ...styles.th, textAlign: 'right' }}>ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.map((user) => (
-                      <tr key={user.id} style={styles.tbodyRow}>
-                        <td style={styles.tdId}>{user.id}</td>
-                        <td style={styles.td}>
-                          <div style={styles.userProfileCell}>
-                            <div style={styles.userCellAvatar}>
-                              {user.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <div style={styles.userCellName}>{user.name}</div>
-                              <div style={styles.userCellEmail}>{user.email}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td style={styles.td}>
-                          <span style={styles.resellerTag}>{user.role}</span>
-                          <span
-                            style={{
-                              ...styles.statusTag,
-                              ...(user.status === 'ACTIVE'
-                                ? styles.statusTagActive
-                                : styles.statusTagExpired),
-                              marginLeft: '6px'
-                            }}
-                          >
-                            ● {user.status}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          <div style={styles.uplinkText}>
-                            Uplink: <strong>{user.uplink}</strong>
-                          </div>
-                        </td>
-                        <td style={styles.td}>
-                          <span style={styles.userBalancePill}>
-                            ₹{user.balance.toLocaleString('en-IN')}
-                          </span>
-                        </td>
-                        <td style={styles.td}>{user.expires}</td>
-                        <td style={{ ...styles.td, textAlign: 'right' }}>
-                          <div style={styles.actionBtnGroup}>
-                            <button
-                              onClick={() => {
-                                setTargetBanUser(user.name)
-                                setActiveTab('ban')
-                              }}
-                              style={styles.actionIconBtn}
-                              title="Ban / Unban User"
-                            >
-                              🚫
-                            </button>
-                            <button
-                              onClick={() => {
-                                setTargetDeleteUser(user.name)
-                                setActiveTab('delete')
-                              }}
-                              style={{ ...styles.actionIconBtn, color: '#ff3366' }}
-                              title="Delete User Keys"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 6: BAN / UNBAN FACILITY */}
-          {activeTab === 'ban' && (
-            <div style={styles.tabContainer}>
-              <div style={styles.noticeBoxWarning}>
-                <span style={styles.noticeIcon}>⚠️</span>
-                <div>
-                  <strong>Status Modification Warning</strong>
-                  <div>
-                    Banning users or keys will instantly revoke socket access and disable hardware telemetry synchronization.
-                  </div>
-                </div>
-              </div>
-
-              <div style={styles.cardBoxCentered}>
-                <div style={styles.actionCardHeader}>
-                  <div style={styles.actionCardIcon}>🛡️</div>
-                  <div>
-                    <h3 style={styles.actionCardTitle}>Bulk Ban / Unban Facility</h3>
-                    <p style={styles.actionCardSub}>Manage user key access states securely</p>
-                  </div>
-                </div>
-
-                <div style={styles.actionFormStack}>
-                  <div>
-                    <label style={styles.formLabel}>TARGET USER</label>
-                    <select
-                      value={targetBanUser}
-                      onChange={(e) => setTargetBanUser(e.target.value)}
-                      style={styles.formSelect}
-                    >
-                      <option value="">-- Select a User --</option>
-                      {usersList.map((u) => (
-                        <option key={u.id} value={u.name}>
-                          {u.name} ({u.email}) — [{u.status}]
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={styles.formLabel}>ACTION TO PERFORM</label>
-                    <select
-                      value={banActionType}
-                      onChange={(e) => setBanActionType(e.target.value)}
-                      style={styles.formSelect}
-                    >
-                      <option value="ban">Ban User & Revoke Keys</option>
-                      <option value="unban">Unban User & Restore Access</option>
-                    </select>
-                  </div>
-
-                  <button
-                    onClick={handleApplyBanStatus}
-                    style={styles.confirmActionBtn}
-                  >
-                    🛡️ Apply Status Change
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 7: DELETE KEYS */}
-          {activeTab === 'delete' && (
-            <div style={styles.tabContainer}>
-              <div style={styles.noticeBoxDanger}>
-                <span style={styles.noticeIcon}>🛑</span>
-                <div>
-                  <strong>Destructive Action</strong>
-                  <div>
-                    This action will permanently delete keys associated with the selected user. This cannot be undone.
-                  </div>
-                </div>
-              </div>
-
-              <div style={styles.cardBoxCentered}>
-                <div style={styles.actionCardHeader}>
-                  <div style={{ ...styles.actionCardIcon, background: 'rgba(255, 51, 102, 0.15)', color: '#ff3366' }}>
-                    🗑️
-                  </div>
-                  <div>
-                    <h3 style={styles.actionCardTitle}>Delete User Keys</h3>
-                    <p style={styles.actionCardSub}>Select user and key criteria for permanent deletion</p>
-                  </div>
-                </div>
-
-                <div style={styles.actionFormStack}>
-                  <div>
-                    <label style={styles.formLabel}>TARGET USER *</label>
-                    <select
-                      value={targetDeleteUser}
-                      onChange={(e) => setTargetDeleteUser(e.target.value)}
-                      style={styles.formSelect}
-                    >
-                      <option value="">-- Select a User --</option>
-                      {usersList.map((u) => (
-                        <option key={u.id} value={u.name}>
-                          {u.name} ({u.email})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={styles.formLabel}>KEY TYPE *</label>
-                    <select
-                      value={deleteKeyType}
-                      onChange={(e) => setDeleteKeyType(e.target.value)}
-                      style={styles.formSelect}
-                    >
-                      <option value="expired">Expired Keys Only</option>
-                      <option value="unused">Unused Keys Only</option>
-                      <option value="all">All Keys (Active + Unused + Expired)</option>
-                    </select>
-                  </div>
-
-                  <button
-                    onClick={handleApplyDeleteUserKeys}
-                    style={styles.dangerActionBtn}
-                  >
-                    🗑️ Confirm Deletion
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 8: EXTEND KEYS */}
-          {activeTab === 'extend' && (
-            <div style={styles.tabContainer}>
-              <div style={styles.cardBoxCentered}>
-                <div style={styles.actionCardHeader}>
-                  <div style={styles.actionCardIcon}>⏳</div>
-                  <div>
-                    <h3 style={styles.actionCardTitle}>Extend License Validity</h3>
-                    <p style={styles.actionCardSub}>Add additional validity days to an active license key</p>
-                  </div>
-                </div>
-
-                <div style={styles.actionFormStack}>
-                  <div>
-                    <label style={styles.formLabel}>SELECT LICENSE KEY</label>
-                    <select
-                      value={targetExtendKey}
-                      onChange={(e) => setTargetExtendKey(e.target.value)}
-                      style={styles.formSelect}
-                    >
-                      <option value="">-- Select License Key --</option>
-                      {keysList.map((k) => (
-                        <option key={k.key} value={k.key}>
-                          {k.game} — {k.key} ({k.plan})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={styles.formLabel}>EXTEND DURATION</label>
-                    <select
-                      value={extendAmount}
-                      onChange={(e) => setExtendAmount(e.target.value)}
-                      style={styles.formSelect}
-                    >
-                      <option value="1">+1 Day Extension</option>
-                      <option value="7">+7 Days Extension</option>
-                      <option value="15">+15 Days Extension</option>
-                      <option value="30">+30 Days Extension</option>
-                    </select>
-                  </div>
-
-                  <button
-                    onClick={handleApplyExtendKey}
-                    style={styles.confirmActionBtn}
-                  >
-                    ⏳ Apply Extension
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 9: ADVANCE SYSTEM CONFIG */}
-          {activeTab === 'advance' && (
-            <div style={styles.tabContainer}>
-              <div style={styles.cardBox}>
-                <div style={styles.cardHeader}>
-                  <h4>📱 Single Device Login Enforcement</h4>
-                  <span style={styles.cyanMiniBadge}>SECURITY POLICY</span>
-                </div>
-                <p style={styles.settingDesc}>
-                  Force strictly one active device per key for selected roles. When enabled, keys generated by that role will only allow 1 device at a time, regardless of max_devices setting.
-                </p>
-
-                <div style={styles.settingToggleRow}>
-                  <div>
-                    <div style={styles.settingTitle}>Admin (Level 2)</div>
-                    <div style={styles.settingSub}>Keys generated by Admins</div>
-                  </div>
-                  <div
-                    onClick={() => setSingleDeviceAdmin(!singleDeviceAdmin)}
-                    style={{
-                      ...styles.switchPill,
-                      background: singleDeviceAdmin ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                    }}
-                  >
-                    <div
-                      style={{
-                        ...styles.switchKnob,
-                        transform: singleDeviceAdmin ? 'translateX(20px)' : 'translateX(0)'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div style={styles.settingToggleRow}>
-                  <div>
-                    <div style={styles.settingTitle}>Reseller (Level 3)</div>
-                    <div style={styles.settingSub}>Keys generated by Resellers</div>
-                  </div>
-                  <div
-                    onClick={() => setSingleDeviceReseller(!singleDeviceReseller)}
-                    style={{
-                      ...styles.switchPill,
-                      background: singleDeviceReseller ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                    }}
-                  >
-                    <div
-                      style={{
-                        ...styles.switchKnob,
-                        transform: singleDeviceReseller ? 'translateX(20px)' : 'translateX(0)'
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div style={styles.cardBox}>
-                <div style={styles.cardHeader}>
-                  <h4>🔑 Trial Key Generation Settings</h4>
-                  <span style={styles.cyanMiniBadge}>ROLE PERMISSIONS</span>
-                </div>
-                <p style={styles.settingDesc}>
-                  Configure which administrative tiers are allowed to generate temporary trial keys.
-                </p>
-
-                <div style={styles.settingToggleRow}>
-                  <div>
-                    <div style={styles.settingTitle}>Admin (Level 2)</div>
-                    <div style={styles.settingSub}>Allow Admins to generate trial keys</div>
-                  </div>
-                  <div
-                    onClick={() => setTrialAdmin(!trialAdmin)}
-                    style={{
-                      ...styles.switchPill,
-                      background: trialAdmin ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                    }}
-                  >
-                    <div
-                      style={{
-                        ...styles.switchKnob,
-                        transform: trialAdmin ? 'translateX(20px)' : 'translateX(0)'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div style={styles.settingToggleRow}>
-                  <div>
-                    <div style={styles.settingTitle}>Reseller (Level 3)</div>
-                    <div style={styles.settingSub}>Allow Resellers to generate trial keys</div>
-                  </div>
-                  <div
-                    onClick={() => setTrialReseller(!trialReseller)}
-                    style={{
-                      ...styles.switchPill,
-                      background: trialReseller ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                    }}
-                  >
-                    <div
-                      style={{
-                        ...styles.switchKnob,
-                        transform: trialReseller ? 'translateX(20px)' : 'translateX(0)'
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
+            )}
+          </main>
+        </div>
       )}
 
       {/* ── EMERGENCY REMOTE PURGE MODAL ────────────────────────────────────── */}
       {showPurgeModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalCard}>
-            <div style={styles.modalIcon}>⚠️</div>
+            <div style={styles.modalIcon}>🚨</div>
             <h3 style={styles.modalTitle}>Confirm Emergency Remote Wipe</h3>
             <p style={styles.modalText}>
-              Are you sure you want to trigger a remote wipe on target device running key <code>{currentKey}</code>?<br /><br />
+              Are you sure you want to trigger a remote purge on target device running key <code>{currentKey}</code>?<br /><br />
               All background processes will be killed immediately, and <code>/data/local/tmp</code> will be wiped completely.
             </p>
             <div style={styles.modalActions}>
@@ -2404,7 +2472,7 @@ export default function RymonConnect() {
   )
 }
 
-// ── Obsidian Cyber Glassmorphism Scoped Design System ─────────────────────────
+// ── Obsidian Cyber Glassmorphism Scoped Design System ────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   appShell: {
     minHeight: '100vh',
@@ -2418,105 +2486,25 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'fixed',
     top: 0,
     left: 0,
-    width: '100vw',
-    height: '100vh',
-    backgroundImage: `
-      radial-gradient(circle at 10% 10%, rgba(0, 217, 255, 0.05) 0%, transparent 40%),
-      radial-gradient(circle at 90% 90%, rgba(0, 132, 255, 0.04) 0%, transparent 45%),
-      linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px)
-    `,
-    backgroundSize: '100% 100%, 100% 100%, 40px 40px, 40px 40px',
+    right: 0,
+    bottom: 0,
+    backgroundImage: `radial-gradient(rgba(0, 217, 255, 0.05) 1px, transparent 0), radial-gradient(rgba(147, 51, 234, 0.03) 1px, transparent 0)`,
+    backgroundSize: '40px 40px, 80px 80px',
+    backgroundPosition: '0 0, 20px 20px',
     pointerEvents: 'none',
     zIndex: 0
   },
-  authGateBox: {
-    maxWidth: '480px',
-    margin: '60px auto',
-    padding: '36px 30px',
-    background: 'rgba(13, 16, 24, 0.85)',
-    backdropFilter: 'blur(20px)',
-    border: '1px solid rgba(255, 255, 255, 0.09)',
-    borderTop: '1px solid rgba(255, 255, 255, 0.22)',
-    borderRadius: '16px',
-    textAlign: 'center',
-    boxShadow: '0 20px 40px rgba(0,0,0,0.7)',
-    position: 'relative',
-    zIndex: 2
-  },
-  authBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '4px 12px',
-    borderRadius: '20px',
-    background: 'rgba(0, 217, 255, 0.1)',
-    border: '1px solid rgba(0, 217, 255, 0.3)',
-    color: '#00d9ff',
-    fontSize: '0.74rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    marginBottom: '16px'
-  },
-  authHead: {
-    fontSize: '1.45rem',
-    fontWeight: 800,
-    marginBottom: '8px'
-  },
-  authDesc: {
-    fontSize: '0.85rem',
-    color: '#94a3b8',
-    lineHeight: 1.5,
-    marginBottom: '24px'
-  },
-  authForm: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '14px',
-    textAlign: 'left'
-  },
-  keyInput: {
-    width: '100%',
-    padding: '14px 16px',
-    borderRadius: '8px',
-    background: 'rgba(8, 11, 18, 0.85)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
-    color: '#ffffff',
-    fontFamily: 'monospace',
-    fontSize: '0.95rem',
-    outline: 'none',
-    boxSizing: 'border-box'
-  },
-  submitBtn: {
-    width: '100%',
-    padding: '14px',
-    borderRadius: '8px',
-    background: 'linear-gradient(135deg, #00d9ff 0%, #0084ff 100%)',
-    border: 'none',
-    color: '#07090e',
-    fontWeight: 800,
-    fontSize: '0.92rem',
-    cursor: 'pointer',
-    boxShadow: '0 8px 20px rgba(0, 217, 255, 0.35)'
-  },
-  errorBox: {
-    padding: '10px 14px',
-    borderRadius: '6px',
-    background: 'rgba(255, 51, 102, 0.12)',
-    border: '1px solid rgba(255, 51, 102, 0.3)',
-    color: '#ff6b8b',
-    fontSize: '0.82rem'
-  },
   topHeader: {
-    position: 'sticky',
-    top: 0,
-    zIndex: 50,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '12px 24px',
-    background: 'rgba(10, 14, 22, 0.88)',
-    backdropFilter: 'blur(20px)',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+    padding: '14px 24px',
+    backgroundColor: 'rgba(10, 13, 20, 0.85)',
+    backdropFilter: 'blur(16px)',
+    borderBottom: '1px solid rgba(30, 41, 59, 0.6)',
+    position: 'sticky',
+    top: 0,
+    zIndex: 50
   },
   headerLeft: {
     display: 'flex',
@@ -2528,7 +2516,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'transparent',
     border: 'none',
     color: '#f8fafc',
-    fontSize: '22px',
+    fontSize: '20px',
     cursor: 'pointer'
   },
   brandCluster: {
@@ -2537,12 +2525,12 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '12px'
   },
   logoFrame: {
-    width: '40px',
-    height: '40px',
+    width: '38px',
+    height: '38px',
     borderRadius: '10px',
     overflow: 'hidden',
-    border: '1px solid rgba(0, 217, 255, 0.3)',
-    boxShadow: '0 0 16px rgba(0, 217, 255, 0.25)',
+    border: '1px solid rgba(0, 217, 255, 0.4)',
+    boxShadow: '0 0 12px rgba(0, 217, 255, 0.25)',
     flexShrink: 0
   },
   logoImage: {
@@ -2551,25 +2539,20 @@ const styles: Record<string, React.CSSProperties> = {
     objectFit: 'cover'
   },
   brandTitleText: {
-    fontSize: '1.05rem',
+    fontSize: '16px',
     fontWeight: 800,
-    letterSpacing: '0.06em',
-    color: '#ffffff'
+    letterSpacing: '0.04em',
+    color: '#f8fafc'
   },
   brandCyanPill: {
-    fontSize: '0.68rem',
-    fontWeight: 700,
-    padding: '2px 6px',
-    borderRadius: '4px',
-    background: 'rgba(0, 217, 255, 0.15)',
     color: '#00d9ff',
-    border: '1px solid rgba(0, 217, 255, 0.35)',
-    marginLeft: '6px'
+    textShadow: '0 0 10px rgba(0, 217, 255, 0.5)'
   },
   brandSubText: {
-    fontSize: '0.7rem',
+    fontSize: '10px',
     color: '#64748b',
-    fontFamily: 'monospace'
+    letterSpacing: '0.06em',
+    fontWeight: 600
   },
   headerRight: {
     display: 'flex',
@@ -2581,34 +2564,35 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '8px',
     padding: '6px 14px',
+    backgroundColor: 'rgba(13, 17, 26, 0.9)',
+    border: '1px solid rgba(0, 217, 255, 0.3)',
     borderRadius: '20px',
-    background: 'rgba(15, 20, 32, 0.9)',
-    border: '1px solid rgba(0, 217, 255, 0.25)',
-    fontSize: '0.84rem'
+    fontSize: '13px',
+    fontWeight: 700,
+    cursor: 'pointer'
   },
   balanceAmount: {
-    color: '#00d9ff',
-    fontWeight: 800,
-    fontFamily: 'monospace'
+    color: '#00d9ff'
   },
   telemetryPill: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: '6px 12px',
+    backgroundColor: 'rgba(13, 17, 26, 0.8)',
+    border: '1px solid rgba(30, 41, 59, 0.6)',
     borderRadius: '20px',
-    background: 'rgba(15, 20, 32, 0.9)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    fontSize: '0.78rem',
-    fontFamily: 'monospace'
+    fontSize: '11px',
+    fontWeight: 600
   },
   pulseDot: {
     width: '8px',
     height: '8px',
-    borderRadius: '50%'
+    borderRadius: '50%',
+    boxShadow: '0 0 8px currentColor'
   },
   telemetryText: {
-    color: '#94a3b8'
+    color: '#cbd5e1'
   },
   pingText: {
     color: '#00d9ff',
@@ -2618,102 +2602,248 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    padding: '4px 12px',
-    borderRadius: '8px',
-    background: 'rgba(0, 217, 255, 0.08)',
-    border: '1px solid rgba(0, 217, 255, 0.25)'
+    padding: '4px 8px 4px 12px',
+    backgroundColor: 'rgba(13, 17, 26, 0.9)',
+    border: '1px solid rgba(30, 41, 59, 0.6)',
+    borderRadius: '20px'
   },
   userAvatarSquare: {
     width: '24px',
     height: '24px',
     borderRadius: '6px',
-    background: '#00d9ff',
+    backgroundColor: '#00d9ff',
     color: '#07090e',
     fontWeight: 800,
+    fontSize: '12px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '0.78rem'
+    justifyContent: 'center'
   },
   userNameBlock: {
     display: 'flex',
     flexDirection: 'column'
   },
   userNameText: {
-    fontSize: '0.8rem',
+    fontSize: '12px',
     fontWeight: 700,
-    lineHeight: 1.1
+    color: '#f8fafc'
   },
   userRoleTag: {
-    fontSize: '0.65rem',
-    color: '#64748b'
+    fontSize: '9px',
+    color: '#00d9ff',
+    fontWeight: 700,
+    letterSpacing: '0.04em'
   },
   headerLogoutBtn: {
-    background: 'transparent',
+    background: 'none',
     border: 'none',
-    color: '#94a3b8',
     cursor: 'pointer',
     fontSize: '14px',
-    padding: '2px'
+    padding: '4px 6px',
+    borderRadius: '6px',
+    color: '#94a3b8'
   },
   quickLoginBtn: {
-    padding: '6px 14px',
-    borderRadius: '6px',
-    background: 'linear-gradient(135deg, #00d9ff, #0084ff)',
-    border: 'none',
+    padding: '7px 16px',
+    backgroundColor: '#00d9ff',
     color: '#07090e',
+    border: 'none',
+    borderRadius: '8px',
     fontWeight: 700,
-    fontSize: '0.82rem',
+    fontSize: '12px',
     cursor: 'pointer'
   },
   toastBanner: {
-    position: 'fixed',
-    top: '70px',
-    right: '24px',
-    zIndex: 9999,
-    padding: '12px 20px',
+    backgroundColor: 'rgba(5, 223, 114, 0.15)',
+    border: '1px solid rgba(5, 223, 114, 0.4)',
+    color: '#05df72',
+    padding: '10px 20px',
+    textAlign: 'center',
+    fontSize: '13px',
+    fontWeight: 600,
+    boxShadow: '0 4px 16px rgba(0,0,0,0.4)'
+  },
+  authGateBox: {
+    maxWidth: '520px',
+    margin: '60px auto',
+    padding: '36px',
+    backgroundColor: 'rgba(13, 17, 26, 0.85)',
+    border: '1px solid rgba(0, 217, 255, 0.25)',
+    borderRadius: '20px',
+    boxShadow: '0 20px 50px rgba(0,0,0,0.6), 0 0 30px rgba(0, 217, 255, 0.1)',
+    backdropFilter: 'blur(20px)',
+    position: 'relative',
+    zIndex: 1
+  },
+  authBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 12px',
+    borderRadius: '12px',
+    backgroundColor: 'rgba(0, 217, 255, 0.1)',
+    color: '#00d9ff',
+    fontSize: '11px',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    marginBottom: '16px'
+  },
+  authTabSelector: {
+    display: 'flex',
+    gap: '8px',
+    backgroundColor: 'rgba(7, 9, 14, 0.6)',
+    padding: '4px',
+    borderRadius: '12px',
+    marginBottom: '24px',
+    border: '1px solid rgba(30, 41, 59, 0.5)'
+  },
+  authTabBtn: {
+    flex: 1,
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: '#94a3b8',
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  },
+  authTabBtnActive: {
+    backgroundColor: 'rgba(0, 217, 255, 0.15)',
+    color: '#00d9ff',
+    fontWeight: 700,
+    boxShadow: '0 0 10px rgba(0, 217, 255, 0.15)'
+  },
+  authHead: {
+    fontSize: '22px',
+    fontWeight: 800,
+    marginBottom: '8px',
+    color: '#f8fafc'
+  },
+  authDesc: {
+    fontSize: '13px',
+    color: '#94a3b8',
+    lineHeight: 1.5,
+    marginBottom: '24px'
+  },
+  authForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  formGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  formLabel: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#94a3b8',
+    letterSpacing: '0.04em'
+  },
+  keyInput: {
+    padding: '12px 16px',
+    backgroundColor: 'rgba(7, 9, 14, 0.8)',
+    border: '1px solid rgba(30, 41, 59, 0.8)',
     borderRadius: '10px',
-    background: 'rgba(10, 24, 38, 0.95)',
-    border: '1px solid #00d9ff',
-    color: '#ffffff',
-    fontSize: '0.88rem',
-    boxShadow: '0 10px 30px rgba(0, 217, 255, 0.3)',
-    animation: 'fadein 0.3s'
+    color: '#f8fafc',
+    fontSize: '14px',
+    outline: 'none',
+    boxSizing: 'border-box',
+    width: '100%'
+  },
+  selectInput: {
+    padding: '12px 16px',
+    backgroundColor: 'rgba(7, 9, 14, 0.8)',
+    border: '1px solid rgba(30, 41, 59, 0.8)',
+    borderRadius: '10px',
+    color: '#f8fafc',
+    fontSize: '14px',
+    outline: 'none',
+    boxSizing: 'border-box',
+    width: '100%'
+  },
+  quickAccountsRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+    marginTop: '4px'
+  },
+  quickLabel: {
+    fontSize: '11px',
+    color: '#64748b'
+  },
+  chipBtn: {
+    padding: '4px 10px',
+    backgroundColor: 'rgba(30, 41, 59, 0.4)',
+    border: '1px solid rgba(0, 217, 255, 0.2)',
+    borderRadius: '6px',
+    color: '#00d9ff',
+    fontSize: '11px',
+    fontWeight: 600,
+    cursor: 'pointer'
+  },
+  submitBtn: {
+    padding: '14px 20px',
+    backgroundColor: '#00d9ff',
+    color: '#07090e',
+    border: 'none',
+    borderRadius: '12px',
+    fontWeight: 800,
+    fontSize: '13px',
+    letterSpacing: '0.04em',
+    cursor: 'pointer',
+    boxShadow: '0 4px 16px rgba(0, 217, 255, 0.35)'
+  },
+  primaryActionBtn: {
+    padding: '12px 24px',
+    borderRadius: '10px',
+    border: 'none',
+    fontSize: '13px',
+    cursor: 'pointer'
+  },
+  errorBox: {
+    padding: '10px 14px',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    border: '1px solid rgba(239, 68, 68, 0.4)',
+    borderRadius: '8px',
+    color: '#ef4444',
+    fontSize: '12px',
+    lineHeight: 1.4
   },
   mainLayout: {
-    position: 'relative',
-    zIndex: 1,
     display: 'flex',
-    maxWidth: '1600px',
-    margin: '0 auto',
-    minHeight: 'calc(100vh - 65px)'
+    minHeight: 'calc(100vh - 67px)',
+    position: 'relative',
+    zIndex: 1
   },
   sidebar: {
     width: '260px',
-    flexShrink: 0,
-    background: 'rgba(10, 14, 22, 0.75)',
-    backdropFilter: 'blur(20px)',
-    borderRight: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(10, 13, 20, 0.75)',
+    borderRight: '1px solid rgba(30, 41, 59, 0.5)',
     padding: '20px 14px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '18px'
+    gap: '16px',
+    flexShrink: 0
   },
   sidebarMobileOpen: {
     display: 'flex',
     position: 'fixed',
-    top: '65px',
+    top: '67px',
     left: 0,
-    width: '280px',
-    height: 'calc(100vh - 65px)',
+    bottom: 0,
     zIndex: 100,
-    background: '#0a0e16'
+    backgroundColor: '#0a0d14'
   },
   sidebarUserCard: {
     padding: '12px',
-    borderRadius: '10px',
-    background: 'rgba(15, 20, 32, 0.8)',
-    border: '1px solid rgba(255, 255, 255, 0.08)'
+    backgroundColor: 'rgba(13, 17, 26, 0.8)',
+    border: '1px solid rgba(30, 41, 59, 0.5)',
+    borderRadius: '12px',
+    marginBottom: '10px'
   },
   sidebarUserRow: {
     display: 'flex',
@@ -2724,30 +2854,32 @@ const styles: Record<string, React.CSSProperties> = {
     width: '32px',
     height: '32px',
     borderRadius: '8px',
-    background: '#00d9ff',
+    backgroundColor: '#00d9ff',
     color: '#07090e',
     fontWeight: 800,
+    fontSize: '14px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '0.9rem'
+    justifyContent: 'center'
   },
   sidebarUserName: {
-    fontSize: '0.88rem',
-    fontWeight: 700
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#f8fafc'
   },
   sidebarUserSub: {
-    fontSize: '0.72rem',
+    fontSize: '10px',
     color: '#64748b',
     display: 'flex',
     alignItems: 'center',
-    gap: '5px'
+    gap: '4px',
+    marginTop: '2px'
   },
   activeDot: {
     width: '6px',
     height: '6px',
     borderRadius: '50%',
-    background: '#05df72'
+    backgroundColor: '#05df72'
   },
   navStack: {
     display: 'flex',
@@ -2755,291 +2887,174 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '4px'
   },
   navCategoryHeader: {
-    fontSize: '0.68rem',
+    fontSize: '10px',
     fontWeight: 800,
-    color: '#475569',
     letterSpacing: '0.08em',
-    padding: '12px 10px 4px',
-    textTransform: 'uppercase'
+    color: '#475569',
+    padding: '14px 10px 4px 10px'
   },
   navItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    padding: '9px 12px',
-    borderRadius: '8px',
-    background: 'transparent',
-    border: '1px solid transparent',
+    padding: '10px 12px',
+    borderRadius: '10px',
+    backgroundColor: 'transparent',
+    border: 'none',
     color: '#94a3b8',
-    fontSize: '0.84rem',
+    fontSize: '13px',
     fontWeight: 600,
     cursor: 'pointer',
     textAlign: 'left',
-    transition: 'all 0.18s ease'
+    transition: 'all 0.15s ease'
   },
   navItemActive: {
-    background: 'rgba(0, 217, 255, 0.12)',
-    borderColor: 'rgba(0, 217, 255, 0.3)',
+    backgroundColor: 'rgba(0, 217, 255, 0.12)',
     color: '#00d9ff',
-    boxShadow: '0 4px 14px rgba(0, 217, 255, 0.15)'
+    fontWeight: 700,
+    borderLeft: '3px solid #00d9ff'
   },
   navIcon: {
-    fontSize: '15px'
+    fontSize: '14px'
   },
-  liveNavBadge: {
+  cyanMiniBadge: {
     marginLeft: 'auto',
-    fontSize: '0.62rem',
-    fontWeight: 800,
-    color: '#05df72',
-    background: 'rgba(5, 223, 114, 0.15)',
-    border: '1px solid rgba(5, 223, 114, 0.35)',
-    padding: '2px 5px',
-    borderRadius: '3px'
-  },
-  navCounterBadge: {
-    marginLeft: 'auto',
-    fontSize: '0.7rem',
-    fontWeight: 700,
-    color: '#64748b',
-    background: 'rgba(255, 255, 255, 0.05)',
+    fontSize: '9px',
     padding: '2px 6px',
-    borderRadius: '10px'
+    borderRadius: '6px',
+    backgroundColor: 'rgba(0, 217, 255, 0.15)',
+    color: '#00d9ff',
+    fontWeight: 700
   },
-  contentArea: {
+  contentPane: {
     flex: 1,
-    padding: '24px 28px 60px',
+    padding: '30px',
     overflowY: 'auto'
   },
-  tabContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '22px'
+  viewContainer: {
+    maxWidth: '1240px',
+    margin: '0 auto'
   },
-  subscriptionHeroCard: {
-    padding: '24px 28px',
-    borderRadius: '14px',
-    background: 'linear-gradient(135deg, rgba(0, 132, 255, 0.15) 0%, rgba(0, 217, 255, 0.05) 100%), rgba(13, 16, 24, 0.85)',
-    border: '1px solid rgba(0, 217, 255, 0.3)',
-    borderTop: '1px solid rgba(255, 255, 255, 0.25)',
-    backdropFilter: 'blur(20px)',
+  bannerRow: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    marginBottom: '28px',
     flexWrap: 'wrap',
-    gap: '20px'
+    gap: '16px'
   },
-  subHeroLeft: {
-    maxWidth: '650px'
+  pageTitle: {
+    fontSize: '24px',
+    fontWeight: 800,
+    margin: 0,
+    color: '#f8fafc'
   },
-  subHeroStatusRow: {
+  pageSubtitle: {
+    fontSize: '13px',
+    color: '#94a3b8',
+    margin: '4px 0 0 0'
+  },
+  badgeCluster: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    marginBottom: '8px'
+    gap: '10px'
   },
-  shieldIcon: {
-    fontSize: '16px'
-  },
-  accountStatusTag: {
-    fontSize: '0.68rem',
-    fontWeight: 800,
-    padding: '2px 8px',
-    borderRadius: '4px',
-    background: 'rgba(5, 223, 114, 0.15)',
-    border: '1px solid rgba(5, 223, 114, 0.35)',
-    color: '#05df72'
-  },
-  subHeroTitle: {
-    fontSize: '1.45rem',
-    fontWeight: 800,
-    margin: '0 0 6px 0',
-    color: '#ffffff'
-  },
-  subHeroDesc: {
-    fontSize: '0.84rem',
-    color: '#94a3b8',
-    margin: 0
-  },
-  subHeroRight: {
-    textAlign: 'right'
-  },
-  timeRemainingLabel: {
-    fontSize: '0.72rem',
-    color: '#64748b',
+  greenPulseBadge: {
+    fontSize: '11px',
     fontWeight: 700,
-    letterSpacing: '0.08em',
-    marginBottom: '4px'
-  },
-  countdownClockText: {
-    fontFamily: 'monospace',
-    fontSize: '1.65rem',
-    fontWeight: 800,
-    color: '#00d9ff',
-    textShadow: '0 0 20px rgba(0, 217, 255, 0.5)'
-  },
-  statsRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-    gap: '14px'
-  },
-  statBox: {
-    padding: '16px 18px',
+    padding: '6px 12px',
     borderRadius: '12px',
-    background: 'rgba(13, 16, 24, 0.78)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    backdropFilter: 'blur(16px)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px'
+    backgroundColor: 'rgba(5, 223, 114, 0.15)',
+    color: '#05df72',
+    border: '1px solid rgba(5, 223, 114, 0.3)'
   },
-  statIconBadge: {
-    fontSize: '16px',
-    color: '#94a3b8'
-  },
-  statLabel: {
-    fontSize: '0.7rem',
+  timeTag: {
+    fontSize: '11px',
     color: '#64748b',
-    fontWeight: 700,
-    letterSpacing: '0.06em'
+    fontWeight: 600
   },
-  statValue: {
-    fontSize: '1.5rem',
-    fontWeight: 800,
-    color: '#ffffff',
-    fontFamily: 'monospace'
-  },
-  statValSmall: {
-    fontSize: '0.92rem',
-    fontWeight: 700,
-    color: '#ffffff',
-    fontFamily: 'monospace'
-  },
-  accountsGrid: {
+  statGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-    gap: '14px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '16px',
+    marginBottom: '28px'
   },
-  accountSummaryTile: {
-    padding: '18px 20px',
-    borderRadius: '12px',
-    background: 'rgba(13, 16, 24, 0.78)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+  statCard: {
     display: 'flex',
     alignItems: 'center',
     gap: '16px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
+    padding: '20px',
+    backgroundColor: 'rgba(13, 17, 26, 0.7)',
+    border: '1px solid rgba(30, 41, 59, 0.5)',
+    borderRadius: '16px',
+    backdropFilter: 'blur(10px)'
   },
-  accIconWrap: {
+  statIconFrame: {
     width: '44px',
     height: '44px',
-    borderRadius: '10px',
-    background: 'rgba(0, 217, 255, 0.12)',
+    borderRadius: '12px',
+    backgroundColor: 'rgba(0, 217, 255, 0.1)',
     color: '#00d9ff',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '20px'
   },
-  accRoleTitle: {
-    fontSize: '0.72rem',
-    color: '#64748b',
-    fontWeight: 700,
-    letterSpacing: '0.06em'
-  },
-  accCount: {
-    fontSize: '1.3rem',
+  statNum: {
+    fontSize: '24px',
     fontWeight: 800,
-    color: '#ffffff'
+    color: '#f8fafc'
   },
-  accLevelDesc: {
-    fontSize: '0.74rem',
+  statLabel: {
+    fontSize: '11px',
+    fontWeight: 600,
     color: '#94a3b8'
   },
-  chevron: {
-    marginLeft: 'auto',
-    fontSize: '20px',
-    color: '#475569'
-  },
-  lowerSplit: {
+  dualGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
-    gap: '20px'
+    gap: '24px'
   },
-  panelCard: {
-    padding: '22px 24px',
-    borderRadius: '14px',
-    background: 'rgba(13, 16, 24, 0.78)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    backdropFilter: 'blur(20px)'
+  cardBox: {
+    padding: '24px',
+    backgroundColor: 'rgba(13, 17, 26, 0.75)',
+    border: '1px solid rgba(30, 41, 59, 0.5)',
+    borderRadius: '16px',
+    backdropFilter: 'blur(10px)'
   },
-  panelHeaderRow: {
+  cardHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '16px',
-    paddingBottom: '10px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
+    marginBottom: '16px'
   },
-  panelTitle: {
-    fontSize: '1.05rem',
-    fontWeight: 700,
-    margin: 0
-  },
-  quickActionButtons: {
+  quickGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '12px',
-    marginBottom: '20px'
+    gridTemplateColumns: '1fr 1fr',
+    gap: '12px'
   },
-  quickTileBtn: {
+  quickActionCard: {
     padding: '16px',
-    borderRadius: '10px',
-    background: 'rgba(15, 20, 32, 0.8)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
+    backgroundColor: 'rgba(7, 9, 14, 0.6)',
+    border: '1px solid rgba(30, 41, 59, 0.6)',
+    borderRadius: '12px',
+    textAlign: 'left',
     cursor: 'pointer',
     color: '#f8fafc',
-    transition: 'all 0.18s ease'
+    transition: 'all 0.15s ease'
   },
-  quickTileIcon: {
+  quickActionIcon: {
     fontSize: '20px',
-    color: '#00d9ff'
+    marginBottom: '8px'
   },
-  quickTileText: {
-    fontSize: '0.82rem',
-    fontWeight: 600
+  quickActionTitle: {
+    fontSize: '13px',
+    fontWeight: 700
   },
-  walletInfoBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    background: 'rgba(10, 14, 22, 0.9)',
-    border: '1px solid rgba(0, 217, 255, 0.2)'
-  },
-  infoBarLbl: {
-    fontSize: '0.68rem',
+  quickActionSub: {
+    fontSize: '11px',
     color: '#64748b',
-    fontWeight: 700
-  },
-  infoBarVal: {
-    fontSize: '0.96rem',
-    fontWeight: 800,
-    fontFamily: 'monospace'
-  },
-  liveStreamBadge: {
-    fontSize: '0.65rem',
-    color: '#00d9ff',
-    background: 'rgba(0, 217, 255, 0.12)',
-    padding: '2px 6px',
-    borderRadius: '4px',
-    fontWeight: 700
+    marginTop: '2px'
   },
   activityFeed: {
     display: 'flex',
@@ -3051,834 +3066,415 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '12px',
     padding: '10px 12px',
-    borderRadius: '8px',
-    background: 'rgba(15, 20, 32, 0.6)',
-    border: '1px solid rgba(255, 255, 255, 0.04)'
+    backgroundColor: 'rgba(7, 9, 14, 0.5)',
+    borderRadius: '10px'
   },
-  activityDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    background: '#00d9ff',
-    flexShrink: 0
-  },
-  actTitleRow: {
+  activityIcon: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(5, 223, 114, 0.15)',
+    color: '#05df72',
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
-  },
-  actTitleText: {
-    fontSize: '0.86rem',
+    justifyContent: 'center',
+    fontSize: '12px',
     fontWeight: 700
   },
-  actGameBadge: {
-    fontSize: '0.65rem',
-    padding: '1px 5px',
-    borderRadius: '3px',
-    background: 'rgba(255, 255, 255, 0.08)',
+  activityTitle: {
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#f8fafc'
+  },
+  activityDetails: {
+    fontSize: '11px',
     color: '#94a3b8'
   },
-  actDetails: {
-    fontSize: '0.74rem',
+  activityTime: {
+    fontSize: '10px',
     color: '#64748b'
   },
-  actTimestamp: {
-    fontSize: '0.72rem',
-    color: '#64748b',
-    fontFamily: 'monospace'
+  centerCardWrapper: {
+    maxWidth: '680px',
+    margin: '0 auto'
   },
-  telemetryHero: {
-    padding: '20px 24px',
-    borderRadius: '14px',
-    background: 'rgba(13, 16, 24, 0.78)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderTop: '1px solid rgba(255, 255, 255, 0.2)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
+  managementCard: {
+    padding: '30px',
+    backgroundColor: 'rgba(13, 17, 26, 0.85)',
+    border: '1px solid rgba(30, 41, 59, 0.6)',
+    borderRadius: '16px',
+    boxShadow: '0 12px 36px rgba(0,0,0,0.4)',
+    backdropFilter: 'blur(16px)'
+  },
+  formGrid2Col: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
     gap: '16px'
   },
-  remoteTitle: {
-    fontSize: '1.25rem',
-    fontWeight: 800,
-    margin: '0 0 6px 0',
+  invoiceSummaryBox: {
+    marginTop: '20px',
+    padding: '16px',
+    backgroundColor: 'rgba(7, 9, 14, 0.6)',
+    border: '1px solid rgba(0, 217, 255, 0.2)',
+    borderRadius: '12px',
     display: 'flex',
-    alignItems: 'center',
-    gap: '10px'
-  },
-  onlineBadge: {
-    fontSize: '0.68rem',
-    color: '#05df72',
-    background: 'rgba(5, 223, 114, 0.15)',
-    border: '1px solid rgba(5, 223, 114, 0.35)',
-    padding: '2px 6px',
-    borderRadius: '4px'
-  },
-  remoteSub: {
-    fontSize: '0.82rem',
-    color: '#94a3b8',
-    margin: 0
-  },
-  remoteKeySelectCluster: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px'
-  },
-  fleetLabel: {
-    fontSize: '0.72rem',
-    fontWeight: 700,
-    color: '#64748b'
-  },
-  fleetDropdown: {
-    padding: '8px 12px',
-    borderRadius: '8px',
-    background: 'rgba(15, 20, 32, 0.9)',
-    border: '1px solid rgba(0, 217, 255, 0.3)',
-    color: '#ffffff',
-    fontFamily: 'monospace',
-    fontSize: '0.82rem',
-    outline: 'none'
-  },
-  controlsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))',
-    gap: '20px'
-  },
-  cardBox: {
-    padding: '22px 24px',
-    borderRadius: '14px',
-    background: 'rgba(13, 16, 24, 0.78)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderTop: '1px solid rgba(255, 255, 255, 0.2)',
-    backdropFilter: 'blur(20px)'
-  },
-  cardHeader: {
-    display: 'flex',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '16px',
-    paddingBottom: '10px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
+    alignItems: 'center'
   },
-  cyanMiniBadge: {
-    fontSize: '0.68rem',
-    fontWeight: 700,
-    color: '#00d9ff',
-    background: 'rgba(0, 217, 255, 0.1)',
-    border: '1px solid rgba(0, 217, 255, 0.25)',
-    padding: '2px 6px',
-    borderRadius: '4px'
+  generatedKeyBox: {
+    marginTop: '24px',
+    padding: '16px',
+    backgroundColor: 'rgba(5, 223, 114, 0.1)',
+    border: '1px solid rgba(5, 223, 114, 0.3)',
+    borderRadius: '12px'
   },
-  featureStack: {
+  generatedKeyRow: {
     display: 'flex',
-    flexDirection: 'column',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '10px',
     gap: '12px'
   },
-  toggleTile: {
-    padding: '14px 18px',
+  keyCodeText: {
+    fontSize: '16px',
+    fontWeight: 800,
+    color: '#00d9ff',
+    letterSpacing: '0.04em'
+  },
+  copyKeyBtn: {
+    padding: '8px 14px',
+    backgroundColor: '#00d9ff',
+    color: '#07090e',
+    fontWeight: 700,
+    fontSize: '11px',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer'
+  },
+  searchBox: {
+    minWidth: '280px'
+  },
+  searchInput: {
+    width: '100%',
+    padding: '10px 14px',
+    backgroundColor: 'rgba(13, 17, 26, 0.8)',
+    border: '1px solid rgba(30, 41, 59, 0.6)',
     borderRadius: '10px',
-    background: 'rgba(15, 19, 29, 0.65)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    color: '#f8fafc',
+    fontSize: '13px',
+    outline: 'none',
+    boxSizing: 'border-box'
+  },
+  tableCard: {
+    backgroundColor: 'rgba(13, 17, 26, 0.75)',
+    border: '1px solid rgba(30, 41, 59, 0.5)',
+    borderRadius: '16px',
+    overflow: 'hidden'
+  },
+  dataTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: '13px',
+    textAlign: 'left'
+  },
+  th: {
+    padding: '14px 18px',
+    backgroundColor: 'rgba(7, 9, 14, 0.7)',
+    color: '#64748b',
+    fontSize: '11px',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    borderBottom: '1px solid rgba(30, 41, 59, 0.5)'
+  },
+  tr: {
+    borderBottom: '1px solid rgba(30, 41, 59, 0.3)'
+  },
+  td: {
+    padding: '14px 18px',
+    verticalAlign: 'middle'
+  },
+  miniCopyBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '12px',
+    padding: '2px 4px'
+  },
+  deviceBarBack: {
+    width: '90px',
+    height: '4px',
+    backgroundColor: 'rgba(30, 41, 59, 0.8)',
+    borderRadius: '2px',
+    marginTop: '4px',
+    overflow: 'hidden'
+  },
+  deviceBarFill: {
+    height: '100%',
+    backgroundColor: '#00d9ff'
+  },
+  planBadge: {
+    padding: '3px 8px',
+    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: 600,
+    color: '#cbd5e1'
+  },
+  avatarTiny: {
+    width: '18px',
+    height: '18px',
+    borderRadius: '50%',
+    backgroundColor: '#00d9ff',
+    color: '#07090e',
+    fontSize: '10px',
+    fontWeight: 800,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  avatarCircle: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(0, 217, 255, 0.15)',
+    color: '#00d9ff',
+    fontSize: '13px',
+    fontWeight: 800,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  statusPill: {
+    padding: '3px 8px',
+    borderRadius: '6px',
+    fontSize: '10px',
+    fontWeight: 700,
+    display: 'inline-block'
+  },
+  roleBadge: {
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(0, 217, 255, 0.15)',
+    color: '#00d9ff',
+    fontSize: '10px',
+    fontWeight: 700
+  },
+  userBalanceGreen: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#05df72'
+  },
+  actionIconBtn: {
+    background: 'rgba(30, 41, 59, 0.4)',
+    border: '1px solid rgba(30, 41, 59, 0.6)',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    padding: '6px 8px',
+    fontSize: '12px',
+    color: '#f8fafc'
+  },
+  actionIconCircle: {
+    width: '38px',
+    height: '38px',
+    borderRadius: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '18px'
+  },
+  settingDesc: {
+    fontSize: '13px',
+    color: '#94a3b8',
+    lineHeight: 1.6,
+    margin: '0 0 16px 0'
+  },
+  settingToggleRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    cursor: 'pointer',
-    userSelect: 'none'
+    padding: '14px 0',
+    borderTop: '1px solid rgba(30, 41, 59, 0.4)'
   },
-  tileTitle: {
-    fontSize: '0.9rem',
-    fontWeight: 600,
-    marginBottom: '2px'
+  settingTitle: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#f8fafc'
   },
-  tileDesc: {
-    fontSize: '0.74rem',
-    color: '#64748b'
+  settingSub: {
+    fontSize: '11px',
+    color: '#64748b',
+    marginTop: '2px'
   },
   switchPill: {
-    width: '46px',
-    height: '26px',
-    borderRadius: '30px',
-    border: '1px solid rgba(255, 255, 255, 0.15)',
-    position: 'relative',
-    transition: 'all 0.2s ease',
-    flexShrink: 0,
-    cursor: 'pointer'
+    width: '44px',
+    height: '24px',
+    borderRadius: '12px',
+    padding: '2px',
+    cursor: 'pointer',
+    transition: 'background 0.2s ease',
+    boxSizing: 'border-box'
   },
   switchKnob: {
-    position: 'absolute',
-    top: '2px',
-    left: '2px',
     width: '20px',
     height: '20px',
     borderRadius: '50%',
-    background: '#ffffff',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
-    transition: 'all 0.2s ease'
+    backgroundColor: '#ffffff',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+    transition: 'transform 0.2s ease'
   },
-  sliderTile: {
-    padding: '14px 18px',
-    borderRadius: '10px',
-    background: 'rgba(15, 19, 29, 0.65)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+  emergencyPurgeBtn: {
+    padding: '8px 14px',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    border: '1px solid rgba(239, 68, 68, 0.4)',
+    color: '#ef4444',
+    fontSize: '11px',
+    fontWeight: 700,
+    borderRadius: '8px',
+    cursor: 'pointer'
+  },
+  telemetryBar: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '10px'
+    gap: '24px',
+    padding: '12px 18px',
+    backgroundColor: 'rgba(13, 17, 26, 0.8)',
+    border: '1px solid rgba(30, 41, 59, 0.6)',
+    borderRadius: '12px',
+    marginBottom: '20px',
+    flexWrap: 'wrap'
   },
-  sliderHeaderRow: {
+  telemetryBarItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '12px'
+  },
+  telemetryBarLabel: {
+    color: '#64748b',
+    fontWeight: 700
+  },
+  telemetryBarVal: {
+    color: '#f8fafc',
+    fontWeight: 700
+  },
+  controlGrid3Col: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+    gap: '20px'
+  },
+  columnCard: {
+    padding: '20px',
+    backgroundColor: 'rgba(13, 17, 26, 0.8)',
+    border: '1px solid rgba(30, 41, 59, 0.6)',
+    borderRadius: '16px',
+    backdropFilter: 'blur(10px)'
+  },
+  columnHead: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    marginBottom: '16px',
+    paddingBottom: '12px',
+    borderBottom: '1px solid rgba(30, 41, 59, 0.5)'
+  },
+  columnIcon: {
+    fontSize: '18px'
+  },
+  toggleRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    fontSize: '0.86rem',
+    padding: '12px 0',
+    borderBottom: '1px solid rgba(30, 41, 59, 0.3)'
+  },
+  toggleTitle: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#f8fafc'
+  },
+  toggleDesc: {
+    fontSize: '11px',
+    color: '#64748b'
+  },
+  sliderBlock: {
+    padding: '14px 0',
+    borderBottom: '1px solid rgba(30, 41, 59, 0.3)'
+  },
+  sliderLabelRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '12px',
+    color: '#94a3b8',
+    marginBottom: '8px',
     fontWeight: 600
   },
-  sliderValueBox: {
+  sliderValText: {
     color: '#00d9ff',
-    fontFamily: 'monospace',
-    fontWeight: 700,
-    background: 'rgba(0, 217, 255, 0.1)',
-    padding: '2px 6px',
-    borderRadius: '4px'
+    fontWeight: 700
   },
-  rangeSlider: {
+  sliderInput: {
     width: '100%',
     accentColor: '#00d9ff',
     cursor: 'pointer'
   },
-  themeSelectorTile: {
-    padding: '14px 18px',
-    borderRadius: '10px',
-    background: 'rgba(15, 19, 29, 0.65)',
-    border: '1px solid rgba(255, 255, 255, 0.08)'
-  },
-  themeHeaderRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '0.84rem',
-    fontWeight: 600,
-    marginBottom: '10px'
-  },
-  activeThemeName: {
-    color: '#00d9ff',
-    fontFamily: 'monospace'
-  },
-  themeButtonsGrid: {
+  themePaletteGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(5, 1fr)',
-    gap: '6px'
-  },
-  themePresetBtn: {
-    padding: '8px 4px',
-    borderRadius: '6px',
-    background: 'transparent',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    color: '#94a3b8',
-    fontSize: '0.72rem',
-    fontWeight: 600,
-    cursor: 'pointer'
-  },
-  themePresetBtnActive: {
-    background: 'rgba(0, 217, 255, 0.15)',
-    borderColor: '#00d9ff',
-    color: '#00d9ff'
-  },
-  emergencyPurgeCard: {
-    padding: '20px 24px',
-    borderRadius: '14px',
-    background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.08) 0%, transparent 100%), rgba(13, 16, 24, 0.8)',
-    border: '1px solid rgba(255, 51, 102, 0.35)',
-    borderTop: '1px solid rgba(255, 51, 102, 0.65)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '20px',
-    flexWrap: 'wrap'
-  },
-  emergencyPurgeTitle: {
-    color: '#ff6b8b',
-    fontSize: '0.96rem',
-    fontWeight: 700,
-    margin: '0 0 4px 0'
-  },
-  emergencyPurgeDesc: {
-    color: '#94a3b8',
-    fontSize: '0.8rem',
-    margin: 0,
-    maxWidth: '650px'
-  },
-  emergencyPurgeBtn: {
-    padding: '12px 20px',
-    borderRadius: '8px',
-    background: 'linear-gradient(135deg, #ff3366 0%, #d90429 100%)',
-    border: 'none',
-    color: '#ffffff',
-    fontWeight: 700,
-    fontSize: '0.86rem',
-    cursor: 'pointer',
-    boxShadow: '0 8px 20px rgba(255, 51, 102, 0.35)'
-  },
-  genHeroCard: {
-    maxWidth: '720px',
-    margin: '0 auto',
-    padding: '32px 30px',
-    borderRadius: '16px',
-    background: 'rgba(13, 16, 24, 0.85)',
-    border: '1px solid rgba(0, 217, 255, 0.25)',
-    borderTop: '1px solid rgba(255, 255, 255, 0.22)',
-    backdropFilter: 'blur(20px)'
-  },
-  genBadge: {
-    display: 'inline-flex',
-    padding: '4px 10px',
-    borderRadius: '20px',
-    background: 'rgba(0, 217, 255, 0.1)',
-    border: '1px solid rgba(0, 217, 255, 0.3)',
-    color: '#00d9ff',
-    fontSize: '0.72rem',
-    fontWeight: 700,
-    marginBottom: '14px'
-  },
-  genTitle: {
-    fontSize: '1.45rem',
-    fontWeight: 800,
-    margin: '0 0 8px 0'
-  },
-  genDesc: {
-    fontSize: '0.85rem',
-    color: '#94a3b8',
-    margin: '0 0 24px 0'
-  },
-  genForm: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '18px'
-  },
-  formRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-    gap: '16px'
-  },
-  formCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px'
-  },
-  formLabel: {
-    fontSize: '0.72rem',
-    fontWeight: 700,
-    color: '#94a3b8',
-    letterSpacing: '0.04em'
-  },
-  formSelect: {
-    padding: '12px 14px',
-    borderRadius: '8px',
-    background: 'rgba(8, 11, 18, 0.9)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
-    color: '#ffffff',
-    fontSize: '0.88rem',
-    outline: 'none'
-  },
-  formInput: {
-    padding: '12px 14px',
-    borderRadius: '8px',
-    background: 'rgba(8, 11, 18, 0.9)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
-    color: '#ffffff',
-    fontSize: '0.88rem',
-    outline: 'none'
-  },
-  formHelperText: {
-    fontSize: '0.72rem',
-    color: '#64748b'
-  },
-  invoiceBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '16px 20px',
-    borderRadius: '10px',
-    background: 'linear-gradient(135deg, rgba(0, 132, 255, 0.12) 0%, rgba(0, 217, 255, 0.05) 100%), rgba(10, 14, 22, 0.9)',
-    border: '1px solid rgba(0, 217, 255, 0.25)',
-    flexWrap: 'wrap',
-    gap: '14px',
-    marginTop: '10px'
-  },
-  invoiceCostBlock: {},
-  walletBalanceBlock: {},
-  invoiceLbl: {
-    fontSize: '0.68rem',
-    color: '#64748b',
-    fontWeight: 700
-  },
-  invoiceAmount: {
-    fontSize: '1.25rem',
-    fontWeight: 800,
-    color: '#ffffff',
-    fontFamily: 'monospace'
-  },
-  walletAmount: {
-    fontSize: '1.25rem',
-    fontWeight: 800,
-    color: '#00d9ff',
-    fontFamily: 'monospace'
-  },
-  generateSubmitBtn: {
-    padding: '12px 24px',
-    borderRadius: '8px',
-    background: 'linear-gradient(135deg, #00d9ff 0%, #0084ff 100%)',
-    border: 'none',
-    color: '#07090e',
-    fontWeight: 800,
-    fontSize: '0.9rem',
-    cursor: 'pointer',
-    boxShadow: '0 8px 20px rgba(0, 217, 255, 0.35)'
-  },
-  genSuccessCard: {
-    marginTop: '22px',
-    padding: '18px 20px',
-    borderRadius: '10px',
-    background: 'rgba(5, 223, 114, 0.08)',
-    border: '1px solid rgba(5, 223, 114, 0.3)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px'
-  },
-  genSuccessTitle: {
-    fontSize: '0.92rem',
-    fontWeight: 700,
-    color: '#05df72'
-  },
-  genKeyDisplayRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '10px 14px',
-    borderRadius: '6px',
-    background: 'rgba(7, 9, 14, 0.8)',
-    border: '1px solid rgba(255, 255, 255, 0.1)'
-  },
-  genKeyCode: {
-    fontFamily: 'monospace',
-    fontSize: '1rem',
-    fontWeight: 800,
-    color: '#00d9ff'
-  },
-  copyKeyBtn: {
-    padding: '6px 14px',
-    borderRadius: '6px',
-    background: 'rgba(0, 217, 255, 0.15)',
-    border: '1px solid rgba(0, 217, 255, 0.4)',
-    color: '#00d9ff',
-    fontWeight: 700,
-    fontSize: '0.78rem',
-    cursor: 'pointer'
-  },
-  genActionRow: {
-    display: 'flex',
-    justifyContent: 'flex-end'
-  },
-  linkRemoteBtn: {
-    background: 'transparent',
-    border: 'none',
-    color: '#00d9ff',
-    fontSize: '0.82rem',
-    fontWeight: 700,
-    cursor: 'pointer'
-  },
-  tableHeaderRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: '16px'
-  },
-  tableHeadTitle: {
-    fontSize: '1.35rem',
-    fontWeight: 800,
-    margin: '0 0 4px 0'
-  },
-  tableHeadDesc: {
-    fontSize: '0.82rem',
-    color: '#94a3b8',
-    margin: 0
-  },
-  tableActionsRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px'
-  },
-  searchTableInput: {
-    padding: '10px 14px',
-    borderRadius: '8px',
-    background: 'rgba(15, 20, 32, 0.8)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    color: '#ffffff',
-    fontSize: '0.84rem',
-    outline: 'none',
-    width: '220px'
-  },
-  addKeyTopBtn: {
-    padding: '10px 16px',
-    borderRadius: '8px',
-    background: 'linear-gradient(135deg, #00d9ff 0%, #0084ff 100%)',
-    border: 'none',
-    color: '#07090e',
-    fontWeight: 700,
-    fontSize: '0.84rem',
-    cursor: 'pointer'
-  },
-  tableWrapper: {
-    overflowX: 'auto',
-    borderRadius: '14px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    background: 'rgba(13, 16, 24, 0.78)',
-    backdropFilter: 'blur(20px)'
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    textAlign: 'left',
-    fontSize: '0.84rem'
-  },
-  theadRow: {
-    background: 'rgba(15, 20, 32, 0.85)',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
-  },
-  th: {
-    padding: '14px 16px',
-    color: '#64748b',
-    fontWeight: 700,
-    fontSize: '0.72rem',
-    letterSpacing: '0.06em'
-  },
-  tbodyRow: {
-    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-    transition: 'background 0.15s ease'
-  },
-  td: {
-    padding: '14px 16px',
-    verticalAlign: 'middle'
-  },
-  tdId: {
-    padding: '14px 16px',
-    color: '#64748b',
-    fontFamily: 'monospace',
-    fontWeight: 700
-  },
-  gameBadge: {
-    display: 'inline-block',
-    fontSize: '0.65rem',
-    fontWeight: 700,
-    padding: '1px 6px',
-    borderRadius: '3px',
-    background: 'rgba(0, 217, 255, 0.1)',
-    color: '#00d9ff',
-    marginBottom: '4px'
-  },
-  keyWithCopyRow: {
-    display: 'flex',
-    alignItems: 'center',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
     gap: '8px'
   },
-  keyMonoText: {
-    fontFamily: 'monospace',
-    fontWeight: 700,
-    color: '#ffffff'
-  },
-  iconCopyBtn: {
-    background: 'transparent',
-    border: 'none',
+  themePillBtn: {
+    padding: '8px 10px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(7, 9, 14, 0.6)',
+    border: '1px solid rgba(30, 41, 59, 0.6)',
     color: '#94a3b8',
-    cursor: 'pointer',
-    fontSize: '13px'
-  },
-  deviceUsageText: {
-    fontSize: '0.75rem',
-    color: '#94a3b8',
-    marginBottom: '4px'
-  },
-  usageBarTrack: {
-    width: '90px',
-    height: '4px',
-    borderRadius: '4px',
-    background: 'rgba(255, 255, 255, 0.08)',
-    overflow: 'hidden'
-  },
-  usageBarFill: {
-    height: '100%',
-    borderRadius: '4px'
-  },
-  tdPlan: {
-    padding: '14px 16px',
+    fontSize: '11px',
     fontWeight: 600,
-    color: '#94a3b8'
+    cursor: 'pointer'
   },
-  creatorPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    fontSize: '0.8rem',
-    color: '#f8fafc'
-  },
-  creatorInitial: {
-    width: '20px',
-    height: '20px',
-    borderRadius: '50%',
-    background: '#00d9ff',
-    color: '#07090e',
-    fontWeight: 800,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '0.68rem'
-  },
-  statusTag: {
-    display: 'inline-block',
-    padding: '3px 8px',
-    borderRadius: '4px',
-    fontSize: '0.7rem',
+  themePillBtnActive: {
+    backgroundColor: 'rgba(0, 217, 255, 0.15)',
+    borderColor: '#00d9ff',
+    color: '#00d9ff',
     fontWeight: 700
-  },
-  statusTagActive: {
-    background: 'rgba(5, 223, 114, 0.15)',
-    color: '#05df72',
-    border: '1px solid rgba(5, 223, 114, 0.35)'
-  },
-  statusTagWaiting: {
-    background: 'rgba(245, 158, 11, 0.15)',
-    color: '#f59e0b',
-    border: '1px solid rgba(245, 158, 11, 0.35)'
-  },
-  statusTagExpired: {
-    background: 'rgba(255, 51, 102, 0.15)',
-    color: '#ff3366',
-    border: '1px solid rgba(255, 51, 102, 0.35)'
-  },
-  statusDateText: {
-    fontSize: '0.68rem',
-    color: '#64748b',
-    marginTop: '3px',
-    fontFamily: 'monospace'
-  },
-  actionBtnGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: '6px'
-  },
-  actionIconBtn: {
-    width: '30px',
-    height: '30px',
-    borderRadius: '6px',
-    background: 'rgba(15, 20, 32, 0.8)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    color: '#94a3b8',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    fontSize: '12px'
-  },
-  userProfileCell: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px'
-  },
-  userCellAvatar: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    background: '#00d9ff',
-    color: '#07090e',
-    fontWeight: 800,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '0.85rem'
-  },
-  userCellName: {
-    fontWeight: 700,
-    fontSize: '0.88rem'
-  },
-  userCellEmail: {
-    fontSize: '0.74rem',
-    color: '#64748b'
-  },
-  resellerTag: {
-    fontSize: '0.68rem',
-    fontWeight: 700,
-    padding: '2px 6px',
-    borderRadius: '4px',
-    background: 'rgba(0, 217, 255, 0.12)',
-    color: '#00d9ff',
-    border: '1px solid rgba(0, 217, 255, 0.25)'
-  },
-  uplinkText: {
-    fontSize: '0.78rem',
-    color: '#94a3b8'
-  },
-  userBalancePill: {
-    fontFamily: 'monospace',
-    fontWeight: 700,
-    color: '#00d9ff',
-    background: 'rgba(0, 217, 255, 0.08)',
-    padding: '3px 8px',
-    borderRadius: '4px'
-  },
-  noticeBoxWarning: {
-    padding: '16px 20px',
-    borderRadius: '12px',
-    background: 'rgba(245, 158, 11, 0.1)',
-    border: '1px solid rgba(245, 158, 11, 0.3)',
-    color: '#f59e0b',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    fontSize: '0.85rem',
-    lineHeight: 1.4
-  },
-  noticeBoxDanger: {
-    padding: '16px 20px',
-    borderRadius: '12px',
-    background: 'rgba(255, 51, 102, 0.1)',
-    border: '1px solid rgba(255, 51, 102, 0.3)',
-    color: '#ff6b8b',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    fontSize: '0.85rem',
-    lineHeight: 1.4
-  },
-  noticeIcon: {
-    fontSize: '22px',
-    flexShrink: 0
-  },
-  cardBoxCentered: {
-    maxWidth: '580px',
-    margin: '10px auto',
-    padding: '30px',
-    borderRadius: '14px',
-    background: 'rgba(13, 16, 24, 0.85)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderTop: '1px solid rgba(255, 255, 255, 0.2)',
-    backdropFilter: 'blur(20px)'
-  },
-  actionCardHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    marginBottom: '22px',
-    paddingBottom: '14px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
-  },
-  actionCardIcon: {
-    width: '42px',
-    height: '42px',
-    borderRadius: '10px',
-    background: 'rgba(0, 217, 255, 0.12)',
-    color: '#00d9ff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '20px'
-  },
-  actionCardTitle: {
-    fontSize: '1.2rem',
-    fontWeight: 800,
-    margin: '0 0 4px 0'
-  },
-  actionCardSub: {
-    fontSize: '0.8rem',
-    color: '#94a3b8',
-    margin: 0
-  },
-  actionFormStack: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px'
-  },
-  confirmActionBtn: {
-    padding: '14px',
-    borderRadius: '8px',
-    background: 'linear-gradient(135deg, #00d9ff 0%, #0084ff 100%)',
-    border: 'none',
-    color: '#07090e',
-    fontWeight: 800,
-    fontSize: '0.88rem',
-    cursor: 'pointer',
-    marginTop: '10px'
-  },
-  dangerActionBtn: {
-    padding: '14px',
-    borderRadius: '8px',
-    background: 'linear-gradient(135deg, #ff3366 0%, #d90429 100%)',
-    border: 'none',
-    color: '#ffffff',
-    fontWeight: 800,
-    fontSize: '0.88rem',
-    cursor: 'pointer',
-    marginTop: '10px'
-  },
-  settingDesc: {
-    fontSize: '0.82rem',
-    color: '#94a3b8',
-    margin: '0 0 16px 0',
-    lineHeight: 1.4
-  },
-  settingToggleRow: {
-    padding: '14px 18px',
-    borderRadius: '10px',
-    background: 'rgba(15, 19, 29, 0.65)',
-    border: '1px solid rgba(255, 255, 255, 0.06)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '10px'
-  },
-  settingTitle: {
-    fontSize: '0.9rem',
-    fontWeight: 700
-  },
-  settingSub: {
-    fontSize: '0.74rem',
-    color: '#64748b'
   },
   modalOverlay: {
     position: 'fixed',
     top: 0,
     left: 0,
-    width: '100vw',
-    height: '100vh',
-    background: 'rgba(0,0,0,0.85)',
-    backdropFilter: 'blur(10px)',
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backdropFilter: 'blur(8px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 9999
+    zIndex: 999
   },
   modalCard: {
-    maxWidth: '440px',
-    padding: '28px',
-    borderRadius: '14px',
-    background: '#0d1018',
-    border: '1px solid rgba(255, 51, 102, 0.5)',
+    maxWidth: '460px',
+    width: '90%',
+    padding: '30px',
+    backgroundColor: '#0a0d14',
+    border: '1px solid rgba(239, 68, 68, 0.4)',
+    borderRadius: '16px',
     textAlign: 'center',
-    boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+    boxShadow: '0 20px 50px rgba(0,0,0,0.8), 0 0 30px rgba(239, 68, 68, 0.2)'
   },
   modalIcon: {
-    fontSize: '32px',
-    marginBottom: '10px'
+    fontSize: '40px',
+    marginBottom: '12px'
   },
   modalTitle: {
-    color: '#ff3366',
-    margin: '0 0 10px 0',
-    fontSize: '1.2rem'
+    fontSize: '18px',
+    fontWeight: 800,
+    color: '#f8fafc',
+    margin: '0 0 10px 0'
   },
   modalText: {
+    fontSize: '13px',
     color: '#94a3b8',
-    fontSize: '0.84rem',
     lineHeight: 1.5,
-    marginBottom: '22px'
+    margin: '0 0 24px 0'
   },
   modalActions: {
     display: 'flex',
@@ -3888,18 +3484,21 @@ const styles: Record<string, React.CSSProperties> = {
   modalCancelBtn: {
     padding: '10px 18px',
     borderRadius: '8px',
-    background: 'rgba(30, 36, 50, 0.8)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
-    color: '#ffffff',
+    backgroundColor: 'rgba(30, 41, 59, 0.6)',
+    border: 'none',
+    color: '#cbd5e1',
+    fontWeight: 600,
+    fontSize: '13px',
     cursor: 'pointer'
   },
   modalConfirmPurgeBtn: {
     padding: '10px 18px',
     borderRadius: '8px',
-    background: '#ff3366',
+    backgroundColor: '#ef4444',
     border: 'none',
     color: '#ffffff',
     fontWeight: 700,
+    fontSize: '13px',
     cursor: 'pointer'
   }
 }
