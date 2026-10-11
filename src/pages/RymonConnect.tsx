@@ -224,7 +224,7 @@ export default function RymonConnect() {
         if (supabase) supabase.removeChannel(channel)
       }
     }
-  }, [isAuthenticated, currentUser?.username, currentUser?.role])
+  }, [isAuthenticated, currentUser])
 
   // 3. Telemetry Realtime Subscription for Current Key
   useEffect(() => {
