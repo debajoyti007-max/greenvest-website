@@ -35,7 +35,8 @@ export interface RymonLicense {
   devices_used: number
   devices_max: number
   device_hwid: string
-  status: 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED'
+  status: 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED'
+  is_paused?: boolean
   expires_at: string | null
   last_heartbeat?: string
   created_at?: string
@@ -59,6 +60,7 @@ export interface StreamerControlRecord {
   game_name: string
   device_hwid?: string
   is_active: boolean
+  is_paused?: boolean
   is_online: boolean
   last_heartbeat?: string
   expires_at?: string
@@ -201,7 +203,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-3108-8842',
     game: 'Free Fire MAX',
     plan_duration: '1 Day',
-    creator_username: 'SK2020',
+    creator_username: 'rymon',
     devices_used: 1,
     devices_max: 1,
     device_hwid: 'HWID-SK-DEVICE',
@@ -225,7 +227,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-1190-7734',
     game: 'PUBG',
     plan_duration: '7 Days',
-    creator_username: 'ROGER',
+    creator_username: 'rymon',
     devices_used: 0,
     devices_max: 1,
     device_hwid: '',
@@ -237,7 +239,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-9920-4100',
     game: 'BGMI',
     plan_duration: '1 Day',
-    creator_username: 'REVERSE_EXE',
+    creator_username: 'rymon',
     devices_used: 1,
     devices_max: 1,
     device_hwid: 'HWID-REV-01',
@@ -597,17 +599,33 @@ export async function verifyLicenseKey(
 }
 
 // ============================================================================
-// 4. FETCH LICENSES & USERS (WITH ROLE FILTERING)
+// 4. FETCH LICENSES & USERS (WITH HIERARCHICAL ROLE RESTRICTIONS)
 // ============================================================================
 export async function fetchAllLicenses(user?: RymonAccount | null): Promise<RymonLicense[]> {
+  // Normal streamers only control their single assigned device, no key registry access
+  if (user && user.role === 'streamer') {
+    return []
+  }
+
   if (supabase) {
     try {
       let query = supabase.from('rymon_licenses').select('*').order('created_at', { ascending: false })
+
       if (user && user.role === 'reseller') {
+        // Reseller can ONLY see keys they generated
         query = query.eq('creator_username', user.username)
+      } else if (user && user.role === 'admin') {
+        // Admin sees keys created by themselves + downline resellers
+        const { data: downlines } = await supabase
+          .from('rymon_accounts')
+          .select('username')
+          .eq('uplink', user.username)
+        const allowedCreators = [user.username, ...(downlines?.map((d) => d.username) || [])]
+        query = query.in('creator_username', allowedCreators)
       }
+
       const { data, error } = await query
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data as RymonLicense[]
       }
     } catch {}
@@ -620,14 +638,25 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
   return stored
 }
 
-export async function fetchAllAccounts(): Promise<RymonAccount[]> {
+export async function fetchAllAccounts(user?: RymonAccount | null): Promise<RymonAccount[]> {
+  // Streamers and Resellers have ZERO access to view other accounts
+  if (user && (user.role === 'reseller' || user.role === 'streamer')) {
+    return []
+  }
+
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('rymon_accounts')
         .select('*')
         .order('balance', { ascending: false })
 
+      if (user && user.role === 'admin') {
+        // Admin only sees their own downlines and self
+        query = query.or(`uplink.eq.${user.username},username.eq.${user.username}`)
+      }
+
+      const { data, error } = await query
       if (!error && data && data.length > 0) {
         return data as RymonAccount[]
       }
@@ -1007,6 +1036,72 @@ export async function extendLicenseBackend(
   return newExp
 }
 
+export async function togglePauseLicenseBackend(
+  licenseKey: string,
+  requesterUsername: string = 'rymon'
+): Promise<{ success: boolean; is_paused: boolean; status: string; message: string }> {
+  const cleanKey = licenseKey.trim().toUpperCase()
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_rymon_toggle_pause_key', {
+        p_license_key: cleanKey,
+        p_requester: requesterUsername
+      })
+      if (!error && data) {
+        return data as { success: boolean; is_paused: boolean; status: string; message: string }
+      }
+    } catch {}
+
+    try {
+      const { data: current } = await supabase
+        .from('rymon_streamer_controls')
+        .select('is_paused')
+        .eq('license_key', cleanKey)
+        .maybeSingle()
+
+      const newPaused = !current?.is_paused
+      const newStatus = newPaused ? 'PAUSED' : 'ACTIVE'
+
+      await supabase
+        .from('rymon_streamer_controls')
+        .update({ is_paused: newPaused, updated_at: new Date().toISOString() })
+        .eq('license_key', cleanKey)
+
+      await supabase
+        .from('rymon_licenses')
+        .update({ is_paused: newPaused, status: newStatus })
+        .eq('license_key', cleanKey)
+
+      return {
+        success: true,
+        is_paused: newPaused,
+        status: newStatus,
+        message: `Key ${cleanKey} is now ${newStatus}`
+      }
+    } catch (err) {
+      return { success: false, is_paused: false, status: 'ERROR', message: String(err) }
+    }
+  }
+
+  const stored = getStoredLicenses()
+  const idx = stored.findIndex((l) => l.license_key === cleanKey)
+  if (idx >= 0) {
+    const newPaused = !stored[idx].is_paused
+    stored[idx].is_paused = newPaused
+    stored[idx].status = newPaused ? 'PAUSED' : 'ACTIVE'
+    saveStoredLicenses(stored)
+    return {
+      success: true,
+      is_paused: newPaused,
+      status: stored[idx].status,
+      message: `Key ${cleanKey} is now ${stored[idx].status}`
+    }
+  }
+
+  return { success: false, is_paused: false, status: 'NOT_FOUND', message: 'Key not found' }
+}
+
 // ============================================================================
 // HELPER STORAGE ROUTINES
 // ============================================================================
@@ -1332,13 +1427,25 @@ export function saveStoredReferrals(referrals: RymonReferral[]): void {
   } catch {}
 }
 
-export async function fetchReferralCodes(): Promise<RymonReferral[]> {
+export async function fetchReferralCodes(user?: RymonAccount | null): Promise<RymonReferral[]> {
+  // Resellers and streamers cannot view or generate staff referrals
+  if (user && (user.role === 'reseller' || user.role === 'streamer')) {
+    return []
+  }
+
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('rymon_referrals')
         .select('*')
         .order('created_at', { ascending: false })
+
+      if (user && user.role === 'admin') {
+        // Admin only sees referral codes they created
+        query = query.eq('created_by', user.username)
+      }
+
+      const { data, error } = await query
 
       if (!error && Array.isArray(data) && data.length > 0) {
         return data as RymonReferral[]
@@ -1355,6 +1462,14 @@ export async function createReferralCode(
   customCode?: string,
   maxUses: number = 1
 ): Promise<{ success: boolean; code?: string; message: string }> {
+  // Strict hierarchy: Only Shadow Admin (rymon) can issue Admin referrals
+  if (owner.toLowerCase() !== 'rymon' && targetRole === 'admin') {
+    return {
+      success: false,
+      message: 'Power restriction: Only Shadow Admin (rymon) can issue Admin referral codes. Admins can only invite Resellers.'
+    }
+  }
+
   if (supabase) {
     try {
       const { data, error } = await supabase.rpc('rpc_rymon_create_referral', {

@@ -31,7 +31,8 @@ import {
   fetchReferralCodes,
   createReferralCode,
   registerWithReferral,
-  deleteReferralCode
+  deleteReferralCode,
+  togglePauseLicenseBackend
 } from '../lib/rymonBackend'
 
 type TabType =
@@ -235,13 +236,16 @@ export default function RymonConnect() {
     let isMounted = true
 
     async function loadLiveData() {
+      const isStreamerRole = currentUser?.role === 'streamer'
       const [lcs, usrs, acts, notifs, tgCfg, refs] = await Promise.all([
         fetchAllLicenses(currentUser),
-        fetchAllAccounts(),
-        fetchAllActivities(),
+        fetchAllAccounts(currentUser),
+        isStreamerRole ? Promise.resolve([]) : fetchAllActivities(),
         fetchNotifications(currentUser?.username),
-        fetchTelegramConfigBackend(),
-        fetchReferralCodes()
+        currentUser?.role === 'owner'
+          ? fetchTelegramConfigBackend()
+          : Promise.resolve({ bot_token: '', chat_id: '', channel_username: '@RymonGhostStreamer', is_active: false }),
+        fetchReferralCodes(currentUser)
       ])
 
       if (isMounted) {
@@ -283,7 +287,7 @@ export default function RymonConnect() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'rymon_accounts' },
           () => {
-            fetchAllAccounts().then((u) => {
+            fetchAllAccounts(currentUser).then((u) => {
               if (isMounted) {
                 setUsersList(u)
                 if (currentUser) {
@@ -317,7 +321,7 @@ export default function RymonConnect() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'rymon_referrals' },
           () => {
-            fetchReferralCodes().then((r) => isMounted && setReferralList(r))
+            fetchReferralCodes(currentUser).then((r) => isMounted && setReferralList(r))
           }
         )
         .subscribe()
@@ -588,7 +592,7 @@ export default function RymonConnect() {
       showToast(`Success! Balance for ${topUpTargetUser} set to ₹${res.newBalance.toLocaleString('en-IN')}`)
       setTopUpAmount('')
       // Refresh accounts
-      fetchAllAccounts().then((u) => {
+      fetchAllAccounts(currentUser).then((u) => {
         setUsersList(u)
         if (currentUser?.username.toLowerCase() === topUpTargetUser.toLowerCase()) {
           setWalletBalance(res.newBalance!)
@@ -604,6 +608,10 @@ export default function RymonConnect() {
   // 9. TELEMETRY MUTATIONS
   const toggleFeature = async (field: keyof StreamerControlRecord) => {
     if (!record) return
+    if (record.is_paused) {
+      showToast('⏸️ License key is PAUSED. Toggles and features are frozen until unpaused by staff.')
+      return
+    }
     const newVal = !record[field]
     setRecord({ ...record, [field]: newVal })
 
@@ -621,6 +629,10 @@ export default function RymonConnect() {
 
   const handleSliderChange = (field: keyof StreamerControlRecord, val: number) => {
     if (!record) return
+    if (record.is_paused) {
+      showToast('⏸️ License key is PAUSED. Slider adjustments are locked until unpaused by staff.')
+      return
+    }
     setRecord({ ...record, [field]: val })
 
     if (sliderTimerRef.current) clearTimeout(sliderTimerRef.current)
@@ -640,6 +652,10 @@ export default function RymonConnect() {
 
   const setThemePreset = async (idx: number) => {
     if (!record) return
+    if (record.is_paused) {
+      showToast('⏸️ License key is PAUSED. Theme presets are locked until unpaused by staff.')
+      return
+    }
     setRecord({ ...record, theme_color_index: idx })
     if (supabase && currentKey) {
       try {
@@ -680,6 +696,10 @@ export default function RymonConnect() {
   }
 
   const handleDeleteKey = async (keyString: string) => {
+    if (!isOwner) {
+      alert('Power restriction: Only the Root Owner can delete license keys.')
+      return
+    }
     if (confirm(`Delete license key ${keyString}?`)) {
       await deleteLicenseBackend(keyString)
       showToast(`Key ${keyString} deleted.`)
@@ -692,13 +712,21 @@ export default function RymonConnect() {
       alert('Please select a target user.')
       return
     }
+    if (targetBanUser.toLowerCase() === 'rymon') {
+      alert('Action forbidden: Root Owner account cannot be banned.')
+      return
+    }
     const isBan = banActionType === 'ban'
     await toggleBanStatusBackend(targetBanUser, 'user', isBan, currentUser?.username || 'rymon')
     showToast(`User ${targetBanUser} has been ${isBan ? 'BANNED' : 'UNBANNED'}.`)
-    fetchAllAccounts().then(setUsersList)
+    fetchAllAccounts(currentUser).then(setUsersList)
   }
 
   const handleApplyDeleteUserKeys = async () => {
+    if (!isOwner) {
+      alert('Power restriction: Only the Root Owner can bulk purge keys.')
+      return
+    }
     if (!targetDeleteUser) {
       alert('Please select a target user.')
       return
@@ -825,11 +853,15 @@ export default function RymonConnect() {
 
   const handleCreateReferral = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isOwner && refTargetRole !== 'reseller') {
+      alert('Power restriction: Only the Shadow Admin / Root Owner (rymon) can issue Administrator invite codes. Admins can only invite downline Resellers.')
+      return
+    }
     setRefCreating(true)
     const bal = typeof refInitialBal === 'number' ? refInitialBal : 0
     const res = await createReferralCode(
       currentUser?.username || 'rymon',
-      refTargetRole,
+      isOwner ? refTargetRole : 'reseller',
       bal,
       refCustomCode,
       refMaxUses
@@ -839,7 +871,7 @@ export default function RymonConnect() {
       showToast(`Created referral code: ${res.code}`)
       setRefCustomCode('')
       setRefInitialBal('')
-      fetchReferralCodes().then(setReferralList)
+      fetchReferralCodes(currentUser).then(setReferralList)
     } else {
       alert(`Error: ${res.message}`)
     }
@@ -850,6 +882,25 @@ export default function RymonConnect() {
     if (ok) {
       setReferralList((prev) => prev.filter((r) => r.id !== id))
       showToast('Referral code deleted.')
+    }
+  }
+
+  const handleTogglePauseKey = async (keyString: string) => {
+    const res = await togglePauseLicenseBackend(keyString, currentUser?.username || 'rymon')
+    if (res.success) {
+      showToast(res.message)
+      setKeysList((prev) =>
+        prev.map((k) =>
+          k.license_key === keyString
+            ? { ...k, is_paused: res.is_paused, status: res.status as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED' }
+            : k
+        )
+      )
+      if (record && record.license_key === keyString) {
+        setRecord((prev) => (prev ? { ...prev, is_paused: res.is_paused } : null))
+      }
+    } else {
+      alert(`Error: ${res.message}`)
     }
   }
 
@@ -913,15 +964,29 @@ export default function RymonConnect() {
   const stats = useMemo(() => {
     const total = keysList.length
     const active = keysList.filter((k) => k.status === 'ACTIVE').length
+    const paused = keysList.filter((k) => k.is_paused || k.status === 'PAUSED').length
     const unused = keysList.filter((k) => k.status === 'WAITING').length
     const expired = keysList.filter((k) => k.status === 'EXPIRED').length
     const reset = keysList.filter((k) => k.devices_used === 0 && k.status === 'ACTIVE').length
-    return { total, active, unused, expired, reset }
+    return { total, active, paused, unused, expired, reset }
   }, [keysList])
 
   const isOwner = currentUser?.role === 'owner'
   const isAdmin = currentUser?.role === 'admin'
-  const isStaff = isOwner || isAdmin || currentUser?.role === 'reseller'
+  const isReseller = currentUser?.role === 'reseller'
+  const isStreamer = currentUser?.role === 'streamer'
+  const isStaff = isOwner || isAdmin || isReseller
+
+  // Sovereign RBAC tab isolation guard
+  useEffect(() => {
+    if (isStreamer && activeTab !== 'remote') {
+      setActiveTab('remote')
+    } else if (isReseller && !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend'].includes(activeTab)) {
+      setActiveTab('overview')
+    } else if (isAdmin && !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend', 'users', 'broadcast', 'referrals', 'ban'].includes(activeTab)) {
+      setActiveTab('overview')
+    }
+  }, [isStreamer, isReseller, isAdmin, activeTab])
 
   return (
     <div style={styles.appShell}>
@@ -1474,115 +1539,132 @@ export default function RymonConnect() {
                 <span style={styles.cyanMiniBadge}>LIVE</span>
               </button>
 
-              {/* Dashboards */}
-              <div style={styles.navCategoryHeader}>DASHBOARDS</div>
-              <button
-                onClick={() => {
-                  setActiveTab('overview')
-                  setMobileMenuOpen(false)
-                }}
-                style={{
-                  ...styles.navItem,
-                  ...(activeTab === 'overview' ? styles.navItemActive : {})
-                }}
-              >
-                <span style={styles.navIcon}>📊</span>
-                <span>Overview</span>
-              </button>
-
-              {/* User System */}
-              {isStaff && (
+              {/* Staff-Only Navigation Sections (Hidden from key-login Streamers) */}
+              {!isStreamer && (
                 <>
-                  <div style={styles.navCategoryHeader}>USER SYSTEM</div>
+                  {/* Dashboards */}
+                  <div style={styles.navCategoryHeader}>DASHBOARDS</div>
                   <button
                     onClick={() => {
-                      setActiveTab('generate')
+                      setActiveTab('overview')
                       setMobileMenuOpen(false)
                     }}
                     style={{
                       ...styles.navItem,
-                      ...(activeTab === 'generate' ? styles.navItemActive : {})
+                      ...(activeTab === 'overview' ? styles.navItemActive : {})
                     }}
                   >
-                    <span style={styles.navIcon}>⚡</span>
-                    <span>Generate Key</span>
+                    <span style={styles.navIcon}>📊</span>
+                    <span>Overview</span>
                   </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab('keys')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'keys' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>🔑</span>
-                    <span>License Keys</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab('telegram')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'telegram' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>✈️</span>
-                    <span>Telegram Bot</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab('connect-api')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'connect-api' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>🔗</span>
-                    <span>Connect URL & APK</span>
-                    <span style={styles.cyanMiniBadge}>SOVEREIGN</span>
-                  </button>
-                </>
-              )}
 
-              {/* Management (Owner & Admin) */}
-              {(isOwner || isAdmin) && (
-                <>
-                  <div style={styles.navCategoryHeader}>MANAGEMENT</div>
-                  <button
-                    onClick={() => {
-                      setActiveTab('users')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'users' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>👥</span>
-                    <span>Users</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab('broadcast')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'broadcast' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>📢</span>
-                    <span>Talk to Users / Broadcast</span>
-                    <span style={styles.cyanMiniBadge}>REALTIME</span>
-                  </button>
-                  {isOwner && (
+                  {/* User System */}
+                  {isStaff && (
                     <>
+                      <div style={styles.navCategoryHeader}>USER SYSTEM</div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('generate')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'generate' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>⚡</span>
+                        <span>Generate Key</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('keys')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'keys' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>🔑</span>
+                        <span>License Keys</span>
+                      </button>
+                      {isOwner && (
+                        <button
+                          onClick={() => {
+                            setActiveTab('telegram')
+                            setMobileMenuOpen(false)
+                          }}
+                          style={{
+                            ...styles.navItem,
+                            ...(activeTab === 'telegram' ? styles.navItemActive : {})
+                          }}
+                        >
+                          <span style={styles.navIcon}>✈️</span>
+                          <span>Telegram Bot</span>
+                          <span style={styles.cyanMiniBadge}>OWNER</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setActiveTab('connect-api')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'connect-api' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>🔗</span>
+                        <span>Connect URL & APK</span>
+                        <span style={styles.cyanMiniBadge}>SOVEREIGN</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('extend')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'extend' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>📅</span>
+                        <span>Extend Keys</span>
+                      </button>
+                    </>
+                  )}
+
+                  {/* Management (Owner & Admin) */}
+                  {(isOwner || isAdmin) && (
+                    <>
+                      <div style={styles.navCategoryHeader}>MANAGEMENT</div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('users')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'users' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>👥</span>
+                        <span>Users</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('broadcast')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'broadcast' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>📢</span>
+                        <span>Talk to Users / Broadcast</span>
+                        <span style={styles.cyanMiniBadge}>REALTIME</span>
+                      </button>
                       <button
                         onClick={() => {
                           setActiveTab('referrals')
@@ -1595,96 +1677,88 @@ export default function RymonConnect() {
                       >
                         <span style={styles.navIcon}>🎟️</span>
                         <span>Invite Codes</span>
-                        <span style={styles.cyanMiniBadge}>OWNER</span>
+                        <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER' : 'ADMIN'}</span>
                       </button>
+                      {isOwner && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setActiveTab('add-balance')
+                              setMobileMenuOpen(false)
+                            }}
+                            style={{
+                              ...styles.navItem,
+                              ...(activeTab === 'add-balance' ? styles.navItemActive : {})
+                            }}
+                          >
+                            <span style={styles.navIcon}>💼</span>
+                            <span>Add Balance</span>
+                            <span style={styles.cyanMiniBadge}>OWNER</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setActiveTab('delete')
+                              setMobileMenuOpen(false)
+                            }}
+                            style={{
+                              ...styles.navItem,
+                              ...(activeTab === 'delete' ? styles.navItemActive : {})
+                            }}
+                          >
+                            <span style={styles.navIcon}>🗑️</span>
+                            <span>Delete Keys</span>
+                            <span style={styles.cyanMiniBadge}>OWNER</span>
+                          </button>
+                        </>
+                      )}
                       <button
                         onClick={() => {
-                          setActiveTab('add-balance')
+                          setActiveTab('ban')
                           setMobileMenuOpen(false)
                         }}
                         style={{
                           ...styles.navItem,
-                          ...(activeTab === 'add-balance' ? styles.navItemActive : {})
+                          ...(activeTab === 'ban' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>💼</span>
-                        <span>Add Balance</span>
-                        <span style={styles.cyanMiniBadge}>OWNER</span>
+                        <span style={styles.navIcon}>🛡️</span>
+                        <span>Ban / Unban</span>
                       </button>
                     </>
                   )}
-                  <button
-                    onClick={() => {
-                      setActiveTab('ban')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'ban' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>🛡️</span>
-                    <span>Ban / Unban</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab('delete')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'delete' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>🗑️</span>
-                    <span>Delete Keys</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab('extend')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'extend' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>📅</span>
-                    <span>Extend Keys</span>
-                  </button>
-                </>
-              )}
 
-              {/* Core Config */}
-              {isOwner && (
-                <>
-                  <div style={styles.navCategoryHeader}>CORE CONFIG</div>
-                  <button
-                    onClick={() => {
-                      setActiveTab('advance')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'advance' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>⚙️</span>
-                    <span>Advance System</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActiveTab('sql-setup')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'sql-setup' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>🗄️</span>
-                    <span>Database SQL</span>
-                  </button>
+                  {/* Core Config (Owner Only) */}
+                  {isOwner && (
+                    <>
+                      <div style={styles.navCategoryHeader}>CORE CONFIG</div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('advance')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'advance' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>⚙️</span>
+                        <span>Advance System</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('sql-setup')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'sql-setup' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>🗄️</span>
+                        <span>Database SQL</span>
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </nav>
@@ -1708,7 +1782,7 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                {/* 4 Metric Counters */}
+                {/* 5 Metric Counters */}
                 <div style={styles.statGrid}>
                   <div style={styles.statCard}>
                     <div style={styles.statIconFrame}>🔑</div>
@@ -1722,6 +1796,13 @@ export default function RymonConnect() {
                     <div>
                       <div style={{ ...styles.statNum, color: '#05df72' }}>{stats.active}</div>
                       <div style={styles.statLabel}>Active Keys</div>
+                    </div>
+                  </div>
+                  <div style={styles.statCard}>
+                    <div style={{ ...styles.statIconFrame, color: '#ffb700' }}>⏸️</div>
+                    <div>
+                      <div style={{ ...styles.statNum, color: '#ffb700' }}>{stats.paused}</div>
+                      <div style={styles.statLabel}>Paused Keys</div>
                     </div>
                   </div>
                   <div style={styles.statCard}>
@@ -2138,20 +2219,24 @@ export default function RymonConnect() {
                                   style={{
                                     ...styles.statusPill,
                                     background:
-                                      k.status === 'ACTIVE'
+                                      k.is_paused || k.status === 'PAUSED'
+                                        ? 'rgba(255,183,0,0.15)'
+                                        : k.status === 'ACTIVE'
                                         ? 'rgba(5,223,114,0.15)'
                                         : k.status === 'WAITING'
                                         ? 'rgba(234,179,8,0.15)'
                                         : 'rgba(239,68,68,0.15)',
                                     color:
-                                      k.status === 'ACTIVE'
+                                      k.is_paused || k.status === 'PAUSED'
+                                        ? '#ffb700'
+                                        : k.status === 'ACTIVE'
                                         ? '#05df72'
                                         : k.status === 'WAITING'
                                         ? '#eab308'
                                         : '#ef4444'
                                   }}
                                 >
-                                  {k.status}
+                                  {k.is_paused || k.status === 'PAUSED' ? 'PAUSED' : k.status}
                                 </span>
                                 {k.expires_at && (
                                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
@@ -2162,17 +2247,27 @@ export default function RymonConnect() {
                               <td style={styles.td}>
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                   <button
+                                    onClick={() => handleTogglePauseKey(k.license_key)}
+                                    style={{
+                                      ...styles.actionIconBtn,
+                                      color: k.is_paused || k.status === 'PAUSED' ? '#05df72' : '#ffb700'
+                                    }}
+                                    title={k.is_paused || k.status === 'PAUSED' ? 'Resume / Unpause Key' : 'Pause / Freeze Key'}
+                                  >
+                                    {k.is_paused || k.status === 'PAUSED' ? '▶️' : '⏸️'}
+                                  </button>
+                                  <button
                                     onClick={() => handleResetHWID(k.license_key)}
                                     style={styles.actionIconBtn}
                                     title="Reset HWID binding"
                                   >
                                     🔄
                                   </button>
-                                  {(isOwner || isAdmin) && (
+                                  {isOwner && (
                                     <button
                                       onClick={() => handleDeleteKey(k.license_key)}
                                       style={{ ...styles.actionIconBtn, color: '#ef4444' }}
-                                      title="Delete License"
+                                      title="Delete License (Owner Only)"
                                     >
                                       🗑️
                                     </button>
@@ -3183,11 +3278,13 @@ export default function RymonConnect() {
                   <div>
                     <h2 style={styles.pageTitle}>Role Invite Codes Engine</h2>
                     <p style={styles.pageSubtitle}>
-                      Generate role-bound invitation codes for prospective Resellers and Admins. Users self-register with their own username and password.
+                      {isOwner
+                        ? 'Generate role-bound invitation codes for prospective Resellers and Admins. Users self-register with their own username and password.'
+                        : 'Generate role-bound invitation codes for prospective downline Resellers. Users self-register with their own username and password.'}
                     </p>
                   </div>
                   <div style={styles.badgeCluster}>
-                    <span style={styles.cyanMiniBadge}>OWNER CONSOLE</span>
+                    <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER CONSOLE' : 'ADMIN CONSOLE'}</span>
                     <span style={styles.greenPulseBadge}>● SOVEREIGN PROTOCOL</span>
                   </div>
                 </div>
@@ -3232,20 +3329,29 @@ export default function RymonConnect() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setRefTargetRole('admin')}
+                            onClick={() => {
+                              if (!isOwner) {
+                                alert('Power restriction: Only the Shadow Admin / Root Owner (rymon) can issue Administrator invite codes. Admins can only invite downline Resellers.')
+                                return
+                              }
+                              setRefTargetRole('admin')
+                            }}
+                            disabled={!isOwner}
                             style={{
                               flex: 1,
                               padding: '10px',
                               borderRadius: '8px',
                               border: refTargetRole === 'admin' ? '1px solid #05df72' : '1px solid rgba(255,255,255,0.08)',
                               background: refTargetRole === 'admin' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                              color: refTargetRole === 'admin' ? '#05df72' : '#94a3b8',
+                              color: !isOwner ? '#475569' : refTargetRole === 'admin' ? '#05df72' : '#94a3b8',
                               fontWeight: 700,
                               fontSize: '12px',
-                              cursor: 'pointer'
+                              cursor: !isOwner ? 'not-allowed' : 'pointer',
+                              opacity: !isOwner ? 0.5 : 1
                             }}
+                            title={!isOwner ? 'Shadow Admin / Root Owner only' : 'Create Administrator invite code'}
                           >
-                            🛡️ ADMINISTRATOR
+                            🛡️ ADMINISTRATOR {!isOwner && '(OWNER ONLY)'}
                           </button>
                         </div>
                       </div>
@@ -3314,7 +3420,7 @@ export default function RymonConnect() {
                           </div>
                         </div>
                         <button
-                          onClick={() => fetchReferralCodes().then(setReferralList)}
+                          onClick={() => fetchReferralCodes(currentUser).then(setReferralList)}
                           style={{ ...styles.chipBtn, fontSize: '11px' }}
                         >
                           🔄 Refresh
@@ -3648,6 +3754,19 @@ public class ServerConfig {
                   </div>
                   <div style={styles.badgeCluster}>
                     <span style={styles.greenPulseBadge}>● {isLiveConnected ? 'LINK ACTIVE' : 'CONNECTING'}</span>
+                    {isStaff && currentKey && (
+                      <button
+                        onClick={() => handleTogglePauseKey(currentKey)}
+                        style={{
+                          ...styles.emergencyPurgeBtn,
+                          background: record?.is_paused ? 'rgba(5, 223, 114, 0.2)' : 'rgba(255, 183, 0, 0.2)',
+                          border: record?.is_paused ? '1px solid #05df72' : '1px solid #ffb700',
+                          color: record?.is_paused ? '#05df72' : '#ffb700'
+                        }}
+                      >
+                        {record?.is_paused ? '▶️ RESUME KEY' : '⏸️ PAUSE KEY'}
+                      </button>
+                    )}
                     <button
                       onClick={() => setShowPurgeModal(true)}
                       style={styles.emergencyPurgeBtn}
@@ -3668,10 +3787,43 @@ public class ServerConfig {
                     <span style={styles.telemetryBarVal}>{record?.game_name || 'Free Fire MAX'}</span>
                   </div>
                   <div style={styles.telemetryBarItem}>
+                    <span style={styles.telemetryBarLabel}>KEY STATE:</span>
+                    <span style={{ ...styles.telemetryBarVal, color: record?.is_paused ? '#ffb700' : '#05df72' }}>
+                      {record?.is_paused ? '⏸️ PAUSED / FROZEN' : '● ACTIVE'}
+                    </span>
+                  </div>
+                  <div style={styles.telemetryBarItem}>
                     <span style={styles.telemetryBarLabel}>EXPIRES IN:</span>
                     <span style={{ ...styles.telemetryBarVal, color: '#00d9ff' }}>{countdown}</span>
                   </div>
                 </div>
+
+                {/* Paused Warning Banner */}
+                {record?.is_paused && (
+                  <div
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(255, 183, 0, 0.2) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(255, 183, 0, 0.2) 100%)',
+                      border: '1px solid rgba(255, 183, 0, 0.5)',
+                      borderRadius: '12px',
+                      padding: '14px 20px',
+                      marginBottom: '20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px',
+                      color: '#ffb700'
+                    }}
+                  >
+                    <span style={{ fontSize: '24px' }}>⏸️</span>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '14px', letterSpacing: '0.5px' }}>
+                        THIS LICENSE KEY IS CURRENTLY PAUSED BY STAFF
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
+                        In-game Stranger daemon hook and telemetry adjustments are frozen until resumed by an authorized reseller or admin.
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* 3 Telemetry Column Control Grid */}
                 <div style={styles.controlGrid3Col}>
