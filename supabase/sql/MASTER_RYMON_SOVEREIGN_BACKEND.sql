@@ -826,3 +826,96 @@ VALUES
 ('trial_key_settings', '{"admin":true,"reseller":false}'::jsonb),
 ('site_branding', '{"panel_name":"Rymon","panel_sub":"CONTROL PANEL & TELEMETRY REMOTE","logo_url":"/rymon_logo.jpg"}'::jsonb)
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+-- ------------------------------------------------------------------------------
+-- 6. COMMUNICATION, NOTIFICATIONS & TELEGRAM BOT GATEWAY
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.rymon_notifications (
+    id BIGSERIAL PRIMARY KEY,
+    sender TEXT NOT NULL DEFAULT 'rymon',
+    recipient TEXT NOT NULL DEFAULT 'ALL',
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'INFO',
+    is_pinned BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rymon_notifications_recipient ON public.rymon_notifications (recipient);
+CREATE INDEX IF NOT EXISTS idx_rymon_notifications_created ON public.rymon_notifications (created_at DESC);
+
+ALTER TABLE public.rymon_notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access to rymon_notifications" ON public.rymon_notifications;
+CREATE POLICY "Public access to rymon_notifications" ON public.rymon_notifications FOR ALL USING (true) WITH CHECK (true);
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.rymon_notifications;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS public.rymon_telegram_config (
+    id INT PRIMARY KEY DEFAULT 1,
+    bot_token TEXT DEFAULT '',
+    chat_id TEXT DEFAULT '',
+    channel_username TEXT DEFAULT '',
+    is_active BOOLEAN DEFAULT false,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+INSERT INTO public.rymon_telegram_config (id, bot_token, chat_id, channel_username, is_active)
+VALUES (1, '', '', '@RymonGhostStreamer', true)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE public.rymon_telegram_config ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access to rymon_telegram_config" ON public.rymon_telegram_config;
+CREATE POLICY "Public access to rymon_telegram_config" ON public.rymon_telegram_config FOR ALL USING (true) WITH CHECK (true);
+
+-- RPC for dispatching broadcasts
+CREATE OR REPLACE FUNCTION public.rpc_rymon_send_broadcast(
+    p_sender TEXT,
+    p_recipient TEXT,
+    p_title TEXT,
+    p_message TEXT,
+    p_type TEXT DEFAULT 'INFO',
+    p_is_pinned BOOLEAN DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_new_id BIGINT;
+BEGIN
+    INSERT INTO public.rymon_notifications (sender, recipient, title, message, type, is_pinned, created_at)
+    VALUES (COALESCE(p_sender, 'rymon'), COALESCE(p_recipient, 'ALL'), p_title, p_message, COALESCE(p_type, 'INFO'), COALESCE(p_is_pinned, false), now())
+    RETURNING id INTO v_new_id;
+
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        'Broadcast Message Sent: ' || p_title,
+        'COMMUNICATION_BROADCAST',
+        'Target: ' || p_recipient || ' | Type: ' || p_type || ' | Pinned: ' || (CASE WHEN p_is_pinned THEN 'YES' ELSE 'NO' END),
+        p_sender,
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'notification_id', v_new_id,
+        'message', 'Broadcast dispatched successfully to ' || p_recipient
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_send_broadcast(TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO anon, authenticated;
+
+-- Seed initial announcements
+INSERT INTO public.rymon_notifications (sender, recipient, title, message, type, is_pinned, created_at)
+VALUES 
+('rymon', 'ALL', '🚨 SYSTEM ACTIVE: Welcome to Rymon Sovereign Network', 'The sovereign portal is online on greenvest.shop with zero external latency. All reseller balances, key generators, and streamer telemetry are linked directly to database.', 'UPDATE', true, now()),
+('rymon', 'ALL', '⚡ PUBG 3.7 & FreeFire Bypass Live', 'All memory injection modules and safe telemetry controls are updated. Ensure your streamers bind HWID before joining live matches.', 'INFO', false, now() - interval '2 hours'),
+('rymon', 'ROGER', '💼 Reseller Tier Verified', 'Your reseller account has been credited. You can generate PUBG and FreeFire keys directly from the Generate Key panel.', 'INFO', false, now() - interval '1 hour')
+ON CONFLICT DO NOTHING;
+
