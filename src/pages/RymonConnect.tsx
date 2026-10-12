@@ -35,7 +35,16 @@ import {
   togglePauseLicenseBackend,
   bulkTogglePauseAllKeysBackend,
   bulkResetAllHwidBackend,
-  bulkExtendAllKeysBackend
+  bulkExtendAllKeysBackend,
+  DEFAULT_KEY_PRICES,
+  getGlobalPriceMap,
+  saveGlobalPriceMap,
+  getAllUserCustomPriceMaps,
+  getUserCustomPriceMap,
+  saveUserCustomPriceMap,
+  clearUserCustomPriceMap,
+  getEffectivePriceMap,
+  fetchAllStreamerControls
 } from '../lib/rymonBackend'
 
 type TabType =
@@ -97,6 +106,15 @@ export default function RymonConnect() {
   const [keysList, setKeysList] = useState<RymonLicense[]>([])
   const [usersList, setUsersList] = useState<RymonAccount[]>([])
   const [activities, setActivities] = useState<RymonActivity[]>([])
+  const [streamerControls, setStreamerControls] = useState<StreamerControlRecord[]>([])
+
+  // Dynamic Pricing Management State (Owner)
+  const [globalPrices, setGlobalPrices] = useState<Record<string, number>>(() => getGlobalPriceMap())
+  const [targetPriceUser, setTargetPriceUser] = useState<string>('')
+  const [customUserPrices, setCustomUserPrices] = useState<Record<string, number>>(() => getGlobalPriceMap())
+  const [allCustomUserMaps, setAllCustomUserMaps] = useState<Record<string, Record<string, number>>>(() =>
+    getAllUserCustomPriceMaps()
+  )
 
   // Generate Key Form State
   const [genGame, setGenGame] = useState('Free Fire MAX')
@@ -193,7 +211,7 @@ export default function RymonConnect() {
   const [copiedRefCode, setCopiedRefCode] = useState<string | null>(null)
 
   // Sovereign Connect URL & APK Test Sandbox State
-  const [testConnectKey, setTestConnectKey] = useState('RYMON-MASTER-KEY')
+  const [testConnectKey, setTestConnectKey] = useState('')
   const [testConnectHwid, setTestConnectHwid] = useState('DEVICE-SIM-ANDROID-9981')
   const [testConnectLoading, setTestConnectLoading] = useState(false)
   const [testConnectResult, setTestConnectResult] = useState<string>('')
@@ -214,9 +232,9 @@ export default function RymonConnect() {
         setCurrentUser(u)
         setWalletBalance(u.balance || 0)
         setIsAuthenticated(true)
-        if (savedKey) setCurrentKey(savedKey)
+        if (savedKey && savedKey !== 'RYMON-MASTER-KEY') setCurrentKey(savedKey)
       } catch {}
-    } else if (savedKey) {
+    } else if (savedKey && savedKey !== 'RYMON-MASTER-KEY') {
       setCurrentKey(savedKey)
       setIsAuthenticated(true)
       const exp = savedExp ? new Date(savedExp) : new Date(Date.now() + 30 * 86400000)
@@ -242,7 +260,7 @@ export default function RymonConnect() {
 
     async function loadLiveData() {
       const isStreamerRole = currentUser?.role === 'streamer'
-      const [lcs, usrs, acts, notifs, tgCfg, refs] = await Promise.all([
+      const [lcs, usrs, acts, notifs, tgCfg, refs, ctrls] = await Promise.all([
         fetchAllLicenses(currentUser),
         fetchAllAccounts(currentUser),
         isStreamerRole ? Promise.resolve([]) : fetchAllActivities(),
@@ -250,7 +268,8 @@ export default function RymonConnect() {
         currentUser?.role === 'owner'
           ? fetchTelegramConfigBackend()
           : Promise.resolve({ bot_token: '', chat_id: '', channel_username: '@RymonGhostStreamer', is_active: false }),
-        fetchReferralCodes(currentUser)
+        fetchReferralCodes(currentUser),
+        fetchAllStreamerControls(currentUser)
       ])
 
       if (isMounted) {
@@ -260,6 +279,7 @@ export default function RymonConnect() {
         setNotifications(notifs)
         setTelegramConfig(tgCfg)
         setReferralList(refs)
+        setStreamerControls(ctrls)
 
         // Sync fresh balance if currentUser in list
         if (currentUser) {
@@ -286,6 +306,13 @@ export default function RymonConnect() {
           { event: '*', schema: 'public', table: 'rymon_licenses' },
           () => {
             fetchAllLicenses(currentUser).then((l) => isMounted && setKeysList(l))
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'rymon_streamer_controls' },
+          () => {
+            fetchAllStreamerControls(currentUser).then((c) => isMounted && setStreamerControls(c))
           }
         )
         .on(
@@ -515,11 +542,6 @@ export default function RymonConnect() {
       setIsAuthenticated(true)
       localStorage.setItem('rymon_session_user', JSON.stringify(res.user))
 
-      if (res.user.role === 'owner') {
-        setCurrentKey('RYMON-MASTER-KEY')
-        localStorage.setItem('rymon_remote_key', 'RYMON-MASTER-KEY')
-      }
-
       showToast(`Welcome back, ${res.user.username} (${res.user.role.toUpperCase()})!`)
       setActiveTab('overview')
     } else {
@@ -544,10 +566,10 @@ export default function RymonConnect() {
 
       const streamerUser: RymonAccount = {
         id: 'usr-streamer',
-        username: res.isMaster ? 'debajoyti' : 'Streamer VIP',
+        username: 'Streamer VIP',
         email: 'streamer@rymon.vip',
-        role: res.isMaster ? 'owner' : 'streamer',
-        balance: res.isMaster ? 999628429 : 0,
+        role: 'streamer',
+        balance: 0,
         uplink: 'debajoyti',
         status: 'ACTIVE'
       }
@@ -575,21 +597,64 @@ export default function RymonConnect() {
     setActiveTab('overview')
   }
 
-  // 7. KEY GENERATION ENGINE WITH REAL BALANCE DEDUCTION
-  const priceMap: Record<string, number> = {
-    '2 Hours': 20,
-    '1 Day': 35,
-    '3 Day': 50,
-    '3 Days': 50,
-    '7 Day': 100,
-    '7 Days': 100,
-    '15 Day': 180,
-    '15 Days': 180,
-    '30 Day': 350,
-    '30 Days': 350
+  // 7. KEY GENERATION ENGINE WITH DYNAMIC DEFAULT + INDIVIDUAL USER PRICING
+  const effectiveUserPrices = useMemo(() => {
+    return getEffectivePriceMap(currentUser?.username)
+  }, [currentUser?.username, globalPrices, allCustomUserMaps])
+
+  const hasCustomPricingForCurrentUser = useMemo(() => {
+    if (!currentUser?.username) return false
+    return Boolean(getUserCustomPriceMap(currentUser.username))
+  }, [currentUser?.username, allCustomUserMaps])
+
+  const unitPlanPrice = effectiveUserPrices[genDuration] ?? 35
+  const projectedInvoice = unitPlanPrice * Math.max(1, genDevicesMax)
+
+  const handleSaveGlobalDefaultPrices = (e: React.FormEvent) => {
+    e.preventDefault()
+    const saved = saveGlobalPriceMap(globalPrices)
+    setGlobalPrices(saved)
+    if (!targetPriceUser || !getUserCustomPriceMap(targetPriceUser)) {
+      setCustomUserPrices(saved)
+    }
+    showToast('✓ Default key prices updated for all Resellers & Admins!')
   }
 
-  const projectedInvoice = priceMap[genDuration] || 35
+  const handleResetGlobalDefaultPrices = () => {
+    const saved = saveGlobalPriceMap(DEFAULT_KEY_PRICES)
+    setGlobalPrices(saved)
+    showToast('↺ Default key prices restored to factory defaults.')
+  }
+
+  const handleSelectTargetPriceUser = (username: string) => {
+    setTargetPriceUser(username)
+    if (!username) {
+      setCustomUserPrices({ ...globalPrices })
+      return
+    }
+    const existing = getUserCustomPriceMap(username)
+    setCustomUserPrices(existing ? { ...globalPrices, ...existing } : { ...globalPrices })
+  }
+
+  const handleSaveIndividualUserPrices = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!targetPriceUser) {
+      alert('Please select a target Admin or Reseller first.')
+      return
+    }
+    saveUserCustomPriceMap(targetPriceUser, customUserPrices)
+    setAllCustomUserMaps(getAllUserCustomPriceMaps())
+    showToast(`👑 Custom key prices saved for @${targetPriceUser}!`)
+  }
+
+  const handleClearIndividualUserPrices = (username: string) => {
+    clearUserCustomPriceMap(username)
+    setAllCustomUserMaps(getAllUserCustomPriceMaps())
+    if (targetPriceUser.toLowerCase() === username.toLowerCase()) {
+      setCustomUserPrices({ ...globalPrices })
+    }
+    showToast(`Reverted @${username} to global default key prices.`)
+  }
 
   const handleGenerateKey = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1060,16 +1125,34 @@ export default function RymonConnect() {
     )
   }, [usersList, searchUserQuery])
 
+  // Live Online / Playing Now Set (from rymon_streamer_controls & recent heartbeats)
+  const onlineKeySet = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of streamerControls) {
+      if (c.is_online && !c.is_paused && c.is_active !== false) {
+        set.add(c.license_key.toUpperCase())
+      }
+    }
+    if (record && record.is_online && !record.is_paused && currentKey) {
+      set.add(currentKey.toUpperCase())
+    }
+    return set
+  }, [streamerControls, record, currentKey])
+
   // Overview Counts
   const stats = useMemo(() => {
     const total = keysList.length
-    const active = keysList.filter((k) => k.status === 'ACTIVE').length
+    const active = keysList.filter((k) => k.status === 'ACTIVE' && !k.is_paused).length
     const paused = keysList.filter((k) => k.is_paused || k.status === 'PAUSED').length
     const unused = keysList.filter((k) => k.status === 'WAITING').length
     const expired = keysList.filter((k) => k.status === 'EXPIRED').length
     const reset = keysList.filter((k) => k.devices_used === 0 && k.status === 'ACTIVE').length
-    return { total, active, paused, unused, expired, reset }
-  }, [keysList])
+    const playingNow = keysList.filter(
+      (k) => !k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(k.license_key.toUpperCase())
+    ).length
+    const notPlaying = Math.max(0, total - playingNow)
+    return { total, active, paused, unused, expired, reset, playingNow, notPlaying }
+  }, [keysList, onlineKeySet])
 
   const isOwner = currentUser?.role === 'owner'
   const isAdmin = currentUser?.role === 'admin'
@@ -1538,39 +1621,15 @@ export default function RymonConnect() {
               <form onSubmit={handleKeyAuth} style={styles.authForm}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: '#94a3b8' }}>
                   <span>LICENSE KEY</span>
-                  <span
-                    style={{ color: '#00d9ff', cursor: 'pointer' }}
-                    onClick={() => setKeyInput('RYMON-MASTER-KEY')}
-                  >
-                    Use Master Key
-                  </span>
                 </div>
                 <input
                   type="text"
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
-                  placeholder="e.g. RYMON-FF-XXXX-YYYY"
+                  placeholder="Enter your Rymon license key (e.g. RYMON-FF-XXXX-XXXX)"
                   style={styles.keyInput}
                   required
                 />
-
-                <div style={styles.quickAccountsRow}>
-                  <span style={styles.quickLabel}>Valid Sample Keys:</span>
-                  <button
-                    type="button"
-                    onClick={() => setKeyInput('RYMON-MASTER-KEY')}
-                    style={styles.chipBtn}
-                  >
-                    RYMON-MASTER-KEY
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setKeyInput('RYMON-FF-94A2-9981')}
-                    style={styles.chipBtn}
-                  >
-                    RYMON-FF-94A2-9981
-                  </button>
-                </div>
 
                 <button type="submit" disabled={authLoading} style={styles.submitBtn}>
                   {authLoading ? 'VERIFYING KEYAUTH...' : 'CONNECT GHOST REMOTE'}
@@ -1595,7 +1654,7 @@ export default function RymonConnect() {
                     gap: '6px'
                   }}
                 >
-                  <span>📥</span> DOWNLOAD APK CLIENT (v2.4 & v2.3)
+                  <span>📥</span> DOWNLOAD RYMON STREAMER APK
                 </button>
 
                 {authError && <div style={styles.errorBox}>{authError}</div>}
@@ -1865,8 +1924,8 @@ export default function RymonConnect() {
                           ...(activeTab === 'advance' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>⚙️</span>
-                        <span>Advance System</span>
+                        <span style={styles.navIcon}>💰</span>
+                        <span>Pricing & Advance</span>
                       </button>
                       <button
                         onClick={() => {
@@ -1906,8 +1965,33 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                {/* 5 Metric Counters */}
+                {/* Metric Counters (Including Playing Now vs Not Playing Now) */}
                 <div style={styles.statGrid}>
+                  <div
+                    style={{
+                      ...styles.statCard,
+                      borderColor: 'rgba(5, 223, 114, 0.45)',
+                      background: 'linear-gradient(135deg, rgba(5, 223, 114, 0.12) 0%, rgba(13, 17, 26, 0.9) 100%)'
+                    }}
+                  >
+                    <div style={{ ...styles.statIconFrame, color: '#05df72' }}>🎮</div>
+                    <div>
+                      <div style={{ ...styles.statNum, color: '#05df72' }}>{stats.playingNow}</div>
+                      <div style={{ ...styles.statLabel, color: '#86efac', fontWeight: 700 }}>Playing Now</div>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      ...styles.statCard,
+                      borderColor: 'rgba(148, 163, 184, 0.35)'
+                    }}
+                  >
+                    <div style={{ ...styles.statIconFrame, color: '#94a3b8' }}>💤</div>
+                    <div>
+                      <div style={{ ...styles.statNum, color: '#e2e8f0' }}>{stats.notPlaying}</div>
+                      <div style={styles.statLabel}>Not Playing Now</div>
+                    </div>
+                  </div>
                   <div style={styles.statCard}>
                     <div style={styles.statIconFrame}>🔑</div>
                     <div>
@@ -1916,9 +2000,9 @@ export default function RymonConnect() {
                     </div>
                   </div>
                   <div style={styles.statCard}>
-                    <div style={{ ...styles.statIconFrame, color: '#05df72' }}>✓</div>
+                    <div style={{ ...styles.statIconFrame, color: '#00d9ff' }}>✓</div>
                     <div>
-                      <div style={{ ...styles.statNum, color: '#05df72' }}>{stats.active}</div>
+                      <div style={{ ...styles.statNum, color: '#00d9ff' }}>{stats.active}</div>
                       <div style={styles.statLabel}>Active Keys</div>
                     </div>
                   </div>
@@ -1936,12 +2020,89 @@ export default function RymonConnect() {
                       <div style={styles.statLabel}>Unused / Waiting</div>
                     </div>
                   </div>
-                  <div style={styles.statCard}>
-                    <div style={{ ...styles.statIconFrame, color: '#ef4444' }}>⚠️</div>
-                    <div>
-                      <div style={{ ...styles.statNum, color: '#ef4444' }}>{stats.expired}</div>
-                      <div style={styles.statLabel}>Expired Keys</div>
+                </div>
+
+                {/* Live Player Status Bar (Playing Now vs Not Playing Breakdown) */}
+                <div
+                  style={{
+                    backgroundColor: 'rgba(13, 17, 26, 0.88)',
+                    border: '1px solid rgba(0, 217, 255, 0.28)',
+                    borderRadius: '14px',
+                    padding: '16px 20px',
+                    marginBottom: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '16px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                    <div
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(5, 223, 114, 0.14)',
+                        border: '1px solid rgba(5, 223, 114, 0.4)',
+                        color: '#05df72',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <span>🟢 PLAYING NOW: {stats.playingNow}</span>
                     </div>
+                    <div
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(148, 163, 184, 0.1)',
+                        border: '1px solid rgba(148, 163, 184, 0.28)',
+                        color: '#cbd5e1',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <span>⚪ NOT PLAYING / OFFLINE: {stats.notPlaying}</span>
+                    </div>
+                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                      {stats.playingNow > 0
+                        ? `Live in-game daemon connected (${stats.playingNow} active match session${stats.playingNow > 1 ? 's' : ''})`
+                        : 'All licensed devices are currently offline / not in a match'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {keysList
+                      .filter((k) => !k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(k.license_key.toUpperCase()))
+                      .slice(0, 4)
+                      .map((k) => (
+                        <button
+                          key={k.license_key}
+                          onClick={() => {
+                            setCurrentKey(k.license_key)
+                            setActiveTab('remote')
+                          }}
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: '8px',
+                            background: 'rgba(0, 217, 255, 0.14)',
+                            border: '1px solid rgba(0, 217, 255, 0.35)',
+                            color: '#00d9ff',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                          title={`Seller: @${k.creator_username}`}
+                        >
+                          🟢 {k.license_key} • @{k.creator_username}
+                        </button>
+                      ))}
                   </div>
                 </div>
 
@@ -1970,14 +2131,24 @@ export default function RymonConnect() {
                         <div style={styles.quickActionSub}>Issue New Game Key</div>
                       </button>
                       {isOwner && (
-                        <button
-                          onClick={() => setActiveTab('add-balance')}
-                          style={styles.quickActionCard}
-                        >
-                          <div style={styles.quickActionIcon}>💼</div>
-                          <div style={styles.quickActionTitle}>Top Up Balance</div>
-                          <div style={styles.quickActionSub}>Credit Reseller Wallet</div>
-                        </button>
+                        <>
+                          <button
+                            onClick={() => setActiveTab('advance')}
+                            style={{ ...styles.quickActionCard, borderColor: 'rgba(250, 204, 21, 0.4)' }}
+                          >
+                            <div style={styles.quickActionIcon}>💰</div>
+                            <div style={{ ...styles.quickActionTitle, color: '#fde047' }}>Key Pricing</div>
+                            <div style={styles.quickActionSub}>Default & Individual Rates</div>
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('add-balance')}
+                            style={styles.quickActionCard}
+                          >
+                            <div style={styles.quickActionIcon}>💼</div>
+                            <div style={styles.quickActionTitle}>Top Up Balance</div>
+                            <div style={styles.quickActionSub}>Credit Reseller Wallet</div>
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => setActiveTab('keys')}
@@ -2009,7 +2180,7 @@ export default function RymonConnect() {
                       >
                         <div style={styles.quickActionIcon}>📥</div>
                         <div style={{ ...styles.quickActionTitle, color: '#00d9ff' }}>Download APK</div>
-                        <div style={styles.quickActionSub}>v2.4 Sync & v2.3 Classic</div>
+                        <div style={styles.quickActionSub}>Web + In-Game Dual APK</div>
                       </button>
                     </div>
                   </div>
@@ -2153,14 +2324,31 @@ export default function RymonConnect() {
                   <div>
                     <h2 style={styles.pageTitle}>Generate License Key</h2>
                     <p style={styles.pageSubtitle}>
-                      Issue new sovereign authorization credentials with atomic wallet balance verification.
+                      Seller username <strong>@{currentUser?.username}</strong> will be displayed as a glowing VIP badge inside the APK.
                     </p>
                   </div>
-                  <div style={styles.balancePill}>
-                    <span>Wallet Balance:</span>
-                    <strong style={{ color: '#00d9ff', marginLeft: '6px' }}>
-                      ₹{walletBalance.toLocaleString('en-IN')}
-                    </strong>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {hasCustomPricingForCurrentUser && (
+                      <span
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(250, 204, 21, 0.15)',
+                          border: '1px solid rgba(250, 204, 21, 0.45)',
+                          color: '#fde047',
+                          fontSize: '11px',
+                          fontWeight: 800
+                        }}
+                      >
+                        👑 CUSTOM VIP RATES ACTIVE
+                      </span>
+                    )}
+                    <div style={styles.balancePill}>
+                      <span>Wallet Balance:</span>
+                      <strong style={{ color: '#00d9ff', marginLeft: '6px' }}>
+                        ₹{walletBalance.toLocaleString('en-IN')}
+                      </strong>
+                    </div>
                   </div>
                 </div>
 
@@ -2188,12 +2376,12 @@ export default function RymonConnect() {
                             onChange={(e) => setGenDuration(e.target.value)}
                             style={styles.selectInput}
                           >
-                            <option value="2 Hours">2 Hours (₹20)</option>
-                            <option value="1 Day">1 Day (₹35)</option>
-                            <option value="3 Days">3 Days (₹50)</option>
-                            <option value="7 Days">7 Days (₹100)</option>
-                            <option value="15 Days">15 Days (₹180)</option>
-                            <option value="30 Days">30 Days (₹350)</option>
+                            <option value="2 Hours">2 Hours (₹{effectiveUserPrices['2 Hours'] ?? 20})</option>
+                            <option value="1 Day">1 Day (₹{effectiveUserPrices['1 Day'] ?? 35})</option>
+                            <option value="3 Days">3 Days (₹{effectiveUserPrices['3 Days'] ?? 50})</option>
+                            <option value="7 Days">7 Days (₹{effectiveUserPrices['7 Days'] ?? 100})</option>
+                            <option value="15 Days">15 Days (₹{effectiveUserPrices['15 Days'] ?? 180})</option>
+                            <option value="30 Days">30 Days (₹{effectiveUserPrices['30 Days'] ?? 350})</option>
                           </select>
                         </div>
                       </div>
@@ -2226,7 +2414,9 @@ export default function RymonConnect() {
                       {/* Cost Summary Box */}
                       <div style={styles.invoiceSummaryBox}>
                         <div>
-                          <div style={{ fontSize: '13px', color: '#94a3b8' }}>Invoice Cost:</div>
+                          <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                            Invoice Cost ({genDevicesMax} Device{genDevicesMax > 1 ? 's' : ''} × ₹{unitPlanPrice}):
+                          </div>
                           <div style={{ fontSize: '20px', fontWeight: 700, color: '#00d9ff' }}>
                             ₹{projectedInvoice}
                           </div>
@@ -2479,33 +2669,54 @@ export default function RymonConnect() {
                                   <span style={styles.avatarTiny}>
                                     {k.creator_username.charAt(0).toUpperCase()}
                                   </span>
-                                  <span>{k.creator_username}</span>
+                                  <span style={{ fontWeight: 600, color: '#fde047' }}>
+                                    👑 @{k.creator_username}
+                                  </span>
                                 </div>
                               </td>
                               <td style={styles.td}>
-                                <span
-                                  style={{
-                                    ...styles.statusPill,
-                                    background:
-                                      k.is_paused || k.status === 'PAUSED'
-                                        ? 'rgba(255,183,0,0.15)'
-                                        : k.status === 'ACTIVE'
-                                        ? 'rgba(5,223,114,0.15)'
-                                        : k.status === 'WAITING'
-                                        ? 'rgba(234,179,8,0.15)'
-                                        : 'rgba(239,68,68,0.15)',
-                                    color:
-                                      k.is_paused || k.status === 'PAUSED'
-                                        ? '#ffb700'
-                                        : k.status === 'ACTIVE'
-                                        ? '#05df72'
-                                        : k.status === 'WAITING'
-                                        ? '#eab308'
-                                        : '#ef4444'
-                                  }}
-                                >
-                                  {k.is_paused || k.status === 'PAUSED' ? 'PAUSED' : k.status}
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span
+                                    style={{
+                                      ...styles.statusPill,
+                                      background:
+                                        k.is_paused || k.status === 'PAUSED'
+                                          ? 'rgba(255,183,0,0.15)'
+                                          : k.status === 'ACTIVE'
+                                          ? 'rgba(5,223,114,0.15)'
+                                          : k.status === 'WAITING'
+                                          ? 'rgba(234,179,8,0.15)'
+                                          : 'rgba(239,68,68,0.15)',
+                                      color:
+                                        k.is_paused || k.status === 'PAUSED'
+                                          ? '#ffb700'
+                                          : k.status === 'ACTIVE'
+                                          ? '#05df72'
+                                          : k.status === 'WAITING'
+                                          ? '#eab308'
+                                          : '#ef4444'
+                                    }}
+                                  >
+                                    {k.is_paused || k.status === 'PAUSED' ? 'PAUSED' : k.status}
+                                  </span>
+                                  {!k.is_paused &&
+                                    k.status === 'ACTIVE' &&
+                                    onlineKeySet.has(k.license_key.toUpperCase()) && (
+                                      <span
+                                        style={{
+                                          fontSize: '10px',
+                                          fontWeight: 800,
+                                          padding: '2px 6px',
+                                          borderRadius: '6px',
+                                          background: 'rgba(5, 223, 114, 0.2)',
+                                          border: '1px solid rgba(5, 223, 114, 0.5)',
+                                          color: '#05df72'
+                                        }}
+                                      >
+                                        🟢 PLAYING
+                                      </span>
+                                    )}
+                                </div>
                                 {k.expires_at && (
                                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
                                     {new Date(k.expires_at).toLocaleDateString()}
@@ -2635,16 +2846,28 @@ export default function RymonConnect() {
                             <td style={styles.td}>
                               <div style={{ display: 'flex', gap: '8px' }}>
                                 {isOwner && (
-                                  <button
-                                    onClick={() => {
-                                      setTopUpTargetUser(u.username)
-                                      setActiveTab('add-balance')
-                                    }}
-                                    style={styles.actionIconBtn}
-                                    title="Top up balance"
-                                  >
-                                    💼
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setTopUpTargetUser(u.username)
+                                        setActiveTab('add-balance')
+                                      }}
+                                      style={styles.actionIconBtn}
+                                      title="Top up balance"
+                                    >
+                                      💼
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        handleSelectTargetPriceUser(u.username)
+                                        setActiveTab('advance')
+                                      }}
+                                      style={{ ...styles.actionIconBtn, color: '#fde047' }}
+                                      title="Set Individual Key Prices for this User"
+                                    >
+                                      💰
+                                    </button>
+                                  </>
                                 )}
                                 <button
                                   onClick={() => {
@@ -3379,15 +3602,217 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {/* 9. ADVANCE SYSTEM (MEDIA_1791705541653_4BB001FC.PNG) */}
+            {/* 9. PRICING & ADVANCE SYSTEM */}
             {activeTab === 'advance' && (
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Advance System Settings</h2>
+                    <h2 style={styles.pageTitle}>Key Pricing & Advance System</h2>
                     <p style={styles.pageSubtitle}>
-                      Set maximum key and device limits for Admins and Resellers.
+                      Update default key prices for all users or set custom discounted rates for specific Admins & Resellers.
                     </p>
+                  </div>
+                  <span style={styles.cyanMiniBadge}>OWNER PRICING ENGINE</span>
+                </div>
+
+                {/* Owner Pricing Grid: Global Default vs Target Individual */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+                  {/* Card 1: Global Default Key Prices */}
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>🌐 Default Key Prices (All Users)</h4>
+                      <span style={styles.cyanMiniBadge}>GLOBAL RATE</span>
+                    </div>
+                    <p style={styles.settingDesc}>
+                      Applies to all Admins and Resellers unless they have an individual custom rate below.
+                    </p>
+
+                    <form onSubmit={handleSaveGlobalDefaultPrices} style={{ marginTop: '14px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                        {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
+                          <div key={plan} style={styles.formGroup}>
+                            <label style={styles.formLabel}>{plan.toUpperCase()} (₹)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={globalPrices[plan] ?? DEFAULT_KEY_PRICES[plan]}
+                              onChange={(e) =>
+                                setGlobalPrices({
+                                  ...globalPrices,
+                                  [plan]: Math.max(0, parseInt(e.target.value) || 0)
+                                })
+                              }
+                              style={styles.keyInput}
+                              required
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
+                        <button
+                          type="submit"
+                          style={{
+                            ...styles.submitBtn,
+                            flex: 1,
+                            background: '#05df72',
+                            color: '#07090e',
+                            fontWeight: 800
+                          }}
+                        >
+                          💾 SAVE DEFAULT PRICES
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleResetGlobalDefaultPrices}
+                          style={{
+                            padding: '10px 14px',
+                            borderRadius: '10px',
+                            background: 'rgba(148, 163, 184, 0.12)',
+                            border: '1px solid rgba(148, 163, 184, 0.3)',
+                            color: '#cbd5e1',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ↺ Reset
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Card 2: Target Individual Custom Price Override */}
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>🎯 Target Individual Price Override</h4>
+                      <span
+                        style={{
+                          ...styles.cyanMiniBadge,
+                          background: 'rgba(250, 204, 21, 0.15)',
+                          color: '#fde047'
+                        }}
+                      >
+                        PER RESELLER / ADMIN
+                      </span>
+                    </div>
+                    <p style={styles.settingDesc}>
+                      Assign custom key prices for a specific Reseller or Admin account.
+                    </p>
+
+                    <form onSubmit={handleSaveIndividualUserPrices} style={{ marginTop: '14px' }}>
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>
+                          SELECT TARGET ADMIN / RESELLER <span style={{ color: '#fde047' }}>*</span>
+                        </label>
+                        <select
+                          value={targetPriceUser}
+                          onChange={(e) => handleSelectTargetPriceUser(e.target.value)}
+                          style={styles.selectInput}
+                          required
+                        >
+                          <option value="">-- Choose Admin or Reseller --</option>
+                          {usersList
+                            .filter((u) => u.role !== 'owner')
+                            .map((u) => {
+                              const hasCustom = Boolean(getUserCustomPriceMap(u.username))
+                              return (
+                                <option key={u.id} value={u.username}>
+                                  @{u.username} ({u.role.toUpperCase()}) {hasCustom ? '★ CUSTOM RATE' : '• Default'}
+                                </option>
+                              )
+                            })}
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '12px' }}>
+                        {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
+                          <div key={plan} style={styles.formGroup}>
+                            <label style={styles.formLabel}>{plan.toUpperCase()} (₹)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={customUserPrices[plan] ?? globalPrices[plan] ?? DEFAULT_KEY_PRICES[plan]}
+                              onChange={(e) =>
+                                setCustomUserPrices({
+                                  ...customUserPrices,
+                                  [plan]: Math.max(0, parseInt(e.target.value) || 0)
+                                })
+                              }
+                              style={styles.keyInput}
+                              required
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
+                        <button
+                          type="submit"
+                          style={{
+                            ...styles.submitBtn,
+                            flex: 1,
+                            background: 'linear-gradient(135deg, #facc15 0%, #eab308 100%)',
+                            color: '#07090e',
+                            fontWeight: 800
+                          }}
+                        >
+                          👑 SAVE RATE FOR {targetPriceUser ? `@${targetPriceUser.toUpperCase()}` : 'USER'}
+                        </button>
+                        {targetPriceUser && getUserCustomPriceMap(targetPriceUser) && (
+                          <button
+                            type="button"
+                            onClick={() => handleClearIndividualUserPrices(targetPriceUser)}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: '10px',
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              color: '#ef4444',
+                              fontWeight: 700,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Use Default
+                          </button>
+                        )}
+                      </div>
+                    </form>
+
+                    {/* Active Individual Overrides Summary */}
+                    {Object.keys(allCustomUserMaps).length > 0 && (
+                      <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginBottom: '8px' }}>
+                          ACTIVE CUSTOM OVERRIDES ({Object.keys(allCustomUserMaps).length}):
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          {Object.entries(allCustomUserMaps).map(([uname, pmap]) => (
+                            <div
+                              key={uname}
+                              onClick={() => handleSelectTargetPriceUser(uname)}
+                              style={{
+                                padding: '5px 10px',
+                                borderRadius: '8px',
+                                background: 'rgba(250, 204, 21, 0.12)',
+                                border: '1px solid rgba(250, 204, 21, 0.35)',
+                                color: '#fde047',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              <span>👑 @{uname} (1D: ₹{pmap['1 Day']} • 30D: ₹{pmap['30 Days']})</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -4667,10 +5092,10 @@ public class ServerConfig {
                 <span style={{ fontSize: '26px' }}>📥</span>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.5px' }}>
-                    RYMON STREAMER APK BUILDS
+                    RYMON STREAMER OFFICIAL APK
                   </h3>
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                    Select client package for Android ARM64
+                    Unified Android ARM64 Client • Web Control + In-Game Panel
                   </div>
                 </div>
               </div>
@@ -4691,7 +5116,6 @@ public class ServerConfig {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* Option 1: Latest v2.4 Remote Sync */}
               <div
                 style={{
                   background: 'rgba(13, 17, 26, 0.9)',
@@ -4708,7 +5132,7 @@ public class ServerConfig {
                 <div style={{ flex: '1 1 300px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                     <span style={{ fontSize: '15px', fontWeight: 800, color: '#00d9ff' }}>
-                      ⚡ v2.4 Remote Sync Edition
+                      ⚡ RYMON STREAMER (All-in-One)
                     </span>
                     <span
                       style={{
@@ -4721,26 +5145,25 @@ public class ServerConfig {
                         border: '1px solid rgba(5, 223, 114, 0.4)'
                       }}
                     >
-                      LATEST / RECOMMENDED
+                      WEB + IN-GAME PANEL
                     </span>
                   </div>
                   <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: '1.4', marginBottom: '8px' }}>
-                    Live cloud telemetry sync with this website. Real-time silent aim, ESP visuals & kinematics updated on-the-fly.
+                    Includes both <strong>Web Control</strong> &amp; <strong>In-Game Panel</strong> by default, or switch to <strong>Web Control Only</strong> directly inside the APK.
                   </div>
-                  <div style={{ fontSize: '10px', color: '#64748b', display: 'flex', gap: '14px' }}>
-                    <span>📦 Size: <strong>7.91 MB</strong></span>
+                  <div style={{ fontSize: '10px', color: '#64748b', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
                     <span>⚙️ Arch: <strong>ARM64-v8a</strong></span>
-                    <span>🔄 Mode: <strong>Web Remote</strong></span>
+                    <span>🔄 Modes: <strong>Web + In-Game / Web Only</strong></span>
                   </div>
                 </div>
 
                 <a
-                  href="/download/RYMON_STREAMER_v2.4_SYNC.apk"
-                  download="RYMON_STREAMER_v2.4_SYNC.apk"
+                  href="/download/RYMON_STREAMER_LATEST.apk"
+                  download="RYMON_STREAMER.apk"
                   style={{
                     backgroundColor: '#00d9ff',
                     color: '#07090e',
-                    padding: '10px 18px',
+                    padding: '11px 20px',
                     borderRadius: '8px',
                     fontWeight: 800,
                     fontSize: '12px',
@@ -4751,72 +5174,7 @@ public class ServerConfig {
                     whiteSpace: 'nowrap'
                   }}
                 >
-                  <span>⬇️</span> Download v2.4
-                </a>
-              </div>
-
-              {/* Option 2: v2.3 Classic Standalone */}
-              <div
-                style={{
-                  background: 'rgba(13, 17, 26, 0.65)',
-                  border: '1px solid rgba(51, 65, 85, 0.5)',
-                  borderRadius: '12px',
-                  padding: '18px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '16px',
-                  flexWrap: 'wrap'
-                }}
-              >
-                <div style={{ flex: '1 1 300px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 800, color: '#f8fafc' }}>
-                      📦 v2.3 Classic Edition
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '9px',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontWeight: 700,
-                        background: 'rgba(148, 163, 184, 0.15)',
-                        color: '#94a3b8',
-                        border: '1px solid rgba(148, 163, 184, 0.3)'
-                      }}
-                    >
-                      LEGACY / OFFLINE
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: '1.4', marginBottom: '8px' }}>
-                    Direct on-screen floating overlay menu. Standalone configuration without cloud sync.
-                  </div>
-                  <div style={{ fontSize: '10px', color: '#64748b', display: 'flex', gap: '14px' }}>
-                    <span>📦 Size: <strong>4.21 MB</strong></span>
-                    <span>⚙️ Arch: <strong>ARM64-v8a</strong></span>
-                    <span>🖥️ Mode: <strong>Direct Overlay</strong></span>
-                  </div>
-                </div>
-
-                <a
-                  href="/download/RYMON_STREAMER_v2.3_CLASSIC.apk"
-                  download="RYMON_STREAMER_v2.3_CLASSIC.apk"
-                  style={{
-                    backgroundColor: 'rgba(51, 65, 85, 0.6)',
-                    border: '1px solid rgba(148, 163, 184, 0.3)',
-                    color: '#f8fafc',
-                    padding: '10px 18px',
-                    borderRadius: '8px',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  <span>⬇️</span> Download v2.3
+                  <span>⬇️</span> Download APK
                 </a>
               </div>
             </div>

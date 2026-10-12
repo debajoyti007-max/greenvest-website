@@ -257,18 +257,6 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     device_hwid: 'HWID-VIP-STREAMER',
     status: 'ACTIVE',
     expires_at: new Date(Date.now() + 30 * 86400000).toISOString()
-  },
-  {
-    id: 38507,
-    license_key: 'RYMON-MASTER-KEY',
-    game: 'Free Fire MAX',
-    plan_duration: 'Lifetime',
-    creator_username: 'rymon',
-    devices_used: 1,
-    devices_max: 999,
-    device_hwid: 'MASTER-HWID',
-    status: 'ACTIVE',
-    expires_at: new Date(Date.now() + 3650 * 86400000).toISOString()
   }
 ]
 
@@ -464,24 +452,8 @@ export async function verifyLicenseKey(
 }> {
   const cleanKey = keyInput.trim().toUpperCase()
   if (!cleanKey) return { valid: false, error: 'License key is required.' }
-
-  // Master Owner Bypass
-  if (
-    cleanKey === 'RYMON-MASTER-KEY' ||
-    cleanKey.includes('MASTER') ||
-    cleanKey.includes('OWNER')
-  ) {
-    return {
-      valid: true,
-      key: cleanKey,
-      game: 'Free Fire MAX',
-      plan: 'Lifetime',
-      status: 'ACTIVE',
-      isMaster: true,
-      expiresAt: new Date(Date.now() + 3650 * 86400000).toISOString(),
-      devicesUsed: 1,
-      devicesMax: 999
-    }
+  if (cleanKey === 'RYMON-MASTER-KEY') {
+    return { valid: false, error: 'Master key login is disabled. Use a valid generated license key.' }
   }
 
   // 1. Web Dashboard / Streamer Remote Console Login:
@@ -754,6 +726,120 @@ export async function fetchAllActivities(): Promise<RymonActivity[]> {
   return getStoredActivities()
 }
 
+export async function fetchAllStreamerControls(user?: RymonAccount | null): Promise<StreamerControlRecord[]> {
+  if (user && user.role === 'streamer') return []
+  if (supabase) {
+    try {
+      let query = supabase.from('rymon_streamer_controls').select('*')
+      if (user && user.role === 'reseller') {
+        query = query.eq('creator', user.username)
+      }
+      const { data, error } = await query
+      if (!error && Array.isArray(data)) {
+        return data as StreamerControlRecord[]
+      }
+    } catch {}
+  }
+  return []
+}
+
+// ============================================================================
+// 4B. DYNAMIC KEY PRICING ENGINE (GLOBAL DEFAULT + INDIVIDUAL USER RATES)
+// ============================================================================
+export const DEFAULT_KEY_PRICES: Record<string, number> = {
+  '2 Hours': 20,
+  '1 Day': 35,
+  '3 Days': 50,
+  '7 Days': 100,
+  '15 Days': 180,
+  '30 Days': 350
+}
+
+const GLOBAL_PRICE_STORAGE_KEY = 'rymon_global_key_prices_v1'
+const USER_CUSTOM_PRICE_STORAGE_KEY = 'rymon_user_custom_prices_v1'
+
+export function getGlobalPriceMap(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(GLOBAL_PRICE_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      return { ...DEFAULT_KEY_PRICES, ...parsed }
+    }
+  } catch {}
+  return { ...DEFAULT_KEY_PRICES }
+}
+
+export function saveGlobalPriceMap(prices: Record<string, number>): Record<string, number> {
+  const clean: Record<string, number> = { ...DEFAULT_KEY_PRICES }
+  for (const k of Object.keys(DEFAULT_KEY_PRICES)) {
+    const val = Number(prices[k])
+    if (!Number.isNaN(val) && val >= 0) {
+      clean[k] = Math.round(val)
+    }
+  }
+  try {
+    localStorage.setItem(GLOBAL_PRICE_STORAGE_KEY, JSON.stringify(clean))
+  } catch {}
+  return clean
+}
+
+export function getAllUserCustomPriceMaps(): Record<string, Record<string, number>> {
+  try {
+    const raw = localStorage.getItem(USER_CUSTOM_PRICE_STORAGE_KEY)
+    if (raw) {
+      return JSON.parse(raw) || {}
+    }
+  } catch {}
+  return {}
+}
+
+export function getUserCustomPriceMap(username: string): Record<string, number> | null {
+  if (!username) return null
+  const all = getAllUserCustomPriceMaps()
+  const key = Object.keys(all).find((u) => u.toLowerCase() === username.trim().toLowerCase())
+  return key ? all[key] : null
+}
+
+export function saveUserCustomPriceMap(
+  username: string,
+  prices: Record<string, number>
+): Record<string, number> {
+  const cleanUser = username.trim()
+  const all = getAllUserCustomPriceMaps()
+  const existingKey = Object.keys(all).find((u) => u.toLowerCase() === cleanUser.toLowerCase()) || cleanUser
+  const base = getGlobalPriceMap()
+  const cleanMap: Record<string, number> = {}
+  for (const k of Object.keys(DEFAULT_KEY_PRICES)) {
+    const val = Number(prices[k])
+    cleanMap[k] = !Number.isNaN(val) && val >= 0 ? Math.round(val) : base[k]
+  }
+  all[existingKey] = cleanMap
+  try {
+    localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(all))
+  } catch {}
+  return cleanMap
+}
+
+export function clearUserCustomPriceMap(username: string): void {
+  if (!username) return
+  const all = getAllUserCustomPriceMaps()
+  const existingKey = Object.keys(all).find((u) => u.toLowerCase() === username.trim().toLowerCase())
+  if (existingKey) {
+    delete all[existingKey]
+    try {
+      localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(all))
+    } catch {}
+  }
+}
+
+export function getEffectivePriceMap(username?: string): Record<string, number> {
+  const globalMap = getGlobalPriceMap()
+  if (!username) return globalMap
+  const custom = getUserCustomPriceMap(username)
+  if (!custom) return globalMap
+  return { ...globalMap, ...custom }
+}
+
 // ============================================================================
 // 5. ATOMIC KEY GENERATION & WALLET DEDUCTION
 // ============================================================================
@@ -772,26 +858,20 @@ export async function generateLicenseKeyBackend(params: {
 }> {
   const { creator, game, duration, customPrefix, devicesMax = 1 } = params
 
-  const priceMap: Record<string, number> = {
-    '2 Hours': 20,
-    '1 Day': 35,
-    '3 Day': 50,
-    '3 Days': 50,
-    '7 Day': 100,
-    '7 Days': 100,
-    '15 Day': 180,
-    '15 Days': 180,
-    '30 Day': 350,
-    '30 Days': 350
-  }
-
-  const cost = priceMap[duration] || 35
+  const effectiveMap = getEffectivePriceMap(creator.username)
+  const normalizedDuration = duration.replace(/^(\d+)\s+Day$/, '$1 Days')
+  const unitPrice =
+    effectiveMap[duration] ??
+    effectiveMap[normalizedDuration] ??
+    DEFAULT_KEY_PRICES[normalizedDuration] ??
+    35
+  const cost = unitPrice * Math.max(1, devicesMax)
 
   // Balance Check
   if (creator.role !== 'owner' && creator.balance < cost) {
     return {
       success: false,
-      error: `Insufficient wallet balance! Key requires ₹${cost}, but current balance is ₹${creator.balance}.`
+      error: `Insufficient wallet balance! Key requires ₹${cost} (₹${unitPrice} × ${devicesMax} device${devicesMax > 1 ? 's' : ''}), but current balance is ₹${creator.balance}.`
     }
   }
 
@@ -1864,7 +1944,7 @@ export const SOVEREIGN_CONNECT_CONFIG = {
     'Content-Type': 'application/json'
   },
   sample_request: {
-    p_license_key: 'RYMON-MASTER-KEY',
+    p_license_key: 'RYMON-FF-XXXX-XXXX',
     p_hwid: 'ANDROID-DEVICE-ID-9481'
   }
 }
