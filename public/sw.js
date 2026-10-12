@@ -1,10 +1,8 @@
-// RYMON GHOST CONNECT Service Worker (v2.0.0 - Sovereign Telemetry Edition)
-const CACHE_NAME = 'rymon-ghost-v2.0'
-const FONT_CACHE_NAME = 'rymon-fonts-v2.0'
+// RYMON GHOST CONNECT Service Worker (v3.0.0 - Auto Cache Busting Edition)
+const CACHE_NAME = 'rymon-ghost-v3.0'
+const FONT_CACHE_NAME = 'rymon-fonts-v3.0'
 
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
   '/manifest.webmanifest',
   '/rymon_logo.jpg',
 ]
@@ -76,10 +74,10 @@ self.addEventListener('fetch', (event) => {
   // 3. Ignore other non-origin requests
   if (url.origin !== self.location.origin) return
 
-  // 4. HTML Navigation: Network-First, fall back to cached index.html (SPA routing offline)
-  if (request.mode === 'navigate') {
+  // 4. HTML Navigation: Always bypass HTTP disk cache (no-store) so new JS bundles load immediately
+  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-store' })
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const copy = networkResponse.clone()

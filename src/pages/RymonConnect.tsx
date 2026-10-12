@@ -32,6 +32,7 @@ import {
   createReferralCode,
   registerWithReferral,
   deleteReferralCode,
+  renewUserSubscriptionBackend,
   togglePauseLicenseBackend,
   bulkTogglePauseAllKeysBackend,
   bulkResetAllHwidBackend,
@@ -46,7 +47,9 @@ import {
   getEffectivePriceMap,
   syncPricingFromSupabase,
   calculateExtensionCost,
-  fetchAllStreamerControls
+  fetchAllStreamerControls,
+  isStreamerKeyActivelyPlaying,
+  buildDefaultStreamerControlPayload
 } from '../lib/rymonBackend'
 
 type TabType =
@@ -123,7 +126,8 @@ export default function RymonConnect() {
   const [genDuration, setGenDuration] = useState('1 Day')
   const [genCustomPrefix, setGenCustomPrefix] = useState('')
   const [genDevicesMax, setGenDevicesMax] = useState(1)
-  const [genLastCreated, setGenLastCreated] = useState<string | null>(null)
+  const [genQuantity, setGenQuantity] = useState(1)
+  const [genCreatedKeysList, setGenCreatedKeysList] = useState<string[]>([])
   const [genError, setGenError] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
@@ -135,13 +139,17 @@ export default function RymonConnect() {
 
   // Search & Filter
   const [searchKeyQuery, setSearchKeyQuery] = useState('')
-  const [keyStatusFilter, setKeyStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PAUSED' | 'WAITING' | 'EXPIRED'>('ALL')
+  const [keyStatusFilter, setKeyStatusFilter] = useState<
+    'ALL' | 'PLAYING' | 'ACTIVE' | 'PAUSED' | 'WAITING' | 'EXPIRED' | 'BANNED'
+  >('ALL')
+  const [keyGameFilter, setKeyGameFilter] = useState<string>('ALL')
+  const [keyCreatorFilter, setKeyCreatorFilter] = useState<string>('ALL')
   const [searchUserQuery, setSearchUserQuery] = useState('')
 
   // Management Action State
   const [targetBanUser, setTargetBanUser] = useState('')
   const [banActionType, setBanActionType] = useState<'ban' | 'unban'>('ban')
-  const [targetDeleteUser, setTargetDeleteUser] = useState('')
+  const [targetDeleteUser, setTargetDeleteUser] = useState('__ALL__')
   const [deleteKeyType, setDeleteKeyType] = useState<'expired' | 'unused' | 'all'>('expired')
   const [targetExtendKey, setTargetExtendKey] = useState('')
   const [extendAmount, setExtendAmount] = useState(30)
@@ -206,6 +214,7 @@ export default function RymonConnect() {
   // Sovereign Referral Codes Engine State
   const [referralList, setReferralList] = useState<RymonReferral[]>([])
   const [refTargetRole, setRefTargetRole] = useState<'reseller' | 'admin'>('reseller')
+  const [refSubDays, setRefSubDays] = useState<30 | 60>(30)
   const [refInitialBal, setRefInitialBal] = useState<number | ''>('')
   const [refCustomCode, setRefCustomCode] = useState('')
   const [refMaxUses, setRefMaxUses] = useState(1)
@@ -286,6 +295,20 @@ export default function RymonConnect() {
         setReferralList(refs)
         setStreamerControls(ctrls)
 
+        // Auto-select a target license key for Staff so Streamer Remote works immediately
+        setCurrentKey((prevKey) => {
+          if (prevKey) return prevKey
+          if (lcs.length === 0) return ''
+          const playingCtrl = ctrls.find((c) => isStreamerKeyActivelyPlaying(c))
+          if (playingCtrl && lcs.some((k) => k.license_key === playingCtrl.license_key)) {
+            return playingCtrl.license_key
+          }
+          const boundActive = lcs.find((k) => k.status === 'ACTIVE' && k.device_hwid)
+          if (boundActive) return boundActive.license_key
+          const anyActive = lcs.find((k) => k.status === 'ACTIVE')
+          return anyActive ? anyActive.license_key : lcs[0].license_key
+        })
+
         // Sync fresh balance if currentUser in list
         if (currentUser) {
           const freshMe = usrs.find(
@@ -301,6 +324,13 @@ export default function RymonConnect() {
     }
 
     loadLiveData()
+
+    // Periodic 10-second heartbeat & playing-status sweep so stale sessions transition to OFFLINE automatically
+    const statusPollTimer = setInterval(() => {
+      if (!isMounted) return
+      fetchAllStreamerControls(currentUser).then((c) => isMounted && setStreamerControls(c))
+      fetchAllLicenses(currentUser).then((l) => isMounted && setKeysList(l))
+    }, 10000)
 
     // Setup Realtime Phoenix Subscriptions
     if (supabase) {
@@ -365,8 +395,14 @@ export default function RymonConnect() {
 
       return () => {
         isMounted = false
+        clearInterval(statusPollTimer)
         if (supabase) supabase.removeChannel(channel)
       }
+    }
+
+    return () => {
+      isMounted = false
+      clearInterval(statusPollTimer)
     }
   }, [isAuthenticated, currentUser])
 
@@ -387,64 +423,85 @@ export default function RymonConnect() {
             .maybeSingle(),
           supabase
             .from('rymon_licenses')
-            .select('device_hwid, devices_used, devices_max, last_heartbeat, status, is_paused')
+            .select('device_hwid, devices_used, devices_max, last_heartbeat, status, is_paused, expires_at, game')
             .eq('license_key', currentKey)
             .maybeSingle()
         ])
 
+        if (licData?.expires_at && isMounted) {
+          setExpiryDate(new Date(licData.expires_at))
+        } else if (isMounted && licData?.status === 'WAITING') {
+          setExpiryDate(null)
+          setCountdown('Starts on 1st Login')
+        }
+
+        const defaults = buildDefaultStreamerControlPayload({
+          license_key: currentKey,
+          streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer',
+          game_name: licData?.game || 'Free Fire MAX',
+          is_online: false,
+          is_active: licData?.status !== 'BANNED' && licData?.status !== 'EXPIRED',
+          is_paused: licData?.is_paused ?? false,
+          device_hwid: licData?.device_hwid || '',
+          devices_used: licData?.devices_used ?? 0,
+          devices_max: licData?.devices_max ?? 1
+        })
+
         if (ctrlData && isMounted) {
-          const merged: StreamerControlRecord = {
+          const rawMerged: StreamerControlRecord = {
+            ...defaults,
             ...(ctrlData as StreamerControlRecord),
+            aim_silent: Boolean(ctrlData.aim_silent ?? defaults.aim_silent),
+            hit_rate: Number(ctrlData.hit_rate ?? defaults.hit_rate),
+            ignore_knocked: Boolean(ctrlData.ignore_knocked ?? defaults.ignore_knocked),
+            show_aim_line: Boolean(ctrlData.show_aim_line ?? defaults.show_aim_line),
+            show_aim_fov: Boolean(ctrlData.show_aim_fov ?? defaults.show_aim_fov),
+            aim_fov: Number(ctrlData.aim_fov ?? defaults.aim_fov),
+            esp_box: Boolean(ctrlData.esp_box ?? defaults.esp_box),
+            esp_line: Boolean(ctrlData.esp_line ?? defaults.esp_line),
+            esp_skeleton: Boolean(ctrlData.esp_skeleton ?? defaults.esp_skeleton),
+            esp_name: Boolean(ctrlData.esp_name ?? defaults.esp_name),
+            esp_distance: Boolean(ctrlData.esp_distance ?? defaults.esp_distance),
+            esp_health: Boolean(ctrlData.esp_health ?? defaults.esp_health),
+            esp_count: Boolean(ctrlData.esp_count ?? defaults.esp_count),
+            esp_radar: Boolean(ctrlData.esp_radar ?? defaults.esp_radar),
+            speed_hack: Boolean(ctrlData.speed_hack ?? defaults.speed_hack),
+            speed_multiplier: Number(ctrlData.speed_multiplier ?? defaults.speed_multiplier),
+            ghost_hack: Boolean(ctrlData.ghost_hack ?? defaults.ghost_hack),
+            no_reload: Boolean(ctrlData.no_reload ?? defaults.no_reload),
+            no_recoil: Boolean(ctrlData.no_recoil ?? defaults.no_recoil),
+            theme_color_index: Number(ctrlData.theme_color_index ?? defaults.theme_color_index),
+            emergency_purge: Boolean(ctrlData.emergency_purge ?? defaults.emergency_purge),
             device_hwid: licData?.device_hwid || ctrlData.device_hwid || '',
             devices_used: licData?.devices_used ?? ctrlData.devices_used ?? 0,
             devices_max: licData?.devices_max ?? ctrlData.devices_max ?? 1,
-            last_heartbeat: licData?.last_heartbeat || ctrlData.last_heartbeat,
+            last_heartbeat: ctrlData.last_heartbeat || licData?.last_heartbeat,
             is_paused: licData?.is_paused ?? ctrlData.is_paused ?? false
           }
-          setRecord(merged)
+          const activelyPlaying = isStreamerKeyActivelyPlaying(rawMerged)
+          setRecord({ ...rawMerged, is_online: activelyPlaying })
           setIsLiveConnected(true)
-        } else if (isMounted) {
-          // Initialize fresh local fallback record and ensure row exists in Supabase
-          const initialRow: StreamerControlRecord = {
-            license_key: currentKey,
-            streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer',
-            game_name: 'Free Fire MAX',
-            is_online: Boolean(licData?.device_hwid),
-            is_active: true,
-            is_paused: licData?.is_paused ?? false,
-            device_hwid: licData?.device_hwid || '',
-            devices_used: licData?.devices_used ?? 0,
-            devices_max: licData?.devices_max ?? 1,
-            last_heartbeat: licData?.last_heartbeat,
-            aim_silent: false,
-            hit_rate: 80,
-            ignore_knocked: false,
-            show_aim_line: false,
-            show_aim_fov: false,
-            aim_fov: 90,
-            esp_box: true,
-            esp_line: false,
-            esp_skeleton: true,
-            esp_name: true,
-            esp_distance: true,
-            esp_health: true,
-            esp_count: true,
-            esp_radar: false,
-            speed_hack: false,
-            speed_multiplier: 1.5,
-            ghost_hack: false,
-            no_reload: false,
-            no_recoil: false,
-            theme_color_index: 0,
-            emergency_purge: false
+
+          // If DB had stale is_online=true or null columns, normalize row in background
+          if ((ctrlData.is_online && !activelyPlaying) || ctrlData.esp_box === null || ctrlData.aim_silent === null) {
+            supabase
+              .from('rymon_streamer_controls')
+              .update({
+                ...rawMerged,
+                is_online: activelyPlaying,
+                updated_at: new Date().toISOString()
+              })
+              .eq('license_key', currentKey)
+              .then(() => {})
           }
-          setRecord(initialRow)
+        } else if (isMounted) {
+          setRecord(defaults)
           setIsLiveConnected(true)
           try {
             await supabase
               .from('rymon_streamer_controls')
               .upsert(
-                { ...initialRow, updated_at: new Date().toISOString() },
+                { ...defaults, updated_at: new Date().toISOString() },
                 { onConflict: 'license_key' }
               )
           } catch {}
@@ -468,10 +525,16 @@ export default function RymonConnect() {
         },
         (payload) => {
           if (payload.new && isMounted) {
-            setRecord((prev) => ({
-              ...(prev || ({} as StreamerControlRecord)),
-              ...(payload.new as StreamerControlRecord)
-            }))
+            setRecord((prev) => {
+              const nextRec = {
+                ...(prev || ({} as StreamerControlRecord)),
+                ...(payload.new as StreamerControlRecord)
+              }
+              return {
+                ...nextRec,
+                is_online: isStreamerKeyActivelyPlaying(nextRec)
+              }
+            })
             setIsLiveConnected(true)
           }
         }
@@ -487,18 +550,24 @@ export default function RymonConnect() {
         (payload) => {
           if (payload.new && isMounted) {
             const lic = payload.new as RymonLicense
-            setRecord((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    device_hwid: lic.device_hwid || prev.device_hwid,
-                    devices_used: lic.devices_used ?? prev.devices_used,
-                    devices_max: lic.devices_max ?? prev.devices_max,
-                    last_heartbeat: lic.last_heartbeat || prev.last_heartbeat,
-                    is_paused: lic.is_paused ?? prev.is_paused
-                  }
-                : null
-            )
+            if (lic.expires_at) {
+              setExpiryDate(new Date(lic.expires_at))
+            }
+            setRecord((prev) => {
+              if (!prev) return null
+              const nextRec: StreamerControlRecord = {
+                ...prev,
+                device_hwid: lic.device_hwid || prev.device_hwid,
+                devices_used: lic.devices_used ?? prev.devices_used,
+                devices_max: lic.devices_max ?? prev.devices_max,
+                last_heartbeat: lic.last_heartbeat || prev.last_heartbeat,
+                is_paused: lic.is_paused ?? prev.is_paused
+              }
+              return {
+                ...nextRec,
+                is_online: isStreamerKeyActivelyPlaying(nextRec)
+              }
+            })
           }
         }
       )
@@ -621,7 +690,8 @@ export default function RymonConnect() {
   }, [currentUser?.username, allCustomUserMaps])
 
   const unitPlanPrice = effectiveUserPrices[genDuration] ?? 35
-  const projectedInvoice = unitPlanPrice * Math.max(1, genDevicesMax)
+  const singleKeyPrice = unitPlanPrice * Math.max(1, genDevicesMax)
+  const projectedInvoice = singleKeyPrice * Math.max(1, genQuantity)
 
   const handleSaveGlobalDefaultPrices = (e: React.FormEvent) => {
     e.preventDefault()
@@ -680,19 +750,25 @@ export default function RymonConnect() {
       game: genGame,
       duration: genDuration,
       customPrefix: genCustomPrefix,
-      devicesMax: genDevicesMax
+      devicesMax: genDevicesMax,
+      quantity: genQuantity
     })
     setAuthLoading(false)
 
     if (res.success && res.key) {
-      setGenLastCreated(res.key)
+      setGenCreatedKeysList(res.keys && res.keys.length > 0 ? res.keys : [res.key])
       if (res.remainingBalance !== undefined) {
         setWalletBalance(res.remainingBalance)
         const updatedUser = { ...currentUser, balance: res.remainingBalance }
         setCurrentUser(updatedUser)
         localStorage.setItem('rymon_session_user', JSON.stringify(updatedUser))
       }
-      showToast(`Key ${res.key} generated! Wallet balance updated.`)
+      const createdCount = res.keys?.length || 1
+      showToast(
+        createdCount > 1
+          ? `⚡ Generated ${createdCount} keys (${genDuration})! Wallet updated.`
+          : `Key ${res.key} generated! Wallet balance updated.`
+      )
       // Refresh list
       fetchAllLicenses(currentUser).then(setKeysList)
       fetchAllAccounts(currentUser).then(setUsersList)
@@ -752,21 +828,52 @@ export default function RymonConnect() {
 
   // 9. TELEMETRY MUTATIONS
   const toggleFeature = async (field: keyof StreamerControlRecord) => {
-    if (!record) return
-    if (record.is_paused) {
+    if (!currentKey) {
+      showToast('⚠️ Please select a Target License Key above to control.')
+      return
+    }
+    const baseRecord =
+      record ||
+      buildDefaultStreamerControlPayload({
+        license_key: currentKey,
+        streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer'
+      })
+    if (baseRecord.is_paused) {
       showToast('⏸️ License key is PAUSED. Toggles and features are frozen until unpaused by staff.')
       return
     }
-    const newVal = !record[field]
+    const newVal = !Boolean(baseRecord[field])
     const nowIso = new Date().toISOString()
-    setRecord({ ...record, [field]: newVal, updated_at: nowIso })
+    const nextRecord: StreamerControlRecord = {
+      ...baseRecord,
+      license_key: currentKey,
+      [field]: newVal,
+      updated_at: nowIso
+    }
+    setRecord(nextRecord)
+    setStreamerControls((prev) => {
+      const exists = prev.some((c) => c.license_key === currentKey)
+      if (!exists) return [nextRecord, ...prev]
+      return prev.map((c) => (c.license_key === currentKey ? { ...c, [field]: newVal, updated_at: nowIso } : c))
+    })
 
-    if (supabase && currentKey) {
+    if (supabase) {
       try {
-        await supabase
+        const { error } = await supabase
           .from('rymon_streamer_controls')
-          .update({ [field]: newVal, updated_at: nowIso })
-          .eq('license_key', currentKey)
+          .upsert(
+            {
+              ...nextRecord,
+              updated_at: nowIso
+            },
+            { onConflict: 'license_key' }
+          )
+        if (error) {
+          await supabase
+            .from('rymon_streamer_controls')
+            .update({ [field]: newVal, updated_at: nowIso })
+            .eq('license_key', currentKey)
+        }
       } catch (err) {
         console.warn('Sync warning:', err)
       }
@@ -774,22 +881,40 @@ export default function RymonConnect() {
   }
 
   const handleSliderChange = (field: keyof StreamerControlRecord, val: number) => {
-    if (!record) return
-    if (record.is_paused) {
+    if (!currentKey) return
+    const baseRecord =
+      record ||
+      buildDefaultStreamerControlPayload({
+        license_key: currentKey,
+        streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer'
+      })
+    if (baseRecord.is_paused) {
       showToast('⏸️ License key is PAUSED. Slider adjustments are locked until unpaused by staff.')
       return
     }
     const nowIso = new Date().toISOString()
-    setRecord({ ...record, [field]: val, updated_at: nowIso })
+    const nextRecord: StreamerControlRecord = {
+      ...baseRecord,
+      license_key: currentKey,
+      [field]: val,
+      updated_at: nowIso
+    }
+    setRecord(nextRecord)
 
     if (sliderTimerRef.current) clearTimeout(sliderTimerRef.current)
     sliderTimerRef.current = setTimeout(async () => {
       if (supabase && currentKey) {
         try {
-          await supabase
+          const ts = new Date().toISOString()
+          const { error } = await supabase
             .from('rymon_streamer_controls')
-            .update({ [field]: val, updated_at: new Date().toISOString() })
-            .eq('license_key', currentKey)
+            .upsert({ ...nextRecord, [field]: val, updated_at: ts }, { onConflict: 'license_key' })
+          if (error) {
+            await supabase
+              .from('rymon_streamer_controls')
+              .update({ [field]: val, updated_at: ts })
+              .eq('license_key', currentKey)
+          }
         } catch (err) {
           console.warn('Sync warning:', err)
         }
@@ -798,19 +923,30 @@ export default function RymonConnect() {
   }
 
   const setThemePreset = async (idx: number) => {
-    if (!record) return
-    if (record.is_paused) {
+    if (!currentKey) return
+    const baseRecord =
+      record ||
+      buildDefaultStreamerControlPayload({
+        license_key: currentKey,
+        streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer'
+      })
+    if (baseRecord.is_paused) {
       showToast('⏸️ License key is PAUSED. Theme presets are locked until unpaused by staff.')
       return
     }
     const nowIso = new Date().toISOString()
-    setRecord({ ...record, theme_color_index: idx, updated_at: nowIso })
+    const nextRecord: StreamerControlRecord = {
+      ...baseRecord,
+      license_key: currentKey,
+      theme_color_index: idx,
+      updated_at: nowIso
+    }
+    setRecord(nextRecord)
     if (supabase && currentKey) {
       try {
         await supabase
           .from('rymon_streamer_controls')
-          .update({ theme_color_index: idx, updated_at: nowIso })
-          .eq('license_key', currentKey)
+          .upsert(nextRecord, { onConflict: 'license_key' })
       } catch {}
     }
   }
@@ -821,7 +957,7 @@ export default function RymonConnect() {
       try {
         await supabase
           .from('rymon_streamer_controls')
-          .update({ emergency_purge: true, updated_at: new Date().toISOString() })
+          .update({ emergency_purge: true, is_online: false, updated_at: new Date().toISOString() })
           .eq('license_key', currentKey)
       } catch {}
     }
@@ -837,22 +973,103 @@ export default function RymonConnect() {
     setTimeout(() => setCopiedKey(null), 2000)
   }
 
-  const handleResetHWID = async (keyString: string) => {
-    await resetHwidBackend(keyString, currentUser?.username || 'debajoyti')
-    showToast(`HWID successfully reset for ${keyString}!`)
-    fetchAllLicenses(currentUser).then(setKeysList)
-  }
-
-  const handleDeleteKey = async (keyString: string) => {
-    if (!isOwner) {
-      alert('Power restriction: Only the Root Owner can delete individual active license keys.')
+  const handleCopyMultipleKeys = (keys: string[], label: string) => {
+    if (!keys.length) {
+      showToast(`No ${label} keys available to copy.`)
       return
     }
-    if (confirm(`Delete license key ${keyString}?`)) {
-      await deleteLicenseBackend(keyString)
-      showToast(`Key ${keyString} deleted.`)
-      fetchAllLicenses(currentUser).then(setKeysList)
+    navigator.clipboard.writeText(keys.join('\n'))
+    showToast(`📋 Copied ${keys.length} ${label} key${keys.length > 1 ? 's' : ''} to clipboard!`)
+  }
+
+  const formatRemainingTime = (expiresAt?: string | null, status?: string, isPaused?: boolean) => {
+    if (status === 'BANNED') return '🚫 BANNED'
+    if (status === 'WAITING' || !expiresAt) return '🟡 Starts on 1st Login'
+    const diff = new Date(expiresAt).getTime() - Date.now()
+    if (diff <= 0 || status === 'EXPIRED') return '🔴 EXPIRED'
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24)
+    const mins = Math.floor((diff / (1000 * 60)) % 60)
+    if (days > 0) return `${isPaused ? '⏸️ ' : '⏳ '}${days}d ${hours}h left`
+    if (hours > 0) return `${isPaused ? '⏸️ ' : '⏳ '}${hours}h ${mins}m left`
+    return `${isPaused ? '⏸️ ' : '⏳ '}${mins}m left`
+  }
+
+  const handleResetHWID = async (keyString: string) => {
+    await resetHwidBackend(keyString, currentUser?.username || 'debajoyti')
+    showToast(`🔄 HWID cleared for ${keyString} (Device unbound, timer preserved)!`)
+    fetchAllLicenses(currentUser).then(setKeysList)
+    fetchAllActivities(currentUser).then(setActivities)
+  }
+
+  const handleDeleteKey = async (keyString: string, keyStatus?: string) => {
+    const canDeleteThisKey =
+      isOwner || keyStatus === 'EXPIRED' || keyStatus === 'WAITING'
+    if (!canDeleteThisKey) {
+      alert(
+        'Power restriction: Only the Root Owner can delete an ACTIVE in-use key. You can delete Expired or Unused (Waiting) keys.'
+      )
+      return
     }
+    if (confirm(`Permanently delete license key ${keyString}?`)) {
+      await deleteLicenseBackend(keyString)
+      showToast(`🗑️ Key ${keyString} deleted.`)
+      fetchAllLicenses(currentUser).then(setKeysList)
+      fetchAllActivities(currentUser).then(setActivities)
+    }
+  }
+
+  const handleToggleBanKey = async (keyString: string, currentStatus: string) => {
+    if (!isOwner && !isAdmin) {
+      alert('Power restriction: Resellers cannot ban keys (use Pause instead).')
+      return
+    }
+    const shouldBan = currentStatus !== 'BANNED'
+    const res = await toggleBanStatusBackend(
+      keyString,
+      'key',
+      shouldBan,
+      currentUser?.username || 'debajoyti'
+    )
+    if (res.success) {
+      showToast(res.message)
+      fetchAllLicenses(currentUser).then(setKeysList)
+      fetchAllActivities(currentUser).then(setActivities)
+    }
+  }
+
+  const handleQuickBulkDelete = async (keyType: 'expired' | 'unused' | 'all') => {
+    if (keyType === 'all' && !isOwner) {
+      alert('Power restriction: Only the Root Owner can wipe ALL active keys.')
+      return
+    }
+    const targetCount =
+      keyType === 'expired'
+        ? stats.expired
+        : keyType === 'unused'
+        ? stats.unused
+        : stats.total
+    if (targetCount === 0) {
+      showToast(`No ${keyType.toUpperCase()} keys found to delete.`)
+      return
+    }
+    const label =
+      keyType === 'expired'
+        ? `ALL ${targetCount} EXPIRED keys`
+        : keyType === 'unused'
+        ? `ALL ${targetCount} UNUSED (WAITING) keys`
+        : `ALL ${targetCount} KEYS (INCLUDING ACTIVE)`
+    if (!confirm(`⚠️ Are you sure you want to permanently delete ${label}?`)) {
+      return
+    }
+    const count = await bulkDeleteKeysBackend(
+      '__ALL__',
+      keyType,
+      currentUser?.username || 'debajoyti'
+    )
+    showToast(`🧹 Purged ${count} ${keyType.toUpperCase()} key${count === 1 ? '' : 's'}!`)
+    fetchAllLicenses(currentUser).then(setKeysList)
+    fetchAllActivities(currentUser).then(setActivities)
   }
 
   const handleApplyBanStatus = async () => {
@@ -880,16 +1097,23 @@ export default function RymonConnect() {
   }
 
   const handleApplyDeleteUserKeys = async () => {
-    if (!isOwner && !isAdmin) {
-      alert('Power restriction: Resellers cannot delete license keys.')
-      return
-    }
     if (!targetDeleteUser) {
-      alert('Please select a target user.')
+      alert('Please select a target scope or user.')
       return
     }
     if (!isOwner && deleteKeyType === 'all') {
-      alert('Power restriction: Only the Root Owner can delete ALL active keys. Admins can clean Expired or Unused keys.')
+      alert('Power restriction: Only the Root Owner can delete ALL active keys. You can clean Expired or Unused keys.')
+      return
+    }
+    const scopeLabel =
+      targetDeleteUser === '__ALL__'
+        ? isOwner
+          ? 'Entire Platform'
+          : isAdmin
+          ? 'Your Admin Team'
+          : `@${currentUser?.username}`
+        : `@${targetDeleteUser}`
+    if (!confirm(`Confirm permanent deletion of ${deleteKeyType.toUpperCase()} keys for ${scopeLabel}?`)) {
       return
     }
     const count = await bulkDeleteKeysBackend(
@@ -897,8 +1121,9 @@ export default function RymonConnect() {
       deleteKeyType,
       currentUser?.username || 'debajoyti'
     )
-    showToast(`Purged ${count} ${deleteKeyType} keys for @${targetDeleteUser}.`)
+    showToast(`🧹 Purged ${count} ${deleteKeyType} key${count === 1 ? '' : 's'} (${scopeLabel}).`)
     fetchAllLicenses(currentUser).then(setKeysList)
+    fetchAllActivities(currentUser).then(setActivities)
   }
 
   const handleApplyExtendKey = async () => {
@@ -1047,7 +1272,8 @@ export default function RymonConnect() {
       isOwner ? refTargetRole : 'reseller',
       bal,
       refCustomCode,
-      refMaxUses
+      refMaxUses,
+      refSubDays
     )
     setRefCreating(false)
     if (res.success) {
@@ -1057,10 +1283,25 @@ export default function RymonConnect() {
         setCurrentUser(updatedMe)
         localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
       }
-      showToast(`Created referral code: ${res.code}`)
+      showToast(`Created ${refSubDays}D subscription invite code: ${res.code}`)
       setRefCustomCode('')
       setRefInitialBal('')
       fetchReferralCodes(currentUser).then(setReferralList)
+    } else {
+      alert(`Error: ${res.message}`)
+    }
+  }
+
+  const handleRenewUserSubscription = async (targetUsername: string, days: 30 | 60) => {
+    const res = await renewUserSubscriptionBackend(
+      targetUsername,
+      days,
+      currentUser?.username || 'debajoyti'
+    )
+    if (res.success) {
+      showToast(`✅ ${res.message}`)
+      fetchAllAccounts(currentUser).then(setUsersList)
+      fetchAllActivities(currentUser).then(setActivities)
     } else {
       alert(`Error: ${res.message}`)
     }
@@ -1167,22 +1408,51 @@ export default function RymonConnect() {
     setTimeout(() => setActionSuccessMsg(''), 3500)
   }
 
+  // Live Online / Playing Now Set (requires fresh heartbeat within 35s from running game)
+  const onlineKeySet = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of streamerControls) {
+      if (isStreamerKeyActivelyPlaying(c)) {
+        set.add(c.license_key.toUpperCase())
+      }
+    }
+    if (record && isStreamerKeyActivelyPlaying(record) && currentKey) {
+      set.add(currentKey.toUpperCase())
+    }
+    return set
+  }, [streamerControls, record, currentKey])
+
   // Filtered queries
   const filteredKeys = useMemo(() => {
     return keysList.filter((k) => {
+      if (
+        keyStatusFilter === 'PLAYING' &&
+        !(!k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(k.license_key.toUpperCase()))
+      ) {
+        return false
+      }
       if (keyStatusFilter === 'PAUSED' && !(k.is_paused || k.status === 'PAUSED')) return false
       if (keyStatusFilter === 'ACTIVE' && (k.is_paused || k.status !== 'ACTIVE')) return false
       if (keyStatusFilter === 'WAITING' && k.status !== 'WAITING') return false
       if (keyStatusFilter === 'EXPIRED' && k.status !== 'EXPIRED') return false
+      if (keyStatusFilter === 'BANNED' && k.status !== 'BANNED') return false
+      if (keyGameFilter !== 'ALL' && k.game !== keyGameFilter) return false
+      if (
+        keyCreatorFilter !== 'ALL' &&
+        k.creator_username.toLowerCase() !== keyCreatorFilter.toLowerCase()
+      ) {
+        return false
+      }
       if (!searchKeyQuery.trim()) return true
       const q = searchKeyQuery.toLowerCase()
       return (
         k.license_key.toLowerCase().includes(q) ||
         k.game.toLowerCase().includes(q) ||
-        k.creator_username.toLowerCase().includes(q)
+        k.creator_username.toLowerCase().includes(q) ||
+        (k.device_hwid && k.device_hwid.toLowerCase().includes(q))
       )
     })
-  }, [keysList, searchKeyQuery, keyStatusFilter])
+  }, [keysList, searchKeyQuery, keyStatusFilter, keyGameFilter, keyCreatorFilter, onlineKeySet])
 
   const filteredUsers = useMemo(() => {
     if (!searchUserQuery.trim()) return usersList
@@ -1196,20 +1466,6 @@ export default function RymonConnect() {
     )
   }, [usersList, searchUserQuery])
 
-  // Live Online / Playing Now Set (from rymon_streamer_controls & recent heartbeats)
-  const onlineKeySet = useMemo(() => {
-    const set = new Set<string>()
-    for (const c of streamerControls) {
-      if (c.is_online && !c.is_paused && c.is_active !== false) {
-        set.add(c.license_key.toUpperCase())
-      }
-    }
-    if (record && record.is_online && !record.is_paused && currentKey) {
-      set.add(currentKey.toUpperCase())
-    }
-    return set
-  }, [streamerControls, record, currentKey])
-
   // Overview Counts
   const stats = useMemo(() => {
     const total = keysList.length
@@ -1217,12 +1473,13 @@ export default function RymonConnect() {
     const paused = keysList.filter((k) => k.is_paused || k.status === 'PAUSED').length
     const unused = keysList.filter((k) => k.status === 'WAITING').length
     const expired = keysList.filter((k) => k.status === 'EXPIRED').length
+    const banned = keysList.filter((k) => k.status === 'BANNED').length
     const reset = keysList.filter((k) => k.devices_used === 0 && k.status === 'ACTIVE').length
     const playingNow = keysList.filter(
       (k) => !k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(k.license_key.toUpperCase())
     ).length
     const notPlaying = Math.max(0, total - playingNow)
-    return { total, active, paused, unused, expired, reset, playingNow, notPlaying }
+    return { total, active, paused, unused, expired, banned, reset, playingNow, notPlaying }
   }, [keysList, onlineKeySet])
 
   const isOwner = currentUser?.role === 'owner'
@@ -1238,7 +1495,7 @@ export default function RymonConnect() {
       setActiveTab('remote')
     } else if (
       isReseller &&
-      !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend'].includes(activeTab)
+      !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend', 'delete'].includes(activeTab)
     ) {
       setActiveTab('overview')
     } else if (
@@ -1906,6 +2163,21 @@ export default function RymonConnect() {
                         <span style={styles.navIcon}>📅</span>
                         <span>Extend Keys</span>
                       </button>
+                      {isReseller && (
+                        <button
+                          onClick={() => {
+                            setActiveTab('delete')
+                            setMobileMenuOpen(false)
+                          }}
+                          style={{
+                            ...styles.navItem,
+                            ...(activeTab === 'delete' ? styles.navItemActive : {})
+                          }}
+                        >
+                          <span style={styles.navIcon}>🗑️</span>
+                          <span>Clean Expired / Unused</span>
+                        </button>
+                      )}
                     </>
                   )}
 
@@ -2047,7 +2319,7 @@ export default function RymonConnect() {
                   <div>
                     <h2 style={styles.pageTitle}>Operational Matrix</h2>
                     <p style={styles.pageSubtitle}>
-                      Live telemetry, active authorizations, and real-time licensing transactions.
+                      Live telemetry, active authorizations, and real-time licensing transactions. Click any counter to filter keys.
                     </p>
                   </div>
                   <div style={styles.badgeCluster}>
@@ -2056,14 +2328,20 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                {/* Metric Counters (Including Playing Now vs Not Playing Now) */}
+                {/* Metric Counters (Clickable to filter License Keys) */}
                 <div style={styles.statGrid}>
                   <div
+                    onClick={() => {
+                      setKeyStatusFilter('PLAYING')
+                      setActiveTab('keys')
+                    }}
                     style={{
                       ...styles.statCard,
+                      cursor: 'pointer',
                       borderColor: 'rgba(5, 223, 114, 0.45)',
                       background: 'linear-gradient(135deg, rgba(5, 223, 114, 0.12) 0%, rgba(13, 17, 26, 0.9) 100%)'
                     }}
+                    title="Click to view keys currently playing in-game"
                   >
                     <div style={{ ...styles.statIconFrame, color: '#05df72' }}>🎮</div>
                     <div>
@@ -2072,43 +2350,81 @@ export default function RymonConnect() {
                     </div>
                   </div>
                   <div
-                    style={{
-                      ...styles.statCard,
-                      borderColor: 'rgba(148, 163, 184, 0.35)'
+                    onClick={() => {
+                      setKeyStatusFilter('ALL')
+                      setActiveTab('keys')
                     }}
+                    style={{ ...styles.statCard, cursor: 'pointer' }}
+                    title="Click to view all keys"
                   >
-                    <div style={{ ...styles.statIconFrame, color: '#94a3b8' }}>💤</div>
-                    <div>
-                      <div style={{ ...styles.statNum, color: '#e2e8f0' }}>{stats.notPlaying}</div>
-                      <div style={styles.statLabel}>Not Playing Now</div>
-                    </div>
-                  </div>
-                  <div style={styles.statCard}>
                     <div style={styles.statIconFrame}>🔑</div>
                     <div>
                       <div style={styles.statNum}>{stats.total}</div>
                       <div style={styles.statLabel}>Total Keys</div>
                     </div>
                   </div>
-                  <div style={styles.statCard}>
+                  <div
+                    onClick={() => {
+                      setKeyStatusFilter('ACTIVE')
+                      setActiveTab('keys')
+                    }}
+                    style={{ ...styles.statCard, cursor: 'pointer' }}
+                    title="Click to view active keys"
+                  >
                     <div style={{ ...styles.statIconFrame, color: '#00d9ff' }}>✓</div>
                     <div>
                       <div style={{ ...styles.statNum, color: '#00d9ff' }}>{stats.active}</div>
                       <div style={styles.statLabel}>Active Keys</div>
                     </div>
                   </div>
-                  <div style={styles.statCard}>
+                  <div
+                    onClick={() => {
+                      setKeyStatusFilter('WAITING')
+                      setActiveTab('keys')
+                    }}
+                    style={{
+                      ...styles.statCard,
+                      cursor: 'pointer',
+                      borderColor: 'rgba(234, 179, 8, 0.35)'
+                    }}
+                    title="Click to view Unused / Waiting keys"
+                  >
+                    <div style={{ ...styles.statIconFrame, color: '#eab308' }}>🟡</div>
+                    <div>
+                      <div style={{ ...styles.statNum, color: '#eab308' }}>{stats.unused}</div>
+                      <div style={styles.statLabel}>Unused / Waiting</div>
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => {
+                      setKeyStatusFilter('PAUSED')
+                      setActiveTab('keys')
+                    }}
+                    style={{ ...styles.statCard, cursor: 'pointer' }}
+                    title="Click to view Paused keys"
+                  >
                     <div style={{ ...styles.statIconFrame, color: '#ffb700' }}>⏸️</div>
                     <div>
                       <div style={{ ...styles.statNum, color: '#ffb700' }}>{stats.paused}</div>
                       <div style={styles.statLabel}>Paused Keys</div>
                     </div>
                   </div>
-                  <div style={styles.statCard}>
-                    <div style={{ ...styles.statIconFrame, color: '#eab308' }}>⏳</div>
+                  <div
+                    onClick={() => {
+                      setKeyStatusFilter('EXPIRED')
+                      setActiveTab('keys')
+                    }}
+                    style={{
+                      ...styles.statCard,
+                      cursor: 'pointer',
+                      borderColor: 'rgba(239, 68, 68, 0.4)'
+                    }}
+                    title="Click to view Expired keys"
+                  >
+                    <div style={{ ...styles.statIconFrame, color: '#ef4444' }}>🔴</div>
                     <div>
-                      <div style={{ ...styles.statNum, color: '#eab308' }}>{stats.unused}</div>
-                      <div style={styles.statLabel}>Unused / Waiting</div>
+                      <div style={{ ...styles.statNum, color: '#ef4444' }}>{stats.expired}</div>
+                      <div style={{ ...styles.statLabel, color: '#fca5a5' }}>Expired Keys</div>
                     </div>
                   </div>
                 </div>
@@ -2219,43 +2535,48 @@ export default function RymonConnect() {
                       >
                         <div style={styles.quickActionIcon}>🔑</div>
                         <div style={styles.quickActionTitle}>Generate License</div>
-                        <div style={styles.quickActionSub}>Issue New Game Key</div>
+                        <div style={styles.quickActionSub}>Single or Bulk Keys (1–50)</div>
                       </button>
-                      {(isOwner || isAdmin) && (
-                        <>
-                          <button
-                            onClick={() => setActiveTab('advance')}
-                            style={{ ...styles.quickActionCard, borderColor: 'rgba(250, 204, 21, 0.4)' }}
-                          >
-                            <div style={styles.quickActionIcon}>💰</div>
-                            <div style={{ ...styles.quickActionTitle, color: '#fde047' }}>
-                              {isOwner ? 'Key Pricing' : 'Reseller Pricing'}
-                            </div>
-                            <div style={styles.quickActionSub}>
-                              {isOwner ? 'Default & Individual Rates' : 'Set Rates for My Resellers'}
-                            </div>
-                          </button>
-                          <button
-                            onClick={() => setActiveTab('add-balance')}
-                            style={styles.quickActionCard}
-                          >
-                            <div style={styles.quickActionIcon}>💼</div>
-                            <div style={styles.quickActionTitle}>
-                              {isOwner ? 'Top Up Balance' : 'Transfer Balance'}
-                            </div>
-                            <div style={styles.quickActionSub}>
-                              {isOwner ? 'Mint Free Wallet Credit' : 'Fund Downline Reseller'}
-                            </div>
-                          </button>
-                        </>
-                      )}
+                      <button
+                        onClick={() =>
+                          handleCopyMultipleKeys(
+                            keysList.filter((k) => k.status === 'WAITING').map((k) => k.license_key),
+                            'UNUSED'
+                          )
+                        }
+                        style={{ ...styles.quickActionCard, borderColor: 'rgba(234, 179, 8, 0.4)' }}
+                      >
+                        <div style={styles.quickActionIcon}>📋</div>
+                        <div style={{ ...styles.quickActionTitle, color: '#eab308' }}>
+                          Copy Unused ({stats.unused})
+                        </div>
+                        <div style={styles.quickActionSub}>1-Click Copy Waiting Keys</div>
+                      </button>
+                      <button
+                        onClick={() => handleQuickBulkDelete('expired')}
+                        style={{ ...styles.quickActionCard, borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                      >
+                        <div style={styles.quickActionIcon}>🧹</div>
+                        <div style={{ ...styles.quickActionTitle, color: '#ef4444' }}>
+                          Purge Expired ({stats.expired})
+                        </div>
+                        <div style={styles.quickActionSub}>1-Click Delete Expired Keys</div>
+                      </button>
+                      <button
+                        onClick={handleBulkResetAllHwid}
+                        style={{ ...styles.quickActionCard, borderColor: 'rgba(0, 217, 255, 0.4)' }}
+                      >
+                        <div style={styles.quickActionIcon}>🔄</div>
+                        <div style={{ ...styles.quickActionTitle, color: '#00d9ff' }}>Reset All HWID</div>
+                        <div style={styles.quickActionSub}>Unbind All Devices Instantly</div>
+                      </button>
                       <button
                         onClick={() => setActiveTab('keys')}
                         style={styles.quickActionCard}
                       >
-                        <div style={styles.quickActionIcon}>📋</div>
-                        <div style={styles.quickActionTitle}>Manage Licenses</div>
-                        <div style={styles.quickActionSub}>HWID Reset & Extend</div>
+                        <div style={styles.quickActionIcon}>🗂️</div>
+                        <div style={styles.quickActionTitle}>Manage All Keys</div>
+                        <div style={styles.quickActionSub}>Filter, Pause, Delete, Extend</div>
                       </button>
                       <button
                         onClick={() => handleBulkPauseAllKeys(true)}
@@ -2272,14 +2593,6 @@ export default function RymonConnect() {
                         <div style={styles.quickActionIcon}>▶️</div>
                         <div style={{ ...styles.quickActionTitle, color: '#05df72' }}>Resume All Keys</div>
                         <div style={styles.quickActionSub}>Unfreeze All Licenses</div>
-                      </button>
-                      <button
-                        onClick={() => setShowDownloadModal(true)}
-                        style={{ ...styles.quickActionCard, borderColor: 'rgba(0, 217, 255, 0.35)' }}
-                      >
-                        <div style={styles.quickActionIcon}>📥</div>
-                        <div style={{ ...styles.quickActionTitle, color: '#00d9ff' }}>Download APK</div>
-                        <div style={styles.quickActionSub}>Web + In-Game Dual APK</div>
                       </button>
                     </div>
                   </div>
@@ -2467,9 +2780,9 @@ export default function RymonConnect() {
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Generate License Key</h2>
+                    <h2 style={styles.pageTitle}>Generate License Key (Single & Bulk)</h2>
                     <p style={styles.pageSubtitle}>
-                      Seller username <strong>@{currentUser?.username}</strong> will be displayed as a glowing VIP badge inside the APK.
+                      Seller username <strong>@{currentUser?.username}</strong> will be displayed as a glowing VIP badge inside the APK. New keys start in <strong>WAITING (Unused)</strong> status and only begin their countdown on 1st APK login.
                     </p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -2491,7 +2804,7 @@ export default function RymonConnect() {
                     <div style={styles.balancePill}>
                       <span>Wallet Balance:</span>
                       <strong style={{ color: '#00d9ff', marginLeft: '6px' }}>
-                        ₹{walletBalance.toLocaleString('en-IN')}
+                        {isOwner ? '∞ FREE (OWNER)' : `₹${walletBalance.toLocaleString('en-IN')}`}
                       </strong>
                     </div>
                   </div>
@@ -2533,18 +2846,22 @@ export default function RymonConnect() {
 
                       <div style={{ ...styles.formGrid2Col, marginTop: '16px' }}>
                         <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>CUSTOM PREFIX (OPTIONAL)</label>
-                          <input
-                            type="text"
-                            value={genCustomPrefix}
-                            onChange={(e) => setGenCustomPrefix(e.target.value)}
-                            placeholder="RYMON"
-                            style={styles.keyInput}
-                          />
+                          <label style={styles.formLabel}>QUANTITY (BULK GENERATOR)</label>
+                          <select
+                            value={genQuantity}
+                            onChange={(e) => setGenQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                            style={styles.selectInput}
+                          >
+                            <option value={1}>1 Key (Single)</option>
+                            <option value={5}>5 Keys (Bulk Pack)</option>
+                            <option value={10}>10 Keys (Bulk Pack)</option>
+                            <option value={20}>20 Keys (Reseller Stock)</option>
+                            <option value={50}>50 Keys (Mega Stock)</option>
+                          </select>
                         </div>
 
                         <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>MAX DEVICES</label>
+                          <label style={styles.formLabel}>MAX DEVICES PER KEY</label>
                           <input
                             type="number"
                             min="1"
@@ -2556,14 +2873,25 @@ export default function RymonConnect() {
                         </div>
                       </div>
 
+                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
+                        <label style={styles.formLabel}>CUSTOM PREFIX (OPTIONAL)</label>
+                        <input
+                          type="text"
+                          value={genCustomPrefix}
+                          onChange={(e) => setGenCustomPrefix(e.target.value)}
+                          placeholder="RYMON"
+                          style={styles.keyInput}
+                        />
+                      </div>
+
                       {/* Cost Summary Box */}
                       <div style={styles.invoiceSummaryBox}>
                         <div>
                           <div style={{ fontSize: '13px', color: '#94a3b8' }}>
-                            Invoice Cost ({genDevicesMax} Device{genDevicesMax > 1 ? 's' : ''} × ₹{unitPlanPrice}):
+                            Invoice Cost ({genQuantity} Key{genQuantity > 1 ? 's' : ''} × {genDevicesMax} Device{genDevicesMax > 1 ? 's' : ''} × ₹{unitPlanPrice}):
                           </div>
                           <div style={{ fontSize: '20px', fontWeight: 700, color: '#00d9ff' }}>
-                            ₹{projectedInvoice}
+                            {isOwner ? '₹0 (Owner Free Mint)' : `₹${projectedInvoice.toLocaleString('en-IN')}`}
                           </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -2587,23 +2915,65 @@ export default function RymonConnect() {
                         disabled={authLoading}
                         style={{ ...styles.submitBtn, marginTop: '24px' }}
                       >
-                        {authLoading ? 'CREATING ON SUPABASE...' : 'GENERATE & DEDUCT WALLET'}
+                        {authLoading
+                          ? 'CREATING ON SUPABASE...'
+                          : genQuantity > 1
+                          ? `⚡ GENERATE ${genQuantity} KEYS NOW`
+                          : 'GENERATE & DEDUCT WALLET'}
                       </button>
                     </form>
 
-                    {genLastCreated && (
+                    {genCreatedKeysList.length > 0 && (
                       <div style={styles.generatedKeyBox}>
-                        <div style={{ fontSize: '12px', color: '#05df72', fontWeight: 600 }}>
-                          ✓ KEY SUCCESSFULLY CREATED IN SUPABASE
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '8px',
+                            marginBottom: '8px'
+                          }}
+                        >
+                          <div style={{ fontSize: '12px', color: '#05df72', fontWeight: 700 }}>
+                            ✓ {genCreatedKeysList.length} KEY{genCreatedKeysList.length > 1 ? 'S' : ''} CREATED (WAITING FOR 1ST LOGIN)
+                          </div>
+                          {genCreatedKeysList.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyMultipleKeys(genCreatedKeysList, 'GENERATED')}
+                              style={{
+                                ...styles.copyKeyBtn,
+                                background: '#05df72',
+                                color: '#07090e',
+                                fontWeight: 800
+                              }}
+                            >
+                              📋 COPY ALL {genCreatedKeysList.length} KEYS
+                            </button>
+                          )}
                         </div>
-                        <div style={styles.generatedKeyRow}>
-                          <code style={styles.keyCodeText}>{genLastCreated}</code>
-                          <button
-                            onClick={() => handleCopyKey(genLastCreated)}
-                            style={styles.copyKeyBtn}
-                          >
-                            {copiedKey === genLastCreated ? 'COPIED!' : 'COPY KEY'}
-                          </button>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            maxHeight: '240px',
+                            overflowY: 'auto'
+                          }}
+                        >
+                          {genCreatedKeysList.map((kStr) => (
+                            <div key={kStr} style={styles.generatedKeyRow}>
+                              <code style={styles.keyCodeText}>{kStr}</code>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyKey(kStr)}
+                                style={styles.copyKeyBtn}
+                              >
+                                {copiedKey === kStr ? 'COPIED!' : 'COPY'}
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -2617,21 +2987,59 @@ export default function RymonConnect() {
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Active Licenses</h2>
+                    <h2 style={styles.pageTitle}>
+                      License Keys Command Center ({filteredKeys.length} / {stats.total})
+                    </h2>
                     <p style={styles.pageSubtitle}>
                       {currentUser?.role === 'reseller'
-                        ? `Showing licenses issued by @${currentUser.username}`
-                        : 'Complete directory of all registered keys across all games.'}
+                        ? `Showing licenses issued by @${currentUser.username} • Auto-detects Expired & Unused keys in real time.`
+                        : 'Complete directory of all registered keys across all games with 1-click bulk operations.'}
                     </p>
                   </div>
-                  <div style={styles.searchBox}>
-                    <input
-                      type="text"
-                      value={searchKeyQuery}
-                      onChange={(e) => setSearchKeyQuery(e.target.value)}
-                      placeholder="Search key, game, creator..."
-                      style={styles.searchInput}
-                    />
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <select
+                      value={keyGameFilter}
+                      onChange={(e) => setKeyGameFilter(e.target.value)}
+                      style={{
+                        ...styles.selectInput,
+                        width: 'auto',
+                        padding: '8px 12px',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <option value="ALL">🎮 All Games</option>
+                      <option value="Free Fire MAX">Free Fire MAX</option>
+                      <option value="BGMI">BGMI</option>
+                      <option value="PUBG">PUBG Mobile</option>
+                    </select>
+                    {(isOwner || isAdmin) && (
+                      <select
+                        value={keyCreatorFilter}
+                        onChange={(e) => setKeyCreatorFilter(e.target.value)}
+                        style={{
+                          ...styles.selectInput,
+                          width: 'auto',
+                          padding: '8px 12px',
+                          fontSize: '12px'
+                        }}
+                      >
+                        <option value="ALL">👥 All Creators</option>
+                        {Array.from(new Set(keysList.map((k) => k.creator_username))).map((creator) => (
+                          <option key={creator} value={creator}>
+                            @{creator}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <div style={styles.searchBox}>
+                      <input
+                        type="text"
+                        value={searchKeyQuery}
+                        onChange={(e) => setSearchKeyQuery(e.target.value)}
+                        placeholder="Search key, HWID, game, seller..."
+                        style={styles.searchInput}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -2639,47 +3047,111 @@ export default function RymonConnect() {
                 <div
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
+                    flexDirection: 'column',
                     gap: '12px',
                     marginBottom: '16px',
-                    padding: '12px 16px',
-                    backgroundColor: 'rgba(13, 17, 26, 0.85)',
-                    border: '1px solid rgba(30, 41, 59, 0.7)',
+                    padding: '14px 16px',
+                    backgroundColor: 'rgba(13, 17, 26, 0.9)',
+                    border: '1px solid rgba(30, 41, 59, 0.8)',
                     borderRadius: '12px'
                   }}
                 >
-                  {/* Status Filter Pills */}
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {(['ALL', 'ACTIVE', 'PAUSED', 'WAITING', 'EXPIRED'] as const).map((st) => (
+                  {/* Row 1: Status Filter Pills with Live Counts */}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {(
+                      [
+                        { id: 'ALL', label: `ALL (${stats.total})`, color: '#00d9ff' },
+                        { id: 'PLAYING', label: `🟢 PLAYING (${stats.playingNow})`, color: '#05df72' },
+                        { id: 'ACTIVE', label: `⚡ ACTIVE (${stats.active})`, color: '#00d9ff' },
+                        { id: 'WAITING', label: `🟡 UNUSED (${stats.unused})`, color: '#eab308' },
+                        { id: 'PAUSED', label: `⏸️ PAUSED (${stats.paused})`, color: '#ffb700' },
+                        { id: 'EXPIRED', label: `🔴 EXPIRED (${stats.expired})`, color: '#ef4444' },
+                        { id: 'BANNED', label: `🚫 BANNED (${stats.banned})`, color: '#f43f5e' }
+                      ] as const
+                    ).map((st) => (
                       <button
-                        key={st}
-                        onClick={() => setKeyStatusFilter(st)}
+                        key={st.id}
+                        onClick={() => setKeyStatusFilter(st.id)}
                         style={{
-                          padding: '5px 12px',
+                          padding: '6px 12px',
                           borderRadius: '8px',
                           fontSize: '11px',
-                          fontWeight: 700,
+                          fontWeight: 800,
                           cursor: 'pointer',
                           border:
-                            keyStatusFilter === st
-                              ? '1px solid #00d9ff'
+                            keyStatusFilter === st.id
+                              ? `1px solid ${st.color}`
                               : '1px solid rgba(51, 65, 85, 0.6)',
                           backgroundColor:
-                            keyStatusFilter === st
-                              ? 'rgba(0, 217, 255, 0.15)'
-                              : 'rgba(15, 23, 42, 0.6)',
-                          color: keyStatusFilter === st ? '#00d9ff' : '#94a3b8'
+                            keyStatusFilter === st.id
+                              ? 'rgba(0, 217, 255, 0.16)'
+                              : 'rgba(15, 23, 42, 0.65)',
+                          color: keyStatusFilter === st.id ? st.color : '#94a3b8'
                         }}
                       >
-                        {st}
+                        {st.label}
                       </button>
                     ))}
                   </div>
 
-                  {/* Global Bulk Buttons */}
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {/* Row 2: Senior Dev 1-Click Bulk Operations Toolbar */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '8px',
+                      flexWrap: 'wrap',
+                      paddingTop: '10px',
+                      borderTop: '1px solid rgba(30, 41, 59, 0.7)'
+                    }}
+                  >
+                    <button
+                      onClick={() =>
+                        handleCopyMultipleKeys(
+                          keysList.filter((k) => k.status === 'WAITING').map((k) => k.license_key),
+                          'UNUSED'
+                        )
+                      }
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                        border: '1px solid #eab308',
+                        color: '#fde047',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Copy all Unused (Waiting) keys to clipboard for resale"
+                    >
+                      <span>📋</span> COPY UNUSED ({stats.unused})
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleCopyMultipleKeys(
+                          filteredKeys.map((k) => k.license_key),
+                          keyStatusFilter === 'ALL' ? 'VISIBLE' : keyStatusFilter
+                        )
+                      }
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        backgroundColor: 'rgba(148, 163, 184, 0.15)',
+                        border: '1px solid #94a3b8',
+                        color: '#e2e8f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Copy all currently filtered keys to clipboard"
+                    >
+                      <span>📋</span> COPY FILTERED ({filteredKeys.length})
+                    </button>
                     <button
                       onClick={() => handleBulkPauseAllKeys(true)}
                       style={{
@@ -2696,7 +3168,7 @@ export default function RymonConnect() {
                         gap: '5px'
                       }}
                     >
-                      <span>⏸️</span> PAUSE ALL KEYS
+                      <span>⏸️</span> PAUSE ALL
                     </button>
                     <button
                       onClick={() => handleBulkPauseAllKeys(false)}
@@ -2714,7 +3186,7 @@ export default function RymonConnect() {
                         gap: '5px'
                       }}
                     >
-                      <span>▶️</span> RESUME ALL KEYS
+                      <span>▶️</span> RESUME ALL
                     </button>
                     <button
                       onClick={handleBulkResetAllHwid}
@@ -2731,6 +3203,7 @@ export default function RymonConnect() {
                         alignItems: 'center',
                         gap: '5px'
                       }}
+                      title="Unbind all devices across your keys without resetting active timers"
                     >
                       <span>🔄</span> RESET ALL HWID
                     </button>
@@ -2752,6 +3225,65 @@ export default function RymonConnect() {
                     >
                       <span>➕</span> +1 DAY ALL
                     </button>
+                    <button
+                      onClick={() => handleQuickBulkDelete('expired')}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        backgroundColor: 'rgba(239, 68, 68, 0.16)',
+                        border: '1px solid #ef4444',
+                        color: '#fca5a5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Permanently delete all Expired keys"
+                    >
+                      <span>🧹</span> DELETE EXPIRED ({stats.expired})
+                    </button>
+                    <button
+                      onClick={() => handleQuickBulkDelete('unused')}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        backgroundColor: 'rgba(249, 115, 22, 0.16)',
+                        border: '1px solid #f97316',
+                        color: '#fdba74',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Permanently delete all Unused (Waiting) keys"
+                    >
+                      <span>🗑️</span> DELETE UNUSED ({stats.unused})
+                    </button>
+                    {isOwner && (
+                      <button
+                        onClick={() => handleQuickBulkDelete('all')}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          backgroundColor: 'rgba(220, 38, 38, 0.28)',
+                          border: '1px solid #dc2626',
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                        title="Owner Only: Wipe all keys in platform"
+                      >
+                        <span>💥</span> DELETE ALL ({stats.total})
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -2762,10 +3294,10 @@ export default function RymonConnect() {
                         <tr>
                           <th style={styles.th}># ID</th>
                           <th style={styles.th}>GAME & KEY</th>
-                          <th style={styles.th}>DEVICES</th>
+                          <th style={styles.th}>DEVICES & HWID</th>
                           <th style={styles.th}>PLAN</th>
                           <th style={styles.th}>CREATOR</th>
-                          <th style={styles.th}>EXPIRY STATUS</th>
+                          <th style={styles.th}>STATUS & TIMER</th>
                           <th style={styles.th}>ACTIONS</th>
                         </tr>
                       </thead>
@@ -2789,13 +3321,13 @@ export default function RymonConnect() {
                                     style={styles.miniCopyBtn}
                                     title="Copy key"
                                   >
-                                    📋
+                                    {copiedKey === k.license_key ? '✓' : '📋'}
                                   </button>
                                 </div>
                               </td>
                               <td style={styles.td}>
-                                <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                                  {k.devices_used} / {k.devices_max}
+                                <div style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 600 }}>
+                                  {k.devices_used} / {k.devices_max} Bound
                                 </div>
                                 <div style={styles.deviceBarBack}>
                                   <div
@@ -2804,6 +3336,9 @@ export default function RymonConnect() {
                                       width: `${Math.min(100, (k.devices_used / (k.devices_max || 1)) * 100)}%`
                                     }}
                                   />
+                                </div>
+                                <div style={{ fontSize: '10px', color: k.device_hwid ? '#38bdf8' : '#64748b', marginTop: '4px' }}>
+                                  {k.device_hwid ? `🔒 ${k.device_hwid.slice(0, 16)}` : '🟢 Unbound / Ready'}
                                 </div>
                               </td>
                               <td style={styles.td}>
@@ -2842,7 +3377,11 @@ export default function RymonConnect() {
                                           : '#ef4444'
                                     }}
                                   >
-                                    {k.is_paused || k.status === 'PAUSED' ? 'PAUSED' : k.status}
+                                    {k.is_paused || k.status === 'PAUSED'
+                                      ? 'PAUSED'
+                                      : k.status === 'WAITING'
+                                      ? 'UNUSED (WAITING)'
+                                      : k.status}
                                   </span>
                                   {!k.is_paused &&
                                     k.status === 'ACTIVE' &&
@@ -2862,14 +3401,30 @@ export default function RymonConnect() {
                                       </span>
                                     )}
                                 </div>
-                                {k.expires_at && (
-                                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                                    {new Date(k.expires_at).toLocaleDateString()}
-                                  </div>
-                                )}
+                                <div
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    color:
+                                      k.status === 'EXPIRED'
+                                        ? '#ef4444'
+                                        : k.status === 'WAITING'
+                                        ? '#eab308'
+                                        : '#94a3b8',
+                                    marginTop: '4px'
+                                  }}
+                                >
+                                  {formatRemainingTime(k.expires_at, k.status, k.is_paused)}
+                                  {k.expires_at && k.status !== 'WAITING' && (
+                                    <span style={{ color: '#64748b', fontWeight: 400 }}>
+                                      {' '}
+                                      • {new Date(k.expires_at).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td style={styles.td}>
-                                <div style={{ display: 'flex', gap: '8px' }}>
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                   <button
                                     onClick={() => {
                                       setCurrentKey(k.license_key)
@@ -2893,7 +3448,7 @@ export default function RymonConnect() {
                                   <button
                                     onClick={() => handleResetHWID(k.license_key)}
                                     style={styles.actionIconBtn}
-                                    title="Reset HWID binding"
+                                    title="Reset HWID device binding (keeps timer)"
                                   >
                                     🔄
                                   </button>
@@ -2907,11 +3462,23 @@ export default function RymonConnect() {
                                   >
                                     ⏳
                                   </button>
-                                  {isOwner && (
+                                  {(isOwner || isAdmin) && (
                                     <button
-                                      onClick={() => handleDeleteKey(k.license_key)}
+                                      onClick={() => handleToggleBanKey(k.license_key, k.status)}
+                                      style={{
+                                        ...styles.actionIconBtn,
+                                        color: k.status === 'BANNED' ? '#05df72' : '#f43f5e'
+                                      }}
+                                      title={k.status === 'BANNED' ? 'Unban Key' : 'Ban Key'}
+                                    >
+                                      🚫
+                                    </button>
+                                  )}
+                                  {(isOwner || k.status === 'EXPIRED' || k.status === 'WAITING') && (
+                                    <button
+                                      onClick={() => handleDeleteKey(k.license_key, k.status)}
                                       style={{ ...styles.actionIconBtn, color: '#ef4444' }}
-                                      title="Delete License (Owner Only)"
+                                      title="Delete License Key"
                                     >
                                       🗑️
                                     </button>
@@ -2962,7 +3529,7 @@ export default function RymonConnect() {
                           <th style={styles.th}>ROLE & STATUS</th>
                           <th style={styles.th}>REFERRAL / UPLINK</th>
                           <th style={styles.th}>BALANCE</th>
-                          <th style={styles.th}>EXPIRES</th>
+                          <th style={styles.th}>SUBSCRIPTION (30D / 60D)</th>
                           <th style={styles.th}>ACTIONS</th>
                         </tr>
                       </thead>
@@ -2970,6 +3537,11 @@ export default function RymonConnect() {
                         {filteredUsers.map((u) => {
                           const isSelfRow = u.username.toLowerCase() === currentUser?.username.toLowerCase()
                           const canManageRow = isOwner ? u.role !== 'owner' : !isSelfRow && u.role === 'reseller'
+                          const expMs = u.expires_at ? new Date(u.expires_at).getTime() : Date.now() + 30 * 86400000
+                          const diffMs = expMs - Date.now()
+                          const daysLeft = Math.max(0, Math.ceil(diffMs / 86400000))
+                          const isSubExpired = u.role !== 'owner' && diffMs <= 0
+                          const subTierLabel = daysLeft > 30 ? '60D SUB' : '30D SUB'
                           return (
                             <tr key={u.id} style={styles.tr}>
                               <td style={styles.td}>
@@ -2987,8 +3559,14 @@ export default function RymonConnect() {
                               </td>
                               <td style={styles.td}>
                                 <span style={styles.roleBadge}>{u.role.toUpperCase()}</span>
-                                <div style={{ fontSize: '11px', color: u.status === 'ACTIVE' ? '#05df72' : '#ef4444', marginTop: '4px' }}>
-                                  ● {u.status}
+                                <div
+                                  style={{
+                                    fontSize: '11px',
+                                    color: isSubExpired ? '#ef4444' : u.status === 'ACTIVE' ? '#05df72' : '#ef4444',
+                                    marginTop: '4px'
+                                  }}
+                                >
+                                  ● {isSubExpired ? 'SUB EXPIRED' : u.status}
                                 </div>
                               </td>
                               <td style={styles.td}>
@@ -3003,13 +3581,76 @@ export default function RymonConnect() {
                                 </span>
                               </td>
                               <td style={styles.td}>
-                                <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                                  {u.expires_at ? new Date(u.expires_at).toLocaleDateString() : 'Never'}
-                                </span>
+                                {u.role === 'owner' ? (
+                                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#fde047' }}>
+                                    👑 ROOT OWNER
+                                  </span>
+                                ) : (
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span
+                                        style={{
+                                          fontSize: '10px',
+                                          fontWeight: 800,
+                                          padding: '2px 7px',
+                                          borderRadius: '6px',
+                                          background: isSubExpired
+                                            ? 'rgba(239, 68, 68, 0.2)'
+                                            : daysLeft > 30
+                                            ? 'rgba(168, 85, 247, 0.2)'
+                                            : 'rgba(0, 217, 255, 0.18)',
+                                          border: isSubExpired
+                                            ? '1px solid rgba(239, 68, 68, 0.5)'
+                                            : daysLeft > 30
+                                            ? '1px solid rgba(168, 85, 247, 0.45)'
+                                            : '1px solid rgba(0, 217, 255, 0.4)',
+                                          color: isSubExpired ? '#ef4444' : daysLeft > 30 ? '#c084fc' : '#00d9ff'
+                                        }}
+                                      >
+                                        {isSubExpired ? '🔴 EXPIRED' : `⏳ ${daysLeft}d left (${subTierLabel})`}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                                      Ends: {new Date(expMs).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                )}
                               </td>
                               <td style={styles.td}>
                                 {canManageRow ? (
-                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <button
+                                      onClick={() => handleRenewUserSubscription(u.username, 30)}
+                                      style={{
+                                        padding: '4px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '10px',
+                                        fontWeight: 800,
+                                        cursor: 'pointer',
+                                        background: 'rgba(0, 217, 255, 0.16)',
+                                        border: '1px solid rgba(0, 217, 255, 0.45)',
+                                        color: '#00d9ff'
+                                      }}
+                                      title="Set / Renew 30 Days Reseller Subscription"
+                                    >
+                                      30D Sub
+                                    </button>
+                                    <button
+                                      onClick={() => handleRenewUserSubscription(u.username, 60)}
+                                      style={{
+                                        padding: '4px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '10px',
+                                        fontWeight: 800,
+                                        cursor: 'pointer',
+                                        background: 'rgba(168, 85, 247, 0.18)',
+                                        border: '1px solid rgba(168, 85, 247, 0.5)',
+                                        color: '#c084fc'
+                                      }}
+                                      title="Set / Renew 60 Days Reseller Subscription"
+                                    >
+                                      60D Sub
+                                    </button>
                                     <button
                                       onClick={() => {
                                         setTopUpTargetUser(u.username)
@@ -3125,52 +3766,124 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {/* 7. DELETE KEYS (MEDIA_1791705541642_70FDE7CE.PNG) */}
+            {/* 7. DELETE KEYS */}
             {activeTab === 'delete' && (
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>{isOwner ? 'Delete User Keys' : 'Clean Team Expired / Unused Keys'}</h2>
+                    <h2 style={styles.pageTitle}>
+                      {isOwner
+                        ? 'Delete & Purge License Keys'
+                        : isAdmin
+                        ? 'Clean Team Expired & Unused Keys'
+                        : 'Clean My Expired & Unused Keys'}
+                    </h2>
                     <p style={styles.pageSubtitle}>
                       {isOwner
-                        ? 'Permanently delete expired, unused, or all keys associated with the selected user.'
-                        : 'Clean up expired or unused keys across your own account or your downline Resellers.'}
+                        ? '1-click global purge or targeted deletion of Expired, Unused (Waiting), or ALL keys across the platform.'
+                        : '1-click cleanup of Expired or Unused (Waiting) keys across your account and downline.'}
                     </p>
                   </div>
+                </div>
+
+                {/* 1-Click Quick Purge Bar */}
+                <div style={{ ...styles.statGrid, marginBottom: '24px' }}>
+                  <div
+                    onClick={() => handleQuickBulkDelete('expired')}
+                    style={{
+                      ...styles.statCard,
+                      cursor: 'pointer',
+                      borderColor: 'rgba(239, 68, 68, 0.45)',
+                      background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.14) 0%, rgba(13, 17, 26, 0.92) 100%)'
+                    }}
+                  >
+                    <div style={{ ...styles.statIconFrame, color: '#ef4444' }}>🧹</div>
+                    <div>
+                      <div style={{ ...styles.statNum, color: '#ef4444' }}>{stats.expired}</div>
+                      <div style={{ ...styles.statLabel, color: '#fca5a5', fontWeight: 700 }}>
+                        1-Click Purge Expired Keys
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => handleQuickBulkDelete('unused')}
+                    style={{
+                      ...styles.statCard,
+                      cursor: 'pointer',
+                      borderColor: 'rgba(234, 179, 8, 0.45)',
+                      background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.14) 0%, rgba(13, 17, 26, 0.92) 100%)'
+                    }}
+                  >
+                    <div style={{ ...styles.statIconFrame, color: '#eab308' }}>🗑️</div>
+                    <div>
+                      <div style={{ ...styles.statNum, color: '#eab308' }}>{stats.unused}</div>
+                      <div style={{ ...styles.statLabel, color: '#fde047', fontWeight: 700 }}>
+                        1-Click Purge Unused Keys
+                      </div>
+                    </div>
+                  </div>
+                  {isOwner && (
+                    <div
+                      onClick={() => handleQuickBulkDelete('all')}
+                      style={{
+                        ...styles.statCard,
+                        cursor: 'pointer',
+                        borderColor: 'rgba(220, 38, 38, 0.6)',
+                        background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.22) 0%, rgba(13, 17, 26, 0.95) 100%)'
+                      }}
+                    >
+                      <div style={{ ...styles.statIconFrame, color: '#ffffff' }}>💥</div>
+                      <div>
+                        <div style={{ ...styles.statNum, color: '#ffffff' }}>{stats.total}</div>
+                        <div style={{ ...styles.statLabel, color: '#fecaca', fontWeight: 800 }}>
+                          1-Click Wipe ALL Keys (Owner)
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div style={styles.centerCardWrapper}>
                   <div style={styles.managementCard}>
                     <div style={styles.formGroup}>
                       <label style={styles.formLabel}>
-                        Target User <span style={{ color: '#ef4444' }}>*</span>
+                        Target Scope / User <span style={{ color: '#ef4444' }}>*</span>
                       </label>
                       <select
                         value={targetDeleteUser}
                         onChange={(e) => setTargetDeleteUser(e.target.value)}
                         style={styles.selectInput}
                       >
-                        <option value="">-- Select a User --</option>
-                        {usersList.map((u) => (
-                          <option key={u.id} value={u.username}>
-                            {u.username} ({u.role.toUpperCase()})
-                          </option>
-                        ))}
+                        <option value="__ALL__">
+                          {isOwner
+                            ? '🌐 ALL USERS (Entire Platform)'
+                            : isAdmin
+                            ? '🌐 ALL IN MY ADMIN TEAM (Me + My Resellers)'
+                            : `👤 My Keys (@${currentUser?.username})`}
+                        </option>
+                        {(isOwner || isAdmin) &&
+                          usersList.map((u) => (
+                            <option key={u.id} value={u.username}>
+                              @{u.username} ({u.role.toUpperCase()})
+                            </option>
+                          ))}
                       </select>
                     </div>
 
                     <div style={{ ...styles.formGroup, marginTop: '16px' }}>
                       <label style={styles.formLabel}>
-                        Key Type <span style={{ color: '#ef4444' }}>*</span>
+                        Key Type to Purge <span style={{ color: '#ef4444' }}>*</span>
                       </label>
                       <select
                         value={deleteKeyType}
                         onChange={(e) => setDeleteKeyType(e.target.value as any)}
                         style={styles.selectInput}
                       >
-                        <option value="expired">Expired Keys Only</option>
-                        <option value="unused">Unused / Waiting Keys</option>
-                        {isOwner && <option value="all">ALL Keys of Selected User (Owner Only)</option>}
+                        <option value="expired">🔴 Expired Keys Only ({stats.expired} in scope)</option>
+                        <option value="unused">🟡 Unused / Waiting Keys Only ({stats.unused} in scope)</option>
+                        {isOwner && (
+                          <option value="all">💥 ALL Keys Including Active ({stats.total} in scope — Owner Only)</option>
+                        )}
                       </select>
                     </div>
 
@@ -3183,7 +3896,7 @@ export default function RymonConnect() {
                         color: '#fff'
                       }}
                     >
-                      Confirm Deletion
+                      🧹 Execute Key Purge Now
                     </button>
                   </div>
                 </div>
@@ -3195,11 +3908,11 @@ export default function RymonConnect() {
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Extend License Duration</h2>
+                    <h2 style={styles.pageTitle}>Extend License Duration (Max 30 Days)</h2>
                     <p style={styles.pageSubtitle}>
                       {isOwner
-                        ? 'Add operational days to any key or all active keys globally at ₹0 cost (Owner Privilege).'
-                        : 'Extend your keys by adding days. Extension cost is calculated from your rate table and deducted from your wallet.'}
+                        ? 'Add operational days to any key or all active keys globally (capped at 30 days max validity).'
+                        : 'Extend your keys by adding days (max 30 days validity). Extension cost is deducted from your wallet.'}
                     </p>
                   </div>
                 </div>
@@ -3229,20 +3942,18 @@ export default function RymonConnect() {
 
                     <div style={{ ...styles.formGroup, marginTop: '16px' }}>
                       <label style={styles.formLabel}>
-                        Days to Add <span style={{ color: '#ef4444' }}>*</span>
+                        Days to Add (Max 30 Days Cap) <span style={{ color: '#ef4444' }}>*</span>
                       </label>
                       <select
                         value={extendAmount}
-                        onChange={(e) => setExtendAmount(parseInt(e.target.value) || 30)}
+                        onChange={(e) => setExtendAmount(Math.min(30, parseInt(e.target.value) || 30))}
                         style={styles.selectInput}
                       >
                         <option value="1">1 Day</option>
                         <option value="3">3 Days</option>
                         <option value="7">7 Days</option>
                         <option value="15">15 Days</option>
-                        <option value="30">30 Days</option>
-                        <option value="90">90 Days</option>
-                        <option value="365">365 Days (1 Year)</option>
+                        <option value="30">30 Days (Max Cap)</option>
                       </select>
                     </div>
 
@@ -4351,6 +5062,49 @@ export default function RymonConnect() {
                       </div>
 
                       <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>RESELLER / ROLE SUBSCRIPTION VALIDITY (NO LIFETIME)</label>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setRefSubDays(30)}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border: refSubDays === 30 ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
+                              background: refSubDays === 30 ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: refSubDays === 30 ? '#00d9ff' : '#94a3b8',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ⏳ 30 DAYS SUBSCRIPTION
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRefSubDays(60)}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border: refSubDays === 60 ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.08)',
+                              background: refSubDays === 60 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: refSubDays === 60 ? '#c084fc' : '#94a3b8',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💎 60 DAYS SUBSCRIPTION
+                          </button>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                          Reseller account expires automatically after {refSubDays} days unless renewed by Owner/Admin.
+                        </div>
+                      </div>
+
+                      <div style={styles.formGroup}>
                         <label style={styles.formLabel}>STARTING WALLET BALANCE (₹ INR)</label>
                         <input
                           type="number"
@@ -4400,7 +5154,7 @@ export default function RymonConnect() {
                         disabled={refCreating}
                         style={{ ...styles.submitBtn, marginTop: '16px' }}
                       >
-                        {refCreating ? 'CREATING CODE IN SUPABASE...' : '🎟️ GENERATE INVITE CODE'}
+                        {refCreating ? 'CREATING CODE IN SUPABASE...' : `🎟️ GENERATE ${refSubDays}D INVITE CODE`}
                       </button>
                     </form>
                   </div>
@@ -4429,7 +5183,7 @@ export default function RymonConnect() {
                         <thead>
                           <tr>
                             <th style={styles.th}>INVITE CODE</th>
-                            <th style={styles.th}>ROLE</th>
+                            <th style={styles.th}>ROLE & SUB</th>
                             <th style={styles.th}>STARTING BAL</th>
                             <th style={styles.th}>USES</th>
                             <th style={styles.th}>STATUS</th>
@@ -4465,13 +5219,26 @@ export default function RymonConnect() {
                                   </div>
                                 </td>
                                 <td style={styles.td}>
-                                  <span style={{
-                                    ...styles.planBadge,
-                                    background: ref.target_role === 'admin' ? 'rgba(5, 223, 114, 0.15)' : 'rgba(0, 217, 255, 0.15)',
-                                    color: ref.target_role === 'admin' ? '#05df72' : '#00d9ff'
-                                  }}>
-                                    {ref.target_role.toUpperCase()}
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span style={{
+                                      ...styles.planBadge,
+                                      background: ref.target_role === 'admin' ? 'rgba(5, 223, 114, 0.15)' : 'rgba(0, 217, 255, 0.15)',
+                                      color: ref.target_role === 'admin' ? '#05df72' : '#00d9ff'
+                                    }}>
+                                      {ref.target_role.toUpperCase()}
+                                    </span>
+                                    <span style={{
+                                      fontSize: '10px',
+                                      fontWeight: 800,
+                                      padding: '2px 6px',
+                                      borderRadius: '6px',
+                                      background: ref.subscription_days === 60 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(0, 217, 255, 0.15)',
+                                      color: ref.subscription_days === 60 ? '#c084fc' : '#38bdf8',
+                                      border: ref.subscription_days === 60 ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(0, 217, 255, 0.3)'
+                                    }}>
+                                      {ref.subscription_days === 60 ? '60D SUB' : '30D SUB'}
+                                    </span>
+                                  </div>
                                 </td>
                                 <td style={styles.td}>
                                   <span style={{ color: '#05df72', fontWeight: 700 }}>
@@ -4509,7 +5276,7 @@ export default function RymonConnect() {
                     </div>
 
                     <div style={{ marginTop: '20px', padding: '12px 16px', background: 'rgba(0, 217, 255, 0.05)', border: '1px solid rgba(0, 217, 255, 0.15)', borderRadius: '10px', fontSize: '12px', color: '#94a3b8' }}>
-                      💡 <strong style={{ color: '#00d9ff' }}>How New Staff Onboard:</strong> Give this invite code to your reseller or admin. When they open this site, they click <strong>"Register with Invite Code"</strong> on the login screen, enter their own desired username, password, email, and the invite code. Their account is created immediately with 1 account per person, assigned their role and wallet balance!
+                      💡 <strong style={{ color: '#00d9ff' }}>How New Staff Onboard:</strong> Give this invite code to your reseller or admin. When they open this site, they click <strong>"Register with Invite Code"</strong> on the login screen, enter their own desired username, password, email, and the invite code. Their account is created immediately with a <strong>30-Day or 60-Day subscription</strong> and starting wallet balance!
                     </div>
                   </div>
                 </div>
@@ -4749,7 +5516,20 @@ public class ServerConfig {
                     </p>
                   </div>
                   <div style={styles.badgeCluster}>
-                    <span style={styles.greenPulseBadge}>● {isLiveConnected ? 'LINK ACTIVE' : 'CONNECTING'}</span>
+                    <span
+                      style={{
+                        ...styles.greenPulseBadge,
+                        background: isStreamerKeyActivelyPlaying(record)
+                          ? 'rgba(5, 223, 114, 0.2)'
+                          : 'rgba(148, 163, 184, 0.15)',
+                        color: isStreamerKeyActivelyPlaying(record) ? '#05df72' : '#cbd5e1',
+                        border: isStreamerKeyActivelyPlaying(record)
+                          ? '1px solid rgba(5, 223, 114, 0.5)'
+                          : '1px solid rgba(148, 163, 184, 0.3)'
+                      }}
+                    >
+                      {isStreamerKeyActivelyPlaying(record) ? '🟢 PLAYING NOW (IN-GAME)' : '⚪ NOT PLAYING (IDLE)'}
+                    </span>
                     {isStaff && currentKey && (
                       <button
                         onClick={() => handleTogglePauseKey(currentKey)}
@@ -4790,15 +5570,70 @@ public class ServerConfig {
                   </div>
                 </div>
 
+                {/* Staff Target Key Selector Bar */}
+                {isStaff && (
+                  <div
+                    style={{
+                      background: 'rgba(13, 17, 26, 0.92)',
+                      border: '1px solid rgba(0, 217, 255, 0.3)',
+                      borderRadius: '12px',
+                      padding: '12px 18px',
+                      marginBottom: '16px',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '18px' }}>🎮</span>
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#00d9ff', letterSpacing: '0.5px' }}>
+                          SELECT TARGET LICENSE KEY TO CONTROL REMOTELY
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                          Any toggle or slider you change here immediately syncs to the selected key&apos;s Android APK
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 320px', maxWidth: '520px' }}>
+                      <select
+                        value={currentKey}
+                        onChange={(e) => setCurrentKey(e.target.value)}
+                        style={{ ...styles.selectInput, flex: 1, fontWeight: 700, color: '#f8fafc' }}
+                      >
+                        <option value="">-- Choose License Key to Control --</option>
+                        {keysList.map((k) => {
+                          const isKeyPlaying = onlineKeySet.has(k.license_key.toUpperCase())
+                          return (
+                            <option key={k.license_key} value={k.license_key}>
+                              {isKeyPlaying ? '🟢 [PLAYING NOW] ' : k.device_hwid ? '📱 [BOUND] ' : '🟡 [UNUSED] '}
+                              {k.license_key} ({k.game} • {k.plan_duration} • @{k.creator_username})
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
                 {/* Status Bar */}
                 <div style={styles.telemetryBar}>
                   <div style={styles.telemetryBarItem}>
                     <span style={styles.telemetryBarLabel}>TARGET KEY:</span>
-                    <span style={styles.telemetryBarVal}>{currentKey}</span>
+                    <span style={styles.telemetryBarVal}>{currentKey || 'NONE SELECTED'}</span>
                   </div>
                   <div style={styles.telemetryBarItem}>
-                    <span style={styles.telemetryBarLabel}>TARGET GAME:</span>
-                    <span style={styles.telemetryBarVal}>{record?.game_name || 'Free Fire MAX'}</span>
+                    <span style={styles.telemetryBarLabel}>GAME SESSION:</span>
+                    <span
+                      style={{
+                        ...styles.telemetryBarVal,
+                        color: isStreamerKeyActivelyPlaying(record) ? '#05df72' : '#94a3b8'
+                      }}
+                    >
+                      {isStreamerKeyActivelyPlaying(record) ? '🟢 PLAYING NOW' : '⚪ NOT PLAYING'}
+                    </span>
                   </div>
                   <div style={styles.telemetryBarItem}>
                     <span style={styles.telemetryBarLabel}>KEY STATE:</span>
@@ -4815,10 +5650,16 @@ public class ServerConfig {
                 {/* Real Hardware & Daemon Binding HUD Card */}
                 <div
                   style={{
-                    background: record?.device_hwid
-                      ? 'linear-gradient(90deg, rgba(5, 223, 114, 0.12) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(5, 223, 114, 0.08) 100%)'
+                    background: isStreamerKeyActivelyPlaying(record)
+                      ? 'linear-gradient(90deg, rgba(5, 223, 114, 0.14) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(5, 223, 114, 0.08) 100%)'
+                      : record?.device_hwid
+                      ? 'linear-gradient(90deg, rgba(0, 217, 255, 0.1) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(0, 217, 255, 0.06) 100%)'
                       : 'linear-gradient(90deg, rgba(255, 183, 0, 0.12) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(255, 183, 0, 0.08) 100%)',
-                    border: record?.device_hwid ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(255, 183, 0, 0.4)',
+                    border: isStreamerKeyActivelyPlaying(record)
+                      ? '1px solid rgba(5, 223, 114, 0.45)'
+                      : record?.device_hwid
+                      ? '1px solid rgba(0, 217, 255, 0.35)'
+                      : '1px solid rgba(255, 183, 0, 0.4)',
                     borderRadius: '12px',
                     padding: '14px 20px',
                     marginBottom: '20px',
@@ -4830,11 +5671,28 @@ public class ServerConfig {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '26px' }}>{record?.device_hwid ? '📱' : '⏳'}</span>
+                    <span style={{ fontSize: '26px' }}>
+                      {isStreamerKeyActivelyPlaying(record) ? '🎮' : record?.device_hwid ? '📱' : '⏳'}
+                    </span>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 800, fontSize: '13px', letterSpacing: '0.5px', color: record?.device_hwid ? '#05df72' : '#ffb700' }}>
-                          {record?.device_hwid ? '● PHONE HARDWARE BINDED (ACTIVE)' : '○ AWAITING PHONE APK INITIALIZATION'}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            fontSize: '13px',
+                            letterSpacing: '0.5px',
+                            color: isStreamerKeyActivelyPlaying(record)
+                              ? '#05df72'
+                              : record?.device_hwid
+                              ? '#00d9ff'
+                              : '#ffb700'
+                          }}
+                        >
+                          {isStreamerKeyActivelyPlaying(record)
+                            ? '● PLAYER IS IN-GAME & PLAYING NOW'
+                            : record?.device_hwid
+                            ? '● DEVICE BOUND (CURRENTLY NOT PLAYING / OFFLINE)'
+                            : '○ AWAITING 1ST PHONE APK LOGIN'}
                         </span>
                         <span
                           style={{
@@ -4842,12 +5700,28 @@ public class ServerConfig {
                             padding: '2px 8px',
                             borderRadius: '10px',
                             fontWeight: 700,
-                            background: record?.device_hwid ? 'rgba(5, 223, 114, 0.2)' : 'rgba(255, 183, 0, 0.2)',
-                            color: record?.device_hwid ? '#05df72' : '#ffb700',
-                            border: record?.device_hwid ? '1px solid #05df72' : '1px solid #ffb700'
+                            background: isStreamerKeyActivelyPlaying(record)
+                              ? 'rgba(5, 223, 114, 0.2)'
+                              : record?.device_hwid
+                              ? 'rgba(0, 217, 255, 0.15)'
+                              : 'rgba(255, 183, 0, 0.2)',
+                            color: isStreamerKeyActivelyPlaying(record)
+                              ? '#05df72'
+                              : record?.device_hwid
+                              ? '#00d9ff'
+                              : '#ffb700',
+                            border: isStreamerKeyActivelyPlaying(record)
+                              ? '1px solid #05df72'
+                              : record?.device_hwid
+                              ? '1px solid #00d9ff'
+                              : '1px solid #ffb700'
                           }}
                         >
-                          {record?.device_hwid ? 'DAEMON LINKED' : 'UNBOUND'}
+                          {isStreamerKeyActivelyPlaying(record)
+                            ? 'LIVE IN-GAME'
+                            : record?.device_hwid
+                            ? 'IDLE / OFFLINE'
+                            : 'UNBOUND'}
                         </span>
                       </div>
                       <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '3px', fontFamily: 'monospace' }}>
@@ -4863,8 +5737,10 @@ public class ServerConfig {
                     </div>
                     <div>
                       <span style={{ display: 'block', fontSize: '10px', color: '#64748b' }}>LAST HEARTBEAT:</span>
-                      <strong style={{ color: '#f8fafc' }}>
-                        {record?.last_heartbeat ? new Date(record.last_heartbeat).toLocaleTimeString() : (record?.device_hwid ? 'Active' : 'Awaiting Connection')}
+                      <strong style={{ color: isStreamerKeyActivelyPlaying(record) ? '#05df72' : '#94a3b8' }}>
+                        {record?.last_heartbeat
+                          ? `${new Date(record.last_heartbeat).toLocaleTimeString()} (${isStreamerKeyActivelyPlaying(record) ? 'Live' : 'Offline'})`
+                          : 'No Game Session Yet'}
                       </strong>
                     </div>
                     <div>

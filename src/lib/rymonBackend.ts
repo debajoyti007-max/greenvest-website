@@ -113,7 +113,7 @@ export interface TelegramConfig {
 // Sovereign In-Memory Fallback Seed (Only genuine Root Owner)
 export const SOVEREIGN_FALLBACK_ACCOUNTS: RymonAccount[] = [
   {
-    id: 'usr-debajoyti-01',
+    id: '941a9e4e-e3cd-49de-8872-390cc7e4dcaf',
     username: 'debajoyti',
     email: 'debajoyti@rymon.vip',
     role: 'owner',
@@ -130,6 +130,7 @@ export interface RymonReferral {
   code: string
   target_role: 'admin' | 'reseller'
   initial_balance: number
+  subscription_days?: 30 | 60
   created_by: string
   max_uses: number
   times_used: number
@@ -137,13 +138,73 @@ export interface RymonReferral {
   created_at: string
 }
 
+export const STREAMER_HEARTBEAT_TIMEOUT_MS = 35000
+
+export function isStreamerKeyActivelyPlaying(
+  ctrl?: Partial<StreamerControlRecord> | null
+): boolean {
+  if (!ctrl) return false
+  if (ctrl.is_online !== true || ctrl.is_paused === true || ctrl.is_active === false) {
+    return false
+  }
+  if (!ctrl.last_heartbeat) {
+    return false
+  }
+  const hbMs = new Date(ctrl.last_heartbeat).getTime()
+  if (Number.isNaN(hbMs)) return false
+  return Date.now() - hbMs <= STREAMER_HEARTBEAT_TIMEOUT_MS
+}
+
+export function buildDefaultStreamerControlPayload(
+  params: Partial<StreamerControlRecord> & { license_key: string }
+): StreamerControlRecord {
+  return {
+    license_key: params.license_key.trim().toUpperCase(),
+    streamer_name: params.streamer_name || 'VIP Streamer',
+    game_name: params.game_name || 'Free Fire MAX',
+    device_hwid: params.device_hwid || '',
+    is_active: params.is_active ?? true,
+    is_paused: params.is_paused ?? false,
+    is_online: params.is_online ?? false,
+    last_heartbeat: params.last_heartbeat,
+    expires_at: params.expires_at,
+    plan_duration: params.plan_duration || '30 Days',
+    creator: params.creator || 'debajoyti',
+    devices_max: params.devices_max ?? 1,
+    devices_used: params.devices_used ?? 0,
+    aim_silent: params.aim_silent ?? false,
+    hit_rate: params.hit_rate ?? 100,
+    ignore_knocked: params.ignore_knocked ?? true,
+    show_aim_line: params.show_aim_line ?? false,
+    show_aim_fov: params.show_aim_fov ?? true,
+    aim_fov: params.aim_fov ?? 90,
+    esp_box: params.esp_box ?? true,
+    esp_line: params.esp_line ?? true,
+    esp_skeleton: params.esp_skeleton ?? true,
+    esp_name: params.esp_name ?? true,
+    esp_distance: params.esp_distance ?? true,
+    esp_health: params.esp_health ?? true,
+    esp_count: params.esp_count ?? true,
+    esp_radar: params.esp_radar ?? false,
+    speed_hack: params.speed_hack ?? false,
+    speed_multiplier: params.speed_multiplier ?? 1,
+    ghost_hack: params.ghost_hack ?? false,
+    no_reload: params.no_reload ?? false,
+    no_recoil: params.no_recoil ?? false,
+    theme_color_index: params.theme_color_index ?? 0,
+    emergency_purge: params.emergency_purge ?? false,
+    updated_at: new Date().toISOString()
+  }
+}
+
 export const SOVEREIGN_FALLBACK_REFERRALS: RymonReferral[] = [
   {
     id: 1,
-    code: 'RYMON-RESELLER-VIP',
+    code: 'RYMON-RES30D-VIP',
     target_role: 'reseller',
     initial_balance: 5000,
-    created_by: 'rymon',
+    subscription_days: 30,
+    created_by: 'debajoyti',
     max_uses: 5,
     times_used: 0,
     is_active: true,
@@ -151,10 +212,11 @@ export const SOVEREIGN_FALLBACK_REFERRALS: RymonReferral[] = [
   },
   {
     id: 2,
-    code: 'RYMON-ADMIN-MASTER',
+    code: 'RYMON-ADM30D-MASTER',
     target_role: 'admin',
     initial_balance: 50000,
-    created_by: 'rymon',
+    subscription_days: 30,
+    created_by: 'debajoyti',
     max_uses: 1,
     times_used: 0,
     is_active: true,
@@ -366,10 +428,10 @@ export async function loginWithCredentials(
         if (row.status === 'BANNED') {
           return { success: false, error: 'Account suspended / banned by Administrator.' }
         }
-        if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+        if (row.role !== 'owner' && row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
           return {
             success: false,
-            error: `Account expired on ${new Date(row.expires_at).toLocaleDateString()}`
+            error: `Your ${String(row.role).toUpperCase()} subscription expired on ${new Date(row.expires_at).toLocaleDateString()}. Contact your Admin/Owner to renew (30 Days / 60 Days).`
           }
         }
         const dbPass = String(row.password_hash || '')
@@ -424,6 +486,12 @@ export async function loginWithCredentials(
   if (matched) {
     if (matched.status === 'BANNED') {
       return { success: false, error: 'Account suspended/banned by Administrator.' }
+    }
+    if (matched.role !== 'owner' && matched.expires_at && new Date(matched.expires_at).getTime() < Date.now()) {
+      return {
+        success: false,
+        error: `Your ${matched.role.toUpperCase()} subscription expired on ${new Date(matched.expires_at).toLocaleDateString()}. Contact your Admin/Owner to renew (30 Days / 60 Days).`
+      }
     }
     const storedPass = localStorage.getItem(`rymon_pw_${matched.username}`) || matched.username.toLowerCase()
     if (
@@ -485,25 +553,43 @@ export async function verifyLicenseKey(
             return { valid: false, error: `License key expired on ${new Date(licRow.expires_at).toLocaleDateString()}` }
           }
 
-          // Ensure controls record exists for this streamer key and clear any stale emergency_purge
-          await supabase
+          // Check if a streamer controls record already exists so we don't wipe toggle columns
+          const { data: existingCtrl } = await supabase
             .from('rymon_streamer_controls')
-            .upsert(
-              {
-                license_key: licRow.license_key,
-                streamer_name: 'VIP Streamer',
-                game_name: licRow.game || 'Free Fire MAX',
-                is_active: licRow.status === 'ACTIVE',
+            .select('license_key')
+            .eq('license_key', licRow.license_key)
+            .maybeSingle()
+
+          if (existingCtrl) {
+            await supabase
+              .from('rymon_streamer_controls')
+              .update({
+                is_active: licRow.status !== 'BANNED' && licRow.status !== 'EXPIRED',
                 is_paused: Boolean(licRow.is_paused),
                 emergency_purge: false,
                 plan_duration: licRow.plan_duration,
                 creator: licRow.creator_username,
                 devices_max: licRow.devices_max || 1,
-                devices_used: licRow.devices_used || 0,
-                updated_at: new Date().toISOString()
-              },
-              { onConflict: 'license_key' }
-            )
+                devices_used: licRow.devices_used || 0
+              })
+              .eq('license_key', licRow.license_key)
+          } else {
+            await supabase
+              .from('rymon_streamer_controls')
+              .insert(
+                buildDefaultStreamerControlPayload({
+                  license_key: licRow.license_key,
+                  game_name: licRow.game || 'Free Fire MAX',
+                  plan_duration: licRow.plan_duration || '30 Days',
+                  creator: licRow.creator_username,
+                  devices_max: licRow.devices_max || 1,
+                  devices_used: licRow.devices_used || 0,
+                  is_active: licRow.status !== 'BANNED' && licRow.status !== 'EXPIRED',
+                  is_paused: Boolean(licRow.is_paused),
+                  expires_at: licRow.expires_at || undefined
+                })
+              )
+          }
 
           return {
             valid: true,
@@ -662,6 +748,55 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
     return []
   }
 
+  const nowMs = Date.now()
+  const max30DaysMs = nowMs + 30 * 86400000
+  const max30DaysIso = new Date(max30DaysMs).toISOString()
+  const normalizeExpiry = (rows: RymonLicense[]): RymonLicense[] => {
+    const newlyExpiredKeys: string[] = []
+    const over30DayKeys: string[] = []
+    const normalized = rows.map((r) => {
+      if (
+        r.status !== 'BANNED' &&
+        r.status !== 'EXPIRED' &&
+        r.expires_at &&
+        new Date(r.expires_at).getTime() < nowMs
+      ) {
+        newlyExpiredKeys.push(r.license_key)
+        return { ...r, status: 'EXPIRED' as const, is_paused: false }
+      }
+      if (r.expires_at && new Date(r.expires_at).getTime() > max30DaysMs) {
+        over30DayKeys.push(r.license_key)
+        return { ...r, expires_at: max30DaysIso, plan_duration: '30 Days' }
+      }
+      return r
+    })
+    if (newlyExpiredKeys.length > 0 && supabase) {
+      supabase
+        .from('rymon_licenses')
+        .update({ status: 'EXPIRED', is_paused: false, updated_at: new Date().toISOString() })
+        .in('license_key', newlyExpiredKeys)
+        .then(() => {}, () => {})
+      supabase
+        .from('rymon_streamer_controls')
+        .update({ is_active: false, is_online: false, updated_at: new Date().toISOString() })
+        .in('license_key', newlyExpiredKeys)
+        .then(() => {}, () => {})
+    }
+    if (over30DayKeys.length > 0 && supabase) {
+      supabase
+        .from('rymon_licenses')
+        .update({ expires_at: max30DaysIso, plan_duration: '30 Days', updated_at: new Date().toISOString() })
+        .in('license_key', over30DayKeys)
+        .then(() => {}, () => {})
+      supabase
+        .from('rymon_streamer_controls')
+        .update({ expires_at: max30DaysIso, plan_duration: '30 Days', updated_at: new Date().toISOString() })
+        .in('license_key', over30DayKeys)
+        .then(() => {}, () => {})
+    }
+    return normalized
+  }
+
   if (supabase) {
     try {
       const { data: allRows, error } = await supabase
@@ -670,11 +805,12 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
         .order('created_at', { ascending: false })
 
       if (!error && Array.isArray(allRows)) {
+        const cleanRows = normalizeExpiry(allRows as RymonLicense[])
         if (!user || user.role === 'owner') {
-          return allRows as RymonLicense[]
+          return cleanRows
         }
         if (user.role === 'reseller') {
-          return (allRows as RymonLicense[]).filter(
+          return cleanRows.filter(
             (l) => (l.creator_username || '').toLowerCase() === user.username.toLowerCase()
           )
         }
@@ -687,7 +823,7 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
             user.username.toLowerCase(),
             ...(downlines?.map((d) => (d.username || '').toLowerCase()) || [])
           ])
-          return (allRows as RymonLicense[]).filter((l) =>
+          return cleanRows.filter((l) =>
             allowedSet.has((l.creator_username || '').toLowerCase())
           )
         }
@@ -695,7 +831,7 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
     } catch {}
   }
 
-  const stored = getStoredLicenses()
+  const stored = normalizeExpiry(getStoredLicenses())
   if (user && user.role === 'reseller') {
     return stored.filter((l) => l.creator_username.toLowerCase() === user.username.toLowerCase())
   }
@@ -715,6 +851,39 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
     return []
   }
 
+  const nowMs = Date.now()
+  const max60DaysMs = nowMs + 60 * 86400000
+  const default30DaysIso = new Date(nowMs + 30 * 86400000).toISOString()
+  const max60DaysIso = new Date(max60DaysMs).toISOString()
+
+  const normalizeAccountSubscriptions = (rows: RymonAccount[]): RymonAccount[] => {
+    return rows.map((u) => {
+      if (u.role === 'owner') return u
+      if (!u.expires_at) {
+        if (supabase && u.id) {
+          supabase
+            .from('rymon_accounts')
+            .update({ expires_at: default30DaysIso })
+            .eq('id', u.id)
+            .then(() => {}, () => {})
+        }
+        return { ...u, expires_at: default30DaysIso }
+      }
+      const expMs = new Date(u.expires_at).getTime()
+      if (expMs > max60DaysMs) {
+        if (supabase && u.id) {
+          supabase
+            .from('rymon_accounts')
+            .update({ expires_at: max60DaysIso })
+            .eq('id', u.id)
+            .then(() => {}, () => {})
+        }
+        return { ...u, expires_at: max60DaysIso }
+      }
+      return u
+    })
+  }
+
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -723,7 +892,7 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
         .order('balance', { ascending: false })
 
       if (!error && Array.isArray(data)) {
-        const rows = data as RymonAccount[]
+        const rows = normalizeAccountSubscriptions(data as RymonAccount[])
         if (!user || user.role === 'owner') {
           return rows
         }
@@ -740,7 +909,7 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
     } catch {}
   }
 
-  const stored = getStoredAccounts()
+  const stored = normalizeAccountSubscriptions(getStoredAccounts())
   if (user && user.role === 'admin') {
     const myName = user.username.toLowerCase()
     return stored.filter(
@@ -796,7 +965,24 @@ export async function fetchAllStreamerControls(user?: RymonAccount | null): Prom
     try {
       const { data, error } = await supabase.from('rymon_streamer_controls').select('*')
       if (!error && Array.isArray(data)) {
-        const rows = data as StreamerControlRecord[]
+        const staleOnlineKeys: string[] = []
+        const rows = (data as StreamerControlRecord[]).map((r) => {
+          const playingNow = isStreamerKeyActivelyPlaying(r)
+          if (r.is_online && !playingNow) {
+            staleOnlineKeys.push(r.license_key)
+            return { ...r, is_online: false }
+          }
+          return r
+        })
+
+        if (staleOnlineKeys.length > 0) {
+          supabase
+            .from('rymon_streamer_controls')
+            .update({ is_online: false })
+            .in('license_key', staleOnlineKeys)
+            .then(() => {}, () => {})
+        }
+
         if (!user || user.role === 'owner') {
           return rows
         }
@@ -979,14 +1165,21 @@ export async function generateLicenseKeyBackend(params: {
   duration: string
   customPrefix?: string
   devicesMax?: number
+  quantity?: number
 }): Promise<{
   success: boolean
   key?: string
+  keys?: string[]
   remainingBalance?: number
   license?: RymonLicense
   error?: string
 }> {
-  const { creator, game, duration, customPrefix, devicesMax = 1 } = params
+  const { creator, game, duration: rawDuration, customPrefix, devicesMax = 1, quantity = 1 } = params
+  const safeQuantity = Math.min(50, Math.max(1, Math.floor(Number(quantity) || 1)))
+  const safeDevices = Math.max(1, Math.floor(Number(devicesMax) || 1))
+
+  const ALLOWED_DURATIONS = ['2 Hours', '1 Day', '3 Days', '7 Days', '15 Days', '30 Days']
+  const duration = ALLOWED_DURATIONS.includes(rawDuration) ? rawDuration : '30 Days'
 
   const effectiveMap = getEffectivePriceMap(creator.username)
   const normalizedDuration = duration.replace(/^(\d+)\s+Day$/, '$1 Days')
@@ -995,13 +1188,24 @@ export async function generateLicenseKeyBackend(params: {
     effectiveMap[normalizedDuration] ??
     DEFAULT_KEY_PRICES[normalizedDuration] ??
     35
-  const cost = unitPrice * Math.max(1, devicesMax)
+  const singleKeyCost = unitPrice * safeDevices
+  const totalCost = singleKeyCost * safeQuantity
 
   const prefix = (customPrefix?.trim() || 'RYMON').toUpperCase()
   const gameTag = game.includes('Free Fire') ? 'FF' : game.includes('BGMI') ? 'BG' : 'PB'
-  const b1 = Math.random().toString(36).substring(2, 6).toUpperCase()
-  const b2 = Math.random().toString(36).substring(2, 6).toUpperCase()
-  const newKey = `${prefix}-${gameTag}-${b1}-${b2}`
+
+  const generatedKeys: string[] = []
+  const usedSet = new Set<string>()
+  while (generatedKeys.length < safeQuantity) {
+    const b1 = Math.random().toString(36).substring(2, 6).toUpperCase()
+    const b2 = Math.random().toString(36).substring(2, 6).toUpperCase()
+    const candidate = `${prefix}-${gameTag}-${b1}-${b2}`
+    if (!usedSet.has(candidate)) {
+      usedSet.add(candidate)
+      generatedKeys.push(candidate)
+    }
+  }
+  const newKey = generatedKeys[0]
 
   // A. Direct Supabase Database Transaction (Respects Dynamic Default & Individual User Pricing)
   if (supabase) {
@@ -1019,14 +1223,21 @@ export async function generateLicenseKeyBackend(params: {
         return { success: false, error: 'Your account is suspended and cannot generate keys.' }
       }
 
-      if (liveRole !== 'owner' && liveBal < cost) {
+      if (liveRole !== 'owner' && accRow?.expires_at && new Date(accRow.expires_at).getTime() < Date.now()) {
         return {
           success: false,
-          error: `Insufficient wallet balance! Key requires ₹${cost} (₹${unitPrice} × ${devicesMax} device${devicesMax > 1 ? 's' : ''}), but current balance is ₹${liveBal}.`
+          error: `Your ${String(liveRole).toUpperCase()} subscription expired on ${new Date(accRow.expires_at).toLocaleDateString()}. Contact your Admin/Owner to renew (30 Days / 60 Days).`
         }
       }
 
-      const nextBalance = liveRole === 'owner' ? liveBal : Math.max(0, liveBal - cost)
+      if (liveRole !== 'owner' && liveBal < totalCost) {
+        return {
+          success: false,
+          error: `Insufficient wallet balance! ${safeQuantity} key${safeQuantity > 1 ? 's' : ''} require ₹${totalCost.toLocaleString('en-IN')} (₹${unitPrice} × ${safeDevices} dev × ${safeQuantity} qty), but current balance is ₹${liveBal.toLocaleString('en-IN')}.`
+        }
+      }
+
+      const nextBalance = liveRole === 'owner' ? liveBal : Math.max(0, liveBal - totalCost)
 
       if (accRow && liveRole !== 'owner') {
         await supabase
@@ -1035,84 +1246,93 @@ export async function generateLicenseKeyBackend(params: {
           .eq('id', accRow.id)
       }
 
-      const { data: insertedLic, error: licErr } = await supabase
-        .from('rymon_licenses')
-        .insert({
-          license_key: newKey,
-          game,
-          plan_duration: duration,
-          creator_username: accRow?.username || creator.username,
-          devices_used: 0,
-          devices_max: Math.max(1, devicesMax),
-          device_hwid: '',
-          status: 'WAITING',
-          is_paused: false,
-          expires_at: null
-        })
-        .select('*')
-        .single()
+      const creatorName = accRow?.username || creator.username
+      const licPayloads = generatedKeys.map((k) => ({
+        license_key: k,
+        game,
+        plan_duration: duration,
+        creator_username: creatorName,
+        devices_used: 0,
+        devices_max: safeDevices,
+        device_hwid: '',
+        status: 'WAITING',
+        is_paused: false,
+        expires_at: null
+      }))
 
-      if (!licErr && insertedLic) {
-        await supabase.from('rymon_streamer_controls').upsert(
-          {
-            license_key: newKey,
-            streamer_name: 'VIP Streamer',
+      const { data: insertedLics, error: licErr } = await supabase
+        .from('rymon_licenses')
+        .insert(licPayloads)
+        .select('*')
+
+      if (!licErr && insertedLics && insertedLics.length > 0) {
+        const ctrlPayloads = generatedKeys.map((k) =>
+          buildDefaultStreamerControlPayload({
+            license_key: k,
             game_name: game,
-            is_active: true,
-            is_paused: false,
-            is_online: false,
-            emergency_purge: false,
             plan_duration: duration,
-            creator: accRow?.username || creator.username,
-            devices_max: Math.max(1, devicesMax),
+            creator: creatorName,
+            devices_max: safeDevices,
             devices_used: 0,
-            updated_at: new Date().toISOString()
-          },
-          { onConflict: 'license_key' }
+            is_active: true,
+            is_paused: false
+          })
         )
 
+        await supabase.from('rymon_streamer_controls').upsert(ctrlPayloads, { onConflict: 'license_key' })
+
         await supabase.from('rymon_activities').insert({
-          title: `Key Generated #${insertedLic.id}`,
+          title:
+            safeQuantity > 1
+              ? `Bulk Generated ${safeQuantity} Keys`
+              : `Key Generated #${insertedLics[0].id}`,
           event_type: 'KEY_GENERATED',
           game,
-          details: `${duration} • ${devicesMax} Device(s) • Cost: ₹${cost}`,
-          actor_username: accRow?.username || creator.username,
+          details: `${safeQuantity}x ${duration} • ${safeDevices} Device(s) • Cost: ${liveRole === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
+          actor_username: creatorName,
           status: 'SUCCESS'
         })
 
         return {
           success: true,
           key: newKey,
+          keys: generatedKeys,
           remainingBalance: nextBalance,
-          license: insertedLic as RymonLicense
+          license: insertedLics[0] as RymonLicense
         }
       }
     } catch {}
   }
 
   // B. Local Fallback Check
-  if (creator.role !== 'owner' && creator.balance < cost) {
+  if (creator.role !== 'owner' && creator.expires_at && new Date(creator.expires_at).getTime() < Date.now()) {
     return {
       success: false,
-      error: `Insufficient wallet balance! Key requires ₹${cost} (₹${unitPrice} × ${devicesMax} device${devicesMax > 1 ? 's' : ''}), but current balance is ₹${creator.balance}.`
+      error: `Your ${creator.role.toUpperCase()} subscription expired on ${new Date(creator.expires_at).toLocaleDateString()}. Contact your Admin/Owner to renew (30 Days / 60 Days).`
+    }
+  }
+  if (creator.role !== 'owner' && creator.balance < totalCost) {
+    return {
+      success: false,
+      error: `Insufficient wallet balance! ${safeQuantity} key${safeQuantity > 1 ? 's' : ''} require ₹${totalCost.toLocaleString('en-IN')}, but current balance is ₹${creator.balance.toLocaleString('en-IN')}.`
     }
   }
 
-  const newLic: RymonLicense = {
-    id: Math.floor(38508 + Math.random() * 1000),
-    license_key: newKey,
+  const newLics: RymonLicense[] = generatedKeys.map((k, idx) => ({
+    id: Math.floor(38508 + Math.random() * 1000) + idx,
+    license_key: k,
     game,
     plan_duration: duration,
     creator_username: creator.username,
     devices_used: 0,
-    devices_max: devicesMax,
+    devices_max: safeDevices,
     device_hwid: '',
     status: 'WAITING',
     expires_at: null,
     created_at: new Date().toISOString()
-  }
+  }))
 
-  const newBalance = creator.role === 'owner' ? creator.balance : Math.max(0, creator.balance - cost)
+  const newBalance = creator.role === 'owner' ? creator.balance : Math.max(0, creator.balance - totalCost)
 
   const accounts = getStoredAccounts()
   const accIndex = accounts.findIndex((a) => a.username.toLowerCase() === creator.username.toLowerCase())
@@ -1122,14 +1342,14 @@ export async function generateLicenseKeyBackend(params: {
   }
 
   const licenses = getStoredLicenses()
-  saveStoredLicenses([newLic, ...licenses])
+  saveStoredLicenses([...newLics, ...licenses])
 
   const newAct: RymonActivity = {
     id: Date.now(),
-    title: `Key Generated #${newLic.id}`,
+    title: safeQuantity > 1 ? `Bulk Generated ${safeQuantity} Keys` : `Key Generated #${newLics[0].id}`,
     event_type: 'KEY_GENERATED',
     game,
-    details: `${duration} • ${devicesMax} Device(s) • Cost: ₹${cost}`,
+    details: `${safeQuantity}x ${duration} • ${safeDevices} Device(s) • Cost: ${creator.role === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
     actor_username: creator.username,
     status: 'SUCCESS',
     created_at: new Date().toISOString()
@@ -1139,8 +1359,9 @@ export async function generateLicenseKeyBackend(params: {
   return {
     success: true,
     key: newKey,
+    keys: generatedKeys,
     remainingBalance: newBalance,
-    license: newLic
+    license: newLics[0]
   }
 }
 
@@ -1280,6 +1501,87 @@ export async function topUpUserBalanceBackend(
   return { success: true, newBalance: nextBal, actorRemainingBalance }
 }
 
+export async function renewUserSubscriptionBackend(
+  targetUsername: string,
+  days: 30 | 60,
+  actorUsername: string = 'debajoyti'
+): Promise<{ success: boolean; newExpiresAt?: string; message: string }> {
+  const cleanTarget = targetUsername.trim()
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+  const safeDays: 30 | 60 = days === 60 ? 60 : 30
+  const isRootOwner =
+    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+
+  if (cleanTarget.toLowerCase() === 'debajoyti' || cleanTarget.toLowerCase() === 'rymon') {
+    return { success: false, message: 'Root Owner account does not use a reseller subscription.' }
+  }
+
+  const nowMs = Date.now()
+  const max60DaysMs = nowMs + 60 * 86400000
+  const newExpIso = new Date(Math.min(nowMs + safeDays * 86400000, max60DaysMs)).toISOString()
+
+  if (supabase) {
+    try {
+      const { data: targetAcc } = await supabase
+        .from('rymon_accounts')
+        .select('*')
+        .ilike('username', cleanTarget)
+        .maybeSingle()
+
+      if (!targetAcc) {
+        return { success: false, message: `User @${cleanTarget} not found.` }
+      }
+
+      if (!isRootOwner) {
+        if (
+          targetAcc.role !== 'reseller' ||
+          (targetAcc.uplink || '').toLowerCase() !== cleanActor.toLowerCase()
+        ) {
+          return {
+            success: false,
+            message: 'Power restriction: Admins can only renew subscriptions for their own invited Resellers.'
+          }
+        }
+      }
+
+      await supabase
+        .from('rymon_accounts')
+        .update({ expires_at: newExpIso, updated_at: new Date().toISOString() })
+        .eq('id', targetAcc.id)
+
+      await supabase.from('rymon_activities').insert({
+        title: `Subscription Set (${safeDays} Days)`,
+        event_type: 'SUBSCRIPTION_RENEW',
+        details: `@${targetAcc.username} (${String(targetAcc.role).toUpperCase()}) subscription set to ${safeDays} Days by @${cleanActor}`,
+        actor_username: cleanActor,
+        status: 'SUCCESS'
+      })
+
+      return {
+        success: true,
+        newExpiresAt: newExpIso,
+        message: `@${targetAcc.username} subscription set to ${safeDays} Days!`
+      }
+    } catch {}
+  }
+
+  const accounts = getStoredAccounts()
+  const matched = accounts.find((a) => a.username.toLowerCase() === cleanTarget.toLowerCase())
+  if (!matched) {
+    return { success: false, message: `User @${cleanTarget} not found.` }
+  }
+  if (!isRootOwner && (matched.role !== 'reseller' || matched.uplink.toLowerCase() !== cleanActor.toLowerCase())) {
+    return { success: false, message: 'Admins can only renew their own invited Resellers.' }
+  }
+  matched.expires_at = newExpIso
+  saveStoredAccounts(accounts)
+  return {
+    success: true,
+    newExpiresAt: newExpIso,
+    message: `@${matched.username} subscription set to ${safeDays} Days!`
+  }
+}
+
 // ============================================================================
 // 7. HWID RESET, BAN, EXTEND, DELETE OPERATIONS
 // ============================================================================
@@ -1315,9 +1617,21 @@ export async function resetHwidBackend(
 
   if (supabase) {
     try {
+      const { data: existing } = await supabase
+        .from('rymon_licenses')
+        .select('expires_at, status, is_paused')
+        .eq('license_key', cleanKey)
+        .maybeSingle()
+
+      const nextStatus = existing?.is_paused
+        ? 'PAUSED'
+        : existing?.expires_at
+        ? 'ACTIVE'
+        : 'WAITING'
+
       await supabase
         .from('rymon_licenses')
-        .update({ device_hwid: '', devices_used: 0, status: 'WAITING', updated_at: new Date().toISOString() })
+        .update({ device_hwid: '', devices_used: 0, status: nextStatus, updated_at: new Date().toISOString() })
         .eq('license_key', cleanKey)
       await supabase
         .from('rymon_streamer_controls')
@@ -1338,7 +1652,7 @@ export async function resetHwidBackend(
   if (item) {
     item.device_hwid = ''
     item.devices_used = 0
-    item.status = 'WAITING'
+    item.status = item.is_paused ? 'PAUSED' : item.expires_at ? 'ACTIVE' : 'WAITING'
     saveStoredLicenses(licenses)
   }
   return true
@@ -1364,28 +1678,45 @@ export async function bulkDeleteKeysBackend(
   keyType: 'expired' | 'unused' | 'all',
   actorUsername: string = 'debajoyti'
 ): Promise<number> {
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+  const cleanTarget = (creatorUsername || '__ALL__').trim()
+  const isAllScope = cleanTarget === '__ALL__' || cleanTarget === ''
   const isRootOwner =
-    actorUsername.toLowerCase() === 'debajoyti' || actorUsername.toLowerCase() === 'rymon'
-  // Non-owners (Admins) can only clean 'expired' or 'unused' keys, never 'all' active keys
-  const effectiveKeyType = !isRootOwner && keyType === 'all' ? 'expired' : keyType
+    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
 
   if (supabase) {
     try {
-      let fetchQ = supabase
+      const { data: allRows } = await supabase
         .from('rymon_licenses')
-        .select('license_key, status, devices_used, expires_at')
-        .ilike('creator_username', creatorUsername.trim())
+        .select('license_key, creator_username, status, devices_used, expires_at')
 
-      const { data: rows } = await fetchQ
-      if (rows && rows.length > 0) {
-        const keysToDelete = rows
+      if (allRows && allRows.length > 0) {
+        let allowedCreators: Set<string> | null = null
+        if (!isRootOwner) {
+          const { data: downlines } = await supabase
+            .from('rymon_accounts')
+            .select('username')
+            .ilike('uplink', cleanActor)
+          allowedCreators = new Set<string>([
+            cleanActor.toLowerCase(),
+            ...(downlines?.map((d) => (d.username || '').toLowerCase()) || [])
+          ])
+        }
+
+        const nowMs = Date.now()
+        const keysToDelete = allRows
           .filter((r) => {
-            if (effectiveKeyType === 'expired') {
-              return r.status === 'EXPIRED' || (r.expires_at && new Date(r.expires_at).getTime() < Date.now())
+            const cName = (r.creator_username || '').toLowerCase()
+            if (allowedCreators && !allowedCreators.has(cName)) return false
+            if (!isAllScope && cName !== cleanTarget.toLowerCase()) return false
+
+            if (keyType === 'expired') {
+              return r.status === 'EXPIRED' || Boolean(r.expires_at && new Date(r.expires_at).getTime() < nowMs)
             }
-            if (effectiveKeyType === 'unused') {
+            if (keyType === 'unused') {
               return r.status === 'WAITING' && Number(r.devices_used || 0) === 0
             }
+            // keyType === 'all': Root Owner can delete all; Admin/Reseller can delete all of their own/team keys
             return true
           })
           .map((r) => r.license_key)
@@ -1394,10 +1725,10 @@ export async function bulkDeleteKeysBackend(
           await supabase.from('rymon_licenses').delete().in('license_key', keysToDelete)
           await supabase.from('rymon_streamer_controls').delete().in('license_key', keysToDelete)
           await supabase.from('rymon_activities').insert({
-            title: 'Keys Purged',
+            title: `Keys Purged (${keyType.toUpperCase()})`,
             event_type: 'CLEANUP',
-            details: `Purged ${keysToDelete.length} ${effectiveKeyType} keys for @${creatorUsername}`,
-            actor_username: actorUsername,
+            details: `Purged ${keysToDelete.length} ${keyType} key(s) (${isAllScope ? 'All Scoped Keys' : `@${cleanTarget}`})`,
+            actor_username: cleanActor,
             status: 'SUCCESS'
           })
         }
@@ -1407,10 +1738,15 @@ export async function bulkDeleteKeysBackend(
   }
 
   const licenses = getStoredLicenses()
+  const nowMs = Date.now()
   const remaining = licenses.filter((l) => {
-    if (l.creator_username.toLowerCase() !== creatorUsername.toLowerCase()) return true
-    if (effectiveKeyType === 'expired') return l.status !== 'EXPIRED'
-    if (effectiveKeyType === 'unused') return l.status !== 'WAITING' || l.devices_used > 0
+    const cName = l.creator_username.toLowerCase()
+    if (!isRootOwner && cName !== cleanActor.toLowerCase()) return true
+    if (!isAllScope && cName !== cleanTarget.toLowerCase()) return true
+
+    const isExp = l.status === 'EXPIRED' || Boolean(l.expires_at && new Date(l.expires_at).getTime() < nowMs)
+    if (keyType === 'expired') return !isExp
+    if (keyType === 'unused') return !(l.status === 'WAITING' && l.devices_used === 0)
     return false
   })
   const count = licenses.length - remaining.length
@@ -1512,7 +1848,7 @@ export async function toggleBanStatusBackend(
 
 export async function extendLicenseBackend(
   licenseKey: string,
-  days: number,
+  rawDays: number,
   actorUsername: string = 'debajoyti'
 ): Promise<{
   success: boolean
@@ -1523,6 +1859,8 @@ export async function extendLicenseBackend(
 }> {
   const cleanKey = licenseKey.trim().toUpperCase()
   const cleanActor = (actorUsername || 'debajoyti').trim()
+  const days = Math.min(30, Math.max(1, Math.floor(Number(rawDays) || 1)))
+  const max30DaysMs = Date.now() + 30 * 86400000
   const isRootOwner =
     cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
 
@@ -1564,7 +1902,9 @@ export async function extendLicenseBackend(
         }
 
         const base = licRow.expires_at ? new Date(licRow.expires_at).getTime() : Date.now()
-        const newExp = new Date(Math.max(base, Date.now()) + days * 86400000).toISOString()
+        const newExp = new Date(
+          Math.min(Math.max(base, Date.now()) + days * 86400000, max30DaysMs)
+        ).toISOString()
         const nextStatus = licRow.is_paused ? 'PAUSED' : 'ACTIVE'
         await supabase
           .from('rymon_licenses')
@@ -1577,7 +1917,7 @@ export async function extendLicenseBackend(
         await supabase.from('rymon_activities').insert({
           title: `Key Extended (+${days}d)`,
           event_type: 'EXTEND_KEY',
-          details: `License ${cleanKey} extended by +${days} Day(s) • Cost: ${isRootOwner ? 'FREE' : `₹${cost}`}`,
+          details: `License ${cleanKey} extended by +${days} Day(s) (Max 30d Cap) • Cost: ${isRootOwner ? 'FREE' : `₹${cost}`}`,
           actor_username: cleanActor,
           status: 'SUCCESS'
         })
@@ -1605,10 +1945,12 @@ export async function extendLicenseBackend(
     saveStoredAccounts(accounts)
   }
 
-  let newExp = new Date(Date.now() + days * 86400000).toISOString()
+  let newExp = new Date(Math.min(Date.now() + days * 86400000, max30DaysMs)).toISOString()
   if (l) {
     const base = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
-    newExp = new Date(Math.max(base, Date.now()) + days * 86400000).toISOString()
+    newExp = new Date(
+      Math.min(Math.max(base, Date.now()) + days * 86400000, max30DaysMs)
+    ).toISOString()
     l.expires_at = newExp
     l.status = 'ACTIVE'
     saveStoredLicenses(lics)
@@ -1802,12 +2144,14 @@ export async function bulkResetAllHwidBackend(
 }
 
 export async function bulkExtendAllKeysBackend(
-  days: number,
+  rawDays: number,
   actorUsername: string = 'rymon',
   creatorFilter?: string
 ): Promise<{ success: boolean; count: number; remainingBalance?: number; message: string }> {
   let count = 0
+  const days = Math.min(30, Math.max(1, Math.floor(Number(rawDays) || 1)))
   const msToAdd = days * 86400000
+  const max30DaysMs = Date.now() + 30 * 86400000
   const cleanActor = (actorUsername || 'debajoyti').trim()
   const isRootOwner =
     cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
@@ -1851,7 +2195,9 @@ export async function bulkExtendAllKeysBackend(
 
         for (const r of rows) {
           const base = r.expires_at ? new Date(r.expires_at).getTime() : Date.now()
-          const nextExp = new Date(Math.max(base, Date.now()) + msToAdd).toISOString()
+          const nextExp = new Date(
+            Math.min(Math.max(base, Date.now()) + msToAdd, max30DaysMs)
+          ).toISOString()
           await supabase
             .from('rymon_licenses')
             .update({ expires_at: nextExp, status: r.is_paused ? 'PAUSED' : 'ACTIVE' })
@@ -1867,7 +2213,9 @@ export async function bulkExtendAllKeysBackend(
     if (l.status !== 'BANNED') {
       if (!creatorFilter || l.creator_username.toLowerCase() === creatorFilter.toLowerCase()) {
         const base = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
-        l.expires_at = new Date(Math.max(base, Date.now()) + msToAdd).toISOString()
+        l.expires_at = new Date(
+          Math.min(Math.max(base, Date.now()) + msToAdd, max30DaysMs)
+        ).toISOString()
         if (l.status === 'EXPIRED') l.status = 'ACTIVE'
         count++
       }
@@ -1879,7 +2227,7 @@ export async function bulkExtendAllKeysBackend(
     id: Date.now(),
     title: `Bulk Extend (+${days}d)`,
     event_type: 'BULK_EXTEND',
-    details: `Added +${days} Day(s) to ${count} key(s) by @${cleanActor}`,
+    details: `Added +${days} Day(s) (Max 30d Cap) to ${count} key(s) by @${cleanActor}`,
     actor_username: cleanActor,
     status: 'SUCCESS',
     created_at: new Date().toISOString()
@@ -1890,7 +2238,7 @@ export async function bulkExtendAllKeysBackend(
     success: true,
     count,
     remainingBalance,
-    message: `Added +${days} Day(s) to ${count} active license(s).`
+    message: `Added +${days} Day(s) to ${count} active license(s) (Max 30 Days cap enforced).`
   }
 }
 
@@ -2185,6 +2533,49 @@ export async function dispatchTelegramMessage(
 // ============================================================================
 // SOVEREIGN REFERRAL & INVITE CODE SYSTEM
 // ============================================================================
+const REFERRAL_SUB_DAYS_STORAGE_KEY = 'rymon_referral_sub_days_v1'
+
+function getLocalReferralSubDaysMap(): Record<string, 30 | 60> {
+  try {
+    const raw = localStorage.getItem(REFERRAL_SUB_DAYS_STORAGE_KEY)
+    if (raw) return JSON.parse(raw) || {}
+  } catch {}
+  return {}
+}
+
+function saveReferralSubDays(code: string, days: 30 | 60): void {
+  const cleanCode = code.trim().toUpperCase()
+  const map = getLocalReferralSubDaysMap()
+  map[cleanCode] = days === 60 ? 60 : 30
+  try {
+    localStorage.setItem(REFERRAL_SUB_DAYS_STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+  if (supabase) {
+    supabase
+      .from('rymon_system_config')
+      .upsert(
+        { key: 'referral_subscription_days', value: map, updated_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      )
+      .then(() => {}, () => {})
+  }
+}
+
+export function resolveReferralSubscriptionDays(
+  code: string,
+  explicitDays?: number,
+  remoteMap?: Record<string, number>
+): 30 | 60 {
+  if (explicitDays === 60) return 60
+  if (explicitDays === 30) return 30
+  const upper = (code || '').trim().toUpperCase()
+  if (remoteMap && remoteMap[upper] === 60) return 60
+  const localMap = getLocalReferralSubDaysMap()
+  if (localMap[upper] === 60) return 60
+  if (upper.includes('60D') || upper.endsWith('-60')) return 60
+  return 30
+}
+
 function getStoredReferrals(): RymonReferral[] {
   try {
     const raw = localStorage.getItem('rymon_sovereign_referrals')
@@ -2205,7 +2596,23 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
     return []
   }
 
+  let remoteSubMap: Record<string, number> = {}
   if (supabase) {
+    try {
+      const { data: cfgRow } = await supabase
+        .from('rymon_system_config')
+        .select('value')
+        .eq('key', 'referral_subscription_days')
+        .maybeSingle()
+      if (cfgRow?.value && typeof cfgRow.value === 'object') {
+        remoteSubMap = cfgRow.value as Record<string, number>
+        try {
+          const merged = { ...getLocalReferralSubDaysMap(), ...remoteSubMap }
+          localStorage.setItem(REFERRAL_SUB_DAYS_STORAGE_KEY, JSON.stringify(merged))
+        } catch {}
+      }
+    } catch {}
+
     try {
       let query = supabase
         .from('rymon_referrals')
@@ -2220,15 +2627,26 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
       const { data, error } = await query
 
       if (!error && Array.isArray(data)) {
+        const enriched = (data as RymonReferral[]).map((r) => ({
+          ...r,
+          subscription_days: resolveReferralSubscriptionDays(
+            r.code,
+            r.subscription_days,
+            remoteSubMap
+          )
+        }))
         if (!user || user.role === 'owner') {
-          saveStoredReferrals(data as RymonReferral[])
+          saveStoredReferrals(enriched)
         }
-        return data as RymonReferral[]
+        return enriched
       }
     } catch {}
   }
 
-  const stored = getStoredReferrals()
+  const stored = getStoredReferrals().map((r) => ({
+    ...r,
+    subscription_days: resolveReferralSubscriptionDays(r.code, r.subscription_days, remoteSubMap)
+  }))
   if (user && user.role === 'admin') {
     return stored.filter((r) => r.created_by.toLowerCase() === user.username.toLowerCase())
   }
@@ -2240,11 +2658,13 @@ export async function createReferralCode(
   targetRole: 'admin' | 'reseller',
   initialBalance: number = 0,
   customCode?: string,
-  maxUses: number = 1
+  maxUses: number = 1,
+  subscriptionDays: 30 | 60 = 30
 ): Promise<{ success: boolean; code?: string; remainingBalance?: number; message: string }> {
   const cleanOwner = (owner || 'debajoyti').trim()
   const isRootOwner =
     cleanOwner.toLowerCase() === 'debajoyti' || cleanOwner.toLowerCase() === 'rymon'
+  const safeSubDays: 30 | 60 = subscriptionDays === 60 ? 60 : 30
 
   // Strict hierarchy: Only Root Owner (debajoyti / rymon) can issue Admin referrals
   if (!isRootOwner && targetRole === 'admin') {
@@ -2254,14 +2674,17 @@ export async function createReferralCode(
     }
   }
 
+  const roleShort = targetRole === 'admin' ? 'ADM' : 'RES'
   const code =
     (customCode && customCode.trim().toUpperCase()) ||
-    `REF-${targetRole.toUpperCase()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+    `REF-${roleShort}${safeSubDays}D-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
 
   const safeBalance = Math.max(0, Number(initialBalance) || 0)
   const safeMaxUses = Math.max(1, Number(maxUses) || 1)
   const totalFundingRequired = isRootOwner ? 0 : safeBalance * safeMaxUses
   let remainingBalance: number | undefined = undefined
+
+  saveReferralSubDays(code, safeSubDays)
 
   if (supabase) {
     try {
@@ -2313,15 +2736,19 @@ export async function createReferralCode(
         .single()
 
       if (!insErr && inserted) {
+        const enrichedInserted: RymonReferral = {
+          ...(inserted as RymonReferral),
+          subscription_days: safeSubDays
+        }
         const stored = getStoredReferrals()
-        stored.unshift(inserted as RymonReferral)
+        stored.unshift(enrichedInserted)
         saveStoredReferrals(stored)
 
         try {
           await supabase.from('rymon_activities').insert({
-            title: `Invite Code Created (${targetRole.toUpperCase()})`,
+            title: `Invite Code Created (${targetRole.toUpperCase()} • ${safeSubDays}D)`,
             event_type: 'REFERRAL_CREATE',
-            details: `Code ${code} (₹${safeBalance} start, ${safeMaxUses}x uses${!isRootOwner && totalFundingRequired > 0 ? `, Wallet Deducted: ₹${totalFundingRequired}` : ''}) created by @${cleanOwner}`,
+            details: `Code ${code} (${safeSubDays} Days Sub, ₹${safeBalance} start, ${safeMaxUses}x uses${!isRootOwner && totalFundingRequired > 0 ? `, Wallet Deducted: ₹${totalFundingRequired}` : ''}) created by @${cleanOwner}`,
             actor_username: cleanOwner,
             status: 'SUCCESS'
           })
@@ -2331,7 +2758,7 @@ export async function createReferralCode(
           success: true,
           code,
           remainingBalance,
-          message: `Referral code ${code} created successfully!`
+          message: `Referral code ${code} (${safeSubDays} Days Subscription) created successfully!`
         }
       }
     } catch {}
@@ -2361,6 +2788,7 @@ export async function createReferralCode(
     code,
     target_role: targetRole,
     initial_balance: safeBalance,
+    subscription_days: safeSubDays,
     created_by: cleanOwner,
     max_uses: safeMaxUses,
     times_used: 0,
@@ -2370,7 +2798,12 @@ export async function createReferralCode(
   stored.unshift(newRef)
   saveStoredReferrals(stored)
 
-  return { success: true, code, remainingBalance, message: 'Referral code created successfully' }
+  return {
+    success: true,
+    code,
+    remainingBalance,
+    message: `Referral code ${code} (${safeSubDays} Days Subscription) created successfully`
+  }
 }
 
 export async function registerWithReferral(
@@ -2406,85 +2839,62 @@ export async function registerWithReferral(
         .ilike('code', cleanRef)
         .maybeSingle()
 
-      if (!refErr && refRow) {
-        if (!refRow.is_active) {
-          return { success: false, message: 'This referral code is no longer active' }
-        }
-        const timesUsed = Number(refRow.times_used) || 0
-        const maxUses = Number(refRow.max_uses) || 1
-        if (timesUsed >= maxUses) {
-          return { success: false, message: 'This referral code has already reached its usage limit' }
-        }
+      if (refErr) {
+        return { success: false, message: `Referral lookup error: ${refErr.message}` }
+      }
+      if (!refRow) {
+        return { success: false, message: `Invalid referral code "${cleanRef}". Please check the code issued by your Admin/Owner.` }
+      }
 
-        // 2. Check if username already exists in rymon_accounts
-        const { data: existingAcc } = await supabase
-          .from('rymon_accounts')
-          .select('id, username')
-          .ilike('username', cleanUser)
+      if (!refRow.is_active) {
+        return { success: false, message: 'This referral code is no longer active' }
+      }
+      const timesUsed = Number(refRow.times_used) || 0
+      const maxUses = Number(refRow.max_uses) || 1
+      if (timesUsed >= maxUses) {
+        return { success: false, message: 'This referral code has already reached its usage limit' }
+      }
+
+      // 2. Check if username already exists in rymon_accounts
+      const { data: existingAcc } = await supabase
+        .from('rymon_accounts')
+        .select('id, username')
+        .ilike('username', cleanUser)
+        .maybeSingle()
+
+      if (existingAcc) {
+        return { success: false, message: 'Username is already taken. Please choose another username.' }
+      }
+
+      let remoteSubMap: Record<string, number> = {}
+      try {
+        const { data: cfgRow } = await supabase
+          .from('rymon_system_config')
+          .select('value')
+          .eq('key', 'referral_subscription_days')
           .maybeSingle()
-
-        if (existingAcc) {
-          return { success: false, message: 'Username is already taken. Please choose another username.' }
+        if (cfgRow?.value && typeof cfgRow.value === 'object') {
+          remoteSubMap = cfgRow.value as Record<string, number>
         }
+      } catch {}
 
-        // 3. Create the account in rymon_accounts using password_hash column (let Postgres generate UUID id)
-        const fallbackAccountId =
-          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12)
-        const targetRole = (refRow.target_role === 'admin' ? 'admin' : 'reseller') as 'admin' | 'reseller'
-        const startBalance = Number(refRow.initial_balance) || 0
-        const uplinkUser = refRow.created_by || 'debajoyti'
-        const expiresAt = new Date(Date.now() + 365 * 86400000).toISOString()
+      const subDays = resolveReferralSubscriptionDays(refRow.code, refRow.subscription_days, remoteSubMap)
 
-        const { data: insertedAcc, error: insAccErr } = await supabase
-          .from('rymon_accounts')
-          .insert({
-            username: cleanUser,
-            password_hash: cleanPass,
-            email: cleanEmail,
-            role: targetRole,
-            balance: startBalance,
-            uplink: uplinkUser,
-            referral_code: refRow.code,
-            status: 'ACTIVE',
-            expires_at: expiresAt
-          })
-          .select()
-          .single()
+      // 3. Create the account in rymon_accounts using password_hash column (let Postgres generate UUID id)
+      const fallbackAccountId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12)
+      const targetRole = (refRow.target_role === 'admin' ? 'admin' : 'reseller') as 'admin' | 'reseller'
+      const startBalance = Number(refRow.initial_balance) || 0
+      const uplinkUser = refRow.created_by || 'debajoyti'
+      const expiresAt = new Date(Date.now() + subDays * 86400000).toISOString()
 
-        if (insAccErr) {
-          return {
-            success: false,
-            message: insAccErr.message || 'Database error while creating account'
-          }
-        }
-
-        // 4. Increment times_used on rymon_referrals
-        const nextUsed = timesUsed + 1
-        const nextActive = nextUsed < maxUses
-        await supabase
-          .from('rymon_referrals')
-          .update({
-            times_used: nextUsed,
-            is_active: nextActive
-          })
-          .eq('id', refRow.id)
-
-        // 5. Log registration activity
-        try {
-          await supabase.from('rymon_activities').insert({
-            title: `New ${targetRole.toUpperCase()} Registered`,
-            event_type: 'REFERRAL_REGISTER',
-            details: `@${cleanUser} joined as ${targetRole.toUpperCase()} via code ${refRow.code} (Invited by @${uplinkUser})`,
-            actor_username: cleanUser,
-            status: 'SUCCESS'
-          })
-        } catch {}
-
-        const newUser: RymonAccount = {
-          id: insertedAcc?.id || fallbackAccountId,
+      const { data: insertedAcc, error: insAccErr } = await supabase
+        .from('rymon_accounts')
+        .insert({
           username: cleanUser,
+          password_hash: cleanPass,
           email: cleanEmail,
           role: targetRole,
           balance: startBalance,
@@ -2492,22 +2902,69 @@ export async function registerWithReferral(
           referral_code: refRow.code,
           status: 'ACTIVE',
           expires_at: expiresAt
-        }
+        })
+        .select()
+        .single()
 
-        // Sync local cache
-        const storedAccounts = getStoredAccounts()
-        if (!storedAccounts.some((a) => a.username.toLowerCase() === cleanUser.toLowerCase())) {
-          storedAccounts.push(newUser)
-          saveStoredAccounts(storedAccounts)
-        }
-
+      if (insAccErr) {
         return {
-          success: true,
-          user: newUser,
-          message: `Registered successfully as ${targetRole.toUpperCase()}! Logging you in...`
+          success: false,
+          message: insAccErr.message || 'Database error while creating account'
         }
       }
-    } catch {}
+
+      // 4. Increment times_used on rymon_referrals
+      const nextUsed = timesUsed + 1
+      const nextActive = nextUsed < maxUses
+      await supabase
+        .from('rymon_referrals')
+        .update({
+          times_used: nextUsed,
+          is_active: nextActive
+        })
+        .eq('id', refRow.id)
+
+      // 5. Log registration activity
+      try {
+        await supabase.from('rymon_activities').insert({
+          title: `New ${targetRole.toUpperCase()} Registered (${subDays}D Sub)`,
+          event_type: 'REFERRAL_REGISTER',
+          details: `@${cleanUser} joined as ${targetRole.toUpperCase()} (${subDays} Days Subscription) via code ${refRow.code} (Invited by @${uplinkUser})`,
+          actor_username: cleanUser,
+          status: 'SUCCESS'
+        })
+      } catch {}
+
+      const newUser: RymonAccount = {
+        id: insertedAcc?.id || fallbackAccountId,
+        username: cleanUser,
+        email: cleanEmail,
+        role: targetRole,
+        balance: startBalance,
+        uplink: uplinkUser,
+        referral_code: refRow.code,
+        status: 'ACTIVE',
+        expires_at: expiresAt
+      }
+
+      // Sync local cache
+      const storedAccounts = getStoredAccounts()
+      if (!storedAccounts.some((a) => a.username.toLowerCase() === cleanUser.toLowerCase())) {
+        storedAccounts.push(newUser)
+        saveStoredAccounts(storedAccounts)
+      }
+
+      return {
+        success: true,
+        user: newUser,
+        message: `Registered successfully as ${targetRole.toUpperCase()} (${subDays} Days Subscription)! Logging you in...`
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err?.message || 'Network error while connecting to Supabase'
+      }
+    }
   }
 
   // Local fallback if offline
@@ -2525,8 +2982,13 @@ export async function registerWithReferral(
     return { success: false, message: 'Username already taken' }
   }
 
+  const subDays = resolveReferralSubscriptionDays(ref.code, ref.subscription_days)
+
   const newUser: RymonAccount = {
-    id: `usr-${cleanUser.toLowerCase()}-${Date.now().toString(36)}`,
+    id:
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12),
     username: cleanUser,
     email: cleanEmail,
     role: ref.target_role,
@@ -2534,7 +2996,7 @@ export async function registerWithReferral(
     uplink: ref.created_by,
     referral_code: cleanRef,
     status: 'ACTIVE',
-    expires_at: new Date(Date.now() + 365 * 86400000).toISOString()
+    expires_at: new Date(Date.now() + subDays * 86400000).toISOString()
   }
 
   ref.times_used += 1
@@ -2544,7 +3006,11 @@ export async function registerWithReferral(
   storedAccounts.push(newUser)
   saveStoredAccounts(storedAccounts)
 
-  return { success: true, user: newUser, message: `Registered successfully as ${ref.target_role}!` }
+  return {
+    success: true,
+    user: newUser,
+    message: `Registered successfully as ${ref.target_role} (${subDays} Days Subscription)!`
+  }
 }
 
 export async function deleteReferralCode(id: number): Promise<boolean> {

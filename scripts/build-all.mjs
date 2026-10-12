@@ -19,10 +19,19 @@ if (fs.existsSync(TEMPLATE)) {
 console.log('2. Compiling production bundle (tsc + vite)...')
 execSync('npx tsc -b && npx vite build', { stdio: 'inherit' })
 
-console.log('3. Generating SPA routing fallbacks (404.html, CNAME, .nojekyll)...')
+console.log('3. Generating SPA routing fallbacks (404.html, CNAME, .nojekyll) & stamping sw.js...')
 fs.copyFileSync(path.join(DIST, 'index.html'), path.join(DIST, '404.html'))
 fs.writeFileSync(path.join(DIST, 'CNAME'), 'greenvest.shop')
 fs.writeFileSync(path.join(DIST, '.nojekyll'), '')
+
+const distSw = path.join(DIST, 'sw.js')
+if (fs.existsSync(distSw)) {
+  const swContent = fs.readFileSync(distSw, 'utf8').replace(
+    /const CACHE_NAME = ['"][^'"]+['"]/,
+    `const CACHE_NAME = 'rymon-ghost-v${Date.now()}'`
+  )
+  fs.writeFileSync(distSw, swContent, 'utf8')
+}
 
 console.log('4. Syncing to /docs (for GitHub Pages /docs mode)...')
 if (fs.existsSync(DOCS)) {
