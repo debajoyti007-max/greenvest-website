@@ -26,6 +26,11 @@ import {
   fetchTelegramConfigBackend,
   saveTelegramConfigBackend,
   dispatchTelegramMessage,
+  OFFICIAL_TELEGRAM_BOT_NAME,
+  OFFICIAL_TELEGRAM_BOT_USERNAME,
+  OFFICIAL_TELEGRAM_BOT_TOKEN,
+  autoDetectTelegramChatId,
+  pollAndReplyTelegramBotCommands,
   type RymonReferral,
   SOVEREIGN_CONNECT_CONFIG,
   fetchReferralCodes,
@@ -186,11 +191,11 @@ export default function RymonConnect() {
   const [broadcastLoading, setBroadcastLoading] = useState(false)
   const [broadcastSuccessMsg, setBroadcastSuccessMsg] = useState('')
 
-  // Telegram Bot Integration State
+  // Telegram Bot Integration State (Pre-configured with RYMON OFFICIAL @Rymon007bot)
   const [telegramConfig, setTelegramConfig] = useState<TelegramConfig>({
-    bot_token: '',
+    bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
     chat_id: '',
-    channel_username: '@RymonGhostStreamer',
+    channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
     is_active: true
   })
   const [telegramSaving, setTelegramSaving] = useState(false)
@@ -290,7 +295,12 @@ export default function RymonConnect() {
         fetchNotifications(currentUser?.username),
         currentUser?.role === 'owner'
           ? fetchTelegramConfigBackend()
-          : Promise.resolve({ bot_token: '', chat_id: '', channel_username: '@RymonGhostStreamer', is_active: false }),
+          : Promise.resolve({
+              bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
+              chat_id: '',
+              channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
+              is_active: true
+            }),
         fetchReferralCodes(currentUser),
         fetchAllStreamerControls(currentUser)
       ])
@@ -337,11 +347,31 @@ export default function RymonConnect() {
 
     loadLiveData()
 
-    // Periodic 10-second heartbeat & playing-status sweep so stale sessions transition to OFFLINE automatically
-    const statusPollTimer = setInterval(() => {
+    // Periodic 10-second heartbeat & playing-status sweep + @Rymon007bot live command responder
+    const statusPollTimer = setInterval(async () => {
       if (!isMounted) return
-      fetchAllStreamerControls(currentUser).then((c) => isMounted && setStreamerControls(c))
-      fetchAllLicenses(currentUser).then((l) => isMounted && setKeysList(l))
+      const [c, l, u] = await Promise.all([
+        fetchAllStreamerControls(currentUser),
+        fetchAllLicenses(currentUser),
+        fetchAllAccounts(currentUser)
+      ])
+      if (!isMounted) return
+      setStreamerControls(c)
+      setKeysList(l)
+      setUsersList(u)
+      if (currentUser?.role === 'owner') {
+        const playingSet = new Set<string>()
+        c.forEach((ctrl) => {
+          if (isStreamerKeyActivelyPlaying(ctrl)) {
+            playingSet.add(ctrl.license_key.toUpperCase())
+          }
+        })
+        pollAndReplyTelegramBotCommands(l, u, playingSet, (discoveredId) => {
+          if (isMounted) {
+            setTelegramConfig((prev) => ({ ...prev, chat_id: discoveredId }))
+          }
+        })
+      }
     }, 10000)
 
     // Setup Realtime Phoenix Subscriptions
@@ -768,19 +798,40 @@ export default function RymonConnect() {
     setAuthLoading(false)
 
     if (res.success && res.key) {
-      setGenCreatedKeysList(res.keys && res.keys.length > 0 ? res.keys : [res.key])
+      const mintedKeys = res.keys && res.keys.length > 0 ? res.keys : [res.key]
+      setGenCreatedKeysList(mintedKeys)
       if (res.remainingBalance !== undefined) {
         setWalletBalance(res.remainingBalance)
         const updatedUser = { ...currentUser, balance: res.remainingBalance }
         setCurrentUser(updatedUser)
         localStorage.setItem('rymon_session_user', JSON.stringify(updatedUser))
       }
-      const createdCount = res.keys?.length || 1
+      const createdCount = mintedKeys.length
       showToast(
         createdCount > 1
           ? `⚡ Generated ${createdCount} keys (${genDuration})! Wallet updated.`
           : `Key ${res.key} generated! Wallet balance updated.`
       )
+      if (telegramConfig.is_active && telegramConfig.bot_token) {
+        const tgKeyMsg = [
+          `⚡ <b>RYMON OFFICIAL — NEW KEY${createdCount > 1 ? 'S' : ''} GENERATED</b>`,
+          `👤 <b>Seller:</b> @${currentUser.username} (${currentUser.role.toUpperCase()})`,
+          `🎮 <b>Game:</b> ${genGame} • <b>Plan:</b> ${genDuration}`,
+          `📱 <b>Max Devices:</b> ${genDevicesMax} • <b>Qty:</b> ${createdCount}`,
+          ``,
+          ...mintedKeys.slice(0, 25).map((k, idx) => `${idx + 1}. <code>${k}</code>`),
+          mintedKeys.length > 25 ? `<i>...and ${mintedKeys.length - 25} more</i>` : '',
+          ``,
+          `⏳ <i>Starts on 1st APK Login • https://greenvest.shop/</i>`
+        ]
+          .filter(Boolean)
+          .join('\n')
+        dispatchTelegramMessage(telegramConfig.bot_token, telegramConfig.chat_id, tgKeyMsg).then((tgRes) => {
+          if (tgRes.detectedChatId && !telegramConfig.chat_id) {
+            setTelegramConfig((prev) => ({ ...prev, chat_id: tgRes.detectedChatId || '' }))
+          }
+        })
+      }
       // Refresh list
       fetchAllLicenses(currentUser).then(setKeysList)
       fetchAllAccounts(currentUser).then(setUsersList)
@@ -1047,6 +1098,23 @@ export default function RymonConnect() {
       showToast(`No ${label} keys available to share.`)
       return
     }
+    if (telegramConfig.bot_token) {
+      const htmlMsg = [
+        `⚡ <b>${OFFICIAL_TELEGRAM_BOT_NAME} — VIP KEYS (${label.toUpperCase()})</b>`,
+        `👤 <b>Seller:</b> @${currentUser?.username || 'rymon'}`,
+        `📦 <b>Total Keys:</b> ${keys.length}`,
+        ``,
+        ...keys.slice(0, 30).map((k, idx) => `${idx + 1}. <code>${k}</code>`)
+      ].join('\n')
+      dispatchTelegramMessage(telegramConfig.bot_token, telegramConfig.chat_id, htmlMsg).then((res) => {
+        if (res.success) {
+          showToast(`✈️ Also dispatched directly via ${OFFICIAL_TELEGRAM_BOT_USERNAME}!`)
+          if (res.detectedChatId && !telegramConfig.chat_id) {
+            setTelegramConfig((prev) => ({ ...prev, chat_id: res.detectedChatId || '' }))
+          }
+        }
+      })
+    }
     const msg = [
       `⚡ RYMON GHOST STREAMER VIP KEYS (${label.toUpperCase()})`,
       `👤 Seller: @${currentUser?.username || 'rymon'}`,
@@ -1300,28 +1368,48 @@ export default function RymonConnect() {
     const ok = await saveTelegramConfigBackend(telegramConfig)
     setTelegramSaving(false)
     if (ok) {
-      setTelegramStatusMsg('Telegram Bot configuration saved to Supabase!')
+      setTelegramStatusMsg(`✅ ${OFFICIAL_TELEGRAM_BOT_NAME} (${OFFICIAL_TELEGRAM_BOT_USERNAME}) configuration saved to Supabase!`)
       showToast('Telegram settings updated!')
     } else {
       setTelegramStatusMsg('Failed to save Telegram settings.')
     }
   }
 
-  const handleTestTelegram = async () => {
-    if (!telegramConfig.bot_token || !telegramConfig.chat_id) {
-      setTelegramStatusMsg('Please enter both Bot Token and Chat/Channel ID first!')
-      return
+  const handleAutoDetectTelegramChatId = async () => {
+    setTelegramTesting(true)
+    setTelegramStatusMsg(`🔍 Scanning ${OFFICIAL_TELEGRAM_BOT_USERNAME} updates for your Chat / Channel ID...`)
+    const res = await autoDetectTelegramChatId(telegramConfig.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN)
+    setTelegramTesting(false)
+    setTelegramStatusMsg(res.message)
+    if (res.success && res.chatId) {
+      setTelegramConfig((prev) => ({
+        ...prev,
+        bot_token: prev.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN,
+        chat_id: res.chatId || '',
+        channel_username: res.chatUsername || prev.channel_username || OFFICIAL_TELEGRAM_BOT_USERNAME
+      }))
+      showToast(res.message)
     }
+  }
+
+  const handleTestTelegram = async () => {
     setTelegramTesting(true)
     setTelegramStatusMsg('')
     const txt =
       telegramTestMsg.trim() ||
-      `⚡ <b>Rymon Sovereign Bot Test</b>\nBroadcast system active on greenvest.shop!\nDispatched by: ${currentUser?.username || 'debajoyti'}\nTimestamp: ${new Date().toLocaleTimeString()}`
-    const res = await dispatchTelegramMessage(telegramConfig.bot_token, telegramConfig.chat_id, txt)
+      `⚡ <b>${OFFICIAL_TELEGRAM_BOT_NAME} (${OFFICIAL_TELEGRAM_BOT_USERNAME}) — LIVE TEST</b>\nSovereign Broadcast &amp; Key Automation active on greenvest.shop!\nDispatched by: @${currentUser?.username || 'debajoyti'}\nTimestamp: ${new Date().toLocaleTimeString()}`
+    const res = await dispatchTelegramMessage(
+      telegramConfig.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN,
+      telegramConfig.chat_id,
+      txt
+    )
     setTelegramTesting(false)
     setTelegramStatusMsg(res.message)
     if (res.success) {
-      showToast('Telegram message sent successfully!')
+      if (res.detectedChatId && !telegramConfig.chat_id) {
+        setTelegramConfig((prev) => ({ ...prev, chat_id: res.detectedChatId || '' }))
+      }
+      showToast(`✈️ Telegram message sent via ${OFFICIAL_TELEGRAM_BOT_USERNAME}!`)
     }
   }
 
@@ -4619,14 +4707,30 @@ export default function RymonConnect() {
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Telegram Bot Automation</h2>
+                    <h2 style={styles.pageTitle}>
+                      Telegram Bot Automation — {OFFICIAL_TELEGRAM_BOT_NAME} ({OFFICIAL_TELEGRAM_BOT_USERNAME})
+                    </h2>
                     <p style={styles.pageSubtitle}>
-                      Deliver live key deliveries, reseller balance credits, and server broadcasts straight to your Telegram channel and subscribers.
+                      Official HTTP API Token pre-linked. Deliver live keys, server broadcasts, and use interactive slash commands (<code>/status</code>, <code>/unused</code>, <code>/playing</code>, <code>/check</code>) directly inside Telegram.
                     </p>
                   </div>
                   <div style={styles.badgeCluster}>
-                    <span style={styles.greenPulseBadge}>● TELEGRAM API ACTIVE</span>
-                    <span style={styles.timeTag}>@RymonGhostStreamer</span>
+                    <span style={styles.greenPulseBadge}>● {OFFICIAL_TELEGRAM_BOT_NAME} ACTIVE</span>
+                    <a
+                      href="https://t.me/Rymon007bot?start=connect"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        ...styles.timeTag,
+                        textDecoration: 'none',
+                        color: '#00d9ff',
+                        border: '1px solid rgba(0, 217, 255, 0.4)',
+                        background: 'rgba(0, 217, 255, 0.14)',
+                        fontWeight: 800
+                      }}
+                    >
+                      ✈️ OPEN {OFFICIAL_TELEGRAM_BOT_USERNAME}
+                    </a>
                   </div>
                 </div>
 
@@ -4634,50 +4738,125 @@ export default function RymonConnect() {
                   {/* Configuration Card */}
                   <div style={styles.cardBox}>
                     <div style={styles.cardHeader}>
-                      <h4>🤖 Bot Credentials & Channel Binding</h4>
-                      <span style={styles.cyanMiniBadge}>GATEWAY CONFIG</span>
+                      <h4>🤖 {OFFICIAL_TELEGRAM_BOT_NAME} ({OFFICIAL_TELEGRAM_BOT_USERNAME})</h4>
+                      <span style={styles.cyanMiniBadge}>VERIFIED BOT API</span>
+                    </div>
+
+                    {/* 2-Click Instant Link Banner */}
+                    <div
+                      style={{
+                        marginTop: '14px',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(0, 217, 255, 0.08)',
+                        border: '1px solid rgba(0, 217, 255, 0.28)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}
+                    >
+                      <div style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 700 }}>
+                        ⚡ Instant 2-Click Chat ID Binding:
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <a
+                          href="https://t.me/Rymon007bot?start=connect"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            flex: 1,
+                            padding: '9px 12px',
+                            borderRadius: '8px',
+                            background: 'rgba(0, 217, 255, 0.2)',
+                            border: '1px solid #00d9ff',
+                            color: '#00d9ff',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            textDecoration: 'none',
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          🚀 1. OPEN @Rymon007bot &amp; TAP START
+                        </a>
+                        <button
+                          type="button"
+                          onClick={handleAutoDetectTelegramChatId}
+                          disabled={telegramTesting}
+                          style={{
+                            flex: 1,
+                            padding: '9px 12px',
+                            borderRadius: '8px',
+                            background: 'rgba(5, 223, 114, 0.2)',
+                            border: '1px solid #05df72',
+                            color: '#05df72',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          🔍 2. AUTO-DETECT MY CHAT ID
+                        </button>
+                      </div>
                     </div>
 
                     <form onSubmit={handleSaveTelegram} style={{ marginTop: '16px' }}>
                       <div style={styles.formGroup}>
                         <label style={styles.formLabel}>
-                          BOT TOKEN (FROM @BOTFATHER) <span style={{ color: '#00d9ff' }}>*</span>
+                          BOT TOKEN ({OFFICIAL_TELEGRAM_BOT_NAME}) <span style={{ color: '#05df72' }}>✓ PRE-LINKED</span>
                         </label>
                         <input
-                          type="password"
+                          type="text"
                           value={telegramConfig.bot_token}
                           onChange={(e) => setTelegramConfig({ ...telegramConfig, bot_token: e.target.value })}
-                          placeholder="e.g. 7123456789:AAHk2..."
-                          style={styles.keyInput}
+                          placeholder={OFFICIAL_TELEGRAM_BOT_TOKEN}
+                          style={{ ...styles.keyInput, fontFamily: 'monospace', fontSize: '12px' }}
                         />
                         <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                          Create your bot via @BotFather and copy the HTTP API token.
+                          Connected to <strong>{OFFICIAL_TELEGRAM_BOT_NAME}</strong> (<code>{OFFICIAL_TELEGRAM_BOT_USERNAME}</code>).
                         </span>
                       </div>
 
                       <div style={{ ...styles.formGroup, marginTop: '16px' }}>
                         <label style={styles.formLabel}>
-                          CHANNEL OR CHAT ID <span style={{ color: '#00d9ff' }}>*</span>
+                          YOUR TELEGRAM CHAT ID OR CHANNEL @USERNAME <span style={{ color: '#00d9ff' }}>*</span>
                         </label>
-                        <input
-                          type="text"
-                          value={telegramConfig.chat_id}
-                          onChange={(e) => setTelegramConfig({ ...telegramConfig, chat_id: e.target.value })}
-                          placeholder="e.g. @RymonGhostStreamer or -1001234567890"
-                          style={styles.keyInput}
-                        />
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <input
+                            type="text"
+                            value={telegramConfig.chat_id}
+                            onChange={(e) => setTelegramConfig({ ...telegramConfig, chat_id: e.target.value })}
+                            placeholder="Tap 'Auto-Detect My Chat ID' above or enter @Channel"
+                            style={{ ...styles.keyInput, flex: 1 }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAutoDetectTelegramChatId}
+                            style={{
+                              ...styles.chipBtn,
+                              background: 'rgba(5, 223, 114, 0.18)',
+                              border: '1px solid #05df72',
+                              color: '#05df72',
+                              fontWeight: 800,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            🔍 Auto-Detect
+                          </button>
+                        </div>
                         <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                          Your public channel username (e.g. @MyChannel) or private group chat ID.
+                          Open <strong>@Rymon007bot</strong> in Telegram, press <strong>START</strong>, then click <strong>Auto-Detect</strong>!
                         </span>
                       </div>
 
                       <div style={{ ...styles.formGroup, marginTop: '16px' }}>
-                        <label style={styles.formLabel}>DISPLAY CHANNEL USERNAME</label>
+                        <label style={styles.formLabel}>BOT / CHANNEL HANDLE</label>
                         <input
                           type="text"
                           value={telegramConfig.channel_username}
                           onChange={(e) => setTelegramConfig({ ...telegramConfig, channel_username: e.target.value })}
-                          placeholder="e.g. @RymonGhostStreamer"
+                          placeholder="@Rymon007bot"
                           style={styles.keyInput}
                         />
                       </div>
@@ -4691,7 +4870,7 @@ export default function RymonConnect() {
                           style={{ accentColor: '#00d9ff' }}
                         />
                         <label htmlFor="tgActive" style={{ fontSize: '12px', color: '#cbd5e1', cursor: 'pointer' }}>
-                          Enable automatic Telegram bot dispatching
+                          Automatically send newly generated keys &amp; alerts to my Telegram via {OFFICIAL_TELEGRAM_BOT_USERNAME}
                         </label>
                       </div>
 
@@ -4710,15 +4889,15 @@ export default function RymonConnect() {
                     </form>
                   </div>
 
-                  {/* Dispatcher & Setup Instructions */}
+                  {/* Dispatcher & Interactive Bot Commands */}
                   <div style={styles.cardBox}>
                     <div style={styles.cardHeader}>
-                      <h4>✈️ Instant Telegram Dispatcher</h4>
-                      <span style={styles.cyanMiniBadge}>TEST MESSAGE</span>
+                      <h4>✈️ Instant Telegram Dispatcher &amp; Live Commands</h4>
+                      <span style={styles.cyanMiniBadge}>{OFFICIAL_TELEGRAM_BOT_USERNAME}</span>
                     </div>
 
                     <p style={styles.settingDesc}>
-                      Test your live bot link by sending a broadcast directly to your connected Telegram channel:
+                      Send an instant test broadcast to your linked Telegram chat or channel via <strong>{OFFICIAL_TELEGRAM_BOT_NAME}</strong>:
                     </p>
 
                     <div style={{ ...styles.formGroup, marginTop: '12px' }}>
@@ -4727,7 +4906,7 @@ export default function RymonConnect() {
                         rows={3}
                         value={telegramTestMsg}
                         onChange={(e) => setTelegramTestMsg(e.target.value)}
-                        placeholder="Write message to dispatch to Telegram channel..."
+                        placeholder="Write message to dispatch via @Rymon007bot..."
                         style={{
                           ...styles.keyInput,
                           height: 'auto',
@@ -4748,7 +4927,7 @@ export default function RymonConnect() {
                         color: '#00d9ff'
                       }}
                     >
-                      {telegramTesting ? 'DISPATCHING TO TELEGRAM...' : '✈️ TEST DISPATCH TO TELEGRAM'}
+                      {telegramTesting ? 'DISPATCHING VIA @Rymon007bot...' : '✈️ TEST DISPATCH VIA @Rymon007bot'}
                     </button>
 
                     {telegramStatusMsg && (
@@ -4769,14 +4948,16 @@ export default function RymonConnect() {
 
                     <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
                       <h5 style={{ fontSize: '13px', color: '#f8fafc', marginBottom: '8px', fontWeight: 700 }}>
-                        📖 4-Step Quick Setup Guide
+                        🤖 Live Slash Commands Registered on {OFFICIAL_TELEGRAM_BOT_USERNAME}
                       </h5>
-                      <ol style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.8, paddingLeft: '18px', margin: 0 }}>
-                        <li>Open Telegram, search for <strong>@BotFather</strong> and send <code>/newbot</code>.</li>
-                        <li>Give your bot a name and username, then copy the <strong>HTTP API Token</strong>.</li>
-                        <li>Create or open your Telegram channel, tap <strong>Administrators ➔ Add Admin</strong>, and add your bot.</li>
-                        <li>Paste your token and channel username above, click <strong>Save</strong>, then test!</li>
-                      </ol>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.8 }}>
+                        <div>• <code>/start</code> — Auto-links your Telegram Chat ID &amp; opens VIP menu</div>
+                        <div>• <code>/status</code> — Live Playing Now, Active, Unused &amp; Expired key counts</div>
+                        <div>• <code>/unused</code> — Instant copyable list of all Unused (Waiting) keys</div>
+                        <div>• <code>/playing</code> — Lists all players currently IN-GAME right now</div>
+                        <div>• <code>/check RYMON-XXXX</code> — Inspects any key&apos;s status, HWID &amp; expiry</div>
+                        <div>• <code>/id</code> — Displays your exact Telegram Chat / Channel ID</div>
+                      </div>
                     </div>
                   </div>
                 </div>

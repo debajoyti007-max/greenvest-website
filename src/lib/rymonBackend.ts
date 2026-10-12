@@ -2893,13 +2893,84 @@ export async function deleteNotificationBackend(id: number): Promise<boolean> {
   return true
 }
 
+export const OFFICIAL_TELEGRAM_BOT_NAME = 'RYMON OFFICIAL'
+export const OFFICIAL_TELEGRAM_BOT_USERNAME = '@Rymon007bot'
+export const OFFICIAL_TELEGRAM_BOT_TOKEN = '8866404681:AAHQbK2PXyx_Y2ISGmhytxRF6G7Pm4oZO6A'
+
+export async function autoDetectTelegramChatId(
+  botToken: string = OFFICIAL_TELEGRAM_BOT_TOKEN
+): Promise<{
+  success: boolean
+  chatId?: string
+  chatTitle?: string
+  chatUsername?: string
+  message: string
+}> {
+  const cleanToken = (botToken || OFFICIAL_TELEGRAM_BOT_TOKEN).trim()
+  try {
+    const resp = await fetch(`https://api.telegram.org/bot${cleanToken}/getUpdates?limit=50`)
+    const json = await resp.json()
+    if (!json.ok || !Array.isArray(json.result) || json.result.length === 0) {
+      return {
+        success: false,
+        message:
+          'No messages received by @Rymon007bot yet. Open @Rymon007bot on Telegram and tap START (or send any message in your channel), then click Auto-Detect again!'
+      }
+    }
+
+    // Search from newest update to oldest for a valid chat object
+    for (let i = json.result.length - 1; i >= 0; i--) {
+      const upd = json.result[i]
+      const chat =
+        upd?.message?.chat ||
+        upd?.channel_post?.chat ||
+        upd?.my_chat_member?.chat ||
+        upd?.callback_query?.message?.chat
+      if (chat && chat.id) {
+        const detectedId = String(chat.id)
+        const detectedTitle =
+          chat.title ||
+          [chat.first_name, chat.last_name].filter(Boolean).join(' ') ||
+          chat.username ||
+          'Telegram User'
+        const detectedUsername = chat.username ? `@${chat.username}` : OFFICIAL_TELEGRAM_BOT_USERNAME
+
+        await saveTelegramConfigBackend({
+          bot_token: cleanToken,
+          chat_id: detectedId,
+          channel_username: detectedUsername,
+          is_active: true
+        })
+
+        return {
+          success: true,
+          chatId: detectedId,
+          chatTitle: detectedTitle,
+          chatUsername: detectedUsername,
+          message: `✅ Auto-detected Chat ID ${detectedId} (${detectedTitle}) from @Rymon007bot!`
+        }
+      }
+    }
+
+    return {
+      success: false,
+      message: 'Open @Rymon007bot in Telegram and tap START first, then click Auto-Detect.'
+    }
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : 'Network error'
+    return { success: false, message: `Telegram API error: ${errMsg}` }
+  }
+}
+
 export async function fetchTelegramConfigBackend(): Promise<TelegramConfig> {
   const defaultCfg: TelegramConfig = {
-    bot_token: '',
+    bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
     chat_id: '',
-    channel_username: '@RymonGhostStreamer',
+    channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
     is_active: true
   }
+
+  let resolvedCfg: TelegramConfig = { ...defaultCfg }
 
   if (supabase) {
     try {
@@ -2910,44 +2981,77 @@ export async function fetchTelegramConfigBackend(): Promise<TelegramConfig> {
         .maybeSingle()
 
       if (!error && data) {
-        return {
-          bot_token: data.bot_token || '',
+        resolvedCfg = {
+          bot_token: data.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN,
           chat_id: data.chat_id || '',
-          channel_username: data.channel_username || '@RymonGhostStreamer',
+          channel_username:
+            data.channel_username && data.channel_username !== '@RymonGhostStreamer'
+              ? data.channel_username
+              : OFFICIAL_TELEGRAM_BOT_USERNAME,
           is_active: data.is_active ?? true
+        }
+        // If DB still had blank bot_token, persist the official token automatically
+        if (!data.bot_token) {
+          saveTelegramConfigBackend(resolvedCfg).then(() => {}, () => {})
+        }
+      } else {
+        saveTelegramConfigBackend(resolvedCfg).then(() => {}, () => {})
+      }
+    } catch {}
+  } else {
+    try {
+      const raw = localStorage.getItem('rymon_telegram_config')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        resolvedCfg = {
+          bot_token: parsed.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN,
+          chat_id: parsed.chat_id || '',
+          channel_username: parsed.channel_username || OFFICIAL_TELEGRAM_BOT_USERNAME,
+          is_active: parsed.is_active ?? true
         }
       }
     } catch {}
   }
 
-  try {
-    const raw = localStorage.getItem('rymon_telegram_config')
-    if (raw) return JSON.parse(raw)
-  } catch {}
+  // If chat_id is not set yet, silently check if user has tapped /start on @Rymon007bot
+  if (!resolvedCfg.chat_id) {
+    const auto = await autoDetectTelegramChatId(resolvedCfg.bot_token)
+    if (auto.success && auto.chatId) {
+      resolvedCfg.chat_id = auto.chatId
+      if (auto.chatUsername) resolvedCfg.channel_username = auto.chatUsername
+    }
+  }
 
-  return defaultCfg
+  return resolvedCfg
 }
 
 export async function saveTelegramConfigBackend(config: TelegramConfig): Promise<boolean> {
+  const normalized: TelegramConfig = {
+    bot_token: config.bot_token?.trim() || OFFICIAL_TELEGRAM_BOT_TOKEN,
+    chat_id: config.chat_id?.trim() || '',
+    channel_username: config.channel_username?.trim() || OFFICIAL_TELEGRAM_BOT_USERNAME,
+    is_active: config.is_active ?? true
+  }
+  try {
+    localStorage.setItem('rymon_telegram_config', JSON.stringify(normalized))
+  } catch {}
+
   if (supabase) {
     try {
       const { error } = await supabase
         .from('rymon_telegram_config')
         .upsert({
           id: 1,
-          bot_token: config.bot_token,
-          chat_id: config.chat_id,
-          channel_username: config.channel_username,
-          is_active: config.is_active,
+          bot_token: normalized.bot_token,
+          chat_id: normalized.chat_id,
+          channel_username: normalized.channel_username,
+          is_active: normalized.is_active,
           updated_at: new Date().toISOString()
         })
       if (!error) return true
     } catch {}
   }
 
-  try {
-    localStorage.setItem('rymon_telegram_config', JSON.stringify(config))
-  } catch {}
   return true
 }
 
@@ -2955,17 +3059,29 @@ export async function dispatchTelegramMessage(
   botToken: string,
   chatId: string,
   text: string
-): Promise<{ success: boolean; message: string }> {
-  if (!botToken || !chatId) {
-    return { success: false, message: 'Please provide both Bot Token and Chat/Channel ID' }
+): Promise<{ success: boolean; message: string; detectedChatId?: string }> {
+  const activeToken = (botToken || OFFICIAL_TELEGRAM_BOT_TOKEN).trim()
+  let activeChatId = (chatId || '').trim()
+
+  if (!activeChatId) {
+    const auto = await autoDetectTelegramChatId(activeToken)
+    if (auto.success && auto.chatId) {
+      activeChatId = auto.chatId
+    } else {
+      return {
+        success: false,
+        message:
+          'No Chat ID linked yet! Open @Rymon007bot on Telegram and tap START (or enter your Channel @username), then click Test Dispatch again.'
+      }
+    }
   }
 
   try {
-    const resp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    const resp = await fetch(`https://api.telegram.org/bot${activeToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: chatId,
+        chat_id: activeChatId,
         text: text,
         parse_mode: 'HTML'
       })
@@ -2973,7 +3089,11 @@ export async function dispatchTelegramMessage(
 
     const json = await resp.json()
     if (json.ok) {
-      return { success: true, message: 'Successfully dispatched to Telegram channel/chat!' }
+      return {
+        success: true,
+        detectedChatId: activeChatId,
+        message: `✅ Dispatched via @Rymon007bot to Chat ID ${activeChatId}!`
+      }
     } else {
       return { success: false, message: json.description || 'Telegram API returned error' }
     }
@@ -2981,6 +3101,169 @@ export async function dispatchTelegramMessage(
     const errMsg = err instanceof Error ? err.message : 'Network error'
     return { success: false, message: `Failed to dispatch Telegram message: ${errMsg}` }
   }
+}
+
+const TG_OFFSET_STORAGE_KEY = 'rymon_tg_bot_last_update_id_v1'
+
+export async function pollAndReplyTelegramBotCommands(
+  keysList: RymonLicense[],
+  usersList: RymonAccount[],
+  onlineKeySet: Set<string>,
+  onChatIdDiscovered?: (chatId: string) => void
+): Promise<void> {
+  try {
+    const lastOffset = Number(localStorage.getItem(TG_OFFSET_STORAGE_KEY) || '0')
+    const url = `https://api.telegram.org/bot${OFFICIAL_TELEGRAM_BOT_TOKEN}/getUpdates?timeout=0${
+      lastOffset > 0 ? `&offset=${lastOffset + 1}` : ''
+    }`
+    const resp = await fetch(url)
+    const json = await resp.json()
+    if (!json.ok || !Array.isArray(json.result) || json.result.length === 0) return
+
+    let maxUpdateId = lastOffset
+    for (const upd of json.result) {
+      if (upd.update_id > maxUpdateId) maxUpdateId = upd.update_id
+      const msg = upd.message || upd.channel_post
+      if (!msg || !msg.chat || !msg.text) continue
+
+      const chatId = String(msg.chat.id)
+      const text = String(msg.text).trim()
+      const senderName = msg.from?.first_name || msg.chat.title || 'VIP User'
+
+      // Ensure chat_id is saved if none was saved yet
+      const rawCfg = localStorage.getItem('rymon_telegram_config')
+      const parsedCfg = rawCfg ? JSON.parse(rawCfg) : null
+      if (!parsedCfg?.chat_id) {
+        await saveTelegramConfigBackend({
+          bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
+          chat_id: chatId,
+          channel_username: msg.chat.username ? `@${msg.chat.username}` : OFFICIAL_TELEGRAM_BOT_USERNAME,
+          is_active: true
+        })
+        if (onChatIdDiscovered) onChatIdDiscovered(chatId)
+      }
+
+      if (text.startsWith('/start')) {
+        const reply = [
+          `⚡ <b>RYMON OFFICIAL BOT (@Rymon007bot)</b>`,
+          `Welcome, <b>${senderName}</b>! Your Telegram is now linked to the Sovereign Command Center.`,
+          ``,
+          `🆔 <b>Your Chat ID:</b> <code>${chatId}</code>`,
+          `🌐 <b>Web Portal:</b> https://greenvest.shop/`,
+          ``,
+          `<b>📋 Available Commands:</b>`,
+          `• /status — Live Server &amp; Key Telemetry`,
+          `• /unused — Copy all Unused (Waiting) Keys`,
+          `• /playing — View Players Currently In-Game`,
+          `• /check <code>KEY</code> — Inspect any License Key`,
+          `• /id — Show your Telegram Chat ID`
+        ].join('\n')
+        await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
+      } else if (text.startsWith('/id')) {
+        await dispatchTelegramMessage(
+          OFFICIAL_TELEGRAM_BOT_TOKEN,
+          chatId,
+          `🆔 <b>Your Telegram Chat ID:</b> <code>${chatId}</code>`
+        )
+      } else if (text.startsWith('/status')) {
+        const unusedCount = keysList.filter((k) => k.status === 'WAITING').length
+        const activeCount = keysList.filter((k) => k.status === 'ACTIVE').length
+        const pausedCount = keysList.filter((k) => k.status === 'PAUSED' || k.is_paused).length
+        const expiredCount = keysList.filter((k) => k.status === 'EXPIRED').length
+        const reply = [
+          `📊 <b>RYMON OFFICIAL — LIVE PLATFORM STATUS</b>`,
+          ``,
+          `🟢 <b>Playing Now (In-Game):</b> ${onlineKeySet.size}`,
+          `⚡ <b>Active Keys:</b> ${activeCount}`,
+          `🟡 <b>Unused (Waiting) Keys:</b> ${unusedCount}`,
+          `⏸️ <b>Paused Keys:</b> ${pausedCount}`,
+          `🔴 <b>Expired Keys:</b> ${expiredCount}`,
+          `🔑 <b>Total Keys:</b> ${keysList.length}`,
+          `👥 <b>Registered Staff/Resellers:</b> ${usersList.length}`,
+          ``,
+          `🌐 https://greenvest.shop/`
+        ].join('\n')
+        await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
+      } else if (text.startsWith('/unused')) {
+        const unusedKeys = keysList.filter((k) => k.status === 'WAITING')
+        if (unusedKeys.length === 0) {
+          await dispatchTelegramMessage(
+            OFFICIAL_TELEGRAM_BOT_TOKEN,
+            chatId,
+            `🟡 No Unused (WAITING) keys found right now.`
+          )
+        } else {
+          const listStr = unusedKeys
+            .slice(0, 30)
+            .map((k, idx) => `${idx + 1}. <code>${k.license_key}</code> (${k.plan_duration} • ${k.game})`)
+            .join('\n')
+          const reply = [
+            `🟡 <b>UNUSED (WAITING) KEYS (${unusedKeys.length})</b>`,
+            `<i>Tap any key below to copy:</i>`,
+            ``,
+            listStr,
+            unusedKeys.length > 30 ? `\n<i>...and ${unusedKeys.length - 30} more on greenvest.shop</i>` : ''
+          ].join('\n')
+          await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
+        }
+      } else if (text.startsWith('/playing')) {
+        const playingKeys = keysList.filter((k) => onlineKeySet.has(k.license_key.toUpperCase()))
+        if (playingKeys.length === 0) {
+          await dispatchTelegramMessage(
+            OFFICIAL_TELEGRAM_BOT_TOKEN,
+            chatId,
+            `⚪ <b>0 Players In-Game Right Now.</b> All bound keys are currently idle/offline.`
+          )
+        } else {
+          const listStr = playingKeys
+            .map(
+              (k, idx) =>
+                `${idx + 1}. 🟢 <code>${k.license_key}</code> — ${k.game} (@${k.creator_username})`
+            )
+            .join('\n')
+          await dispatchTelegramMessage(
+            OFFICIAL_TELEGRAM_BOT_TOKEN,
+            chatId,
+            `🟢 <b>CURRENTLY PLAYING IN-GAME (${playingKeys.length})</b>\n\n${listStr}`
+          )
+        }
+      } else if (text.startsWith('/check')) {
+        const parts = text.split(/\s+/)
+        const queryKey = (parts[1] || '').trim().toUpperCase()
+        if (!queryKey) {
+          await dispatchTelegramMessage(
+            OFFICIAL_TELEGRAM_BOT_TOKEN,
+            chatId,
+            `ℹ️ Usage: <code>/check RYMON-XXXX-XXXX</code>`
+          )
+        } else {
+          const found = keysList.find((k) => k.license_key.toUpperCase() === queryKey)
+          if (!found) {
+            await dispatchTelegramMessage(
+              OFFICIAL_TELEGRAM_BOT_TOKEN,
+              chatId,
+              `❌ Key <code>${queryKey}</code> not found in database.`
+            )
+          } else {
+            const isPlaying = onlineKeySet.has(found.license_key.toUpperCase())
+            const reply = [
+              `🔍 <b>KEY INSPECTION:</b> <code>${found.license_key}</code>`,
+              ``,
+              `• <b>Status:</b> ${isPlaying ? '🟢 PLAYING NOW' : found.status}`,
+              `• <b>Game:</b> ${found.game}`,
+              `• <b>Plan:</b> ${found.plan_duration} (Max 30D)`,
+              `• <b>Seller:</b> @${found.creator_username}`,
+              `• <b>HWID:</b> <code>${found.device_hwid || 'Unbound (Waiting 1st Login)'}</code>`,
+              `• <b>Expires:</b> ${found.expires_at ? new Date(found.expires_at).toLocaleString('en-IN') : 'Starts on 1st APK Login'}`
+            ].join('\n')
+            await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
+          }
+        }
+      }
+    }
+
+    localStorage.setItem(TG_OFFSET_STORAGE_KEY, String(maxUpdateId))
+  } catch {}
 }
 
 // ============================================================================
