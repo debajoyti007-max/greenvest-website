@@ -25,7 +25,13 @@ import {
   deleteNotificationBackend,
   fetchTelegramConfigBackend,
   saveTelegramConfigBackend,
-  dispatchTelegramMessage
+  dispatchTelegramMessage,
+  type RymonReferral,
+  SOVEREIGN_CONNECT_CONFIG,
+  fetchReferralCodes,
+  createReferralCode,
+  registerWithReferral,
+  deleteReferralCode
 } from '../lib/rymonBackend'
 
 type TabType =
@@ -35,6 +41,8 @@ type TabType =
   | 'keys'
   | 'telegram'
   | 'users'
+  | 'referrals'
+  | 'connect-api'
   | 'add-balance'
   | 'ban'
   | 'delete'
@@ -160,6 +168,30 @@ export default function RymonConnect() {
     return notifications
   }, [notifications, notifFilter])
 
+  // User Registration with Referral Code State
+  const [isRegisterMode, setIsRegisterMode] = useState(false)
+  const [regUsername, setRegUsername] = useState('')
+  const [regPassword, setRegPassword] = useState('')
+  const [regEmail, setRegEmail] = useState('')
+  const [regInviteCode, setRegInviteCode] = useState('')
+  const [regLoading, setRegLoading] = useState(false)
+  const [regError, setRegError] = useState('')
+
+  // Sovereign Referral Codes Engine State
+  const [referralList, setReferralList] = useState<RymonReferral[]>([])
+  const [refTargetRole, setRefTargetRole] = useState<'reseller' | 'admin'>('reseller')
+  const [refInitialBal, setRefInitialBal] = useState<number | ''>('')
+  const [refCustomCode, setRefCustomCode] = useState('')
+  const [refMaxUses, setRefMaxUses] = useState(1)
+  const [refCreating, setRefCreating] = useState(false)
+  const [copiedRefCode, setCopiedRefCode] = useState<string | null>(null)
+
+  // Sovereign Connect URL & APK Test Sandbox State
+  const [testConnectKey, setTestConnectKey] = useState('RYMON-MASTER-KEY')
+  const [testConnectHwid, setTestConnectHwid] = useState('DEVICE-SIM-ANDROID-9981')
+  const [testConnectLoading, setTestConnectLoading] = useState(false)
+  const [testConnectResult, setTestConnectResult] = useState<string>('')
+
   // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
     // Check Supabase Database health
@@ -203,12 +235,13 @@ export default function RymonConnect() {
     let isMounted = true
 
     async function loadLiveData() {
-      const [lcs, usrs, acts, notifs, tgCfg] = await Promise.all([
+      const [lcs, usrs, acts, notifs, tgCfg, refs] = await Promise.all([
         fetchAllLicenses(currentUser),
         fetchAllAccounts(),
         fetchAllActivities(),
         fetchNotifications(currentUser?.username),
-        fetchTelegramConfigBackend()
+        fetchTelegramConfigBackend(),
+        fetchReferralCodes()
       ])
 
       if (isMounted) {
@@ -217,6 +250,7 @@ export default function RymonConnect() {
         setActivities(acts)
         setNotifications(notifs)
         setTelegramConfig(tgCfg)
+        setReferralList(refs)
 
         // Sync fresh balance if currentUser in list
         if (currentUser) {
@@ -277,6 +311,13 @@ export default function RymonConnect() {
           { event: '*', schema: 'public', table: 'rymon_notifications' },
           () => {
             fetchNotifications(currentUser?.username).then((n) => isMounted && setNotifications(n))
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'rymon_referrals' },
+          () => {
+            fetchReferralCodes().then((r) => isMounted && setReferralList(r))
           }
         )
         .subscribe()
@@ -761,6 +802,84 @@ export default function RymonConnect() {
     }
   }
 
+  // 12. REFERRAL ONBOARDING & CONNECT API HANDLERS
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setRegLoading(true)
+    setRegError('')
+
+    const res = await registerWithReferral(regUsername, regPassword, regEmail, regInviteCode)
+    setRegLoading(false)
+
+    if (res.success && res.user) {
+      setCurrentUser(res.user)
+      setWalletBalance(res.user.balance)
+      setIsAuthenticated(true)
+      localStorage.setItem('rymon_session_user', JSON.stringify(res.user))
+      showToast(`Welcome! You are registered as ${res.user.role.toUpperCase()} (Starting Balance: ₹${res.user.balance.toLocaleString('en-IN')})`)
+      setActiveTab('overview')
+    } else {
+      setRegError(res.message || 'Registration failed. Check referral code.')
+    }
+  }
+
+  const handleCreateReferral = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setRefCreating(true)
+    const bal = typeof refInitialBal === 'number' ? refInitialBal : 0
+    const res = await createReferralCode(
+      currentUser?.username || 'rymon',
+      refTargetRole,
+      bal,
+      refCustomCode,
+      refMaxUses
+    )
+    setRefCreating(false)
+    if (res.success) {
+      showToast(`Created referral code: ${res.code}`)
+      setRefCustomCode('')
+      setRefInitialBal('')
+      fetchReferralCodes().then(setReferralList)
+    } else {
+      alert(`Error: ${res.message}`)
+    }
+  }
+
+  const handleDeleteReferral = async (id: number) => {
+    const ok = await deleteReferralCode(id)
+    if (ok) {
+      setReferralList((prev) => prev.filter((r) => r.id !== id))
+      showToast('Referral code deleted.')
+    }
+  }
+
+  const handleTestConnectApi = async () => {
+    setTestConnectLoading(true)
+    setTestConnectResult('')
+    try {
+      const res = await fetch(SOVEREIGN_CONNECT_CONFIG.endpoint_url, {
+        method: 'POST',
+        headers: {
+          'apikey': SOVEREIGN_CONNECT_CONFIG.anon_key,
+          'Authorization': `Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          p_license_key: testConnectKey.trim(),
+          p_hwid: testConnectHwid.trim()
+        })
+      })
+      const json = await res.json()
+      setTestConnectResult(JSON.stringify(json, null, 2))
+      showToast('Connect API verified successfully!')
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Network connection error'
+      setTestConnectResult(JSON.stringify({ error: errMsg }, null, 2))
+    } finally {
+      setTestConnectLoading(false)
+    }
+  }
+
   const showToast = (msg: string) => {
     setActionSuccessMsg(msg)
     setTimeout(() => setActionSuccessMsg(''), 3500)
@@ -1089,76 +1208,173 @@ export default function RymonConnect() {
 
           {authMode === 'staff' ? (
             <div>
-              <h2 style={styles.authHead}>Staff Control Login</h2>
-              <p style={styles.authDesc}>
-                Authenticate with your sovereign account to manage licenses, generate keys, and oversee user balances.
-              </p>
-
-              <form onSubmit={handleStaffLogin} style={styles.authForm}>
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>USERNAME</label>
-                  <input
-                    type="text"
-                    value={staffUsername}
-                    onChange={(e) => setStaffUsername(e.target.value)}
-                    placeholder="e.g. rymon, ROGER, SK2020"
-                    style={styles.keyInput}
-                    required
-                  />
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>PASSWORD</label>
-                  <input
-                    type="password"
-                    value={staffPassword}
-                    onChange={(e) => setStaffPassword(e.target.value)}
-                    placeholder="Enter account password"
-                    style={styles.keyInput}
-                    required
-                  />
-                </div>
-
-                <div style={styles.quickAccountsRow}>
-                  <span style={styles.quickLabel}>Quick Sign-in:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStaffUsername('rymon')
-                      setStaffPassword('rymon@2026')
-                    }}
-                    style={styles.chipBtn}
-                  >
-                    rymon (Owner)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStaffUsername('ROGER')
-                      setStaffPassword('roger')
-                    }}
-                    style={styles.chipBtn}
-                  >
-                    ROGER (Reseller)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStaffUsername('SK2020')
-                      setStaffPassword('sk2020')
-                    }}
-                    style={styles.chipBtn}
-                  >
-                    SK2020 (Reseller)
-                  </button>
-                </div>
-
-                <button type="submit" disabled={authLoading} style={styles.submitBtn}>
-                  {authLoading ? 'AUTHENTICATING SUPABASE...' : 'SIGN IN TO DASHBOARD'}
+              {/* Sign In vs Register Toggle */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterMode(false)
+                    setAuthError('')
+                    setRegError('')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: !isRegisterMode ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
+                    background: !isRegisterMode ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                    color: !isRegisterMode ? '#00d9ff' : '#94a3b8',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔑 Sign In (Existing User)
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterMode(true)
+                    setAuthError('')
+                    setRegError('')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: isRegisterMode ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
+                    background: isRegisterMode ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                    color: isRegisterMode ? '#00d9ff' : '#94a3b8',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  📝 Register with Invite Code
+                </button>
+              </div>
 
-                {authError && <div style={styles.errorBox}>{authError}</div>}
-              </form>
+              {!isRegisterMode ? (
+                <div>
+                  <h2 style={styles.authHead}>Staff Control Login</h2>
+                  <p style={styles.authDesc}>
+                    Authenticate with your sovereign account to manage licenses, generate keys, and oversee user balances.
+                  </p>
+
+                  <form onSubmit={handleStaffLogin} style={styles.authForm}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>USERNAME</label>
+                      <input
+                        type="text"
+                        value={staffUsername}
+                        onChange={(e) => setStaffUsername(e.target.value)}
+                        placeholder="Enter registered username"
+                        style={styles.keyInput}
+                        required
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>PASSWORD</label>
+                      <input
+                        type="password"
+                        value={staffPassword}
+                        onChange={(e) => setStaffPassword(e.target.value)}
+                        placeholder="Enter account password"
+                        style={styles.keyInput}
+                        required
+                      />
+                    </div>
+
+                    <div style={styles.quickAccountsRow}>
+                      <span style={styles.quickLabel}>Root Sign-in:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStaffUsername('rymon')
+                          setStaffPassword('rymon@2026')
+                        }}
+                        style={styles.chipBtn}
+                      >
+                        rymon (Root Owner)
+                      </button>
+                    </div>
+
+                    <button type="submit" disabled={authLoading} style={styles.submitBtn}>
+                      {authLoading ? 'AUTHENTICATING SUPABASE...' : 'SIGN IN TO DASHBOARD'}
+                    </button>
+
+                    {authError && <div style={styles.errorBox}>{authError}</div>}
+                  </form>
+                </div>
+              ) : (
+                <div>
+                  <h2 style={styles.authHead}>Register with Referral Code</h2>
+                  <p style={styles.authDesc}>
+                    Enter an invitation code issued by the owner to create your genuine sovereign Reseller or Admin account.
+                  </p>
+
+                  <form onSubmit={handleRegister} style={styles.authForm}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>DESIRED USERNAME</label>
+                      <input
+                        type="text"
+                        value={regUsername}
+                        onChange={(e) => setRegUsername(e.target.value)}
+                        placeholder="e.g. MyResellerName"
+                        style={styles.keyInput}
+                        required
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>PASSWORD</label>
+                      <input
+                        type="password"
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="Create strong account password"
+                        style={styles.keyInput}
+                        required
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>EMAIL ADDRESS (OPTIONAL)</label>
+                      <input
+                        type="email"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        placeholder="e.g. contact@domain.com"
+                        style={styles.keyInput}
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>
+                        OWNER REFERRAL / INVITE CODE <span style={{ color: '#00d9ff' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={regInviteCode}
+                        onChange={(e) => setRegInviteCode(e.target.value)}
+                        placeholder="e.g. RYMON-RESELLER-VIP"
+                        style={{ ...styles.keyInput, textTransform: 'uppercase' }}
+                        required
+                      />
+                      <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                        Each code automatically assigns your role and pre-loaded wallet credit.
+                      </span>
+                    </div>
+
+                    <button type="submit" disabled={regLoading} style={styles.submitBtn}>
+                      {regLoading ? 'VERIFYING REFERRAL CODE...' : '⚡ CREATE SOVEREIGN ACCOUNT'}
+                    </button>
+
+                    {regError && <div style={styles.errorBox}>{regError}</div>}
+                  </form>
+                </div>
+              )}
             </div>
           ) : (
             <div>
@@ -1317,6 +1533,20 @@ export default function RymonConnect() {
                     <span style={styles.navIcon}>✈️</span>
                     <span>Telegram Bot</span>
                   </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab('connect-api')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'connect-api' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>🔗</span>
+                    <span>Connect URL & APK</span>
+                    <span style={styles.cyanMiniBadge}>SOVEREIGN</span>
+                  </button>
                 </>
               )}
 
@@ -1352,20 +1582,36 @@ export default function RymonConnect() {
                     <span style={styles.cyanMiniBadge}>REALTIME</span>
                   </button>
                   {isOwner && (
-                    <button
-                      onClick={() => {
-                        setActiveTab('add-balance')
-                        setMobileMenuOpen(false)
-                      }}
-                      style={{
-                        ...styles.navItem,
-                        ...(activeTab === 'add-balance' ? styles.navItemActive : {})
-                      }}
-                    >
-                      <span style={styles.navIcon}>💼</span>
-                      <span>Add Balance</span>
-                      <span style={styles.cyanMiniBadge}>OWNER</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={() => {
+                          setActiveTab('referrals')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'referrals' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>🎟️</span>
+                        <span>Invite Codes</span>
+                        <span style={styles.cyanMiniBadge}>OWNER</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('add-balance')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'add-balance' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>💼</span>
+                        <span>Add Balance</span>
+                        <span style={styles.cyanMiniBadge}>OWNER</span>
+                      </button>
+                    </>
                   )}
                   <button
                     onClick={() => {
@@ -2930,7 +3176,467 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {/* 11. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
+            {/* 11. REFERRAL / INVITE CODE ENGINE (OWNER ONLY) */}
+            {activeTab === 'referrals' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Role Invite Codes Engine</h2>
+                    <p style={styles.pageSubtitle}>
+                      Generate role-bound invitation codes for prospective Resellers and Admins. Users self-register with their own username and password.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.cyanMiniBadge}>OWNER CONSOLE</span>
+                    <span style={styles.greenPulseBadge}>● SOVEREIGN PROTOCOL</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '24px', alignItems: 'start' }}>
+                  {/* Card 1: Generate Code */}
+                  <div style={styles.managementCard}>
+                    <div style={styles.cardHeader}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ ...styles.actionIconCircle, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff' }}>
+                          🎟️
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Create Role Invite Code</h3>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                            Binds role & initial balance atomically upon user registration
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleCreateReferral} style={{ marginTop: '20px' }}>
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>TARGET USER ROLE</label>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setRefTargetRole('reseller')}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border: refTargetRole === 'reseller' ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
+                              background: refTargetRole === 'reseller' ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: refTargetRole === 'reseller' ? '#00d9ff' : '#94a3b8',
+                              fontWeight: 700,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💼 RESELLER
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRefTargetRole('admin')}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border: refTargetRole === 'admin' ? '1px solid #05df72' : '1px solid rgba(255,255,255,0.08)',
+                              background: refTargetRole === 'admin' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: refTargetRole === 'admin' ? '#05df72' : '#94a3b8',
+                              fontWeight: 700,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🛡️ ADMINISTRATOR
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>STARTING WALLET BALANCE (₹ INR)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="100"
+                          value={refInitialBal}
+                          onChange={(e) => setRefInitialBal(e.target.value === '' ? '' : Number(e.target.value))}
+                          placeholder="e.g. 5000 (Credits to wallet upon signup)"
+                          style={styles.keyInput}
+                        />
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                          Reseller will use this balance to generate streamer license keys.
+                        </div>
+                      </div>
+
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>CUSTOM CODE (OPTIONAL)</label>
+                        <input
+                          type="text"
+                          value={refCustomCode}
+                          onChange={(e) => setRefCustomCode(e.target.value.toUpperCase())}
+                          placeholder="e.g. RYMON-RESELLER-VIP (Blank for auto)"
+                          style={styles.keyInput}
+                        />
+                      </div>
+
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>MAX USES / REDEMPTIONS</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={refMaxUses}
+                          onChange={(e) => setRefMaxUses(Math.max(1, parseInt(e.target.value) || 1))}
+                          style={styles.keyInput}
+                          required
+                        />
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                          Each use creates 1 unique real account. Recommended: 1 use per person.
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={refCreating}
+                        style={{ ...styles.submitBtn, marginTop: '16px' }}
+                      >
+                        {refCreating ? 'CREATING CODE IN SUPABASE...' : '🎟️ GENERATE INVITE CODE'}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Card 2: Active Codes Table */}
+                  <div style={styles.managementCard}>
+                    <div style={styles.cardHeader}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Active Referral Codes ({referralList.length})</h3>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                            Real codes stored in Supabase <code>public.rymon_referrals</code>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => fetchReferralCodes().then(setReferralList)}
+                          style={{ ...styles.chipBtn, fontSize: '11px' }}
+                        >
+                          🔄 Refresh
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '16px', overflowX: 'auto' }}>
+                      <table style={styles.dataTable}>
+                        <thead>
+                          <tr>
+                            <th style={styles.th}>INVITE CODE</th>
+                            <th style={styles.th}>ROLE</th>
+                            <th style={styles.th}>STARTING BAL</th>
+                            <th style={styles.th}>USES</th>
+                            <th style={styles.th}>STATUS</th>
+                            <th style={styles.th}>ACTION</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {referralList.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} style={{ ...styles.td, textAlign: 'center', color: '#64748b', padding: '30px' }}>
+                                No active invite codes. Generate one on the left to onboard real staff.
+                              </td>
+                            </tr>
+                          ) : (
+                            referralList.map((ref) => (
+                              <tr key={ref.id} style={styles.tr}>
+                                <td style={styles.td}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#00d9ff', fontSize: '13px' }}>
+                                      {ref.code}
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(ref.code)
+                                        setCopiedRefCode(ref.code)
+                                        setTimeout(() => setCopiedRefCode(null), 2000)
+                                      }}
+                                      style={styles.miniCopyBtn}
+                                      title="Copy code"
+                                    >
+                                      {copiedRefCode === ref.code ? '✓' : '📋'}
+                                    </button>
+                                  </div>
+                                </td>
+                                <td style={styles.td}>
+                                  <span style={{
+                                    ...styles.planBadge,
+                                    background: ref.target_role === 'admin' ? 'rgba(5, 223, 114, 0.15)' : 'rgba(0, 217, 255, 0.15)',
+                                    color: ref.target_role === 'admin' ? '#05df72' : '#00d9ff'
+                                  }}>
+                                    {ref.target_role.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td style={styles.td}>
+                                  <span style={{ color: '#05df72', fontWeight: 700 }}>
+                                    ₹{ref.initial_balance.toLocaleString('en-IN')}
+                                  </span>
+                                </td>
+                                <td style={styles.td}>
+                                  <span style={{ color: '#cbd5e1', fontSize: '12px' }}>
+                                    {ref.times_used} / {ref.max_uses}
+                                  </span>
+                                </td>
+                                <td style={styles.td}>
+                                  <span style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    color: ref.is_active ? '#05df72' : '#ef4444'
+                                  }}>
+                                    ● {ref.is_active ? 'ACTIVE' : 'DEPLETED'}
+                                  </span>
+                                </td>
+                                <td style={styles.td}>
+                                  <button
+                                    onClick={() => handleDeleteReferral(ref.id)}
+                                    style={{ ...styles.actionIconBtn, color: '#ef4444' }}
+                                    title="Revoke / Delete Code"
+                                  >
+                                    🗑️
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div style={{ marginTop: '20px', padding: '12px 16px', background: 'rgba(0, 217, 255, 0.05)', border: '1px solid rgba(0, 217, 255, 0.15)', borderRadius: '10px', fontSize: '12px', color: '#94a3b8' }}>
+                      💡 <strong style={{ color: '#00d9ff' }}>How New Staff Onboard:</strong> Give this invite code to your reseller or admin. When they open this site, they click <strong>"Register with Invite Code"</strong> on the login screen, enter their own desired username, password, email, and the invite code. Their account is created immediately with 1 account per person, assigned their role and wallet balance!
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 12. SOVEREIGN CONNECT URL & APK ENGINE */}
+            {activeTab === 'connect-api' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Sovereign Connect URL & APK Engine</h2>
+                    <p style={styles.pageSubtitle}>
+                      Direct sovereign key verification and hardware binding endpoint for the Safe Streamer Android APK (Free Fire MAX). Zero third-party ghostpanel reliance.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.greenPulseBadge}>● 100% SOVEREIGN</span>
+                    <span style={styles.cyanMiniBadge}>ANDROID APK READY</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
+                  {/* Left Column: Endpoints & APK Config */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {/* Endpoint Overview Card */}
+                    <div style={styles.managementCard}>
+                      <div style={styles.cardHeader}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ ...styles.actionIconCircle, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff' }}>
+                            🔗
+                          </div>
+                          <div>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Live Connect Endpoints</h3>
+                            <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                              Primary RPC endpoint & Web Gateway
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
+                            PRIMARY DIRECT SUPABASE RPC ENDPOINT:
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.8)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(0, 217, 255, 0.25)' }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#00d9ff', flex: 1, wordBreak: 'break-all' }}>
+                              {SOVEREIGN_CONNECT_CONFIG.endpoint_url}
+                            </span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(SOVEREIGN_CONNECT_CONFIG.endpoint_url)
+                                showToast('Copied endpoint URL')
+                              }}
+                              style={styles.miniCopyBtn}
+                              title="Copy URL"
+                            >
+                              📋
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
+                            WEB PORTAL GATEWAY CONNECT URL:
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.8)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#05df72', flex: 1 }}>
+                              https://greenvest.shop/connect
+                            </span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText('https://greenvest.shop/connect')
+                                showToast('Copied portal URL')
+                              }}
+                              style={styles.miniCopyBtn}
+                              title="Copy URL"
+                            >
+                              📋
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{ padding: '12px', background: 'rgba(15, 23, 42, 0.5)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', fontSize: '12px' }}>
+                          <div style={{ color: '#f8fafc', fontWeight: 700, marginBottom: '6px' }}>Request Specifications:</div>
+                          <div style={{ color: '#94a3b8', lineHeight: '1.6' }}>
+                            • <strong>Method:</strong> <code>POST</code><br />
+                            • <strong>Header <code>apikey</code>:</strong> <code>{SOVEREIGN_CONNECT_CONFIG.anon_key.substring(0, 20)}...</code><br />
+                            • <strong>Header <code>Content-Type</code>:</strong> <code>application/json</code><br />
+                            • <strong>JSON Payload:</strong> <code>{`{"p_license_key": "YOUR_KEY", "p_hwid": "YOUR_DEVICE_HWID"}`}</code>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ServerConfig.java APK Integration Card */}
+                    <div style={styles.managementCard}>
+                      <div style={styles.cardHeader}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ ...styles.actionIconCircle, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72' }}>
+                            📱
+                          </div>
+                          <div>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Android APK Configuration</h3>
+                            <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                              In <code>c:\SAFE STREAMER\app\src\main\java\com\rymon\external\ServerConfig.java</code>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '16px' }}>
+                        <pre style={{
+                          background: '#07090e',
+                          border: '1px solid rgba(30, 41, 59, 0.8)',
+                          borderRadius: '10px',
+                          padding: '16px',
+                          fontSize: '11px',
+                          fontFamily: 'Consolas, monospace',
+                          color: '#cbd5e1',
+                          overflowX: 'auto',
+                          lineHeight: '1.5'
+                        }}>
+{`// Sovereign Server Configuration for Safe Streamer
+package com.rymon.external;
+
+public class ServerConfig {
+    public static final String SUPABASE_REST_URL = 
+        "https://zvjqpigduyvczidzafus.supabase.co/rest/v1/rymon_streamer_controls";
+    public static final String CONNECT_URL = 
+        "https://greenvest.shop/";
+    public static final String VERIFY_LICENSE_RPC = 
+        "https://zvjqpigduyvczidzafus.supabase.co/rest/v1/rpc/rpc_rymon_verify_license";
+    public static final String SUPABASE_KEY = 
+        "${SOVEREIGN_CONNECT_CONFIG.anon_key}";
+}`}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Live Test Sandbox */}
+                  <div style={styles.managementCard}>
+                    <div style={styles.cardHeader}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ ...styles.actionIconCircle, background: 'rgba(255, 183, 0, 0.15)', color: '#ffb700' }}>
+                          🧪
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Live Verification Test Sandbox</h3>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                            Simulate Android APK key verification against live Supabase RPC
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '20px' }}>
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>LICENSE KEY TO TEST</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <input
+                            type="text"
+                            value={testConnectKey}
+                            onChange={(e) => setTestConnectKey(e.target.value.toUpperCase())}
+                            placeholder="Enter key e.g. RYMON-XXXX-XXXX"
+                            style={{ ...styles.keyInput, flex: 1 }}
+                          />
+                          {keysList.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setTestConnectKey(keysList[0].license_key)}
+                              style={{ ...styles.chipBtn, fontSize: '11px', whiteSpace: 'nowrap' }}
+                              title="Pick first active key from database"
+                            >
+                              Pick Key ({keysList[0].license_key.substring(0, 10)}...)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>DEVICE HARDWARE ID (HWID)</label>
+                        <input
+                          type="text"
+                          value={testConnectHwid}
+                          onChange={(e) => setTestConnectHwid(e.target.value)}
+                          placeholder="e.g. DEVICE-SIM-ANDROID-9981"
+                          style={styles.keyInput}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleTestConnectApi}
+                        disabled={testConnectLoading}
+                        style={{ ...styles.submitBtn, marginTop: '8px' }}
+                      >
+                        {testConnectLoading ? 'CONNECTING & VERIFYING...' : '🚀 TEST KEY VERIFICATION NOW'}
+                      </button>
+
+                      <div style={{ marginTop: '20px' }}>
+                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '6px' }}>
+                          LIVE RPC RESPONSE TERMINAL:
+                        </div>
+                        <div style={{
+                          background: '#04060a',
+                          border: '1px solid rgba(0, 217, 255, 0.3)',
+                          borderRadius: '8px',
+                          padding: '14px',
+                          fontFamily: 'Consolas, monospace',
+                          fontSize: '11px',
+                          color: '#00d9ff',
+                          minHeight: '140px',
+                          maxHeight: '260px',
+                          overflowY: 'auto',
+                          whiteSpace: 'pre-wrap'
+                        }}>
+                          {testConnectResult || '// Click "TEST KEY VERIFICATION NOW" to dispatch live RPC call...'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 13. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
             {activeTab === 'remote' && (
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>

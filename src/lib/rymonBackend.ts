@@ -107,7 +107,7 @@ export interface TelegramConfig {
   is_active: boolean
 }
 
-// Sovereign In-Memory Fallback Seed (Active if Supabase SQL migration has not been run yet)
+// Sovereign In-Memory Fallback Seed (Only genuine Root Owner)
 export const SOVEREIGN_FALLBACK_ACCOUNTS: RymonAccount[] = [
   {
     id: 'usr-rymon-01',
@@ -119,83 +119,43 @@ export const SOVEREIGN_FALLBACK_ACCOUNTS: RymonAccount[] = [
     referral_code: 'ROOT001',
     status: 'ACTIVE',
     expires_at: '2036-10-10T00:00:00Z'
+  }
+]
+
+export interface RymonReferral {
+  id: number
+  code: string
+  target_role: 'admin' | 'reseller'
+  initial_balance: number
+  created_by: string
+  max_uses: number
+  times_used: number
+  is_active: boolean
+  created_at: string
+}
+
+export const SOVEREIGN_FALLBACK_REFERRALS: RymonReferral[] = [
+  {
+    id: 1,
+    code: 'RYMON-RESELLER-VIP',
+    target_role: 'reseller',
+    initial_balance: 5000,
+    created_by: 'rymon',
+    max_uses: 5,
+    times_used: 0,
+    is_active: true,
+    created_at: new Date().toISOString()
   },
   {
-    id: 'usr-roger-02',
-    username: 'ROGER',
-    email: 'amarogerxd07@gmail.com',
-    role: 'reseller',
-    balance: 9629,
-    uplink: 'rymon',
-    referral_code: 'FMv2VX',
-    status: 'ACTIVE',
-    expires_at: '2027-04-09T00:00:00Z'
-  },
-  {
-    id: 'usr-satan-03',
-    username: 'Satan',
-    email: 'saranshshrivastava7@gmail.com',
-    role: 'reseller',
-    balance: 20,
-    uplink: 'rymon',
-    referral_code: 'N6eedM',
-    status: 'ACTIVE',
-    expires_at: '2027-05-08T00:00:00Z'
-  },
-  {
-    id: 'usr-sk2020-04',
-    username: 'SK2020',
-    email: 'spvk202008@gmail.com',
-    role: 'reseller',
-    balance: 315,
-    uplink: 'rymon',
-    referral_code: 'RLx94x',
-    status: 'ACTIVE',
-    expires_at: '2027-05-08T00:00:00Z'
-  },
-  {
-    id: 'usr-reverse-05',
-    username: 'REVERSE_EXE',
-    email: 'harissnkardebnath02@gmail.com',
-    role: 'reseller',
-    balance: 99999,
-    uplink: 'rymon',
-    referral_code: 'GE2rS4',
-    status: 'ACTIVE',
-    expires_at: '2027-05-08T00:00:00Z'
-  },
-  {
-    id: 'usr-ashwani-06',
-    username: 'Ashwani',
-    email: 'PandaXe23@gmail.com',
-    role: 'reseller',
-    balance: 99999999,
-    uplink: 'ASHWANIxTHOR',
-    referral_code: 'ASH001',
-    status: 'ACTIVE',
-    expires_at: '2027-10-01T00:00:00Z'
-  },
-  {
-    id: 'usr-harshil-07',
-    username: 'HARSHIL2829',
-    email: 'harshil2829@gmail.com',
-    role: 'reseller',
-    balance: 4325,
-    uplink: 'rymon',
-    referral_code: 'HAR282',
-    status: 'ACTIVE',
-    expires_at: '2027-04-09T00:00:00Z'
-  },
-  {
-    id: 'usr-thor-08',
-    username: 'THORBHAIxTRUSTED',
-    email: 'thorbhai@gmail.com',
-    role: 'reseller',
-    balance: 988824,
-    uplink: 'rymon',
-    referral_code: 'THOR99',
-    status: 'ACTIVE',
-    expires_at: '2027-10-01T00:00:00Z'
+    id: 2,
+    code: 'RYMON-ADMIN-MASTER',
+    target_role: 'admin',
+    initial_balance: 50000,
+    created_by: 'rymon',
+    max_uses: 1,
+    times_used: 0,
+    is_active: true,
+    created_at: new Date().toISOString()
   }
 ]
 
@@ -1354,4 +1314,194 @@ export async function dispatchTelegramMessage(
     return { success: false, message: `Failed to dispatch Telegram message: ${errMsg}` }
   }
 }
+
+// ============================================================================
+// SOVEREIGN REFERRAL & INVITE CODE SYSTEM
+// ============================================================================
+function getStoredReferrals(): RymonReferral[] {
+  try {
+    const raw = localStorage.getItem('rymon_sovereign_referrals')
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return [...SOVEREIGN_FALLBACK_REFERRALS]
+}
+
+export function saveStoredReferrals(referrals: RymonReferral[]): void {
+  try {
+    localStorage.setItem('rymon_sovereign_referrals', JSON.stringify(referrals))
+  } catch {}
+}
+
+export async function fetchReferralCodes(): Promise<RymonReferral[]> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('rymon_referrals')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data as RymonReferral[]
+      }
+    } catch {}
+  }
+  return getStoredReferrals()
+}
+
+export async function createReferralCode(
+  owner: string,
+  targetRole: 'admin' | 'reseller',
+  initialBalance: number = 0,
+  customCode?: string,
+  maxUses: number = 1
+): Promise<{ success: boolean; code?: string; message: string }> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_rymon_create_referral', {
+        p_owner: owner || 'rymon',
+        p_target_role: targetRole,
+        p_initial_balance: initialBalance,
+        p_custom_code: customCode ? customCode.trim().toUpperCase() : null,
+        p_max_uses: maxUses
+      })
+
+      if (!error && data) {
+        return data as { success: boolean; code?: string; message: string }
+      }
+    } catch {}
+  }
+
+  const stored = getStoredReferrals()
+  const code =
+    (customCode && customCode.trim().toUpperCase()) ||
+    `REF-${targetRole.toUpperCase()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+
+  if (stored.some((r) => r.code === code)) {
+    return { success: false, message: 'Referral code already exists' }
+  }
+
+  const newRef: RymonReferral = {
+    id: Date.now(),
+    code,
+    target_role: targetRole,
+    initial_balance: initialBalance,
+    created_by: owner || 'rymon',
+    max_uses: maxUses,
+    times_used: 0,
+    is_active: true,
+    created_at: new Date().toISOString()
+  }
+  stored.unshift(newRef)
+  saveStoredReferrals(stored)
+
+  return { success: true, code, message: 'Referral code created successfully' }
+}
+
+export async function registerWithReferral(
+  username: string,
+  password: string,
+  email: string,
+  referralCode: string
+): Promise<{ success: boolean; user?: RymonAccount; message: string }> {
+  const cleanUser = username.trim()
+  const cleanPass = password.trim()
+  const cleanRef = referralCode.trim().toUpperCase()
+
+  if (cleanUser.length < 3) {
+    return { success: false, message: 'Username must be at least 3 characters' }
+  }
+  if (cleanPass.length < 4) {
+    return { success: false, message: 'Password must be at least 4 characters' }
+  }
+  if (!cleanRef) {
+    return { success: false, message: 'Referral / Invite code is required' }
+  }
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_rymon_register_with_referral', {
+        p_username: cleanUser,
+        p_password: cleanPass,
+        p_email: email ? email.trim() : `${cleanUser}@rymon.vip`,
+        p_referral_code: cleanRef
+      })
+
+      if (!error && data) {
+        return data as { success: boolean; user?: RymonAccount; message: string }
+      }
+    } catch {}
+  }
+
+  const storedRefs = getStoredReferrals()
+  const ref = storedRefs.find((r) => r.code === cleanRef && r.is_active)
+  if (!ref) {
+    return { success: false, message: 'Invalid or expired referral code' }
+  }
+  if (ref.times_used >= ref.max_uses) {
+    return { success: false, message: 'This referral code has already reached its usage limit' }
+  }
+
+  const storedAccounts = getStoredAccounts()
+  if (storedAccounts.some((a) => a.username.toLowerCase() === cleanUser.toLowerCase())) {
+    return { success: false, message: 'Username already taken' }
+  }
+
+  const newUser: RymonAccount = {
+    id: `usr-${cleanUser.toLowerCase()}-${Date.now().toString(36)}`,
+    username: cleanUser,
+    email: email ? email.trim() : `${cleanUser}@rymon.vip`,
+    role: ref.target_role,
+    balance: ref.initial_balance,
+    uplink: ref.created_by,
+    referral_code: cleanRef,
+    status: 'ACTIVE',
+    expires_at: new Date(Date.now() + 365 * 86400000).toISOString()
+  }
+
+  ref.times_used += 1
+  if (ref.times_used >= ref.max_uses) ref.is_active = false
+  saveStoredReferrals(storedRefs)
+
+  storedAccounts.push(newUser)
+  saveStoredAccounts(storedAccounts)
+
+  return { success: true, user: newUser, message: `Registered successfully as ${ref.target_role}!` }
+}
+
+export async function deleteReferralCode(id: number): Promise<boolean> {
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('rymon_referrals')
+        .delete()
+        .eq('id', id)
+      if (!error) return true
+    } catch {}
+  }
+
+  const stored = getStoredReferrals()
+  const filtered = stored.filter((r) => r.id !== id)
+  saveStoredReferrals(filtered)
+  return true
+}
+
+// ============================================================================
+// SOVEREIGN CONNECT API SPECIFICATION (FOR ANDROID APK & STRANGER DAEMON)
+// ============================================================================
+export const SOVEREIGN_CONNECT_CONFIG = {
+  endpoint_url: 'https://zvjqpigduyvczidzafus.supabase.co/rest/v1/rpc/rpc_rymon_verify_license',
+  dashboard_url: 'https://greenvest.shop/',
+  anon_key: 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR',
+  method: 'POST',
+  headers: {
+    'apikey': 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR',
+    'Authorization': 'Bearer sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR',
+    'Content-Type': 'application/json'
+  },
+  sample_request: {
+    p_license_key: 'RYMON-MASTER-KEY',
+    p_hwid: 'ANDROID-DEVICE-ID-9481'
+  }
+}
+
 

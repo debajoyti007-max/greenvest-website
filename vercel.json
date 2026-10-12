@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/connect",
+      "destination": "/api/connect"
+    },
+    {
+      "source": "/api/connect",
+      "destination": "/api/connect"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
