@@ -40,6 +40,15 @@ fs.copyFileSync(path.join(DIST, '404.html'), path.join(ROOT, '404.html'))
 fs.writeFileSync(path.join(ROOT, 'CNAME'), 'greenvest.shop')
 fs.writeFileSync(path.join(ROOT, '.nojekyll'), '')
 
+// Ensure download directory is present in root
+const DOWNLOAD_ROOT = path.join(ROOT, 'download')
+if (fs.existsSync(path.join(DIST, 'download'))) {
+  if (fs.existsSync(DOWNLOAD_ROOT)) {
+    fs.rmSync(DOWNLOAD_ROOT, { recursive: true, force: true })
+  }
+  fs.cpSync(path.join(DIST, 'download'), DOWNLOAD_ROOT, { recursive: true })
+}
+
 // Ensure search crawlers and PWA files are present in root
 const publicFiles = ['robots.txt', 'sitemap.xml', 'manifest.webmanifest', 'sw.js', 'favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.png', 'logo-transparent.png', 'logo.jpg', 'rymon_logo.jpg']
 for (const file of publicFiles) {

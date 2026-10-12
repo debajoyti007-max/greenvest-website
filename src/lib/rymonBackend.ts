@@ -1174,6 +1174,184 @@ export async function togglePauseLicenseBackend(
   return { success: false, is_paused: false, status: 'NOT_FOUND', message: 'Key not found' }
 }
 
+export async function bulkTogglePauseAllKeysBackend(
+  pauseState: boolean,
+  actorUsername: string = 'rymon',
+  creatorFilter?: string
+): Promise<{ success: boolean; count: number; message: string }> {
+  const newStatus = pauseState ? 'PAUSED' : 'ACTIVE'
+  let affected = 0
+
+  if (supabase) {
+    try {
+      let ctrlQuery = supabase
+        .from('rymon_streamer_controls')
+        .update({ is_paused: pauseState, updated_at: new Date().toISOString() })
+      if (creatorFilter) {
+        ctrlQuery = ctrlQuery.eq('creator', creatorFilter)
+      } else {
+        ctrlQuery = ctrlQuery.neq('license_key', '')
+      }
+      await ctrlQuery
+
+      let licQuery = supabase
+        .from('rymon_licenses')
+        .update({ is_paused: pauseState, status: newStatus })
+        .neq('status', 'BANNED')
+        .neq('status', 'EXPIRED')
+      if (creatorFilter) {
+        licQuery = licQuery.eq('creator_username', creatorFilter)
+      }
+      const { data } = await licQuery.select('license_key')
+      affected = data?.length || 0
+    } catch {}
+  }
+
+  const stored = getStoredLicenses()
+  stored.forEach((l) => {
+    if (l.status !== 'BANNED' && l.status !== 'EXPIRED') {
+      if (!creatorFilter || l.creator_username.toLowerCase() === creatorFilter.toLowerCase()) {
+        l.is_paused = pauseState
+        l.status = newStatus
+        affected++
+      }
+    }
+  })
+  saveStoredLicenses(stored)
+
+  const newAct: RymonActivity = {
+    id: Date.now(),
+    title: pauseState ? 'Global Keys Paused' : 'Global Keys Resumed',
+    event_type: pauseState ? 'BULK_PAUSE' : 'BULK_RESUME',
+    details: `${pauseState ? 'Paused' : 'Resumed'} all active keys by @${actorUsername}`,
+    actor_username: actorUsername,
+    status: 'SUCCESS',
+    created_at: new Date().toISOString()
+  }
+  saveStoredActivities([newAct, ...getStoredActivities()])
+
+  return {
+    success: true,
+    count: affected,
+    message: pauseState
+      ? 'All active license keys have been PAUSED.'
+      : 'All paused license keys have been RESUMED.'
+  }
+}
+
+export async function bulkResetAllHwidBackend(
+  actorUsername: string = 'rymon',
+  creatorFilter?: string
+): Promise<{ success: boolean; message: string }> {
+  if (supabase) {
+    try {
+      let licQuery = supabase
+        .from('rymon_licenses')
+        .update({ device_hwid: '', devices_used: 0 })
+        .neq('status', 'BANNED')
+      if (creatorFilter) {
+        licQuery = licQuery.eq('creator_username', creatorFilter)
+      }
+      await licQuery
+
+      let ctrlQuery = supabase
+        .from('rymon_streamer_controls')
+        .update({ device_hwid: '', devices_used: 0 })
+      if (creatorFilter) {
+        ctrlQuery = ctrlQuery.eq('creator', creatorFilter)
+      } else {
+        ctrlQuery = ctrlQuery.neq('license_key', '')
+      }
+      await ctrlQuery
+    } catch {}
+  }
+
+  const stored = getStoredLicenses()
+  stored.forEach((l) => {
+    if (!creatorFilter || l.creator_username.toLowerCase() === creatorFilter.toLowerCase()) {
+      l.device_hwid = ''
+      l.devices_used = 0
+    }
+  })
+  saveStoredLicenses(stored)
+
+  const newAct: RymonActivity = {
+    id: Date.now(),
+    title: 'Global HWID Reset',
+    event_type: 'BULK_HWID_RESET',
+    details: `Reset all HWID bindings by @${actorUsername}`,
+    actor_username: actorUsername,
+    status: 'SUCCESS',
+    created_at: new Date().toISOString()
+  }
+  saveStoredActivities([newAct, ...getStoredActivities()])
+
+  return {
+    success: true,
+    message: 'All hardware ID (HWID) bindings have been reset across keys.'
+  }
+}
+
+export async function bulkExtendAllKeysBackend(
+  days: number,
+  actorUsername: string = 'rymon',
+  creatorFilter?: string
+): Promise<{ success: boolean; count: number; message: string }> {
+  let count = 0
+  const msToAdd = days * 86400000
+
+  if (supabase) {
+    try {
+      let fetchQuery = supabase.from('rymon_licenses').select('*').neq('status', 'BANNED')
+      if (creatorFilter) {
+        fetchQuery = fetchQuery.eq('creator_username', creatorFilter)
+      }
+      const { data: rows } = await fetchQuery
+      if (rows && rows.length > 0) {
+        for (const r of rows) {
+          const base = r.expires_at ? new Date(r.expires_at).getTime() : Date.now()
+          const nextExp = new Date(Math.max(base, Date.now()) + msToAdd).toISOString()
+          await supabase
+            .from('rymon_licenses')
+            .update({ expires_at: nextExp, status: r.is_paused ? 'PAUSED' : 'ACTIVE' })
+            .eq('license_key', r.license_key)
+          count++
+        }
+      }
+    } catch {}
+  }
+
+  const stored = getStoredLicenses()
+  stored.forEach((l) => {
+    if (l.status !== 'BANNED') {
+      if (!creatorFilter || l.creator_username.toLowerCase() === creatorFilter.toLowerCase()) {
+        const base = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
+        l.expires_at = new Date(Math.max(base, Date.now()) + msToAdd).toISOString()
+        if (l.status === 'EXPIRED') l.status = 'ACTIVE'
+        count++
+      }
+    }
+  })
+  saveStoredLicenses(stored)
+
+  const newAct: RymonActivity = {
+    id: Date.now(),
+    title: `Bulk Extend (+${days}d)`,
+    event_type: 'BULK_EXTEND',
+    details: `Added +${days} Day(s) to all keys by @${actorUsername}`,
+    actor_username: actorUsername,
+    status: 'SUCCESS',
+    created_at: new Date().toISOString()
+  }
+  saveStoredActivities([newAct, ...getStoredActivities()])
+
+  return {
+    success: true,
+    count,
+    message: `Added +${days} Day(s) to all active licenses.`
+  }
+}
+
 // ============================================================================
 // HELPER STORAGE ROUTINES
 // ============================================================================
