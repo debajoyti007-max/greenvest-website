@@ -2427,8 +2427,11 @@ export async function registerWithReferral(
           return { success: false, message: 'Username is already taken. Please choose another username.' }
         }
 
-        // 3. Create the account in rymon_accounts using password_hash column
-        const newAccountId = `usr-${cleanUser.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Date.now().toString(36)}`
+        // 3. Create the account in rymon_accounts using password_hash column (let Postgres generate UUID id)
+        const fallbackAccountId =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12)
         const targetRole = (refRow.target_role === 'admin' ? 'admin' : 'reseller') as 'admin' | 'reseller'
         const startBalance = Number(refRow.initial_balance) || 0
         const uplinkUser = refRow.created_by || 'debajoyti'
@@ -2437,7 +2440,6 @@ export async function registerWithReferral(
         const { data: insertedAcc, error: insAccErr } = await supabase
           .from('rymon_accounts')
           .insert({
-            id: newAccountId,
             username: cleanUser,
             password_hash: cleanPass,
             email: cleanEmail,
@@ -2481,7 +2483,7 @@ export async function registerWithReferral(
         } catch {}
 
         const newUser: RymonAccount = {
-          id: insertedAcc?.id || newAccountId,
+          id: insertedAcc?.id || fallbackAccountId,
           username: cleanUser,
           email: cleanEmail,
           role: targetRole,
