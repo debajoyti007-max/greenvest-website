@@ -29,6 +29,8 @@ import {
   OFFICIAL_TELEGRAM_BOT_NAME,
   OFFICIAL_TELEGRAM_BOT_USERNAME,
   OFFICIAL_TELEGRAM_BOT_TOKEN,
+  OFFICIAL_OWNER_CHAT_ID,
+  selfServiceResetKeyHwidBackend,
   autoDetectTelegramChatId,
   pollAndReplyTelegramBotCommands,
   type RymonReferral,
@@ -194,7 +196,7 @@ export default function RymonConnect() {
   // Telegram Bot Integration State (Pre-configured with RYMON OFFICIAL @Rymon007bot)
   const [telegramConfig, setTelegramConfig] = useState<TelegramConfig>({
     bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
-    chat_id: '',
+    chat_id: OFFICIAL_OWNER_CHAT_ID,
     channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
     is_active: true
   })
@@ -202,6 +204,8 @@ export default function RymonConnect() {
   const [telegramTestMsg, setTelegramTestMsg] = useState('')
   const [telegramTesting, setTelegramTesting] = useState(false)
   const [telegramStatusMsg, setTelegramStatusMsg] = useState('')
+  const [selfResetMsg, setSelfResetMsg] = useState('')
+  const [selfResetBusy, setSelfResetBusy] = useState(false)
 
   // Derived Notification computations
   const pinnedAnnouncement = useMemo(() => {
@@ -279,6 +283,31 @@ export default function RymonConnect() {
     }
   }, [])
 
+  // 1B. Global 3-Second @Rymon007bot Responder (Services Customer 2/Day Key Resets & Owner Commands)
+  useEffect(() => {
+    let active = true
+    const runTgPoll = () => {
+      if (!active) return
+      const playingSet = new Set<string>()
+      streamerControls.forEach((ctrl) => {
+        if (isStreamerKeyActivelyPlaying(ctrl)) {
+          playingSet.add(ctrl.license_key.toUpperCase())
+        }
+      })
+      pollAndReplyTelegramBotCommands(keysList, usersList, playingSet, (discoveredId) => {
+        if (active) {
+          setTelegramConfig((prev) => ({ ...prev, chat_id: discoveredId }))
+        }
+      })
+    }
+    runTgPoll()
+    const tgFastTimer = setInterval(runTgPoll, 3000)
+    return () => {
+      active = false
+      clearInterval(tgFastTimer)
+    }
+  }, [keysList, usersList, streamerControls])
+
   // 2. Fetch Live Supabase Data when Authenticated
   useEffect(() => {
     if (!isAuthenticated) return
@@ -297,7 +326,7 @@ export default function RymonConnect() {
           ? fetchTelegramConfigBackend()
           : Promise.resolve({
               bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
-              chat_id: '',
+              chat_id: OFFICIAL_OWNER_CHAT_ID,
               channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
               is_active: true
             }),
@@ -347,7 +376,7 @@ export default function RymonConnect() {
 
     loadLiveData()
 
-    // Periodic 10-second heartbeat & playing-status sweep + @Rymon007bot live command responder
+    // Periodic 10-second heartbeat & playing-status sweep
     const statusPollTimer = setInterval(async () => {
       if (!isMounted) return
       const [c, l, u] = await Promise.all([
@@ -359,19 +388,6 @@ export default function RymonConnect() {
       setStreamerControls(c)
       setKeysList(l)
       setUsersList(u)
-      if (currentUser?.role === 'owner') {
-        const playingSet = new Set<string>()
-        c.forEach((ctrl) => {
-          if (isStreamerKeyActivelyPlaying(ctrl)) {
-            playingSet.add(ctrl.license_key.toUpperCase())
-          }
-        })
-        pollAndReplyTelegramBotCommands(l, u, playingSet, (discoveredId) => {
-          if (isMounted) {
-            setTelegramConfig((prev) => ({ ...prev, chat_id: discoveredId }))
-          }
-        })
-      }
     }, 10000)
 
     // Setup Realtime Phoenix Subscriptions
@@ -1413,6 +1429,40 @@ export default function RymonConnect() {
     }
   }
 
+  const handleCustomerSelfResetHwid = async (targetKey: string) => {
+    const clean = (targetKey || '').trim().toUpperCase()
+    if (!clean) {
+      setSelfResetMsg('ℹ️ Enter your License Key above first, then click Reset Key HWID (2/Day).')
+      showToast('ℹ️ Please enter your License Key first!')
+      return
+    }
+    setSelfResetBusy(true)
+    setSelfResetMsg('')
+    const isOwnerOverride = Boolean(isOwner)
+    const res = await selfServiceResetKeyHwidBackend(
+      clean,
+      isOwnerOverride,
+      currentUser?.username || 'WebUser'
+    )
+    setSelfResetBusy(false)
+    setSelfResetMsg(res.message)
+    showToast(res.message)
+    if (res.success) {
+      setKeysList((prev) =>
+        prev.map((k) =>
+          k.license_key.toUpperCase() === clean ? { ...k, device_hwid: '', devices_used: 0 } : k
+        )
+      )
+      setStreamerControls((prev) =>
+        prev.map((c) =>
+          c.license_key.toUpperCase() === clean
+            ? { ...c, device_hwid: '', devices_used: 0, is_online: false }
+            : c
+        )
+      )
+    }
+  }
+
   // 12. REFERRAL ONBOARDING & CONNECT API HANDLERS
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -2226,6 +2276,63 @@ export default function RymonConnect() {
                 >
                   <span>📥</span> DOWNLOAD RYMON STREAMER APK
                 </button>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={selfResetBusy}
+                    onClick={() => handleCustomerSelfResetHwid(keyInput)}
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      backgroundColor: 'rgba(5, 223, 114, 0.12)',
+                      border: '1px solid rgba(5, 223, 114, 0.4)',
+                      color: '#05df72',
+                      fontWeight: 800,
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {selfResetBusy ? 'RESETTING HWID...' : '🔄 RESET KEY HWID (2/DAY)'}
+                  </button>
+                  <a
+                    href="https://t.me/Rymon007bot?start=reset"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                      border: '1px solid rgba(56, 189, 248, 0.4)',
+                      color: '#38bdf8',
+                      fontWeight: 800,
+                      fontSize: '11px',
+                      textDecoration: 'none',
+                      textAlign: 'center',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    ✈️ TG RESET BOT (@Rymon007bot)
+                  </a>
+                </div>
+
+                {selfResetMsg && (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      background: 'rgba(5, 223, 114, 0.1)',
+                      border: '1px solid rgba(5, 223, 114, 0.35)',
+                      color: '#e2e8f0',
+                      fontSize: '12px'
+                    }}
+                  >
+                    {selfResetMsg}
+                  </div>
+                )}
 
                 {authError && <div style={styles.errorBox}>{authError}</div>}
               </form>
@@ -4947,16 +5054,25 @@ export default function RymonConnect() {
                     )}
 
                     <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
-                      <h5 style={{ fontSize: '13px', color: '#f8fafc', marginBottom: '8px', fontWeight: 700 }}>
-                        🤖 Live Slash Commands Registered on {OFFICIAL_TELEGRAM_BOT_USERNAME}
+                      <h5 style={{ fontSize: '13px', color: '#05df72', marginBottom: '6px', fontWeight: 800 }}>
+                        🔄 Normal User Self-Service Commands (Max 2 Resets / Day):
                       </h5>
-                      <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.8 }}>
-                        <div>• <code>/start</code> — Auto-links your Telegram Chat ID &amp; opens VIP menu</div>
+                      <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.75, marginBottom: '12px' }}>
+                        <div>• <b>Paste Key Directly</b> (e.g. <code>RYMON-FF-XXXX-XXXX</code>) — Instant HWID Reset (Max 2/Day)</div>
+                        <div>• <code>/reset RYMON-XXXX</code> — Unbind device HWID (2 resets/day limit enforced)</div>
+                        <div>• <code>/check RYMON-XXXX</code> — Check key status, expiry &amp; remaining daily resets (<code>2/2</code>)</div>
+                        <div>• <code>/apk</code> — Direct download link for Latest RYMON STREAMER APK</div>
+                      </div>
+                      <h5 style={{ fontSize: '13px', color: '#00d9ff', marginBottom: '6px', fontWeight: 800 }}>
+                        👑 Root Owner Commands (@montage007pc • ID {OFFICIAL_OWNER_CHAT_ID}):
+                      </h5>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.75 }}>
                         <div>• <code>/status</code> — Live Playing Now, Active, Unused &amp; Expired key counts</div>
                         <div>• <code>/unused</code> — Instant copyable list of all Unused (Waiting) keys</div>
                         <div>• <code>/playing</code> — Lists all players currently IN-GAME right now</div>
-                        <div>• <code>/check RYMON-XXXX</code> — Inspects any key&apos;s status, HWID &amp; expiry</div>
-                        <div>• <code>/id</code> — Displays your exact Telegram Chat / Channel ID</div>
+                        <div>• <code>/gen 1d</code> | <code>3d</code> | <code>7d</code> | <code>15d</code> | <code>30d</code> | <code>2h</code> — Mint a VIP Key from Telegram</div>
+                        <div>• <code>/pause KEY</code> &amp; <code>/resume KEY</code> — Freeze or restore key countdown timer</div>
+                        <div>• <code>/reset KEY</code> — Unlimited Owner Override Reset (restores user&apos;s 2/2 quota)</div>
                       </div>
                     </div>
                   </div>
@@ -6149,6 +6265,44 @@ public class ServerConfig {
                         {record?.is_paused ? '▶️ RESUME KEY' : '⏸️ PAUSE KEY'}
                       </button>
                     )}
+                    {currentKey && (
+                      <button
+                        onClick={() => handleCustomerSelfResetHwid(currentKey)}
+                        disabled={selfResetBusy}
+                        style={{
+                          backgroundColor: 'rgba(5, 223, 114, 0.15)',
+                          border: '1px solid #05df72',
+                          color: '#05df72',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {selfResetBusy ? 'RESETTING...' : isOwner ? '🔄 RESET HWID' : '🔄 RESET HWID (2/DAY)'}
+                      </button>
+                    )}
+                    <a
+                      href="https://t.me/Rymon007bot?start=reset"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                        border: '1px solid #38bdf8',
+                        color: '#38bdf8',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        textDecoration: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      <span>✈️</span> @Rymon007bot
+                    </a>
                     <button
                       onClick={() => setShowDownloadModal(true)}
                       style={{

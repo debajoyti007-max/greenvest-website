@@ -2896,6 +2896,251 @@ export async function deleteNotificationBackend(id: number): Promise<boolean> {
 export const OFFICIAL_TELEGRAM_BOT_NAME = 'RYMON OFFICIAL'
 export const OFFICIAL_TELEGRAM_BOT_USERNAME = '@Rymon007bot'
 export const OFFICIAL_TELEGRAM_BOT_TOKEN = '8866404681:AAHQbK2PXyx_Y2ISGmhytxRF6G7Pm4oZO6A'
+export const OFFICIAL_OWNER_CHAT_ID = '5831000769'
+
+export async function selfServiceResetKeyHwidBackend(
+  rawKey: string,
+  isOwnerOverride: boolean = false,
+  actorLabel: string = 'Customer'
+): Promise<{
+  success: boolean
+  message: string
+  htmlReply: string
+  remainingResets: number
+  usedToday: number
+  dailyLimit: number
+}> {
+  const cleanKey = (rawKey || '').trim().toUpperCase()
+  const DAILY_LIMIT = 2
+  const DAY_WINDOW_MS = 86400000
+  const nowMs = Date.now()
+  const nowIso = new Date(nowMs).toISOString()
+
+  if (!cleanKey) {
+    return {
+      success: false,
+      message: 'Please enter a valid license key.',
+      htmlReply: `ℹ️ <b>Usage:</b> Send <code>/reset RYMON-XXXX-XXXX</code> or simply paste your license key directly!`,
+      remainingResets: DAILY_LIMIT,
+      usedToday: 0,
+      dailyLimit: DAILY_LIMIT
+    }
+  }
+
+  // 1. Fetch key from Supabase (or local fallback)
+  let licRecord: RymonLicense | null = null
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('rymon_licenses')
+        .select('*')
+        .ilike('license_key', cleanKey)
+        .maybeSingle()
+      if (data) licRecord = data as RymonLicense
+    } catch {}
+  }
+  if (!licRecord) {
+    const localMatch = getStoredLicenses().find((l) => l.license_key.toUpperCase() === cleanKey)
+    if (localMatch) licRecord = localMatch
+  }
+
+  if (!licRecord) {
+    return {
+      success: false,
+      message: `Key ${cleanKey} not found.`,
+      htmlReply: `❌ <b>Key Not Found:</b> <code>${cleanKey}</code>\nPlease double-check your license key and try again.`,
+      remainingResets: 0,
+      usedToday: 0,
+      dailyLimit: DAILY_LIMIT
+    }
+  }
+
+  if (licRecord.status === 'BANNED') {
+    return {
+      success: false,
+      message: `Key ${cleanKey} is BANNED and cannot be reset.`,
+      htmlReply: `🚫 <b>Key Suspended:</b> <code>${cleanKey}</code> is BANNED and cannot be reset.`,
+      remainingResets: 0,
+      usedToday: DAILY_LIMIT,
+      dailyLimit: DAILY_LIMIT
+    }
+  }
+
+  const isExpired =
+    licRecord.status === 'EXPIRED' ||
+    Boolean(licRecord.expires_at && new Date(licRecord.expires_at).getTime() <= nowMs)
+  if (isExpired) {
+    return {
+      success: false,
+      message: `Key ${cleanKey} has EXPIRED.`,
+      htmlReply: `⏰ <b>Key Expired:</b> <code>${cleanKey}</code> has expired. Please contact your seller to renew.`,
+      remainingResets: 0,
+      usedToday: DAILY_LIMIT,
+      dailyLimit: DAILY_LIMIT
+    }
+  }
+
+  // 2. Load cloud-synced daily HWID reset log from Supabase rymon_system_config
+  let logMap: Record<string, number[]> = getHwidResetLog()
+  if (supabase) {
+    try {
+      const { data: cfgRow } = await supabase
+        .from('rymon_system_config')
+        .select('value')
+        .eq('key', 'hwid_reset_daily_log')
+        .maybeSingle()
+      if (cfgRow?.value && typeof cfgRow.value === 'object') {
+        logMap = { ...logMap, ...(cfgRow.value as Record<string, number[]>) }
+      }
+    } catch {}
+  }
+
+  const exactKey = licRecord.license_key.toUpperCase()
+  const recentResets = (logMap[exactKey] || []).filter((ts) => nowMs - Number(ts) < DAY_WINDOW_MS)
+
+  if (!isOwnerOverride) {
+    if (recentResets.length >= DAILY_LIMIT) {
+      const oldestTs = Math.min(...recentResets)
+      const waitMs = Math.max(60000, DAY_WINDOW_MS - (nowMs - oldestTs))
+      const waitStr = formatDurationShort(waitMs)
+      return {
+        success: false,
+        message: `Daily limit reached (2/2 resets used today for ${exactKey}). Next reset in ~${waitStr}.`,
+        htmlReply: [
+          `🛡️ <b>DAILY HWID RESET LIMIT REACHED (2/2)</b>`,
+          ``,
+          `• <b>Key:</b> <code>${exactKey}</code>`,
+          `• <b>Resets Used Today:</b> 2 / 2 (Max 2 per day)`,
+          `• <b>Next Reset Available In:</b> ~${waitStr}`,
+          ``,
+          `<i>Normal users can reset their key up to 2 times per day. Contact your seller or @montage007pc if you need an emergency override.</i>`
+        ].join('\n'),
+        remainingResets: 0,
+        usedToday: DAILY_LIMIT,
+        dailyLimit: DAILY_LIMIT
+      }
+    }
+    recentResets.push(nowMs)
+    logMap[exactKey] = recentResets
+  } else {
+    // Owner override clears the daily lock so the customer gets 2/2 fresh resets again
+    delete logMap[exactKey]
+  }
+
+  saveHwidResetLog(logMap)
+
+  const nextStatus = licRecord.is_paused
+    ? 'PAUSED'
+    : licRecord.expires_at
+    ? 'ACTIVE'
+    : 'WAITING'
+
+  if (supabase) {
+    try {
+      await supabase
+        .from('rymon_licenses')
+        .update({
+          device_hwid: '',
+          devices_used: 0,
+          status: nextStatus,
+          updated_at: nowIso
+        })
+        .eq('license_key', licRecord.license_key)
+
+      await supabase
+        .from('rymon_streamer_controls')
+        .update({
+          device_hwid: '',
+          devices_used: 0,
+          is_online: false,
+          updated_at: nowIso
+        })
+        .eq('license_key', licRecord.license_key)
+
+      await supabase.from('rymon_activities').insert({
+        title: isOwnerOverride ? 'Owner Override HWID Reset' : 'User Self-Service HWID Reset',
+        event_type: 'HWID_RESET',
+        details: isOwnerOverride
+          ? `Owner override cleared HWID & reset 2/day quota for ${exactKey}`
+          : `Device HWID unbound for ${exactKey} (${recentResets.length}/${DAILY_LIMIT} used today) by ${actorLabel}`,
+        actor_username: actorLabel,
+        status: 'SUCCESS'
+      })
+    } catch {}
+  }
+
+  const stored = getStoredLicenses()
+  const localItem = stored.find((l) => l.license_key.toUpperCase() === exactKey)
+  if (localItem) {
+    localItem.device_hwid = ''
+    localItem.devices_used = 0
+    localItem.status = nextStatus
+    saveStoredLicenses(stored)
+  }
+
+  const usedToday = isOwnerOverride ? 0 : recentResets.length
+  const remainingResets = isOwnerOverride ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - usedToday)
+
+  const htmlReply = isOwnerOverride
+    ? [
+        `👑 <b>OWNER OVERRIDE — HWID RESET COMPLETE</b>`,
+        ``,
+        `• <b>Key:</b> <code>${exactKey}</code>`,
+        `• <b>Game:</b> ${licRecord.game}`,
+        `• <b>Device Lock:</b> Cleared (Unbound)`,
+        `• <b>Customer Daily Quota:</b> Restored to 2 / 2 today`,
+        `• <b>Timer:</b> Preserved`
+      ].join('\n')
+    : [
+        `✅ <b>KEY HWID RESET SUCCESSFUL!</b>`,
+        ``,
+        `• <b>Key:</b> <code>${exactKey}</code>`,
+        `• <b>Game:</b> ${licRecord.game} (${licRecord.plan_duration})`,
+        `• <b>Device Lock:</b> Unbound (Ready for new login)`,
+        `• <b>Daily Resets Used:</b> ${usedToday} / ${DAILY_LIMIT} today (<b>${remainingResets} left today</b>)`,
+        `• <b>Expiry Timer:</b> Preserved`
+      ].join('\n')
+
+  return {
+    success: true,
+    message: `✅ HWID cleared for ${exactKey}! (${remainingResets}/${DAILY_LIMIT} daily resets left today)`,
+    htmlReply,
+    remainingResets,
+    usedToday,
+    dailyLimit: DAILY_LIMIT
+  }
+}
+
+export async function getKeyDailyResetUsage(rawKey: string): Promise<{
+  usedToday: number
+  remainingResets: number
+  dailyLimit: number
+}> {
+  const cleanKey = (rawKey || '').trim().toUpperCase()
+  const DAILY_LIMIT = 2
+  const DAY_WINDOW_MS = 86400000
+  const nowMs = Date.now()
+  let logMap: Record<string, number[]> = getHwidResetLog()
+  if (supabase) {
+    try {
+      const { data: cfgRow } = await supabase
+        .from('rymon_system_config')
+        .select('value')
+        .eq('key', 'hwid_reset_daily_log')
+        .maybeSingle()
+      if (cfgRow?.value && typeof cfgRow.value === 'object') {
+        logMap = { ...logMap, ...(cfgRow.value as Record<string, number[]>) }
+      }
+    } catch {}
+  }
+  const recent = (logMap[cleanKey] || []).filter((ts) => nowMs - Number(ts) < DAY_WINDOW_MS)
+  const usedToday = Math.min(DAILY_LIMIT, recent.length)
+  return {
+    usedToday,
+    remainingResets: Math.max(0, DAILY_LIMIT - usedToday),
+    dailyLimit: DAILY_LIMIT
+  }
+}
 
 export async function autoDetectTelegramChatId(
   botToken: string = OFFICIAL_TELEGRAM_BOT_TOKEN
@@ -2911,10 +3156,19 @@ export async function autoDetectTelegramChatId(
     const resp = await fetch(`https://api.telegram.org/bot${cleanToken}/getUpdates?limit=50`)
     const json = await resp.json()
     if (!json.ok || !Array.isArray(json.result) || json.result.length === 0) {
+      // Fallback to verified Owner Chat ID if getUpdates queue was already consumed
+      await saveTelegramConfigBackend({
+        bot_token: cleanToken,
+        chat_id: OFFICIAL_OWNER_CHAT_ID,
+        channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
+        is_active: true
+      })
       return {
-        success: false,
-        message:
-          'No messages received by @Rymon007bot yet. Open @Rymon007bot on Telegram and tap START (or send any message in your channel), then click Auto-Detect again!'
+        success: true,
+        chatId: OFFICIAL_OWNER_CHAT_ID,
+        chatTitle: 'Montage (@montage007pc)',
+        chatUsername: OFFICIAL_TELEGRAM_BOT_USERNAME,
+        message: `✅ Connected to Owner Chat ID ${OFFICIAL_OWNER_CHAT_ID} (@montage007pc) via @Rymon007bot!`
       }
     }
 
@@ -2953,8 +3207,11 @@ export async function autoDetectTelegramChatId(
     }
 
     return {
-      success: false,
-      message: 'Open @Rymon007bot in Telegram and tap START first, then click Auto-Detect.'
+      success: true,
+      chatId: OFFICIAL_OWNER_CHAT_ID,
+      chatTitle: 'Montage (@montage007pc)',
+      chatUsername: OFFICIAL_TELEGRAM_BOT_USERNAME,
+      message: `✅ Connected to Owner Chat ID ${OFFICIAL_OWNER_CHAT_ID} via @Rymon007bot!`
     }
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : 'Network error'
@@ -2965,7 +3222,7 @@ export async function autoDetectTelegramChatId(
 export async function fetchTelegramConfigBackend(): Promise<TelegramConfig> {
   const defaultCfg: TelegramConfig = {
     bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
-    chat_id: '',
+    chat_id: OFFICIAL_OWNER_CHAT_ID,
     channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
     is_active: true
   }
@@ -2983,15 +3240,14 @@ export async function fetchTelegramConfigBackend(): Promise<TelegramConfig> {
       if (!error && data) {
         resolvedCfg = {
           bot_token: data.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN,
-          chat_id: data.chat_id || '',
+          chat_id: data.chat_id || OFFICIAL_OWNER_CHAT_ID,
           channel_username:
             data.channel_username && data.channel_username !== '@RymonGhostStreamer'
               ? data.channel_username
               : OFFICIAL_TELEGRAM_BOT_USERNAME,
           is_active: data.is_active ?? true
         }
-        // If DB still had blank bot_token, persist the official token automatically
-        if (!data.bot_token) {
+        if (!data.bot_token || !data.chat_id) {
           saveTelegramConfigBackend(resolvedCfg).then(() => {}, () => {})
         }
       } else {
@@ -3005,21 +3261,12 @@ export async function fetchTelegramConfigBackend(): Promise<TelegramConfig> {
         const parsed = JSON.parse(raw)
         resolvedCfg = {
           bot_token: parsed.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN,
-          chat_id: parsed.chat_id || '',
+          chat_id: parsed.chat_id || OFFICIAL_OWNER_CHAT_ID,
           channel_username: parsed.channel_username || OFFICIAL_TELEGRAM_BOT_USERNAME,
           is_active: parsed.is_active ?? true
         }
       }
     } catch {}
-  }
-
-  // If chat_id is not set yet, silently check if user has tapped /start on @Rymon007bot
-  if (!resolvedCfg.chat_id) {
-    const auto = await autoDetectTelegramChatId(resolvedCfg.bot_token)
-    if (auto.success && auto.chatId) {
-      resolvedCfg.chat_id = auto.chatId
-      if (auto.chatUsername) resolvedCfg.channel_username = auto.chatUsername
-    }
   }
 
   return resolvedCfg
@@ -3028,7 +3275,7 @@ export async function fetchTelegramConfigBackend(): Promise<TelegramConfig> {
 export async function saveTelegramConfigBackend(config: TelegramConfig): Promise<boolean> {
   const normalized: TelegramConfig = {
     bot_token: config.bot_token?.trim() || OFFICIAL_TELEGRAM_BOT_TOKEN,
-    chat_id: config.chat_id?.trim() || '',
+    chat_id: config.chat_id?.trim() || OFFICIAL_OWNER_CHAT_ID,
     channel_username: config.channel_username?.trim() || OFFICIAL_TELEGRAM_BOT_USERNAME,
     is_active: config.is_active ?? true
   }
@@ -3061,20 +3308,7 @@ export async function dispatchTelegramMessage(
   text: string
 ): Promise<{ success: boolean; message: string; detectedChatId?: string }> {
   const activeToken = (botToken || OFFICIAL_TELEGRAM_BOT_TOKEN).trim()
-  let activeChatId = (chatId || '').trim()
-
-  if (!activeChatId) {
-    const auto = await autoDetectTelegramChatId(activeToken)
-    if (auto.success && auto.chatId) {
-      activeChatId = auto.chatId
-    } else {
-      return {
-        success: false,
-        message:
-          'No Chat ID linked yet! Open @Rymon007bot on Telegram and tap START (or enter your Channel @username), then click Test Dispatch again.'
-      }
-    }
-  }
+  const activeChatId = (chatId || OFFICIAL_OWNER_CHAT_ID).trim()
 
   try {
     const resp = await fetch(`https://api.telegram.org/bot${activeToken}/sendMessage`, {
@@ -3104,6 +3338,7 @@ export async function dispatchTelegramMessage(
 }
 
 const TG_OFFSET_STORAGE_KEY = 'rymon_tg_bot_last_update_id_v1'
+let isPollingTelegramLock = false
 
 export async function pollAndReplyTelegramBotCommands(
   keysList: RymonLicense[],
@@ -3111,6 +3346,8 @@ export async function pollAndReplyTelegramBotCommands(
   onlineKeySet: Set<string>,
   onChatIdDiscovered?: (chatId: string) => void
 ): Promise<void> {
+  if (isPollingTelegramLock) return
+  isPollingTelegramLock = true
   try {
     const lastOffset = Number(localStorage.getItem(TG_OFFSET_STORAGE_KEY) || '0')
     const url = `https://api.telegram.org/bot${OFFICIAL_TELEGRAM_BOT_TOKEN}/getUpdates?timeout=0${
@@ -3123,111 +3360,80 @@ export async function pollAndReplyTelegramBotCommands(
     let maxUpdateId = lastOffset
     for (const upd of json.result) {
       if (upd.update_id > maxUpdateId) maxUpdateId = upd.update_id
+    }
+    // Immediately advance offset locally and acknowledge on Telegram so no duplicate reply occurs
+    localStorage.setItem(TG_OFFSET_STORAGE_KEY, String(maxUpdateId))
+    fetch(
+      `https://api.telegram.org/bot${OFFICIAL_TELEGRAM_BOT_TOKEN}/getUpdates?timeout=0&offset=${maxUpdateId + 1}`
+    ).then(() => {}, () => {})
+
+    for (const upd of json.result) {
       const msg = upd.message || upd.channel_post
       if (!msg || !msg.chat || !msg.text) continue
 
       const chatId = String(msg.chat.id)
       const text = String(msg.text).trim()
       const senderName = msg.from?.first_name || msg.chat.title || 'VIP User'
+      const senderUser = msg.from?.username ? `@${msg.from.username}` : senderName
+      const isOwnerChat = chatId === OFFICIAL_OWNER_CHAT_ID
 
-      // Ensure chat_id is saved if none was saved yet
-      const rawCfg = localStorage.getItem('rymon_telegram_config')
-      const parsedCfg = rawCfg ? JSON.parse(rawCfg) : null
-      if (!parsedCfg?.chat_id) {
-        await saveTelegramConfigBackend({
-          bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
-          chat_id: chatId,
-          channel_username: msg.chat.username ? `@${msg.chat.username}` : OFFICIAL_TELEGRAM_BOT_USERNAME,
-          is_active: true
-        })
-        if (onChatIdDiscovered) onChatIdDiscovered(chatId)
+      if (isOwnerChat && onChatIdDiscovered) {
+        onChatIdDiscovered(chatId)
       }
 
-      if (text.startsWith('/start')) {
-        const reply = [
+      const lowerText = text.toLowerCase()
+
+      if (lowerText.startsWith('/start') || lowerText.startsWith('/help')) {
+        const customerLines = [
           `⚡ <b>RYMON OFFICIAL BOT (@Rymon007bot)</b>`,
-          `Welcome, <b>${senderName}</b>! Your Telegram is now linked to the Sovereign Command Center.`,
+          `Welcome, <b>${senderName}</b>!`,
           ``,
-          `🆔 <b>Your Chat ID:</b> <code>${chatId}</code>`,
-          `🌐 <b>Web Portal:</b> https://greenvest.shop/`,
-          ``,
-          `<b>📋 Available Commands:</b>`,
-          `• /status — Live Server &amp; Key Telemetry`,
-          `• /unused — Copy all Unused (Waiting) Keys`,
-          `• /playing — View Players Currently In-Game`,
-          `• /check <code>KEY</code> — Inspect any License Key`,
-          `• /id — Show your Telegram Chat ID`
-        ].join('\n')
-        await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
-      } else if (text.startsWith('/id')) {
+          `🔄 <b>24/7 Self-Service Key Reset (Max 2/Day):</b>`,
+          `• Simply <b>send your License Key</b> (e.g. <code>RYMON-FF-XXXX-XXXX</code>) or type:`,
+          `• /reset <code>YOUR_KEY</code> — Unbind device HWID (2 resets/day)`,
+          `• /check <code>YOUR_KEY</code> — Check key expiry, status &amp; daily resets`,
+          `• /apk — Download Latest RYMON STREAMER APK`,
+          `• /id — Show your Telegram Chat ID (<code>${chatId}</code>)`
+        ]
+        if (isOwnerChat) {
+          customerLines.push(
+            ``,
+            `👑 <b>ROOT OWNER COMMAND CENTER (@montage007pc):</b>`,
+            `• /status — Live Server &amp; Key Telemetry`,
+            `• /unused — Copy all Unused (Waiting) Keys`,
+            `• /playing — View Players Currently In-Game`,
+            `• /gen <code>1d</code> | <code>3d</code> | <code>7d</code> | <code>15d</code> | <code>30d</code> | <code>2h</code> — Mint VIP Key`,
+            `• /pause <code>KEY</code> — Freeze Key &amp; Timer`,
+            `• /resume <code>KEY</code> — Resume Key &amp; Restore Timer`,
+            `• /reset <code>KEY</code> — Unlimited Owner Override Reset`
+          )
+        }
+        customerLines.push(``, `🌐 <b>Portal:</b> https://greenvest.shop/`)
+        await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, customerLines.join('\n'))
+      } else if (lowerText.startsWith('/id')) {
         await dispatchTelegramMessage(
           OFFICIAL_TELEGRAM_BOT_TOKEN,
           chatId,
-          `🆔 <b>Your Telegram Chat ID:</b> <code>${chatId}</code>`
+          `🆔 <b>Your Telegram Chat ID:</b> <code>${chatId}</code>${isOwnerChat ? ' (👑 Root Owner Verified)' : ''}`
         )
-      } else if (text.startsWith('/status')) {
-        const unusedCount = keysList.filter((k) => k.status === 'WAITING').length
-        const activeCount = keysList.filter((k) => k.status === 'ACTIVE').length
-        const pausedCount = keysList.filter((k) => k.status === 'PAUSED' || k.is_paused).length
-        const expiredCount = keysList.filter((k) => k.status === 'EXPIRED').length
+      } else if (lowerText.startsWith('/apk')) {
+        const policy = getSovereignSecurityPolicy()
         const reply = [
-          `📊 <b>RYMON OFFICIAL — LIVE PLATFORM STATUS</b>`,
+          `📲 <b>RYMON STREAMER OFFICIAL APK (v${policy.apk_latest_version || '2.4'})</b>`,
           ``,
-          `🟢 <b>Playing Now (In-Game):</b> ${onlineKeySet.size}`,
-          `⚡ <b>Active Keys:</b> ${activeCount}`,
-          `🟡 <b>Unused (Waiting) Keys:</b> ${unusedCount}`,
-          `⏸️ <b>Paused Keys:</b> ${pausedCount}`,
-          `🔴 <b>Expired Keys:</b> ${expiredCount}`,
-          `🔑 <b>Total Keys:</b> ${keysList.length}`,
-          `👥 <b>Registered Staff/Resellers:</b> ${usersList.length}`,
+          `⬇️ <b>Direct Download:</b>`,
+          `https://greenvest.shop/download/RYMON_STREAMER_LATEST.apk`,
           ``,
-          `🌐 https://greenvest.shop/`
+          `✨ <b>Release Notes:</b> ${policy.apk_release_notes || 'Instant Website Remote Hack Toggles + Live Heartbeat Engine'}`,
+          `🌐 <b>Web Remote Control:</b> https://greenvest.shop/`
         ].join('\n')
         await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
-      } else if (text.startsWith('/unused')) {
-        const unusedKeys = keysList.filter((k) => k.status === 'WAITING')
-        if (unusedKeys.length === 0) {
-          await dispatchTelegramMessage(
-            OFFICIAL_TELEGRAM_BOT_TOKEN,
-            chatId,
-            `🟡 No Unused (WAITING) keys found right now.`
-          )
-        } else {
-          const listStr = unusedKeys
-            .slice(0, 30)
-            .map((k, idx) => `${idx + 1}. <code>${k.license_key}</code> (${k.plan_duration} • ${k.game})`)
-            .join('\n')
-          const reply = [
-            `🟡 <b>UNUSED (WAITING) KEYS (${unusedKeys.length})</b>`,
-            `<i>Tap any key below to copy:</i>`,
-            ``,
-            listStr,
-            unusedKeys.length > 30 ? `\n<i>...and ${unusedKeys.length - 30} more on greenvest.shop</i>` : ''
-          ].join('\n')
-          await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
-        }
-      } else if (text.startsWith('/playing')) {
-        const playingKeys = keysList.filter((k) => onlineKeySet.has(k.license_key.toUpperCase()))
-        if (playingKeys.length === 0) {
-          await dispatchTelegramMessage(
-            OFFICIAL_TELEGRAM_BOT_TOKEN,
-            chatId,
-            `⚪ <b>0 Players In-Game Right Now.</b> All bound keys are currently idle/offline.`
-          )
-        } else {
-          const listStr = playingKeys
-            .map(
-              (k, idx) =>
-                `${idx + 1}. 🟢 <code>${k.license_key}</code> — ${k.game} (@${k.creator_username})`
-            )
-            .join('\n')
-          await dispatchTelegramMessage(
-            OFFICIAL_TELEGRAM_BOT_TOKEN,
-            chatId,
-            `🟢 <b>CURRENTLY PLAYING IN-GAME (${playingKeys.length})</b>\n\n${listStr}`
-          )
-        }
-      } else if (text.startsWith('/check')) {
+      } else if (lowerText.startsWith('/reset')) {
+        const parts = text.split(/\s+/)
+        const targetKey = (parts[1] || '').trim().toUpperCase()
+        const res = await selfServiceResetKeyHwidBackend(targetKey, isOwnerChat, `TG:${senderUser}`)
+        await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, res.htmlReply)
+      } else if (lowerText.startsWith('/check')) {
         const parts = text.split(/\s+/)
         const queryKey = (parts[1] || '').trim().toUpperCase()
         if (!queryKey) {
@@ -3237,7 +3443,17 @@ export async function pollAndReplyTelegramBotCommands(
             `ℹ️ Usage: <code>/check RYMON-XXXX-XXXX</code>`
           )
         } else {
-          const found = keysList.find((k) => k.license_key.toUpperCase() === queryKey)
+          let found = keysList.find((k) => k.license_key.toUpperCase() === queryKey)
+          if (!found && supabase) {
+            try {
+              const { data } = await supabase
+                .from('rymon_licenses')
+                .select('*')
+                .ilike('license_key', queryKey)
+                .maybeSingle()
+              if (data) found = data as RymonLicense
+            } catch {}
+          }
           if (!found) {
             await dispatchTelegramMessage(
               OFFICIAL_TELEGRAM_BOT_TOKEN,
@@ -3246,6 +3462,7 @@ export async function pollAndReplyTelegramBotCommands(
             )
           } else {
             const isPlaying = onlineKeySet.has(found.license_key.toUpperCase())
+            const quota = await getKeyDailyResetUsage(found.license_key)
             const reply = [
               `🔍 <b>KEY INSPECTION:</b> <code>${found.license_key}</code>`,
               ``,
@@ -3253,17 +3470,179 @@ export async function pollAndReplyTelegramBotCommands(
               `• <b>Game:</b> ${found.game}`,
               `• <b>Plan:</b> ${found.plan_duration} (Max 30D)`,
               `• <b>Seller:</b> @${found.creator_username}`,
-              `• <b>HWID:</b> <code>${found.device_hwid || 'Unbound (Waiting 1st Login)'}</code>`,
+              `• <b>HWID:</b> <code>${found.device_hwid || 'Unbound (Ready for Login)'}</code>`,
+              `• <b>Daily Resets Left:</b> <b>${quota.remainingResets} / ${quota.dailyLimit} today</b>`,
               `• <b>Expires:</b> ${found.expires_at ? new Date(found.expires_at).toLocaleString('en-IN') : 'Starts on 1st APK Login'}`
             ].join('\n')
             await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
           }
         }
+      } else if (
+        lowerText.startsWith('/status') ||
+        lowerText.startsWith('/unused') ||
+        lowerText.startsWith('/playing') ||
+        lowerText.startsWith('/gen') ||
+        lowerText.startsWith('/pause') ||
+        lowerText.startsWith('/resume')
+      ) {
+        if (!isOwnerChat) {
+          await dispatchTelegramMessage(
+            OFFICIAL_TELEGRAM_BOT_TOKEN,
+            chatId,
+            `🔒 <b>Restricted Command:</b> This command is reserved for the Root Owner (@montage007pc).\n\n💡 <i>Normal users can use <code>/reset KEY</code> (max 2/day), <code>/check KEY</code>, or <code>/apk</code>.</i>`
+          )
+          continue
+        }
+
+        // Refresh keys from Supabase if in-memory list is empty (e.g. unauthenticated screen)
+        let activeKeysList = keysList
+        if (activeKeysList.length === 0 && supabase) {
+          try {
+            const { data } = await supabase
+              .from('rymon_licenses')
+              .select('*')
+              .order('created_at', { ascending: false })
+            if (data) activeKeysList = data as RymonLicense[]
+          } catch {}
+        }
+
+        if (lowerText.startsWith('/status')) {
+          const unusedCount = activeKeysList.filter((k) => k.status === 'WAITING').length
+          const activeCount = activeKeysList.filter((k) => k.status === 'ACTIVE').length
+          const pausedCount = activeKeysList.filter((k) => k.status === 'PAUSED' || k.is_paused).length
+          const expiredCount = activeKeysList.filter((k) => k.status === 'EXPIRED').length
+          const reply = [
+            `📊 <b>RYMON OFFICIAL — LIVE PLATFORM STATUS</b>`,
+            ``,
+            `🟢 <b>Playing Now (In-Game):</b> ${onlineKeySet.size}`,
+            `⚡ <b>Active Keys:</b> ${activeCount}`,
+            `🟡 <b>Unused (Waiting) Keys:</b> ${unusedCount}`,
+            `⏸️ <b>Paused Keys:</b> ${pausedCount}`,
+            `🔴 <b>Expired Keys:</b> ${expiredCount}`,
+            `🔑 <b>Total Keys:</b> ${activeKeysList.length}`,
+            `👥 <b>Registered Staff/Resellers:</b> ${usersList.length}`,
+            ``,
+            `🌐 https://greenvest.shop/`
+          ].join('\n')
+          await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
+        } else if (lowerText.startsWith('/unused')) {
+          const unusedKeys = activeKeysList.filter((k) => k.status === 'WAITING')
+          if (unusedKeys.length === 0) {
+            await dispatchTelegramMessage(
+              OFFICIAL_TELEGRAM_BOT_TOKEN,
+              chatId,
+              `🟡 No Unused (WAITING) keys found right now.`
+            )
+          } else {
+            const listStr = unusedKeys
+              .slice(0, 30)
+              .map((k, idx) => `${idx + 1}. <code>${k.license_key}</code> (${k.plan_duration} • ${k.game})`)
+              .join('\n')
+            const reply = [
+              `🟡 <b>UNUSED (WAITING) KEYS (${unusedKeys.length})</b>`,
+              `<i>Tap any key below to copy:</i>`,
+              ``,
+              listStr,
+              unusedKeys.length > 30 ? `\n<i>...and ${unusedKeys.length - 30} more on greenvest.shop</i>` : ''
+            ].join('\n')
+            await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
+          }
+        } else if (lowerText.startsWith('/playing')) {
+          const playingKeys = activeKeysList.filter((k) => onlineKeySet.has(k.license_key.toUpperCase()))
+          if (playingKeys.length === 0) {
+            await dispatchTelegramMessage(
+              OFFICIAL_TELEGRAM_BOT_TOKEN,
+              chatId,
+              `⚪ <b>0 Players In-Game Right Now.</b> All bound keys are currently idle/offline.`
+            )
+          } else {
+            const listStr = playingKeys
+              .map(
+                (k, idx) =>
+                  `${idx + 1}. 🟢 <code>${k.license_key}</code> — ${k.game} (@${k.creator_username})`
+              )
+              .join('\n')
+            await dispatchTelegramMessage(
+              OFFICIAL_TELEGRAM_BOT_TOKEN,
+              chatId,
+              `🟢 <b>CURRENTLY PLAYING IN-GAME (${playingKeys.length})</b>\n\n${listStr}`
+            )
+          }
+        } else if (lowerText.startsWith('/gen')) {
+          const parts = text.split(/\s+/)
+          const arg = (parts[1] || '1d').toLowerCase()
+          const durationMap: Record<string, string> = {
+            '2h': '2 Hours',
+            '1d': '1 Day',
+            '3d': '3 Days',
+            '7d': '7 Days',
+            '15d': '15 Days',
+            '30d': '30 Days'
+          }
+          const planDuration = durationMap[arg] || '1 Day'
+          const ownerCreator: RymonAccount = {
+            id: '1',
+            username: 'debajoyti',
+            email: 'debajoyti007@gmail.com',
+            role: 'owner',
+            balance: 9999999,
+            uplink: 'ROOT',
+            status: 'ACTIVE'
+          }
+          const genRes = await generateLicenseKeyBackend({
+            creator: ownerCreator,
+            game: 'Free Fire',
+            duration: planDuration,
+            customPrefix: 'RYMON',
+            devicesMax: 1,
+            quantity: 1
+          })
+          if (genRes.success && genRes.key) {
+            const reply = [
+              `✨ <b>NEW VIP KEY GENERATED!</b>`,
+              ``,
+              `🔑 <b>Tap to Copy Key:</b>`,
+              `<code>${genRes.key}</code>`,
+              ``,
+              `• <b>Game:</b> Free Fire`,
+              `• <b>Duration:</b> ${planDuration} (Starts on 1st APK Login)`,
+              `• <b>Devices:</b> 1 Device (Max 2 Self-Resets/Day)`
+            ].join('\n')
+            await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
+          } else {
+            await dispatchTelegramMessage(
+              OFFICIAL_TELEGRAM_BOT_TOKEN,
+              chatId,
+              `❌ Failed to generate key: ${genRes.error || 'Unknown error'}`
+            )
+          }
+        } else if (lowerText.startsWith('/pause') || lowerText.startsWith('/resume')) {
+          const parts = text.split(/\s+/)
+          const targetKey = (parts[1] || '').trim().toUpperCase()
+          if (!targetKey) {
+            await dispatchTelegramMessage(
+              OFFICIAL_TELEGRAM_BOT_TOKEN,
+              chatId,
+              `ℹ️ Usage: <code>/${lowerText.startsWith('/pause') ? 'pause' : 'resume'} RYMON-XXXX-XXXX</code>`
+            )
+          } else {
+            const pauseRes = await togglePauseLicenseBackend(targetKey, 'debajoyti')
+            await dispatchTelegramMessage(
+              OFFICIAL_TELEGRAM_BOT_TOKEN,
+              chatId,
+              pauseRes.success ? `✅ ${pauseRes.message}` : `❌ ${pauseRes.message}`
+            )
+          }
+        }
+      } else if (/^[A-Za-z0-9]{2,12}-[A-Za-z0-9-]+$/.test(text)) {
+        // Customer pasted their license key directly (e.g. RYMON-FF-XXXX-XXXX) -> Self-Service HWID Reset (2/Day)!
+        const res = await selfServiceResetKeyHwidBackend(text, isOwnerChat, `TG:${senderUser}`)
+        await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, res.htmlReply)
       }
     }
-
-    localStorage.setItem(TG_OFFSET_STORAGE_KEY, String(maxUpdateId))
-  } catch {}
+  } catch {} finally {
+    isPollingTelegramLock = false
+  }
 }
 
 // ============================================================================
