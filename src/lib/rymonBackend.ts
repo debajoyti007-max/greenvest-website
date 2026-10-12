@@ -767,7 +767,7 @@ export async function generateLicenseKeyBackend(params: {
   }
 
   // Deduct balance
-  const newBalance = creator.role === 'owner' ? creator.balance : Math.max(0, creator.balance - cost)
+  const newBalance = Math.max(0, creator.balance - cost)
 
   // Update local memory & storage
   const accounts = getStoredAccounts()

@@ -556,11 +556,14 @@ export default function RymonConnect() {
       setGenLastCreated(res.key)
       if (res.remainingBalance !== undefined) {
         setWalletBalance(res.remainingBalance)
-        setCurrentUser({ ...currentUser, balance: res.remainingBalance })
+        const updatedUser = { ...currentUser, balance: res.remainingBalance }
+        setCurrentUser(updatedUser)
+        localStorage.setItem('rymon_session_user', JSON.stringify(updatedUser))
       }
       showToast(`Key ${res.key} generated! Wallet balance updated.`)
       // Refresh list
       fetchAllLicenses(currentUser).then(setKeysList)
+      fetchAllAccounts(currentUser).then(setUsersList)
       fetchAllActivities().then(setActivities)
     } else {
       setGenError(res.error || 'Failed to generate key.')
