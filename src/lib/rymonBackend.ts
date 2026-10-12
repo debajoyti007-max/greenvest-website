@@ -855,9 +855,11 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
   const max60DaysMs = nowMs + 60 * 86400000
   const default30DaysIso = new Date(nowMs + 30 * 86400000).toISOString()
   const max60DaysIso = new Date(max60DaysMs).toISOString()
+  const policy = getSovereignSecurityPolicy()
 
   const normalizeAccountSubscriptions = (rows: RymonAccount[]): RymonAccount[] => {
-    return rows.map((u) => {
+    const expiredResellerUsernames: string[] = []
+    const mapped = rows.map((u) => {
       if (u.role === 'owner') return u
       if (!u.expires_at) {
         if (supabase && u.id) {
@@ -870,6 +872,9 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
         return { ...u, expires_at: default30DaysIso }
       }
       const expMs = new Date(u.expires_at).getTime()
+      if (expMs <= nowMs) {
+        expiredResellerUsernames.push(u.username)
+      }
       if (expMs > max60DaysMs) {
         if (supabase && u.id) {
           supabase
@@ -882,6 +887,27 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
       }
       return u
     })
+
+    // Auto-pause active keys created by expired Resellers if policy is enabled
+    if (policy.auto_pause_keys_on_reseller_expiry && expiredResellerUsernames.length > 0 && supabase) {
+      const nowIso = new Date().toISOString()
+      for (const expUser of expiredResellerUsernames) {
+        supabase
+          .from('rymon_licenses')
+          .update({ is_paused: true, status: 'PAUSED', updated_at: nowIso })
+          .ilike('creator_username', expUser)
+          .eq('status', 'ACTIVE')
+          .then(() => {}, () => {})
+        supabase
+          .from('rymon_streamer_controls')
+          .update({ is_paused: true, is_online: false, updated_at: nowIso })
+          .ilike('creator', expUser)
+          .eq('is_paused', false)
+          .then(() => {}, () => {})
+      }
+    }
+
+    return mapped
   }
 
   if (supabase) {
@@ -1501,11 +1527,238 @@ export async function topUpUserBalanceBackend(
   return { success: true, newBalance: nextBal, actorRemainingBalance }
 }
 
+// ============================================================================
+// 6B. SOVEREIGN SECURITY & APK VERSION POLICY ENGINE
+// ============================================================================
+export interface SovereignSecurityPolicy {
+  reseller_hwid_limit_per_day: number // 0 = Unlimited, default 2 per key per 24h
+  auto_pause_keys_on_reseller_expiry: boolean // default true
+  admin_sub_renew_fee_30d: number // default 0 (₹0 or custom fee for Admin renewing a Reseller for 30D)
+  admin_sub_renew_fee_60d: number // default 0 (₹0 or custom fee for Admin renewing a Reseller for 60D)
+  apk_latest_version: string // default '2.4'
+  apk_min_version: string // default '2.4'
+  apk_force_update: boolean // default false
+  apk_release_notes: string
+}
+
+const SECURITY_POLICY_STORAGE_KEY = 'rymon_sovereign_security_policy_v1'
+const PAUSED_TIMESTAMPS_STORAGE_KEY = 'rymon_paused_key_timestamps_v1'
+const HWID_RESET_LOG_STORAGE_KEY = 'rymon_hwid_reset_daily_log_v1'
+
+export const DEFAULT_SECURITY_POLICY: SovereignSecurityPolicy = {
+  reseller_hwid_limit_per_day: 2,
+  auto_pause_keys_on_reseller_expiry: true,
+  admin_sub_renew_fee_30d: 0,
+  admin_sub_renew_fee_60d: 0,
+  apk_latest_version: '2.4',
+  apk_min_version: '2.4',
+  apk_force_update: false,
+  apk_release_notes: 'v2.4 Sovereign Sync: Instant Website Remote Hack Toggles + Live Heartbeat Engine'
+}
+
+export function getSovereignSecurityPolicy(): SovereignSecurityPolicy {
+  try {
+    const raw = localStorage.getItem(SECURITY_POLICY_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') {
+        return { ...DEFAULT_SECURITY_POLICY, ...parsed }
+      }
+    }
+  } catch {}
+  return { ...DEFAULT_SECURITY_POLICY }
+}
+
+export function saveSovereignSecurityPolicy(
+  partial: Partial<SovereignSecurityPolicy>
+): SovereignSecurityPolicy {
+  const next: SovereignSecurityPolicy = {
+    ...getSovereignSecurityPolicy(),
+    ...partial
+  }
+  try {
+    localStorage.setItem(SECURITY_POLICY_STORAGE_KEY, JSON.stringify(next))
+  } catch {}
+  if (supabase) {
+    supabase
+      .from('rymon_system_config')
+      .upsert(
+        { key: 'sovereign_security_policy', value: next, updated_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      )
+      .then(() => {}, () => {})
+  }
+  return next
+}
+
+export async function syncSecurityPolicyFromSupabase(): Promise<SovereignSecurityPolicy> {
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('rymon_system_config')
+        .select('key, value')
+        .in('key', ['sovereign_security_policy', 'paused_key_timestamps', 'hwid_reset_daily_log'])
+
+      if (Array.isArray(data)) {
+        for (const row of data) {
+          if (row.key === 'sovereign_security_policy' && row.value && typeof row.value === 'object') {
+            const merged = { ...DEFAULT_SECURITY_POLICY, ...(row.value as Partial<SovereignSecurityPolicy>) }
+            try {
+              localStorage.setItem(SECURITY_POLICY_STORAGE_KEY, JSON.stringify(merged))
+            } catch {}
+          } else if (row.key === 'paused_key_timestamps' && row.value && typeof row.value === 'object') {
+            try {
+              const local = getPausedKeyTimestamps()
+              localStorage.setItem(
+                PAUSED_TIMESTAMPS_STORAGE_KEY,
+                JSON.stringify({ ...local, ...(row.value as Record<string, number>) })
+              )
+            } catch {}
+          } else if (row.key === 'hwid_reset_daily_log' && row.value && typeof row.value === 'object') {
+            try {
+              localStorage.setItem(HWID_RESET_LOG_STORAGE_KEY, JSON.stringify(row.value))
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
+  return getSovereignSecurityPolicy()
+}
+
+function getPausedKeyTimestamps(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(PAUSED_TIMESTAMPS_STORAGE_KEY)
+    if (raw) return JSON.parse(raw) || {}
+  } catch {}
+  return {}
+}
+
+function savePausedKeyTimestamps(map: Record<string, number>): void {
+  try {
+    localStorage.setItem(PAUSED_TIMESTAMPS_STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+  if (supabase) {
+    supabase
+      .from('rymon_system_config')
+      .upsert(
+        { key: 'paused_key_timestamps', value: map, updated_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      )
+      .then(() => {}, () => {})
+  }
+}
+
+function getHwidResetLog(): Record<string, number[]> {
+  try {
+    const raw = localStorage.getItem(HWID_RESET_LOG_STORAGE_KEY)
+    if (raw) return JSON.parse(raw) || {}
+  } catch {}
+  return {}
+}
+
+function saveHwidResetLog(map: Record<string, number[]>): void {
+  try {
+    localStorage.setItem(HWID_RESET_LOG_STORAGE_KEY, JSON.stringify(map))
+  } catch {}
+  if (supabase) {
+    supabase
+      .from('rymon_system_config')
+      .upsert(
+        { key: 'hwid_reset_daily_log', value: map, updated_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      )
+      .then(() => {}, () => {})
+  }
+}
+
+function formatDurationShort(ms: number): string {
+  const totalMins = Math.max(1, Math.round(ms / 60000))
+  const days = Math.floor(totalMins / (60 * 24))
+  const hours = Math.floor((totalMins % (60 * 24)) / 60)
+  const mins = totalMins % 60
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${mins}m`
+  return `${mins}m`
+}
+
+export async function resetUserPasswordBackend(
+  targetUsername: string,
+  newPassword: string,
+  actorUsername: string = 'debajoyti'
+): Promise<{ success: boolean; message: string }> {
+  const cleanTarget = targetUsername.trim()
+  const cleanPass = newPassword.trim()
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+  const isRootOwner =
+    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+
+  if (cleanPass.length < 4) {
+    return { success: false, message: 'Password must be at least 4 characters long.' }
+  }
+  if (!isRootOwner && (cleanTarget.toLowerCase() === 'debajoyti' || cleanTarget.toLowerCase() === 'rymon')) {
+    return { success: false, message: 'Forbidden: Only the Root Owner can modify the Root Owner account.' }
+  }
+
+  if (supabase) {
+    try {
+      const { data: targetAcc } = await supabase
+        .from('rymon_accounts')
+        .select('*')
+        .ilike('username', cleanTarget)
+        .maybeSingle()
+
+      if (!targetAcc) {
+        return { success: false, message: `User @${cleanTarget} not found.` }
+      }
+
+      if (!isRootOwner) {
+        if (
+          targetAcc.role !== 'reseller' ||
+          (targetAcc.uplink || '').toLowerCase() !== cleanActor.toLowerCase()
+        ) {
+          return {
+            success: false,
+            message: 'Power restriction: Admins can only reset passwords for their own invited Resellers.'
+          }
+        }
+      }
+
+      const { error: updErr } = await supabase
+        .from('rymon_accounts')
+        .update({ password_hash: cleanPass, updated_at: new Date().toISOString() })
+        .eq('id', targetAcc.id)
+
+      if (updErr) {
+        return { success: false, message: updErr.message }
+      }
+
+      await supabase.from('rymon_activities').insert({
+        title: 'User Password Reset',
+        event_type: 'PASSWORD_RESET',
+        details: `Password reset for @${targetAcc.username} (${String(targetAcc.role).toUpperCase()}) by @${cleanActor}`,
+        actor_username: cleanActor,
+        status: 'SUCCESS'
+      })
+
+      return {
+        success: true,
+        message: `Password for @${targetAcc.username} has been updated!`
+      }
+    } catch {}
+  }
+
+  return {
+    success: true,
+    message: `Password for @${cleanTarget} has been updated!`
+  }
+}
+
 export async function renewUserSubscriptionBackend(
   targetUsername: string,
   days: 30 | 60,
   actorUsername: string = 'debajoyti'
-): Promise<{ success: boolean; newExpiresAt?: string; message: string }> {
+): Promise<{ success: boolean; newExpiresAt?: string; remainingBalance?: number; message: string }> {
   const cleanTarget = targetUsername.trim()
   const cleanActor = (actorUsername || 'debajoyti').trim()
   const safeDays: 30 | 60 = days === 60 ? 60 : 30
@@ -1516,9 +1769,17 @@ export async function renewUserSubscriptionBackend(
     return { success: false, message: 'Root Owner account does not use a reseller subscription.' }
   }
 
+  const policy = getSovereignSecurityPolicy()
+  const adminFee = isRootOwner
+    ? 0
+    : safeDays === 60
+    ? Math.max(0, Number(policy.admin_sub_renew_fee_60d || 0))
+    : Math.max(0, Number(policy.admin_sub_renew_fee_30d || 0))
+
   const nowMs = Date.now()
   const max60DaysMs = nowMs + 60 * 86400000
   const newExpIso = new Date(Math.min(nowMs + safeDays * 86400000, max60DaysMs)).toISOString()
+  let remainingBalance: number | undefined = undefined
 
   if (supabase) {
     try {
@@ -1542,17 +1803,54 @@ export async function renewUserSubscriptionBackend(
             message: 'Power restriction: Admins can only renew subscriptions for their own invited Resellers.'
           }
         }
+
+        if (adminFee > 0) {
+          const { data: adminAcc } = await supabase
+            .from('rymon_accounts')
+            .select('*')
+            .ilike('username', cleanActor)
+            .maybeSingle()
+
+          const adminBal = adminAcc ? Number(adminAcc.balance || 0) : 0
+          if (adminBal < adminFee) {
+            return {
+              success: false,
+              message: `Insufficient Admin wallet balance! Renewing @${targetAcc.username} for ${safeDays} Days costs ₹${adminFee}, but your wallet has ₹${adminBal}.`
+            }
+          }
+          remainingBalance = Math.max(0, adminBal - adminFee)
+          if (adminAcc) {
+            await supabase
+              .from('rymon_accounts')
+              .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
+              .eq('id', adminAcc.id)
+          }
+        }
       }
 
       await supabase
         .from('rymon_accounts')
-        .update({ expires_at: newExpIso, updated_at: new Date().toISOString() })
+        .update({ expires_at: newExpIso, status: 'ACTIVE', updated_at: new Date().toISOString() })
         .eq('id', targetAcc.id)
+
+      // Automatically resume any paused keys belonging to this renewed Reseller
+      const nowIso = new Date().toISOString()
+      await supabase
+        .from('rymon_licenses')
+        .update({ is_paused: false, status: 'ACTIVE', updated_at: nowIso })
+        .ilike('creator_username', targetAcc.username)
+        .eq('status', 'PAUSED')
+
+      await supabase
+        .from('rymon_streamer_controls')
+        .update({ is_paused: false, updated_at: nowIso })
+        .ilike('creator', targetAcc.username)
+        .eq('is_paused', true)
 
       await supabase.from('rymon_activities').insert({
         title: `Subscription Set (${safeDays} Days)`,
         event_type: 'SUBSCRIPTION_RENEW',
-        details: `@${targetAcc.username} (${String(targetAcc.role).toUpperCase()}) subscription set to ${safeDays} Days by @${cleanActor}`,
+        details: `@${targetAcc.username} (${String(targetAcc.role).toUpperCase()}) subscription set to ${safeDays} Days by @${cleanActor}${adminFee > 0 ? ` (₹${adminFee} deducted)` : ''}`,
         actor_username: cleanActor,
         status: 'SUCCESS'
       })
@@ -1560,7 +1858,8 @@ export async function renewUserSubscriptionBackend(
       return {
         success: true,
         newExpiresAt: newExpIso,
-        message: `@${targetAcc.username} subscription set to ${safeDays} Days!`
+        remainingBalance,
+        message: `@${targetAcc.username} subscription renewed for ${safeDays} Days (active keys resumed)!`
       }
     } catch {}
   }
@@ -1578,6 +1877,7 @@ export async function renewUserSubscriptionBackend(
   return {
     success: true,
     newExpiresAt: newExpIso,
+    remainingBalance,
     message: `@${matched.username} subscription set to ${safeDays} Days!`
   }
 }
@@ -1611,9 +1911,44 @@ export function calculateExtensionCost(
 
 export async function resetHwidBackend(
   licenseKey: string,
-  actorUsername: string = 'debajoyti'
-): Promise<boolean> {
+  actorUsername: string = 'debajoyti',
+  actorRole?: string
+): Promise<{ success: boolean; message: string; remainingResets?: number }> {
   const cleanKey = licenseKey.trim().toUpperCase()
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+  const isRootOwner =
+    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  const effectiveRole = isRootOwner ? 'owner' : (actorRole || 'reseller').toLowerCase()
+
+  const policy = getSovereignSecurityPolicy()
+  const dailyLimit = Math.max(0, Number(policy.reseller_hwid_limit_per_day ?? 2))
+  const nowMs = Date.now()
+  const dayWindowMs = 86400000
+  const logMap = getHwidResetLog()
+  const recentResets = (logMap[cleanKey] || []).filter((ts) => nowMs - ts < dayWindowMs)
+
+  // Anti-Sharing Protection: Enforce daily HWID reset limit for Resellers
+  if (effectiveRole === 'reseller' && dailyLimit > 0) {
+    if (recentResets.length >= dailyLimit) {
+      return {
+        success: false,
+        remainingResets: 0,
+        message: `🛡️ Anti-Sharing Limit: You have already used ${recentResets.length}/${dailyLimit} HWID resets today for ${cleanKey}. Contact Owner/Admin for override.`
+      }
+    }
+    recentResets.push(nowMs)
+    logMap[cleanKey] = recentResets
+    saveHwidResetLog(logMap)
+  } else if (effectiveRole === 'owner' || effectiveRole === 'admin') {
+    // Owner/Admin reset clears the reseller daily lock for this key
+    delete logMap[cleanKey]
+    saveHwidResetLog(logMap)
+  }
+
+  const remainingResets =
+    effectiveRole === 'reseller' && dailyLimit > 0
+      ? Math.max(0, dailyLimit - recentResets.length)
+      : undefined
 
   if (supabase) {
     try {
@@ -1640,8 +1975,8 @@ export async function resetHwidBackend(
       await supabase.from('rymon_activities').insert({
         title: 'HWID Reset',
         event_type: 'HWID_RESET',
-        details: `Device binding cleared for ${cleanKey}`,
-        actor_username: actorUsername,
+        details: `Device binding cleared for ${cleanKey} by @${cleanActor}`,
+        actor_username: cleanActor,
         status: 'SUCCESS'
       })
     } catch {}
@@ -1655,7 +1990,15 @@ export async function resetHwidBackend(
     item.status = item.is_paused ? 'PAUSED' : item.expires_at ? 'ACTIVE' : 'WAITING'
     saveStoredLicenses(licenses)
   }
-  return true
+
+  return {
+    success: true,
+    remainingResets,
+    message:
+      remainingResets !== undefined
+        ? `🔄 HWID cleared for ${cleanKey}! (${remainingResets}/${dailyLimit} daily resets remaining today)`
+        : `🔄 HWID cleared for ${cleanKey} (Device unbound, timer preserved)!`
+  }
 }
 
 export async function deleteLicenseBackend(licenseKey: string): Promise<boolean> {
@@ -1961,35 +2304,85 @@ export async function extendLicenseBackend(
 export async function togglePauseLicenseBackend(
   licenseKey: string,
   requesterUsername: string = 'rymon'
-): Promise<{ success: boolean; is_paused: boolean; status: string; message: string }> {
+): Promise<{
+  success: boolean
+  is_paused: boolean
+  status: string
+  newExpiresAt?: string | null
+  message: string
+}> {
   const cleanKey = licenseKey.trim().toUpperCase()
+  const nowMs = Date.now()
+  const nowIso = new Date(nowMs).toISOString()
+  const max30DaysMs = nowMs + 30 * 86400000
+  const pauseMap = getPausedKeyTimestamps()
 
   if (supabase) {
     try {
-      const { data: current } = await supabase
-        .from('rymon_streamer_controls')
-        .select('is_paused')
-        .eq('license_key', cleanKey)
-        .maybeSingle()
+      const [{ data: currentCtrl }, { data: licRow }] = await Promise.all([
+        supabase
+          .from('rymon_streamer_controls')
+          .select('is_paused')
+          .eq('license_key', cleanKey)
+          .maybeSingle(),
+        supabase
+          .from('rymon_licenses')
+          .select('is_paused, expires_at, updated_at, status')
+          .eq('license_key', cleanKey)
+          .maybeSingle()
+      ])
 
-      const newPaused = !current?.is_paused
-      const newStatus = newPaused ? 'PAUSED' : 'ACTIVE'
-      const nowIso = new Date().toISOString()
+      const wasPaused = Boolean(licRow?.is_paused ?? currentCtrl?.is_paused)
+      const newPaused = !wasPaused
+      const newStatus = newPaused ? 'PAUSED' : licRow?.expires_at ? 'ACTIVE' : 'WAITING'
+      let nextExpiresAt: string | null | undefined = licRow?.expires_at
+      let restoredNote = ''
+
+      if (newPaused) {
+        // Record exact timestamp when freeze started
+        pauseMap[cleanKey] = nowMs
+        savePausedKeyTimestamps(pauseMap)
+      } else {
+        // True Timer Freeze: Calculate how long the key was paused and add it back to expires_at
+        const pausedSinceMs =
+          pauseMap[cleanKey] ||
+          (licRow?.updated_at ? new Date(licRow.updated_at).getTime() : nowMs)
+        const frozenMs = Math.max(0, nowMs - pausedSinceMs)
+        delete pauseMap[cleanKey]
+        savePausedKeyTimestamps(pauseMap)
+
+        if (licRow?.expires_at && frozenMs > 60000) {
+          const oldExpMs = new Date(licRow.expires_at).getTime()
+          const restoredExpMs = Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max30DaysMs)
+          nextExpiresAt = new Date(restoredExpMs).toISOString()
+          restoredNote = ` (+${formatDurationShort(frozenMs)} frozen time restored)`
+        }
+      }
 
       await supabase
         .from('rymon_streamer_controls')
-        .update({ is_paused: newPaused, updated_at: nowIso })
+        .update({
+          is_paused: newPaused,
+          ...(newPaused ? { is_online: false } : {}),
+          ...(nextExpiresAt ? { expires_at: nextExpiresAt } : {}),
+          updated_at: nowIso
+        })
         .eq('license_key', cleanKey)
 
       await supabase
         .from('rymon_licenses')
-        .update({ is_paused: newPaused, status: newStatus, updated_at: nowIso })
+        .update({
+          is_paused: newPaused,
+          status: newStatus,
+          ...(nextExpiresAt ? { expires_at: nextExpiresAt } : {}),
+          updated_at: nowIso
+        })
         .eq('license_key', cleanKey)
 
       await supabase.from('rymon_activities').insert({
-        title: newPaused ? 'Key Paused' : 'Key Resumed',
+        title: newPaused ? 'Key Paused (Timer Frozen)' : 'Key Resumed (Timer Restored)',
         event_type: newPaused ? 'KEY_PAUSE' : 'KEY_RESUME',
-        details: `License ${cleanKey} ${newPaused ? 'PAUSED' : 'RESUMED'} by @${requesterUsername}`,
+        details: `License ${cleanKey} ${newPaused ? 'PAUSED (Timer Frozen)' : `RESUMED${restoredNote}`} by @${requesterUsername}`,
         actor_username: requesterUsername,
         status: 'SUCCESS'
       })
@@ -1998,7 +2391,10 @@ export async function togglePauseLicenseBackend(
         success: true,
         is_paused: newPaused,
         status: newStatus,
-        message: `Key ${cleanKey} is now ${newStatus}`
+        newExpiresAt: nextExpiresAt,
+        message: newPaused
+          ? `❄️ Key ${cleanKey} PAUSED — Countdown timer is now frozen.`
+          : `▶️ Key ${cleanKey} RESUMED${restoredNote}!`
       }
     } catch (err) {
       return { success: false, is_paused: false, status: 'ERROR', message: String(err) }
@@ -2010,13 +2406,31 @@ export async function togglePauseLicenseBackend(
   if (idx >= 0) {
     const newPaused = !stored[idx].is_paused
     stored[idx].is_paused = newPaused
-    stored[idx].status = newPaused ? 'PAUSED' : 'ACTIVE'
+    stored[idx].status = newPaused ? 'PAUSED' : stored[idx].expires_at ? 'ACTIVE' : 'WAITING'
+    if (newPaused) {
+      pauseMap[cleanKey] = nowMs
+      savePausedKeyTimestamps(pauseMap)
+    } else {
+      const pausedSinceMs = pauseMap[cleanKey] || nowMs
+      const frozenMs = Math.max(0, nowMs - pausedSinceMs)
+      delete pauseMap[cleanKey]
+      savePausedKeyTimestamps(pauseMap)
+      if (stored[idx].expires_at && frozenMs > 60000) {
+        const oldExpMs = new Date(stored[idx].expires_at!).getTime()
+        stored[idx].expires_at = new Date(
+          Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max30DaysMs)
+        ).toISOString()
+      }
+    }
     saveStoredLicenses(stored)
     return {
       success: true,
       is_paused: newPaused,
       status: stored[idx].status,
-      message: `Key ${cleanKey} is now ${stored[idx].status}`
+      newExpiresAt: stored[idx].expires_at,
+      message: newPaused
+        ? `❄️ Key ${cleanKey} PAUSED — Countdown timer is now frozen.`
+        : `▶️ Key ${cleanKey} RESUMED!`
     }
   }
 
@@ -2028,32 +2442,71 @@ export async function bulkTogglePauseAllKeysBackend(
   actorUsername: string = 'rymon',
   creatorFilter?: string
 ): Promise<{ success: boolean; count: number; message: string }> {
-  const newStatus = pauseState ? 'PAUSED' : 'ACTIVE'
   let affected = 0
-  const nowIso = new Date().toISOString()
+  const nowMs = Date.now()
+  const nowIso = new Date(nowMs).toISOString()
+  const max30DaysMs = nowMs + 30 * 86400000
+  const pauseMap = getPausedKeyTimestamps()
 
   if (supabase) {
     try {
+      let fetchQuery = supabase
+        .from('rymon_licenses')
+        .select('license_key, expires_at, updated_at, is_paused, status')
+        .neq('status', 'BANNED')
+        .neq('status', 'EXPIRED')
+      if (creatorFilter) {
+        fetchQuery = fetchQuery.ilike('creator_username', creatorFilter)
+      }
+      const { data: rows } = await fetchQuery
+      if (rows && rows.length > 0) {
+        for (const r of rows) {
+          const k = r.license_key.toUpperCase()
+          let nextExp = r.expires_at
+          if (pauseState) {
+            if (!r.is_paused) {
+              pauseMap[k] = nowMs
+            }
+          } else if (r.is_paused) {
+            const pausedSinceMs =
+              pauseMap[k] || (r.updated_at ? new Date(r.updated_at).getTime() : nowMs)
+            const frozenMs = Math.max(0, nowMs - pausedSinceMs)
+            delete pauseMap[k]
+            if (r.expires_at && frozenMs > 60000) {
+              const oldExpMs = new Date(r.expires_at).getTime()
+              nextExp = new Date(
+                Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max30DaysMs)
+              ).toISOString()
+            }
+          }
+          const rowNextStatus = pauseState ? 'PAUSED' : nextExp ? 'ACTIVE' : 'WAITING'
+          await supabase
+            .from('rymon_licenses')
+            .update({
+              is_paused: pauseState,
+              status: rowNextStatus,
+              ...(nextExp ? { expires_at: nextExp } : {}),
+              updated_at: nowIso
+            })
+            .eq('license_key', r.license_key)
+          affected++
+        }
+        savePausedKeyTimestamps(pauseMap)
+      }
+
       let ctrlQuery = supabase
         .from('rymon_streamer_controls')
-        .update({ is_paused: pauseState, updated_at: nowIso })
+        .update({
+          is_paused: pauseState,
+          ...(pauseState ? { is_online: false } : {}),
+          updated_at: nowIso
+        })
       if (creatorFilter) {
         ctrlQuery = ctrlQuery.ilike('creator', creatorFilter)
       } else {
         ctrlQuery = ctrlQuery.neq('license_key', '')
       }
       await ctrlQuery
-
-      let licQuery = supabase
-        .from('rymon_licenses')
-        .update({ is_paused: pauseState, status: newStatus, updated_at: nowIso })
-        .neq('status', 'BANNED')
-        .neq('status', 'EXPIRED')
-      if (creatorFilter) {
-        licQuery = licQuery.ilike('creator_username', creatorFilter)
-      }
-      const { data } = await licQuery.select('license_key')
-      affected = data?.length || 0
     } catch {}
   }
 
@@ -2062,7 +2515,7 @@ export async function bulkTogglePauseAllKeysBackend(
     if (l.status !== 'BANNED' && l.status !== 'EXPIRED') {
       if (!creatorFilter || l.creator_username.toLowerCase() === creatorFilter.toLowerCase()) {
         l.is_paused = pauseState
-        l.status = newStatus
+        l.status = pauseState ? 'PAUSED' : l.expires_at ? 'ACTIVE' : 'WAITING'
         affected++
       }
     }
@@ -2071,9 +2524,9 @@ export async function bulkTogglePauseAllKeysBackend(
 
   const newAct: RymonActivity = {
     id: Date.now(),
-    title: pauseState ? 'Global Keys Paused' : 'Global Keys Resumed',
+    title: pauseState ? 'Global Keys Paused (Frozen)' : 'Global Keys Resumed (Timers Restored)',
     event_type: pauseState ? 'BULK_PAUSE' : 'BULK_RESUME',
-    details: `${pauseState ? 'Paused' : 'Resumed'} all active keys by @${actorUsername}`,
+    details: `${pauseState ? 'Paused & froze timers for' : 'Resumed & restored timers for'} all active keys by @${actorUsername}`,
     actor_username: actorUsername,
     status: 'SUCCESS',
     created_at: nowIso
@@ -2084,8 +2537,8 @@ export async function bulkTogglePauseAllKeysBackend(
     success: true,
     count: affected,
     message: pauseState
-      ? 'All active license keys have been PAUSED.'
-      : 'All paused license keys have been RESUMED.'
+      ? '❄️ All active license keys have been PAUSED and their countdown timers are frozen.'
+      : '▶️ All paused license keys have been RESUMED with frozen time restored!'
   }
 }
 

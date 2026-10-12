@@ -49,7 +49,12 @@ import {
   calculateExtensionCost,
   fetchAllStreamerControls,
   isStreamerKeyActivelyPlaying,
-  buildDefaultStreamerControlPayload
+  buildDefaultStreamerControlPayload,
+  type SovereignSecurityPolicy,
+  getSovereignSecurityPolicy,
+  saveSovereignSecurityPolicy,
+  syncSecurityPolicyFromSupabase,
+  resetUserPasswordBackend
 } from '../lib/rymonBackend'
 
 type TabType =
@@ -155,11 +160,17 @@ export default function RymonConnect() {
   const [extendAmount, setExtendAmount] = useState(30)
   const [actionSuccessMsg, setActionSuccessMsg] = useState('')
 
-  // Advanced System Toggles
+  // Advanced System Toggles & Sovereign Security Policy
   const [singleDeviceAdmin, setSingleDeviceAdmin] = useState(false)
   const [singleDeviceReseller, setSingleDeviceReseller] = useState(true)
   const [trialAdmin, setTrialAdmin] = useState(true)
   const [trialReseller, setTrialReseller] = useState(false)
+  const [securityPolicy, setSecurityPolicy] = useState<SovereignSecurityPolicy>(() => getSovereignSecurityPolicy())
+
+  // Password Reset Modal State
+  const [pwdModalUser, setPwdModalUser] = useState<string | null>(null)
+  const [pwdNewValue, setPwdNewValue] = useState('')
+  const [pwdLoading, setPwdLoading] = useState(false)
 
   // Communication & Messaging Engine State
   const [notifications, setNotifications] = useState<RymonNotification[]>([])
@@ -271,7 +282,7 @@ export default function RymonConnect() {
 
     async function loadLiveData() {
       const isStreamerRole = currentUser?.role === 'streamer'
-      await syncPricingFromSupabase()
+      await Promise.all([syncPricingFromSupabase(), syncSecurityPolicyFromSupabase()])
       const [lcs, usrs, acts, notifs, tgCfg, refs, ctrls] = await Promise.all([
         fetchAllLicenses(currentUser),
         fetchAllAccounts(currentUser),
@@ -287,6 +298,7 @@ export default function RymonConnect() {
       if (isMounted) {
         setGlobalPrices(getGlobalPriceMap())
         setAllCustomUserMaps(getAllUserCustomPriceMaps())
+        setSecurityPolicy(getSovereignSecurityPolicy())
         setKeysList(lcs)
         setUsersList(usrs)
         setActivities(acts)
@@ -982,6 +994,73 @@ export default function RymonConnect() {
     showToast(`📋 Copied ${keys.length} ${label} key${keys.length > 1 ? 's' : ''} to clipboard!`)
   }
 
+  const handleDownloadKeysTxt = (keys: string[], label: string) => {
+    if (!keys.length) {
+      showToast(`No ${label} keys available to download.`)
+      return
+    }
+    const nowStr = new Date().toLocaleString('en-IN')
+    const header = [
+      '======================================================',
+      '        ⚡ RYMON GHOST CONNECT VIP LICENSE KEYS       ',
+      '======================================================',
+      `Batch Type   : ${label.toUpperCase()} (${keys.length} Key${keys.length > 1 ? 's' : ''})`,
+      `Issued By    : @${currentUser?.username || 'rymon'}`,
+      `Generated At : ${nowStr}`,
+      `Portal URL   : https://greenvest.shop/`,
+      '======================================================',
+      ''
+    ].join('\r\n')
+    const content = header + keys.join('\r\n') + '\r\n'
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `RYMON_${label.replace(/\s+/g, '_').toUpperCase()}_KEYS_${keys.length}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showToast(`📥 Downloaded ${keys.length} ${label} key${keys.length > 1 ? 's' : ''} as .TXT!`)
+  }
+
+  const handleShareKeysWhatsApp = (keys: string[], label: string) => {
+    if (!keys.length) {
+      showToast(`No ${label} keys available to share.`)
+      return
+    }
+    const msg = [
+      `⚡ *RYMON GHOST STREAMER VIP KEYS (${label.toUpperCase()})*`,
+      `👤 Seller: *@${currentUser?.username || 'rymon'}*`,
+      `📦 Total Keys: *${keys.length}*`,
+      `⏳ Status: *Starts on 1st APK Login*`,
+      '',
+      ...keys.map((k, idx) => `${idx + 1}. \`${k}\``),
+      '',
+      `🌐 Portal & APK Download: https://greenvest.shop/`
+    ].join('\n')
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleShareKeysTelegram = (keys: string[], label: string) => {
+    if (!keys.length) {
+      showToast(`No ${label} keys available to share.`)
+      return
+    }
+    const msg = [
+      `⚡ RYMON GHOST STREAMER VIP KEYS (${label.toUpperCase()})`,
+      `👤 Seller: @${currentUser?.username || 'rymon'}`,
+      `📦 Total Keys: ${keys.length}`,
+      '',
+      ...keys.map((k, idx) => `${idx + 1}. ${k}`)
+    ].join('\n')
+    window.open(
+      `https://t.me/share/url?url=${encodeURIComponent('https://greenvest.shop/')}&text=${encodeURIComponent(msg)}`,
+      '_blank',
+      'noopener,noreferrer'
+    )
+  }
+
   const formatRemainingTime = (expiresAt?: string | null, status?: string, isPaused?: boolean) => {
     if (status === 'BANNED') return '🚫 BANNED'
     if (status === 'WAITING' || !expiresAt) return '🟡 Starts on 1st Login'
@@ -996,8 +1075,16 @@ export default function RymonConnect() {
   }
 
   const handleResetHWID = async (keyString: string) => {
-    await resetHwidBackend(keyString, currentUser?.username || 'debajoyti')
-    showToast(`🔄 HWID cleared for ${keyString} (Device unbound, timer preserved)!`)
+    const res = await resetHwidBackend(
+      keyString,
+      currentUser?.username || 'debajoyti',
+      currentUser?.role
+    )
+    if (!res.success) {
+      alert(res.message)
+      return
+    }
+    showToast(`🔄 ${res.message}`)
     fetchAllLicenses(currentUser).then(setKeysList)
     fetchAllActivities(currentUser).then(setActivities)
   }
@@ -1299,12 +1386,50 @@ export default function RymonConnect() {
       currentUser?.username || 'debajoyti'
     )
     if (res.success) {
+      if (res.remainingBalance !== undefined && currentUser) {
+        setWalletBalance(res.remainingBalance)
+        const updatedMe = { ...currentUser, balance: res.remainingBalance }
+        setCurrentUser(updatedMe)
+        localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
+      }
       showToast(`✅ ${res.message}`)
       fetchAllAccounts(currentUser).then(setUsersList)
+      fetchAllLicenses(currentUser).then(setKeysList)
       fetchAllActivities(currentUser).then(setActivities)
     } else {
       alert(`Error: ${res.message}`)
     }
+  }
+
+  const handleResetUserPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pwdModalUser) return
+    if (!pwdNewValue.trim() || pwdNewValue.trim().length < 4) {
+      alert('Password must be at least 4 characters.')
+      return
+    }
+    setPwdLoading(true)
+    const res = await resetUserPasswordBackend(
+      pwdModalUser,
+      pwdNewValue.trim(),
+      currentUser?.username || 'debajoyti'
+    )
+    setPwdLoading(false)
+    if (res.success) {
+      showToast(`🔑 ${res.message}`)
+      fetchAllAccounts(currentUser).then(setUsersList)
+      fetchAllActivities(currentUser).then(setActivities)
+      setPwdModalUser(null)
+      setPwdNewValue('')
+    } else {
+      alert(res.message)
+    }
+  }
+
+  const handleSaveSecurityPolicy = async (nextPolicy: SovereignSecurityPolicy) => {
+    setSecurityPolicy(nextPolicy)
+    await saveSovereignSecurityPolicy(nextPolicy)
+    showToast('🛡️ Sovereign Enterprise Security Policy saved!')
   }
 
   const handleDeleteReferral = async (id: number) => {
@@ -1322,10 +1447,18 @@ export default function RymonConnect() {
       setKeysList((prev) =>
         prev.map((k) =>
           k.license_key === keyString
-            ? { ...k, is_paused: res.is_paused, status: res.status as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED' }
+            ? {
+                ...k,
+                is_paused: res.is_paused,
+                status: res.status as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED',
+                expires_at: res.newExpiresAt !== undefined ? res.newExpiresAt : k.expires_at
+              }
             : k
         )
       )
+      if (currentKey === keyString && res.newExpiresAt) {
+        setExpiryDate(new Date(res.newExpiresAt))
+      }
       if (record && record.license_key === keyString) {
         setRecord((prev) => (prev ? { ...prev, is_paused: res.is_paused } : null))
       }
@@ -2932,13 +3065,13 @@ export default function RymonConnect() {
                             justifyContent: 'space-between',
                             flexWrap: 'wrap',
                             gap: '8px',
-                            marginBottom: '8px'
+                            marginBottom: '10px'
                           }}
                         >
                           <div style={{ fontSize: '12px', color: '#05df72', fontWeight: 700 }}>
                             ✓ {genCreatedKeysList.length} KEY{genCreatedKeysList.length > 1 ? 'S' : ''} CREATED (WAITING FOR 1ST LOGIN)
                           </div>
-                          {genCreatedKeysList.length > 1 && (
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                             <button
                               type="button"
                               onClick={() => handleCopyMultipleKeys(genCreatedKeysList, 'GENERATED')}
@@ -2949,9 +3082,48 @@ export default function RymonConnect() {
                                 fontWeight: 800
                               }}
                             >
-                              📋 COPY ALL {genCreatedKeysList.length} KEYS
+                              📋 COPY {genCreatedKeysList.length > 1 ? `ALL (${genCreatedKeysList.length})` : 'KEY'}
                             </button>
-                          )}
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadKeysTxt(genCreatedKeysList, `${genDuration}_${genGame}`)}
+                              style={{
+                                ...styles.copyKeyBtn,
+                                background: 'rgba(0, 217, 255, 0.2)',
+                                border: '1px solid #00d9ff',
+                                color: '#00d9ff',
+                                fontWeight: 800
+                              }}
+                            >
+                              📥 DOWNLOAD .TXT
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleShareKeysWhatsApp(genCreatedKeysList, `${genDuration} (${genGame})`)}
+                              style={{
+                                ...styles.copyKeyBtn,
+                                background: 'rgba(34, 197, 94, 0.2)',
+                                border: '1px solid #22c55e',
+                                color: '#4ade80',
+                                fontWeight: 800
+                              }}
+                            >
+                              📲 WHATSAPP
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleShareKeysTelegram(genCreatedKeysList, `${genDuration} (${genGame})`)}
+                              style={{
+                                ...styles.copyKeyBtn,
+                                background: 'rgba(56, 189, 248, 0.2)',
+                                border: '1px solid #38bdf8',
+                                color: '#38bdf8',
+                                fontWeight: 800
+                              }}
+                            >
+                              ✈️ TELEGRAM
+                            </button>
+                          </div>
                         </div>
                         <div
                           style={{
@@ -3127,6 +3299,54 @@ export default function RymonConnect() {
                       title="Copy all Unused (Waiting) keys to clipboard for resale"
                     >
                       <span>📋</span> COPY UNUSED ({stats.unused})
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleDownloadKeysTxt(
+                          keysList.filter((k) => k.status === 'WAITING').map((k) => k.license_key),
+                          'UNUSED'
+                        )
+                      }
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        backgroundColor: 'rgba(0, 217, 255, 0.15)',
+                        border: '1px solid #00d9ff',
+                        color: '#00d9ff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Download all Unused (Waiting) keys as a .TXT file"
+                    >
+                      <span>📥</span> DOWNLOAD UNUSED .TXT
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleShareKeysWhatsApp(
+                          keysList.filter((k) => k.status === 'WAITING').map((k) => k.license_key),
+                          'UNUSED'
+                        )
+                      }
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                        border: '1px solid #22c55e',
+                        color: '#4ade80',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Share Unused (Waiting) keys directly on WhatsApp"
+                    >
+                      <span>📲</span> WHATSAPP UNUSED
                     </button>
                     <button
                       onClick={() =>
@@ -3670,6 +3890,25 @@ export default function RymonConnect() {
                                       title="Set Individual Key Prices for this User"
                                     >
                                       💰
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setPwdModalUser(u.username)
+                                        setPwdNewValue(`rymon@${Math.floor(1000 + Math.random() * 9000)}`)
+                                      }}
+                                      style={{
+                                        padding: '4px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '10px',
+                                        fontWeight: 800,
+                                        cursor: 'pointer',
+                                        background: 'rgba(5, 223, 114, 0.16)',
+                                        border: '1px solid rgba(5, 223, 114, 0.45)',
+                                        color: '#05df72'
+                                      }}
+                                      title="Reset Password for this User"
+                                    >
+                                      🔑 Pass
                                     </button>
                                     <button
                                       onClick={() => {
@@ -4916,6 +5155,192 @@ export default function RymonConnect() {
                           />
                         </div>
                       </div>
+                    </div>
+
+                    {/* Sovereign Anti-Sharing, Reseller Expiry & APK Force-Update Policy */}
+                    <div style={{ ...styles.cardBox, marginTop: '20px' }}>
+                      <div style={styles.cardHeader}>
+                        <h4>🛡️ Sovereign Anti-Sharing, Reseller Expiry &amp; APK Force-Update</h4>
+                        <span
+                          style={{
+                            ...styles.cyanMiniBadge,
+                            background: 'rgba(5, 223, 114, 0.16)',
+                            color: '#05df72'
+                          }}
+                        >
+                          ENTERPRISE POLICY
+                        </span>
+                      </div>
+                      <p style={styles.settingDesc}>
+                        Configure daily HWID reset limits for Resellers (anti-sharing protection), automatic customer key pause when a Reseller&apos;s 30D/60D subscription expires, Admin renewal fees, and APK force-update requirements.
+                      </p>
+
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Reseller Daily HWID Reset Limit (Per Key)</div>
+                          <div style={styles.settingSub}>
+                            Prevents Resellers from resetting 1 key across multiple buyers all day (Owner &amp; Admin remain unlimited)
+                          </div>
+                        </div>
+                        <select
+                          value={securityPolicy.reseller_hwid_limit_per_day}
+                          onChange={(e) =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              reseller_hwid_limit_per_day: parseInt(e.target.value)
+                            })
+                          }
+                          style={{
+                            ...styles.selectInput,
+                            width: 'auto',
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: 800
+                          }}
+                        >
+                          <option value={1}>1 Reset / Day / Key (Strict)</option>
+                          <option value={2}>2 Resets / Day / Key (Recommended)</option>
+                          <option value={3}>3 Resets / Day / Key</option>
+                          <option value={5}>5 Resets / Day / Key</option>
+                          <option value={999}>Unlimited Resets</option>
+                        </select>
+                      </div>
+
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Auto-Pause Customer Keys When Reseller Subscription Expires</div>
+                          <div style={styles.settingSub}>
+                            Automatically freezes all active keys of an expired Reseller until they renew their 30D/60D subscription
+                          </div>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              auto_pause_keys_on_reseller_expiry: !securityPolicy.auto_pause_keys_on_reseller_expiry
+                            })
+                          }
+                          style={{
+                            ...styles.switchPill,
+                            background: securityPolicy.auto_pause_keys_on_reseller_expiry
+                              ? '#05df72'
+                              : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: securityPolicy.auto_pause_keys_on_reseller_expiry
+                                ? 'translateX(20px)'
+                                : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '14px' }}>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>ADMIN 30D RESELLER RENEWAL FEE (₹)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="50"
+                            value={securityPolicy.admin_sub_renew_fee_30d}
+                            onChange={(e) =>
+                              setSecurityPolicy({
+                                ...securityPolicy,
+                                admin_sub_renew_fee_30d: Math.max(0, parseInt(e.target.value) || 0)
+                              })
+                            }
+                            style={styles.keyInput}
+                          />
+                        </div>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>ADMIN 60D RESELLER RENEWAL FEE (₹)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="50"
+                            value={securityPolicy.admin_sub_renew_fee_60d}
+                            onChange={(e) =>
+                              setSecurityPolicy({
+                                ...securityPolicy,
+                                admin_sub_renew_fee_60d: Math.max(0, parseInt(e.target.value) || 0)
+                              })
+                            }
+                            style={styles.keyInput}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ ...styles.settingToggleRow, marginTop: '12px' }}>
+                        <div>
+                          <div style={styles.settingTitle}>Force Android APK Update on All Devices</div>
+                          <div style={styles.settingSub}>
+                            Require players to install the latest APK build ({securityPolicy.apk_latest_version})
+                          </div>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              apk_force_update: !securityPolicy.apk_force_update
+                            })
+                          }
+                          style={{
+                            ...styles.switchPill,
+                            background: securityPolicy.apk_force_update ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: securityPolicy.apk_force_update ? 'translateX(20px)' : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px', marginTop: '12px' }}>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>REQUIRED APK VERSION</label>
+                          <input
+                            type="text"
+                            value={securityPolicy.apk_latest_version}
+                            onChange={(e) =>
+                              setSecurityPolicy({
+                                ...securityPolicy,
+                                apk_latest_version: e.target.value
+                              })
+                            }
+                            placeholder="v2.4"
+                            style={styles.keyInput}
+                          />
+                        </div>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>APK RELEASE NOTES / BANNER</label>
+                          <input
+                            type="text"
+                            value={securityPolicy.apk_release_notes}
+                            onChange={(e) =>
+                              setSecurityPolicy({
+                                ...securityPolicy,
+                                apk_release_notes: e.target.value
+                              })
+                            }
+                            placeholder="True Web Sync + Heartbeat Online Status"
+                            style={styles.keyInput}
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSaveSecurityPolicy(securityPolicy)}
+                        style={{ ...styles.submitBtn, marginTop: '16px' }}
+                      >
+                        🛡️ SAVE ENTERPRISE SECURITY &amp; APK POLICY
+                      </button>
                     </div>
                   </>
                 )}
@@ -6358,6 +6783,151 @@ public class ServerConfig {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── RESET USER PASSWORD MODAL ───────────────────────────────────────── */}
+      {pwdModalUser && (
+        <div style={styles.modalOverlay} onClick={() => setPwdModalUser(null)}>
+          <div
+            style={{
+              ...styles.modalCard,
+              maxWidth: '480px',
+              width: '92%',
+              textAlign: 'left',
+              padding: '26px',
+              border: '1px solid rgba(5, 223, 114, 0.35)',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.85), 0 0 30px rgba(5, 223, 114, 0.15)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '24px' }}>🔑</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#f8fafc' }}>
+                    Reset Password for @{pwdModalUser}
+                  </h3>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    Instantly updates user credentials on Supabase
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setPwdModalUser(null)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid rgba(148, 163, 184, 0.2)',
+                  borderRadius: '6px',
+                  color: '#94a3b8',
+                  padding: '4px 10px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleResetUserPassword}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>NEW PASSWORD FOR @{pwdModalUser.toUpperCase()}</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={pwdNewValue}
+                    onChange={(e) => setPwdNewValue(e.target.value)}
+                    placeholder="Enter new password..."
+                    style={{ ...styles.keyInput, flex: 1, fontFamily: 'monospace' }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPwdNewValue(`rymon@${Math.floor(1000 + Math.random() * 9000)}`)}
+                    style={{
+                      ...styles.chipBtn,
+                      fontSize: '11px',
+                      whiteSpace: 'nowrap',
+                      background: 'rgba(0, 217, 255, 0.15)',
+                      border: '1px solid rgba(0, 217, 255, 0.35)',
+                      color: '#00d9ff'
+                    }}
+                  >
+                    🎲 Auto-Gen
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      `⚡ Rymon Ghost Connect Login\nUsername: ${pwdModalUser}\nNew Password: ${pwdNewValue}\nPortal: https://greenvest.shop/`
+                    )
+                    showToast('📋 Copied login credentials to clipboard!')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    background: 'rgba(148, 163, 184, 0.15)',
+                    border: '1px solid rgba(148, 163, 184, 0.35)',
+                    color: '#e2e8f0',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  📋 Copy Credentials
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const msg = `⚡ *Rymon Ghost Connect Credentials Updated*\n👤 Username: *${pwdModalUser}*\n🔑 New Password: \`${pwdNewValue}\`\n🌐 Portal: https://greenvest.shop/`
+                    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    background: 'rgba(34, 197, 94, 0.18)',
+                    border: '1px solid #22c55e',
+                    color: '#4ade80',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  📲 Share on WhatsApp
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setPwdModalUser(null)}
+                  style={styles.modalCancelBtn}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={pwdLoading}
+                  style={{
+                    ...styles.submitBtn,
+                    width: 'auto',
+                    padding: '10px 20px',
+                    background: '#05df72',
+                    color: '#07090e',
+                    fontWeight: 800
+                  }}
+                >
+                  {pwdLoading ? 'SAVING...' : '🔑 SAVE NEW PASSWORD'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
