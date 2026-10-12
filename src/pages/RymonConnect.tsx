@@ -45,6 +45,7 @@ import {
   clearUserCustomPriceMap,
   getEffectivePriceMap,
   syncPricingFromSupabase,
+  calculateExtensionCost,
   fetchAllStreamerControls
 } from '../lib/rymonBackend'
 
@@ -695,37 +696,47 @@ export default function RymonConnect() {
       // Refresh list
       fetchAllLicenses(currentUser).then(setKeysList)
       fetchAllAccounts(currentUser).then(setUsersList)
-      fetchAllActivities().then(setActivities)
+      fetchAllActivities(currentUser).then(setActivities)
     } else {
       setGenError(res.error || 'Failed to generate key.')
     }
   }
 
-  // 8. TOP UP USER BALANCE HANDLER (MEDIA_1791705436374_5F17E828.PNG)
+  // 8. TOP UP / TRANSFER USER BALANCE HANDLER
   const handleTopUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!topUpTargetUser) {
       alert('Please select a target user.')
       return
     }
-    if (topUpAmount === '' || topUpAmount < 0) {
-      alert('Please enter a valid amount.')
+    if (topUpAmount === '' || topUpAmount <= 0) {
+      alert('Please enter a valid amount greater than ₹0.')
       return
     }
 
     setTopUpLoading(true)
+    const effectiveMode = isOwner ? topUpMode : 'add'
     const res = await topUpUserBalanceBackend(
       topUpTargetUser,
       Number(topUpAmount),
-      topUpMode,
+      effectiveMode,
       currentUser?.username || 'debajoyti'
     )
     setTopUpLoading(false)
 
     if (res.success && res.newBalance !== undefined) {
-      showToast(`Success! Balance for ${topUpTargetUser} set to ₹${res.newBalance.toLocaleString('en-IN')}`)
+      if (res.actorRemainingBalance !== undefined && currentUser) {
+        setWalletBalance(res.actorRemainingBalance)
+        const updatedMe = { ...currentUser, balance: res.actorRemainingBalance }
+        setCurrentUser(updatedMe)
+        localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
+      }
+      showToast(
+        isOwner
+          ? `Success! Balance for @${topUpTargetUser} updated to ₹${res.newBalance.toLocaleString('en-IN')}`
+          : `Transferred ₹${Number(topUpAmount).toLocaleString('en-IN')} from your wallet to @${topUpTargetUser}!`
+      )
       setTopUpAmount('')
-      // Refresh accounts
       fetchAllAccounts(currentUser).then((u) => {
         setUsersList(u)
         if (currentUser?.username.toLowerCase() === topUpTargetUser.toLowerCase()) {
@@ -733,7 +744,7 @@ export default function RymonConnect() {
           setCurrentUser({ ...currentUser, balance: res.newBalance! })
         }
       })
-      fetchAllActivities().then(setActivities)
+      fetchAllActivities(currentUser).then(setActivities)
     } else {
       alert(res.error || 'Failed to update balance.')
     }
@@ -827,14 +838,14 @@ export default function RymonConnect() {
   }
 
   const handleResetHWID = async (keyString: string) => {
-    await resetHwidBackend(keyString, currentUser?.username || 'rymon')
+    await resetHwidBackend(keyString, currentUser?.username || 'debajoyti')
     showToast(`HWID successfully reset for ${keyString}!`)
     fetchAllLicenses(currentUser).then(setKeysList)
   }
 
   const handleDeleteKey = async (keyString: string) => {
     if (!isOwner) {
-      alert('Power restriction: Only the Root Owner can delete license keys.')
+      alert('Power restriction: Only the Root Owner can delete individual active license keys.')
       return
     }
     if (confirm(`Delete license key ${keyString}?`)) {
@@ -854,18 +865,31 @@ export default function RymonConnect() {
       return
     }
     const isBan = banActionType === 'ban'
-    await toggleBanStatusBackend(targetBanUser, 'user', isBan, currentUser?.username || 'debajoyti')
-    showToast(`User ${targetBanUser} has been ${isBan ? 'BANNED' : 'UNBANNED'}.`)
-    fetchAllAccounts(currentUser).then(setUsersList)
+    const res = await toggleBanStatusBackend(
+      targetBanUser,
+      'user',
+      isBan,
+      currentUser?.username || 'debajoyti'
+    )
+    if (res.success) {
+      showToast(res.message)
+      fetchAllAccounts(currentUser).then(setUsersList)
+    } else {
+      alert(res.message)
+    }
   }
 
   const handleApplyDeleteUserKeys = async () => {
-    if (!isOwner) {
-      alert('Power restriction: Only the Root Owner can bulk purge keys.')
+    if (!isOwner && !isAdmin) {
+      alert('Power restriction: Resellers cannot delete license keys.')
       return
     }
     if (!targetDeleteUser) {
       alert('Please select a target user.')
+      return
+    }
+    if (!isOwner && deleteKeyType === 'all') {
+      alert('Power restriction: Only the Root Owner can delete ALL active keys. Admins can clean Expired or Unused keys.')
       return
     }
     const count = await bulkDeleteKeysBackend(
@@ -873,7 +897,7 @@ export default function RymonConnect() {
       deleteKeyType,
       currentUser?.username || 'debajoyti'
     )
-    showToast(`Purged ${count} ${deleteKeyType} keys for user ${targetDeleteUser}.`)
+    showToast(`Purged ${count} ${deleteKeyType} keys for @${targetDeleteUser}.`)
     fetchAllLicenses(currentUser).then(setKeysList)
   }
 
@@ -886,9 +910,27 @@ export default function RymonConnect() {
       await handleBulkExtendAllKeys(extendAmount)
       return
     }
-    await extendLicenseBackend(targetExtendKey, extendAmount, currentUser?.username || 'debajoyti')
-    showToast(`License ${targetExtendKey} extended by ${extendAmount} days!`)
-    fetchAllLicenses(currentUser).then(setKeysList)
+    const res = await extendLicenseBackend(
+      targetExtendKey,
+      extendAmount,
+      currentUser?.username || 'debajoyti'
+    )
+    if (res.success) {
+      if (res.remainingBalance !== undefined && currentUser) {
+        setWalletBalance(res.remainingBalance)
+        const updatedMe = { ...currentUser, balance: res.remainingBalance }
+        setCurrentUser(updatedMe)
+        localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
+      }
+      showToast(
+        `License ${targetExtendKey} extended by +${extendAmount} days!${
+          !isOwner && res.cost ? ` (₹${res.cost} deducted from wallet)` : ''
+        }`
+      )
+      fetchAllLicenses(currentUser).then(setKeysList)
+    } else {
+      alert(res.error || 'Failed to extend license.')
+    }
   }
 
   // 11. COMMUNICATION & BROADCAST HANDLERS
@@ -995,7 +1037,7 @@ export default function RymonConnect() {
   const handleCreateReferral = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isOwner && refTargetRole !== 'reseller') {
-      alert('Power restriction: Only the Shadow Admin / Root Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
+      alert('Power restriction: Only the Root Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
       return
     }
     setRefCreating(true)
@@ -1009,6 +1051,12 @@ export default function RymonConnect() {
     )
     setRefCreating(false)
     if (res.success) {
+      if (res.remainingBalance !== undefined && currentUser) {
+        setWalletBalance(res.remainingBalance)
+        const updatedMe = { ...currentUser, balance: res.remainingBalance }
+        setCurrentUser(updatedMe)
+        localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
+      }
       showToast(`Created referral code: ${res.code}`)
       setRefCustomCode('')
       setRefInitialBal('')
@@ -1074,8 +1122,16 @@ export default function RymonConnect() {
     const creatorFilter = currentUser?.role === 'reseller' ? currentUser.username : undefined
     const res = await bulkExtendAllKeysBackend(days, currentUser?.username || 'debajoyti', creatorFilter)
     if (res.success) {
+      if (res.remainingBalance !== undefined && currentUser) {
+        setWalletBalance(res.remainingBalance)
+        const updatedMe = { ...currentUser, balance: res.remainingBalance }
+        setCurrentUser(updatedMe)
+        localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
+      }
       showToast(`➕ ${res.message}`)
       fetchAllLicenses(currentUser).then(setKeysList)
+    } else {
+      alert(res.message)
     }
   }
 
@@ -1180,9 +1236,28 @@ export default function RymonConnect() {
     const streamerAllowed = ['remote']
     if (isStreamer && !streamerAllowed.includes(activeTab)) {
       setActiveTab('remote')
-    } else if (isReseller && !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend'].includes(activeTab)) {
+    } else if (
+      isReseller &&
+      !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend'].includes(activeTab)
+    ) {
       setActiveTab('overview')
-    } else if (isAdmin && !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend', 'users', 'broadcast', 'referrals', 'ban'].includes(activeTab)) {
+    } else if (
+      isAdmin &&
+      ![
+        'remote',
+        'overview',
+        'generate',
+        'keys',
+        'connect-api',
+        'extend',
+        'users',
+        'referrals',
+        'add-balance',
+        'ban',
+        'delete',
+        'advance'
+      ].includes(activeTab)
+    ) {
       setActiveTab('overview')
     }
   }, [isStreamer, isReseller, isAdmin, activeTab])
@@ -1227,11 +1302,13 @@ export default function RymonConnect() {
           {isAuthenticated && currentUser?.role !== 'streamer' && (
             <div
               style={styles.balancePill}
-              onClick={() => isOwner && setActiveTab('add-balance')}
-              title={isOwner ? 'Click to manage balances' : 'Wallet balance'}
+              onClick={() => (isOwner || isAdmin) && setActiveTab('add-balance')}
+              title={isOwner || isAdmin ? 'Click to manage balances' : 'Wallet balance'}
             >
               <span style={{ color: '#00d9ff', fontSize: '13px' }}>💳</span>
-              <span style={styles.balanceAmount}>₹{walletBalance.toLocaleString('en-IN')}</span>
+              <span style={styles.balanceAmount}>
+                {isOwner ? '∞ FREE (OWNER)' : `₹${walletBalance.toLocaleString('en-IN')}`}
+              </span>
             </div>
           )}
 
@@ -1847,22 +1924,24 @@ export default function RymonConnect() {
                         }}
                       >
                         <span style={styles.navIcon}>👥</span>
-                        <span>Users</span>
+                        <span>{isOwner ? 'Users (All)' : 'My Resellers'}</span>
                       </button>
-                      <button
-                        onClick={() => {
-                          setActiveTab('broadcast')
-                          setMobileMenuOpen(false)
-                        }}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'broadcast' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}>📢</span>
-                        <span>Talk to Users / Broadcast</span>
-                        <span style={styles.cyanMiniBadge}>REALTIME</span>
-                      </button>
+                      {isOwner && (
+                        <button
+                          onClick={() => {
+                            setActiveTab('broadcast')
+                            setMobileMenuOpen(false)
+                          }}
+                          style={{
+                            ...styles.navItem,
+                            ...(activeTab === 'broadcast' ? styles.navItemActive : {})
+                          }}
+                        >
+                          <span style={styles.navIcon}>📢</span>
+                          <span>Talk to Users / Broadcast</span>
+                          <span style={styles.cyanMiniBadge}>OWNER</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setActiveTab('referrals')
@@ -1877,38 +1956,33 @@ export default function RymonConnect() {
                         <span>Invite Codes</span>
                         <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER' : 'ADMIN'}</span>
                       </button>
-                      {isOwner && (
-                        <>
-                          <button
-                            onClick={() => {
-                              setActiveTab('add-balance')
-                              setMobileMenuOpen(false)
-                            }}
-                            style={{
-                              ...styles.navItem,
-                              ...(activeTab === 'add-balance' ? styles.navItemActive : {})
-                            }}
-                          >
-                            <span style={styles.navIcon}>💼</span>
-                            <span>Add Balance</span>
-                            <span style={styles.cyanMiniBadge}>OWNER</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setActiveTab('delete')
-                              setMobileMenuOpen(false)
-                            }}
-                            style={{
-                              ...styles.navItem,
-                              ...(activeTab === 'delete' ? styles.navItemActive : {})
-                            }}
-                          >
-                            <span style={styles.navIcon}>🗑️</span>
-                            <span>Delete Keys</span>
-                            <span style={styles.cyanMiniBadge}>OWNER</span>
-                          </button>
-                        </>
-                      )}
+                      <button
+                        onClick={() => {
+                          setActiveTab('add-balance')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'add-balance' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>💼</span>
+                        <span>{isOwner ? 'Add Balance' : 'Transfer Balance'}</span>
+                        <span style={styles.cyanMiniBadge}>{isOwner ? 'FREE' : 'WALLET'}</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('delete')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'delete' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>🗑️</span>
+                        <span>{isOwner ? 'Delete Keys' : 'Clean Expired Keys'}</span>
+                      </button>
                       <button
                         onClick={() => {
                           setActiveTab('ban')
@@ -1925,8 +1999,8 @@ export default function RymonConnect() {
                     </>
                   )}
 
-                  {/* Core Config (Owner Only) */}
-                  {isOwner && (
+                  {/* Core Config (Owner & Admin Pricing) */}
+                  {(isOwner || isAdmin) && (
                     <>
                       <div style={styles.navCategoryHeader}>CORE CONFIG</div>
                       <button
@@ -1940,21 +2014,23 @@ export default function RymonConnect() {
                         }}
                       >
                         <span style={styles.navIcon}>💰</span>
-                        <span>Pricing & Advance</span>
+                        <span>{isOwner ? 'Pricing & Advance' : 'Reseller Pricing'}</span>
                       </button>
-                      <button
-                        onClick={() => {
-                          setActiveTab('sql-setup')
-                          setMobileMenuOpen(false)
-                        }}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'sql-setup' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}>🗄️</span>
-                        <span>Database SQL</span>
-                      </button>
+                      {isOwner && (
+                        <button
+                          onClick={() => {
+                            setActiveTab('sql-setup')
+                            setMobileMenuOpen(false)
+                          }}
+                          style={{
+                            ...styles.navItem,
+                            ...(activeTab === 'sql-setup' ? styles.navItemActive : {})
+                          }}
+                        >
+                          <span style={styles.navIcon}>🗄️</span>
+                          <span>Database SQL</span>
+                        </button>
+                      )}
                     </>
                   )}
                 </>
@@ -2145,23 +2221,31 @@ export default function RymonConnect() {
                         <div style={styles.quickActionTitle}>Generate License</div>
                         <div style={styles.quickActionSub}>Issue New Game Key</div>
                       </button>
-                      {isOwner && (
+                      {(isOwner || isAdmin) && (
                         <>
                           <button
                             onClick={() => setActiveTab('advance')}
                             style={{ ...styles.quickActionCard, borderColor: 'rgba(250, 204, 21, 0.4)' }}
                           >
                             <div style={styles.quickActionIcon}>💰</div>
-                            <div style={{ ...styles.quickActionTitle, color: '#fde047' }}>Key Pricing</div>
-                            <div style={styles.quickActionSub}>Default & Individual Rates</div>
+                            <div style={{ ...styles.quickActionTitle, color: '#fde047' }}>
+                              {isOwner ? 'Key Pricing' : 'Reseller Pricing'}
+                            </div>
+                            <div style={styles.quickActionSub}>
+                              {isOwner ? 'Default & Individual Rates' : 'Set Rates for My Resellers'}
+                            </div>
                           </button>
                           <button
                             onClick={() => setActiveTab('add-balance')}
                             style={styles.quickActionCard}
                           >
                             <div style={styles.quickActionIcon}>💼</div>
-                            <div style={styles.quickActionTitle}>Top Up Balance</div>
-                            <div style={styles.quickActionSub}>Credit Reseller Wallet</div>
+                            <div style={styles.quickActionTitle}>
+                              {isOwner ? 'Top Up Balance' : 'Transfer Balance'}
+                            </div>
+                            <div style={styles.quickActionSub}>
+                              {isOwner ? 'Mint Free Wallet Credit' : 'Fund Downline Reseller'}
+                            </div>
                           </button>
                         </>
                       )}
@@ -2224,17 +2308,23 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {/* 2. TOP UP USER BALANCE (MEDIA_1791705436374_5F17E828.PNG) */}
+            {/* 2. TOP UP / TRANSFER USER BALANCE */}
             {activeTab === 'add-balance' && (
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Top Up User Balance</h2>
+                    <h2 style={styles.pageTitle}>
+                      {isOwner ? 'Top Up User Balance (Free Owner Mint)' : 'Transfer Balance to Reseller'}
+                    </h2>
                     <p style={styles.pageSubtitle}>
-                      Credit or set balance directly into a registered reseller or administrator account.
+                      {isOwner
+                        ? 'Create and credit unlimited balance into any Admin or Reseller account for ₹0 cost.'
+                        : 'Transfer balance from your own Admin wallet directly to your invited Resellers.'}
                     </p>
                   </div>
-                  <span style={styles.cyanMiniBadge}>OWNER CONSOLE</span>
+                  <span style={styles.cyanMiniBadge}>
+                    {isOwner ? '👑 OWNER FREE MINT' : `🛡️ ADMIN WALLET: ₹${walletBalance.toLocaleString('en-IN')}`}
+                  </span>
                 </div>
 
                 <div style={styles.centerCardWrapper}>
@@ -2245,9 +2335,13 @@ export default function RymonConnect() {
                           💼
                         </div>
                         <div>
-                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Top Up User Balance</h3>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
+                            {isOwner ? 'Top Up User Balance' : 'Transfer Wallet Balance to Reseller'}
+                          </h3>
                           <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            Credit balance directly into a user's account
+                            {isOwner
+                              ? 'Set or add balance to any Admin or Reseller'
+                              : 'Amount transferred is deducted directly from your Admin wallet'}
                           </div>
                         </div>
                       </div>
@@ -2257,7 +2351,8 @@ export default function RymonConnect() {
                       <div style={styles.formGrid2Col}>
                         <div style={styles.formGroup}>
                           <label style={styles.formLabel}>
-                            Select User <span style={{ color: '#ef4444' }}>*</span>
+                            {isOwner ? 'Select Admin or Reseller' : 'Select Your Downline Reseller'}{' '}
+                            <span style={{ color: '#ef4444' }}>*</span>
                           </label>
                           <select
                             value={topUpTargetUser}
@@ -2266,11 +2361,18 @@ export default function RymonConnect() {
                             required
                           >
                             <option value="">-- Choose Account --</option>
-                            {usersList.map((u) => (
-                              <option key={u.id} value={u.username}>
-                                {u.username} (Bal: ₹{u.balance.toLocaleString('en-IN')})
-                              </option>
-                            ))}
+                            {usersList
+                              .filter((u) =>
+                                isOwner
+                                  ? u.role !== 'owner'
+                                  : u.role === 'reseller' &&
+                                    u.username.toLowerCase() !== currentUser?.username.toLowerCase()
+                              )
+                              .map((u) => (
+                                <option key={u.id} value={u.username}>
+                                  @{u.username} ({u.role.toUpperCase()} • Bal: ₹{u.balance.toLocaleString('en-IN')})
+                                </option>
+                              ))}
                           </select>
                         </div>
 
@@ -2280,7 +2382,7 @@ export default function RymonConnect() {
                           </label>
                           <input
                             type="number"
-                            min="0"
+                            min="1"
                             step="1"
                             value={topUpAmount}
                             onChange={(e) => setTopUpAmount(e.target.value === '' ? '' : Number(e.target.value))}
@@ -2291,26 +2393,50 @@ export default function RymonConnect() {
                         </div>
                       </div>
 
-                      <div style={{ marginTop: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                        <label style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input
-                            type="radio"
-                            name="topUpMode"
-                            checked={topUpMode === 'set'}
-                            onChange={() => setTopUpMode('set')}
-                          />
-                          Set Exact Balance
-                        </label>
-                        <label style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input
-                            type="radio"
-                            name="topUpMode"
-                            checked={topUpMode === 'add'}
-                            onChange={() => setTopUpMode('add')}
-                          />
-                          Add (Credit) to Existing Balance
-                        </label>
-                      </div>
+                      {isOwner ? (
+                        <div style={{ marginTop: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                          <label style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                            <input
+                              type="radio"
+                              name="topUpMode"
+                              checked={topUpMode === 'set'}
+                              onChange={() => setTopUpMode('set')}
+                            />
+                            Set Exact Balance
+                          </label>
+                          <label style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                            <input
+                              type="radio"
+                              name="topUpMode"
+                              checked={topUpMode === 'add'}
+                              onChange={() => setTopUpMode('add')}
+                            />
+                            Add (Credit) to Existing Balance
+                          </label>
+                        </div>
+                      ) : (
+                        <div style={{ ...styles.invoiceSummaryBox, marginTop: '18px' }}>
+                          <div>
+                            <div style={{ fontSize: '12px', color: '#94a3b8' }}>Your Current Admin Wallet:</div>
+                            <div style={{ fontSize: '16px', fontWeight: 700, color: '#00d9ff' }}>
+                              ₹{walletBalance.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '12px', color: '#94a3b8' }}>Remaining After Transfer:</div>
+                            <div
+                              style={{
+                                fontSize: '16px',
+                                fontWeight: 700,
+                                color:
+                                  walletBalance >= (Number(topUpAmount) || 0) ? '#05df72' : '#ef4444'
+                              }}
+                            >
+                              ₹{Math.max(0, walletBalance - (Number(topUpAmount) || 0)).toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'flex-end' }}>
                         <button
@@ -2323,7 +2449,11 @@ export default function RymonConnect() {
                             fontWeight: 700
                           }}
                         >
-                          {topUpLoading ? 'SAVING TO SUPABASE...' : 'Set Balance'}
+                          {topUpLoading
+                            ? 'PROCESSING ON SUPABASE...'
+                            : isOwner
+                            ? 'Credit Balance (FREE)'
+                            : 'Transfer from My Wallet'}
                         </button>
                       </div>
                     </form>
@@ -2767,6 +2897,16 @@ export default function RymonConnect() {
                                   >
                                     🔄
                                   </button>
+                                  <button
+                                    onClick={() => {
+                                      setTargetExtendKey(k.license_key)
+                                      setActiveTab('extend')
+                                    }}
+                                    style={{ ...styles.actionIconBtn, color: '#a855f7' }}
+                                    title="Extend License Duration"
+                                  >
+                                    ⏳
+                                  </button>
                                   {isOwner && (
                                     <button
                                       onClick={() => handleDeleteKey(k.license_key)}
@@ -2793,9 +2933,13 @@ export default function RymonConnect() {
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Registered Users ({usersList.length})</h2>
+                    <h2 style={styles.pageTitle}>
+                      {isOwner ? `Registered Users (${usersList.length})` : `My Downline Resellers & Team (${usersList.length})`}
+                    </h2>
                     <p style={styles.pageSubtitle}>
-                      Manage administrative roles, uplinks, and wallet authorizations in Supabase.
+                      {isOwner
+                        ? 'Manage all administrative roles, uplinks, and global wallet authorizations in Supabase.'
+                        : 'Manage your invited downline Resellers, transfer wallet balance, and set custom Reseller key prices.'}
                     </p>
                   </div>
                   <div style={styles.searchBox}>
@@ -2823,52 +2967,56 @@ export default function RymonConnect() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredUsers.map((u) => (
-                          <tr key={u.id} style={styles.tr}>
-                            <td style={styles.td}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <div style={styles.avatarCircle}>
-                                  {u.username.charAt(0).toUpperCase()}
+                        {filteredUsers.map((u) => {
+                          const isSelfRow = u.username.toLowerCase() === currentUser?.username.toLowerCase()
+                          const canManageRow = isOwner ? u.role !== 'owner' : !isSelfRow && u.role === 'reseller'
+                          return (
+                            <tr key={u.id} style={styles.tr}>
+                              <td style={styles.td}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <div style={styles.avatarCircle}>
+                                    {u.username.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontWeight: 600, color: '#f8fafc' }}>
+                                      {u.username} {isSelfRow && <span style={{ fontSize: '10px', color: '#00d9ff' }}>(YOU)</span>}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#64748b' }}>{u.email}</div>
+                                  </div>
                                 </div>
-                                <div>
-                                  <div style={{ fontWeight: 600, color: '#f8fafc' }}>{u.username}</div>
-                                  <div style={{ fontSize: '12px', color: '#64748b' }}>{u.email}</div>
+                              </td>
+                              <td style={styles.td}>
+                                <span style={styles.roleBadge}>{u.role.toUpperCase()}</span>
+                                <div style={{ fontSize: '11px', color: u.status === 'ACTIVE' ? '#05df72' : '#ef4444', marginTop: '4px' }}>
+                                  ● {u.status}
                                 </div>
-                              </div>
-                            </td>
-                            <td style={styles.td}>
-                              <span style={styles.roleBadge}>{u.role.toUpperCase()}</span>
-                              <div style={{ fontSize: '11px', color: u.status === 'ACTIVE' ? '#05df72' : '#ef4444', marginTop: '4px' }}>
-                                ● {u.status}
-                              </div>
-                            </td>
-                            <td style={styles.td}>
-                              <div style={{ fontSize: '13px', color: '#cbd5e1' }}>Uplink: {u.uplink}</div>
-                              {u.referral_code && (
-                                <div style={{ fontSize: '11px', color: '#64748b' }}>Code: {u.referral_code}</div>
-                              )}
-                            </td>
-                            <td style={styles.td}>
-                              <span style={styles.userBalanceGreen}>
-                                ₹{u.balance.toLocaleString('en-IN')}
-                              </span>
-                            </td>
-                            <td style={styles.td}>
-                              <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                                {u.expires_at ? new Date(u.expires_at).toLocaleDateString() : 'Never'}
-                              </span>
-                            </td>
-                            <td style={styles.td}>
-                              <div style={{ display: 'flex', gap: '8px' }}>
-                                {isOwner && (
-                                  <>
+                              </td>
+                              <td style={styles.td}>
+                                <div style={{ fontSize: '13px', color: '#cbd5e1' }}>Uplink: {u.uplink}</div>
+                                {u.referral_code && (
+                                  <div style={{ fontSize: '11px', color: '#64748b' }}>Code: {u.referral_code}</div>
+                                )}
+                              </td>
+                              <td style={styles.td}>
+                                <span style={styles.userBalanceGreen}>
+                                  {u.role === 'owner' ? '∞ FREE' : `₹${u.balance.toLocaleString('en-IN')}`}
+                                </span>
+                              </td>
+                              <td style={styles.td}>
+                                <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                                  {u.expires_at ? new Date(u.expires_at).toLocaleDateString() : 'Never'}
+                                </span>
+                              </td>
+                              <td style={styles.td}>
+                                {canManageRow ? (
+                                  <div style={{ display: 'flex', gap: '8px' }}>
                                     <button
                                       onClick={() => {
                                         setTopUpTargetUser(u.username)
                                         setActiveTab('add-balance')
                                       }}
                                       style={styles.actionIconBtn}
-                                      title="Top up balance"
+                                      title={isOwner ? 'Top up balance (Free Mint)' : 'Transfer balance from your wallet'}
                                     >
                                       💼
                                     </button>
@@ -2882,22 +3030,24 @@ export default function RymonConnect() {
                                     >
                                       💰
                                     </button>
-                                  </>
+                                    <button
+                                      onClick={() => {
+                                        setTargetBanUser(u.username)
+                                        setActiveTab('ban')
+                                      }}
+                                      style={styles.actionIconBtn}
+                                      title="Ban / Unban User"
+                                    >
+                                      🛡️
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span style={{ fontSize: '11px', color: '#64748b' }}>Protected</span>
                                 )}
-                                <button
-                                  onClick={() => {
-                                    setTargetBanUser(u.username)
-                                    setActiveTab('ban')
-                                  }}
-                                  style={styles.actionIconBtn}
-                                  title="Moderation"
-                                >
-                                  🛡️
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2912,7 +3062,9 @@ export default function RymonConnect() {
                   <div>
                     <h2 style={styles.pageTitle}>Bulk Ban / Unban Facility</h2>
                     <p style={styles.pageSubtitle}>
-                      Banning keys will immediately revoke access for active users associated with those keys.
+                      {isOwner
+                        ? 'Banning an Admin or Reseller immediately revokes access for their account.'
+                        : 'Suspend or restore access for any Reseller in your downline team.'}
                     </p>
                   </div>
                 </div>
@@ -2921,7 +3073,7 @@ export default function RymonConnect() {
                   <div style={styles.managementCard}>
                     <div style={styles.formGroup}>
                       <label style={styles.formLabel}>
-                        Target User <span style={{ color: '#ef4444' }}>*</span>
+                        Target {isOwner ? 'User (Admin / Reseller)' : 'Downline Reseller'} <span style={{ color: '#ef4444' }}>*</span>
                       </label>
                       <select
                         value={targetBanUser}
@@ -2929,11 +3081,17 @@ export default function RymonConnect() {
                         style={styles.selectInput}
                       >
                         <option value="">-- Select a User --</option>
-                        {usersList.map((u) => (
-                          <option key={u.id} value={u.username}>
-                            {u.username} ({u.status})
-                          </option>
-                        ))}
+                        {usersList
+                          .filter((u) =>
+                            isOwner
+                              ? u.role !== 'owner'
+                              : u.role === 'reseller' && u.username.toLowerCase() !== currentUser?.username.toLowerCase()
+                          )
+                          .map((u) => (
+                            <option key={u.id} value={u.username}>
+                              {u.username} ({u.role.toUpperCase()} • {u.status})
+                            </option>
+                          ))}
                       </select>
                     </div>
 
@@ -2972,9 +3130,11 @@ export default function RymonConnect() {
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Delete User Keys</h2>
+                    <h2 style={styles.pageTitle}>{isOwner ? 'Delete User Keys' : 'Clean Team Expired / Unused Keys'}</h2>
                     <p style={styles.pageSubtitle}>
-                      This action will permanently delete keys associated with the selected user. This cannot be undone.
+                      {isOwner
+                        ? 'Permanently delete expired, unused, or all keys associated with the selected user.'
+                        : 'Clean up expired or unused keys across your own account or your downline Resellers.'}
                     </p>
                   </div>
                 </div>
@@ -2993,7 +3153,7 @@ export default function RymonConnect() {
                         <option value="">-- Select a User --</option>
                         {usersList.map((u) => (
                           <option key={u.id} value={u.username}>
-                            {u.username}
+                            {u.username} ({u.role.toUpperCase()})
                           </option>
                         ))}
                       </select>
@@ -3010,7 +3170,7 @@ export default function RymonConnect() {
                       >
                         <option value="expired">Expired Keys Only</option>
                         <option value="unused">Unused / Waiting Keys</option>
-                        <option value="all">ALL Keys of Selected User</option>
+                        {isOwner && <option value="all">ALL Keys of Selected User (Owner Only)</option>}
                       </select>
                     </div>
 
@@ -3037,7 +3197,9 @@ export default function RymonConnect() {
                   <div>
                     <h2 style={styles.pageTitle}>Extend License Duration</h2>
                     <p style={styles.pageSubtitle}>
-                      Add operational days directly to any active or waiting license in Supabase.
+                      {isOwner
+                        ? 'Add operational days to any key or all active keys globally at ₹0 cost (Owner Privilege).'
+                        : 'Extend your keys by adding days. Extension cost is calculated from your rate table and deducted from your wallet.'}
                     </p>
                   </div>
                 </div>
@@ -3054,10 +3216,12 @@ export default function RymonConnect() {
                         style={styles.selectInput}
                       >
                         <option value="">-- Select a Key --</option>
-                        <option value="__ALL__">⚡ ALL ACTIVE & PAUSED KEYS (Bulk Compensation)</option>
+                        <option value="__ALL__">
+                          ⚡ ALL ACTIVE & PAUSED KEYS ({keysList.filter((k) => k.status === 'ACTIVE' || k.status === 'PAUSED').length} Keys)
+                        </option>
                         {keysList.map((k) => (
                           <option key={k.license_key} value={k.license_key}>
-                            {k.license_key} ({k.game} • {k.plan_duration})
+                            {k.license_key} ({k.game} • {k.plan_duration} • {k.devices_max || 1} Dev)
                           </option>
                         ))}
                       </select>
@@ -3082,11 +3246,63 @@ export default function RymonConnect() {
                       </select>
                     </div>
 
+                    {/* Live Extension Cost Preview */}
+                    {(() => {
+                      const selectedKeyObj = keysList.find((k) => k.license_key === targetExtendKey)
+                      const isBulkAll = targetExtendKey === '__ALL__'
+                      const activeTargets = keysList.filter(
+                        (k) => k.status === 'ACTIVE' || k.status === 'PAUSED'
+                      )
+                      const singleCost = calculateExtensionCost(
+                        extendAmount,
+                        currentUser?.username,
+                        selectedKeyObj?.devices_max || 1
+                      )
+                      const bulkCost = activeTargets.reduce(
+                        (sum, k) => sum + calculateExtensionCost(extendAmount, currentUser?.username, k.devices_max || 1),
+                        0
+                      )
+                      const finalCost = isOwner ? 0 : isBulkAll ? bulkCost : targetExtendKey ? singleCost : 0
+                      const actorWallet = currentUser?.balance ?? 0
+
+                      return (
+                        <div
+                          style={{
+                            marginTop: '18px',
+                            padding: '12px 14px',
+                            borderRadius: '10px',
+                            background: isOwner ? 'rgba(250, 204, 21, 0.1)' : 'rgba(0, 217, 255, 0.08)',
+                            border: isOwner ? '1px solid rgba(250, 204, 21, 0.35)' : '1px solid rgba(0, 217, 255, 0.25)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <div style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: 600 }}>
+                            {isOwner ? '👑 Owner Extension Cost:' : '💳 Wallet Deduction:'}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '14px',
+                              fontWeight: 800,
+                              color: isOwner ? '#fde047' : finalCost > actorWallet ? '#ef4444' : '#05df72'
+                            }}
+                          >
+                            {isOwner
+                              ? '₹0 (FREE UNLIMITED)'
+                              : targetExtendKey
+                              ? `₹${finalCost.toLocaleString('en-IN')} (Bal: ₹${actorWallet.toLocaleString('en-IN')})`
+                              : 'Select a key above'}
+                          </div>
+                        </div>
+                      )
+                    })()}
+
                     <button
                       onClick={handleApplyExtendKey}
                       style={{
                         ...styles.submitBtn,
-                        marginTop: '24px',
+                        marginTop: '20px',
                         background: '#00d9ff',
                         color: '#07090e'
                       }}
@@ -3622,81 +3838,119 @@ export default function RymonConnect() {
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Key Pricing & Advance System</h2>
+                    <h2 style={styles.pageTitle}>
+                      {isOwner ? 'Key Pricing & Advance System' : 'Downline Reseller Custom Pricing'}
+                    </h2>
                     <p style={styles.pageSubtitle}>
-                      Update default key prices for all users or set custom discounted rates for specific Admins & Resellers.
+                      {isOwner
+                        ? 'Update default key prices for all users or set custom discounted rates for specific Admins & Resellers.'
+                        : 'Assign custom key generation rates for your invited downline Resellers.'}
                     </p>
                   </div>
-                  <span style={styles.cyanMiniBadge}>OWNER PRICING ENGINE</span>
+                  <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER PRICING ENGINE' : 'ADMIN RESELLER PRICING'}</span>
                 </div>
 
-                {/* Owner Pricing Grid: Global Default vs Target Individual */}
+                {/* Pricing Grid: Global Default (Owner) / Wholesale Rates (Admin) vs Target Individual */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-                  {/* Card 1: Global Default Key Prices */}
-                  <div style={styles.cardBox}>
-                    <div style={styles.cardHeader}>
-                      <h4>🌐 Default Key Prices (All Users)</h4>
-                      <span style={styles.cyanMiniBadge}>GLOBAL RATE</span>
-                    </div>
-                    <p style={styles.settingDesc}>
-                      Applies to all Admins and Resellers unless they have an individual custom rate below.
-                    </p>
+                  {isOwner ? (
+                    /* Card 1 (Owner): Global Default Key Prices */
+                    <div style={styles.cardBox}>
+                      <div style={styles.cardHeader}>
+                        <h4>🌐 Default Key Prices (All Users)</h4>
+                        <span style={styles.cyanMiniBadge}>GLOBAL RATE</span>
+                      </div>
+                      <p style={styles.settingDesc}>
+                        Applies to all Admins and Resellers unless they have an individual custom rate on the right.
+                      </p>
 
-                    <form onSubmit={handleSaveGlobalDefaultPrices} style={{ marginTop: '14px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                      <form onSubmit={handleSaveGlobalDefaultPrices} style={{ marginTop: '14px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                          {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
+                            <div key={plan} style={styles.formGroup}>
+                              <label style={styles.formLabel}>{plan.toUpperCase()} (₹)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={globalPrices[plan] ?? DEFAULT_KEY_PRICES[plan]}
+                                onChange={(e) =>
+                                  setGlobalPrices({
+                                    ...globalPrices,
+                                    [plan]: Math.max(0, parseInt(e.target.value) || 0)
+                                  })
+                                }
+                                style={styles.keyInput}
+                                required
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
+                          <button
+                            type="submit"
+                            style={{
+                              ...styles.submitBtn,
+                              flex: 1,
+                              background: '#05df72',
+                              color: '#07090e',
+                              fontWeight: 800
+                            }}
+                          >
+                            💾 SAVE DEFAULT PRICES
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleResetGlobalDefaultPrices}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: '10px',
+                              background: 'rgba(148, 163, 184, 0.12)',
+                              border: '1px solid rgba(148, 163, 184, 0.3)',
+                              color: '#cbd5e1',
+                              fontWeight: 700,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ↺ Reset
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  ) : (
+                    /* Card 1 (Admin): Read-only view of Admin's own Wholesale Rates */
+                    <div style={styles.cardBox}>
+                      <div style={styles.cardHeader}>
+                        <h4>🛡️ Your Admin Wholesale Key Rates</h4>
+                        <span style={styles.cyanMiniBadge}>YOUR BASE COST</span>
+                      </div>
+                      <p style={styles.settingDesc}>
+                        These are your current key generation rates set by the Owner. You can assign custom rates for your downline Resellers on the right.
+                      </p>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '14px' }}>
                         {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
-                          <div key={plan} style={styles.formGroup}>
-                            <label style={styles.formLabel}>{plan.toUpperCase()} (₹)</label>
-                            <input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={globalPrices[plan] ?? DEFAULT_KEY_PRICES[plan]}
-                              onChange={(e) =>
-                                setGlobalPrices({
-                                  ...globalPrices,
-                                  [plan]: Math.max(0, parseInt(e.target.value) || 0)
-                                })
-                              }
-                              style={styles.keyInput}
-                              required
-                            />
+                          <div
+                            key={plan}
+                            style={{
+                              padding: '10px 12px',
+                              borderRadius: '10px',
+                              background: 'rgba(15, 23, 42, 0.65)',
+                              border: '1px solid rgba(255, 255, 255, 0.07)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>{plan}</span>
+                            <span style={{ fontSize: '14px', color: '#05df72', fontWeight: 800 }}>
+                              ₹{getEffectivePriceMap(currentUser?.username)[plan] ?? DEFAULT_KEY_PRICES[plan]}
+                            </span>
                           </div>
                         ))}
                       </div>
-
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
-                        <button
-                          type="submit"
-                          style={{
-                            ...styles.submitBtn,
-                            flex: 1,
-                            background: '#05df72',
-                            color: '#07090e',
-                            fontWeight: 800
-                          }}
-                        >
-                          💾 SAVE DEFAULT PRICES
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleResetGlobalDefaultPrices}
-                          style={{
-                            padding: '10px 14px',
-                            borderRadius: '10px',
-                            background: 'rgba(148, 163, 184, 0.12)',
-                            border: '1px solid rgba(148, 163, 184, 0.3)',
-                            color: '#cbd5e1',
-                            fontWeight: 700,
-                            fontSize: '12px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          ↺ Reset
-                        </button>
-                      </div>
-                    </form>
-                  </div>
+                    </div>
+                  )}
 
                   {/* Card 2: Target Individual Custom Price Override */}
                   <div style={styles.cardBox}>
@@ -3709,17 +3963,19 @@ export default function RymonConnect() {
                           color: '#fde047'
                         }}
                       >
-                        PER RESELLER / ADMIN
+                        {isOwner ? 'PER RESELLER / ADMIN' : 'MY DOWNLINE RESELLERS'}
                       </span>
                     </div>
                     <p style={styles.settingDesc}>
-                      Assign custom key prices for a specific Reseller or Admin account.
+                      {isOwner
+                        ? 'Assign custom key prices for a specific Reseller or Admin account.'
+                        : 'Assign custom key prices for any Reseller in your downline team.'}
                     </p>
 
                     <form onSubmit={handleSaveIndividualUserPrices} style={{ marginTop: '14px' }}>
                       <div style={styles.formGroup}>
                         <label style={styles.formLabel}>
-                          SELECT TARGET ADMIN / RESELLER <span style={{ color: '#fde047' }}>*</span>
+                          SELECT TARGET {isOwner ? 'ADMIN / RESELLER' : 'DOWNLINE RESELLER'} <span style={{ color: '#fde047' }}>*</span>
                         </label>
                         <select
                           value={targetPriceUser}
@@ -3727,9 +3983,13 @@ export default function RymonConnect() {
                           style={styles.selectInput}
                           required
                         >
-                          <option value="">-- Choose Admin or Reseller --</option>
+                          <option value="">-- Choose {isOwner ? 'Admin or Reseller' : 'Downline Reseller'} --</option>
                           {usersList
-                            .filter((u) => u.role !== 'owner')
+                            .filter((u) =>
+                              isOwner
+                                ? u.role !== 'owner'
+                                : u.role === 'reseller' && u.username.toLowerCase() !== currentUser?.username.toLowerCase()
+                            )
                             .map((u) => {
                               const hasCustom = Boolean(getUserCustomPriceMap(u.username))
                               return (
@@ -3801,139 +4061,153 @@ export default function RymonConnect() {
                     {Object.keys(allCustomUserMaps).length > 0 && (
                       <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                         <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginBottom: '8px' }}>
-                          ACTIVE CUSTOM OVERRIDES ({Object.keys(allCustomUserMaps).length}):
+                          ACTIVE CUSTOM OVERRIDES:
                         </div>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {Object.entries(allCustomUserMaps).map(([uname, pmap]) => (
-                            <div
-                              key={uname}
-                              onClick={() => handleSelectTargetPriceUser(uname)}
-                              style={{
-                                padding: '5px 10px',
-                                borderRadius: '8px',
-                                background: 'rgba(250, 204, 21, 0.12)',
-                                border: '1px solid rgba(250, 204, 21, 0.35)',
-                                color: '#fde047',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                              }}
-                            >
-                              <span>👑 @{uname} (1D: ₹{pmap['1 Day']} • 30D: ₹{pmap['30 Days']})</span>
-                            </div>
-                          ))}
+                          {Object.entries(allCustomUserMaps)
+                            .filter(([uname]) =>
+                              isOwner ||
+                              usersList.some(
+                                (u) =>
+                                  u.username.toLowerCase() === uname.toLowerCase() &&
+                                  u.role === 'reseller' &&
+                                  u.username.toLowerCase() !== currentUser?.username.toLowerCase()
+                              )
+                            )
+                            .map(([uname, pmap]) => (
+                              <div
+                                key={uname}
+                                onClick={() => handleSelectTargetPriceUser(uname)}
+                                style={{
+                                  padding: '5px 10px',
+                                  borderRadius: '8px',
+                                  background: 'rgba(250, 204, 21, 0.12)',
+                                  border: '1px solid rgba(250, 204, 21, 0.35)',
+                                  color: '#fde047',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px'
+                                }}
+                              >
+                                <span>👑 @{uname} (1D: ₹{pmap['1 Day']} • 30D: ₹{pmap['30 Days']})</span>
+                              </div>
+                            ))}
                         </div>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div style={styles.cardBox}>
-                  <div style={styles.cardHeader}>
-                    <h4>📱 Single Device Login</h4>
-                    <span style={styles.cyanMiniBadge}>SECURITY POLICY</span>
-                  </div>
-                  <p style={styles.settingDesc}>
-                    When enabled, keys generated by that role will only allow 1 device at a time, regardless of the max_devices setting.
-                  </p>
+                {isOwner && (
+                  <>
+                    <div style={styles.cardBox}>
+                      <div style={styles.cardHeader}>
+                        <h4>📱 Single Device Login</h4>
+                        <span style={styles.cyanMiniBadge}>SECURITY POLICY</span>
+                      </div>
+                      <p style={styles.settingDesc}>
+                        When enabled, keys generated by that role will only allow 1 device at a time, regardless of the max_devices setting.
+                      </p>
 
-                  <div style={styles.settingToggleRow}>
-                    <div>
-                      <div style={styles.settingTitle}>Admin (Level 2)</div>
-                      <div style={styles.settingSub}>Keys by Admins</div>
-                    </div>
-                    <div
-                      onClick={() => setSingleDeviceAdmin(!singleDeviceAdmin)}
-                      style={{
-                        ...styles.switchPill,
-                        background: singleDeviceAdmin ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                      }}
-                    >
-                      <div
-                        style={{
-                          ...styles.switchKnob,
-                          transform: singleDeviceAdmin ? 'translateX(20px)' : 'translateX(0)'
-                        }}
-                      />
-                    </div>
-                  </div>
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Admin (Level 2)</div>
+                          <div style={styles.settingSub}>Keys by Admins</div>
+                        </div>
+                        <div
+                          onClick={() => setSingleDeviceAdmin(!singleDeviceAdmin)}
+                          style={{
+                            ...styles.switchPill,
+                            background: singleDeviceAdmin ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: singleDeviceAdmin ? 'translateX(20px)' : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
 
-                  <div style={styles.settingToggleRow}>
-                    <div>
-                      <div style={styles.settingTitle}>Reseller (Level 3)</div>
-                      <div style={styles.settingSub}>Keys by Resellers</div>
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Reseller (Level 3)</div>
+                          <div style={styles.settingSub}>Keys by Resellers</div>
+                        </div>
+                        <div
+                          onClick={() => setSingleDeviceReseller(!singleDeviceReseller)}
+                          style={{
+                            ...styles.switchPill,
+                            background: singleDeviceReseller ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: singleDeviceReseller ? 'translateX(20px)' : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div
-                      onClick={() => setSingleDeviceReseller(!singleDeviceReseller)}
-                      style={{
-                        ...styles.switchPill,
-                        background: singleDeviceReseller ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                      }}
-                    >
-                      <div
-                        style={{
-                          ...styles.switchKnob,
-                          transform: singleDeviceReseller ? 'translateX(20px)' : 'translateX(0)'
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
 
-                <div style={{ ...styles.cardBox, marginTop: '20px' }}>
-                  <div style={styles.cardHeader}>
-                    <h4>🔑 Trial Key Settings</h4>
-                    <span style={styles.cyanMiniBadge}>ROLE PERMISSIONS</span>
-                  </div>
-                  <p style={styles.settingDesc}>
-                    Control which administrative tiers are allowed to generate temporary trial keys.
-                  </p>
+                    <div style={{ ...styles.cardBox, marginTop: '20px' }}>
+                      <div style={styles.cardHeader}>
+                        <h4>🔑 Trial Key Settings</h4>
+                        <span style={styles.cyanMiniBadge}>ROLE PERMISSIONS</span>
+                      </div>
+                      <p style={styles.settingDesc}>
+                        Control which administrative tiers are allowed to generate temporary trial keys.
+                      </p>
 
-                  <div style={styles.settingToggleRow}>
-                    <div>
-                      <div style={styles.settingTitle}>Admin (Level 2)</div>
-                      <div style={styles.settingSub}>Allow Admins to generate trial keys</div>
-                    </div>
-                    <div
-                      onClick={() => setTrialAdmin(!trialAdmin)}
-                      style={{
-                        ...styles.switchPill,
-                        background: trialAdmin ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                      }}
-                    >
-                      <div
-                        style={{
-                          ...styles.switchKnob,
-                          transform: trialAdmin ? 'translateX(20px)' : 'translateX(0)'
-                        }}
-                      />
-                    </div>
-                  </div>
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Admin (Level 2)</div>
+                          <div style={styles.settingSub}>Allow Admins to generate trial keys</div>
+                        </div>
+                        <div
+                          onClick={() => setTrialAdmin(!trialAdmin)}
+                          style={{
+                            ...styles.switchPill,
+                            background: trialAdmin ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: trialAdmin ? 'translateX(20px)' : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
 
-                  <div style={styles.settingToggleRow}>
-                    <div>
-                      <div style={styles.settingTitle}>Reseller (Level 3)</div>
-                      <div style={styles.settingSub}>Allow Resellers to generate trial keys</div>
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Reseller (Level 3)</div>
+                          <div style={styles.settingSub}>Allow Resellers to generate trial keys</div>
+                        </div>
+                        <div
+                          onClick={() => setTrialReseller(!trialReseller)}
+                          style={{
+                            ...styles.switchPill,
+                            background: trialReseller ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: trialReseller ? 'translateX(20px)' : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div
-                      onClick={() => setTrialReseller(!trialReseller)}
-                      style={{
-                        ...styles.switchPill,
-                        background: trialReseller ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                      }}
-                    >
-                      <div
-                        style={{
-                          ...styles.switchKnob,
-                          transform: trialReseller ? 'translateX(20px)' : 'translateX(0)'
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -3991,7 +4265,7 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {/* 11. REFERRAL / INVITE CODE ENGINE (OWNER ONLY) */}
+            {/* 11. REFERRAL / INVITE CODE ENGINE (OWNER & ADMIN) */}
             {activeTab === 'referrals' && (
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
@@ -4051,7 +4325,7 @@ export default function RymonConnect() {
                             type="button"
                             onClick={() => {
                               if (!isOwner) {
-                                alert('Power restriction: Only the Shadow Admin / Root Owner (rymon) can issue Administrator invite codes. Admins can only invite downline Resellers.')
+                                alert('Power restriction: Only the Supreme Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
                                 return
                               }
                               setRefTargetRole('admin')
@@ -4069,7 +4343,7 @@ export default function RymonConnect() {
                               cursor: !isOwner ? 'not-allowed' : 'pointer',
                               opacity: !isOwner ? 0.5 : 1
                             }}
-                            title={!isOwner ? 'Shadow Admin / Root Owner only' : 'Create Administrator invite code'}
+                            title={!isOwner ? 'Supreme Owner only' : 'Create Administrator invite code'}
                           >
                             🛡️ ADMINISTRATOR {!isOwner && '(OWNER ONLY)'}
                           </button>
@@ -4087,8 +4361,10 @@ export default function RymonConnect() {
                           placeholder="e.g. 5000 (Credits to wallet upon signup)"
                           style={styles.keyInput}
                         />
-                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                          Reseller will use this balance to generate streamer license keys.
+                        <div style={{ fontSize: '11px', color: isOwner ? '#fde047' : '#38bdf8', marginTop: '4px', fontWeight: 600 }}>
+                          {isOwner
+                            ? '👑 Owner Privilege: Starting balance is minted for FREE (₹0 deducted).'
+                            : `💳 Admin Wallet Notice: ₹${((Number(refInitialBal) || 0) * refMaxUses).toLocaleString('en-IN')} will be deducted from your wallet (${refMaxUses} use × ₹${(Number(refInitialBal) || 0).toLocaleString('en-IN')}).`}
                         </div>
                       </div>
 

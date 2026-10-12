@@ -664,24 +664,33 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
 
   if (supabase) {
     try {
-      let query = supabase.from('rymon_licenses').select('*').order('created_at', { ascending: false })
+      const { data: allRows, error } = await supabase
+        .from('rymon_licenses')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-      if (user && user.role === 'reseller') {
-        // Reseller can ONLY see keys they generated
-        query = query.eq('creator_username', user.username)
-      } else if (user && user.role === 'admin') {
-        // Admin sees keys created by themselves + downline resellers
-        const { data: downlines } = await supabase
-          .from('rymon_accounts')
-          .select('username')
-          .eq('uplink', user.username)
-        const allowedCreators = [user.username, ...(downlines?.map((d) => d.username) || [])]
-        query = query.in('creator_username', allowedCreators)
-      }
-
-      const { data, error } = await query
-      if (!error && data) {
-        return data as RymonLicense[]
+      if (!error && Array.isArray(allRows)) {
+        if (!user || user.role === 'owner') {
+          return allRows as RymonLicense[]
+        }
+        if (user.role === 'reseller') {
+          return (allRows as RymonLicense[]).filter(
+            (l) => (l.creator_username || '').toLowerCase() === user.username.toLowerCase()
+          )
+        }
+        if (user.role === 'admin') {
+          const { data: downlines } = await supabase
+            .from('rymon_accounts')
+            .select('username')
+            .ilike('uplink', user.username)
+          const allowedSet = new Set<string>([
+            user.username.toLowerCase(),
+            ...(downlines?.map((d) => (d.username || '').toLowerCase()) || [])
+          ])
+          return (allRows as RymonLicense[]).filter((l) =>
+            allowedSet.has((l.creator_username || '').toLowerCase())
+          )
+        }
       }
     } catch {}
   }
@@ -689,6 +698,13 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
   const stored = getStoredLicenses()
   if (user && user.role === 'reseller') {
     return stored.filter((l) => l.creator_username.toLowerCase() === user.username.toLowerCase())
+  }
+  if (user && user.role === 'admin') {
+    const downlines = getStoredAccounts()
+      .filter((a) => (a.uplink || '').toLowerCase() === user.username.toLowerCase())
+      .map((a) => a.username.toLowerCase())
+    const allowedSet = new Set([user.username.toLowerCase(), ...downlines])
+    return stored.filter((l) => allowedSet.has(l.creator_username.toLowerCase()))
   }
   return stored
 }
@@ -701,36 +717,73 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
 
   if (supabase) {
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('rymon_accounts')
         .select('*')
         .order('balance', { ascending: false })
 
-      if (user && user.role === 'admin') {
-        // Admin only sees their own downlines and self
-        query = query.or(`uplink.ilike.${user.username},username.ilike.${user.username}`)
-      }
-
-      const { data, error } = await query
       if (!error && Array.isArray(data)) {
-        return data as RymonAccount[]
+        const rows = data as RymonAccount[]
+        if (!user || user.role === 'owner') {
+          return rows
+        }
+        if (user.role === 'admin') {
+          // Admin sees only self + their own downline Resellers (never other Admins or Owner)
+          const myName = user.username.toLowerCase()
+          return rows.filter(
+            (u) =>
+              u.username.toLowerCase() === myName ||
+              (u.role === 'reseller' && (u.uplink || '').toLowerCase() === myName)
+          )
+        }
       }
     } catch {}
   }
-  return getStoredAccounts()
+
+  const stored = getStoredAccounts()
+  if (user && user.role === 'admin') {
+    const myName = user.username.toLowerCase()
+    return stored.filter(
+      (u) =>
+        u.username.toLowerCase() === myName ||
+        (u.role === 'reseller' && (u.uplink || '').toLowerCase() === myName)
+    )
+  }
+  return stored
 }
 
-export async function fetchAllActivities(): Promise<RymonActivity[]> {
+export async function fetchAllActivities(user?: RymonAccount | null): Promise<RymonActivity[]> {
   if (supabase) {
     try {
       const { data, error } = await supabase
         .from('rymon_activities')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(20)
+        .limit(40)
 
       if (!error && Array.isArray(data)) {
-        return data as RymonActivity[]
+        const acts = data as RymonActivity[]
+        if (!user || user.role === 'owner') {
+          return acts.slice(0, 20)
+        }
+        if (user.role === 'reseller') {
+          return acts
+            .filter((a) => (a.actor_username || '').toLowerCase() === user.username.toLowerCase())
+            .slice(0, 20)
+        }
+        if (user.role === 'admin') {
+          const { data: downlines } = await supabase
+            .from('rymon_accounts')
+            .select('username')
+            .ilike('uplink', user.username)
+          const allowedSet = new Set<string>([
+            user.username.toLowerCase(),
+            ...(downlines?.map((d) => (d.username || '').toLowerCase()) || [])
+          ])
+          return acts
+            .filter((a) => allowedSet.has((a.actor_username || '').toLowerCase()))
+            .slice(0, 20)
+        }
       }
     } catch {}
   }
@@ -741,13 +794,28 @@ export async function fetchAllStreamerControls(user?: RymonAccount | null): Prom
   if (user && user.role === 'streamer') return []
   if (supabase) {
     try {
-      let query = supabase.from('rymon_streamer_controls').select('*')
-      if (user && user.role === 'reseller') {
-        query = query.eq('creator', user.username)
-      }
-      const { data, error } = await query
+      const { data, error } = await supabase.from('rymon_streamer_controls').select('*')
       if (!error && Array.isArray(data)) {
-        return data as StreamerControlRecord[]
+        const rows = data as StreamerControlRecord[]
+        if (!user || user.role === 'owner') {
+          return rows
+        }
+        if (user.role === 'reseller') {
+          return rows.filter(
+            (r) => (r.creator || '').toLowerCase() === user.username.toLowerCase()
+          )
+        }
+        if (user.role === 'admin') {
+          const { data: downlines } = await supabase
+            .from('rymon_accounts')
+            .select('username')
+            .ilike('uplink', user.username)
+          const allowedSet = new Set<string>([
+            user.username.toLowerCase(),
+            ...(downlines?.map((d) => (d.username || '').toLowerCase()) || [])
+          ])
+          return rows.filter((r) => allowedSet.has((r.creator || '').toLowerCase()))
+        }
       }
     } catch {}
   }
@@ -1077,15 +1145,23 @@ export async function generateLicenseKeyBackend(params: {
 }
 
 // ============================================================================
-// 6. TOP UP USER BALANCE (ADMIN & OWNER PRIVILEGE)
+// 6. TOP UP / TRANSFER USER BALANCE (OWNER FREE MINT vs ADMIN WALLET TRANSFER)
 // ============================================================================
 export async function topUpUserBalanceBackend(
   targetUsername: string,
   amount: number,
   mode: 'set' | 'add',
   actorUsername: string = 'debajoyti'
-): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+): Promise<{ success: boolean; newBalance?: number; actorRemainingBalance?: number; error?: string }> {
   const cleanTarget = targetUsername.trim()
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+  const isRootOwner =
+    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+
+  if (cleanTarget.toLowerCase() === 'debajoyti' || cleanTarget.toLowerCase() === 'rymon') {
+    return { success: false, error: 'Root Owner has infinite balance and does not need top-up.' }
+  }
+
   if (supabase) {
     try {
       const { data: targetUser } = await supabase
@@ -1094,34 +1170,73 @@ export async function topUpUserBalanceBackend(
         .ilike('username', cleanTarget)
         .maybeSingle()
 
-      if (targetUser) {
-        const nextBal = mode === 'add' ? Number(targetUser.balance || 0) + amount : amount
-        const { error: updErr } = await supabase
-          .from('rymon_accounts')
-          .update({ balance: nextBal, updated_at: new Date().toISOString() })
-          .eq('id', targetUser.id)
+      if (!targetUser) {
+        return { success: false, error: `User @${cleanTarget} not found in database.` }
+      }
 
-        if (!updErr) {
-          await supabase.from('rymon_activities').insert({
-            title: 'Balance Top Up',
-            event_type: 'BALANCE_CREDIT',
-            details: `Updated balance for ${targetUser.username} to ₹${nextBal.toLocaleString('en-IN')}`,
-            actor_username: actorUsername,
-            status: 'SUCCESS'
-          })
-          return { success: true, newBalance: nextBal }
+      let actorRemainingBalance: number | undefined = undefined
+
+      if (!isRootOwner) {
+        // Admin Wallet-to-Reseller Transfer Mode
+        if (amount <= 0) {
+          return { success: false, error: 'Transfer amount must be greater than ₹0.' }
+        }
+        const { data: actorAcc } = await supabase
+          .from('rymon_accounts')
+          .select('*')
+          .ilike('username', cleanActor)
+          .maybeSingle()
+
+        if (!actorAcc || actorAcc.role !== 'admin') {
+          return { success: false, error: 'Power restriction: Only Owner or Admin can fund accounts.' }
+        }
+
+        if (
+          targetUser.role !== 'reseller' ||
+          (targetUser.uplink || '').toLowerCase() !== cleanActor.toLowerCase()
+        ) {
+          return {
+            success: false,
+            error: 'Power restriction: Admins can only transfer balance to their own invited Resellers.'
+          }
+        }
+
+        const adminBal = Number(actorAcc.balance || 0)
+        if (adminBal < amount) {
+          return {
+            success: false,
+            error: `Insufficient wallet balance! You need ₹${amount.toLocaleString('en-IN')} to fund @${targetUser.username}, but your wallet has ₹${adminBal.toLocaleString('en-IN')}.`
+          }
+        }
+
+        actorRemainingBalance = Math.max(0, adminBal - amount)
+        const { error: decErr } = await supabase
+          .from('rymon_accounts')
+          .update({ balance: actorRemainingBalance, updated_at: new Date().toISOString() })
+          .eq('id', actorAcc.id)
+
+        if (decErr) {
+          return { success: false, error: 'Failed to deduct balance from Admin wallet.' }
         }
       }
 
-      const { data, error } = await supabase.rpc('rpc_rymon_topup_balance', {
-        p_target_username: cleanTarget,
-        p_amount: amount,
-        p_mode: mode,
-        p_actor_username: actorUsername
-      })
+      const nextBal = !isRootOwner || mode === 'add' ? Number(targetUser.balance || 0) + amount : amount
+      const { error: updErr } = await supabase
+        .from('rymon_accounts')
+        .update({ balance: nextBal, updated_at: new Date().toISOString() })
+        .eq('id', targetUser.id)
 
-      if (!error && data && data.success) {
-        return { success: true, newBalance: data.balance }
+      if (!updErr) {
+        await supabase.from('rymon_activities').insert({
+          title: isRootOwner ? 'Owner Balance Credit' : 'Admin Wallet Transfer',
+          event_type: 'BALANCE_CREDIT',
+          details: isRootOwner
+            ? `Updated balance for @${targetUser.username} to ₹${nextBal.toLocaleString('en-IN')} (FREE Owner Mint)`
+            : `@${cleanActor} transferred ₹${amount.toLocaleString('en-IN')} from wallet to @${targetUser.username} (New Bal: ₹${nextBal.toLocaleString('en-IN')})`,
+          actor_username: cleanActor,
+          status: 'SUCCESS'
+        })
+        return { success: true, newBalance: nextBal, actorRemainingBalance }
       }
     } catch {}
   }
@@ -1131,27 +1246,67 @@ export async function topUpUserBalanceBackend(
   const matched = accounts.find((a) => a.username.toLowerCase() === cleanTarget.toLowerCase())
   if (!matched) return { success: false, error: 'User not found' }
 
-  const nextBal = mode === 'add' ? matched.balance + amount : amount
+  let actorRemainingBalance: number | undefined = undefined
+  if (!isRootOwner) {
+    const actorAcc = accounts.find((a) => a.username.toLowerCase() === cleanActor.toLowerCase())
+    if (!actorAcc || actorAcc.role !== 'admin') {
+      return { success: false, error: 'Power restriction: Only Owner or Admin can fund accounts.' }
+    }
+    if (matched.role !== 'reseller' || matched.uplink.toLowerCase() !== cleanActor.toLowerCase()) {
+      return { success: false, error: 'Admins can only transfer balance to their own Resellers.' }
+    }
+    if (actorAcc.balance < amount) {
+      return { success: false, error: `Insufficient wallet balance (Available: ₹${actorAcc.balance}).` }
+    }
+    actorAcc.balance = Math.max(0, actorAcc.balance - amount)
+    actorRemainingBalance = actorAcc.balance
+  }
+
+  const nextBal = !isRootOwner || mode === 'add' ? matched.balance + amount : amount
   matched.balance = nextBal
   saveStoredAccounts(accounts)
 
   const newAct: RymonActivity = {
     id: Date.now(),
-    title: 'Balance Top Up',
+    title: isRootOwner ? 'Owner Balance Credit' : 'Admin Wallet Transfer',
     event_type: 'BALANCE_CREDIT',
-    details: `Updated balance for ${cleanTarget} to ₹${nextBal.toLocaleString('en-IN')}`,
-    actor_username: actorUsername,
+    details: `Updated balance for @${cleanTarget} to ₹${nextBal.toLocaleString('en-IN')}`,
+    actor_username: cleanActor,
     status: 'SUCCESS',
     created_at: new Date().toISOString()
   }
   saveStoredActivities([newAct, ...getStoredActivities()])
 
-  return { success: true, newBalance: nextBal }
+  return { success: true, newBalance: nextBal, actorRemainingBalance }
 }
 
 // ============================================================================
 // 7. HWID RESET, BAN, EXTEND, DELETE OPERATIONS
 // ============================================================================
+export function calculateExtensionCost(
+  days: number,
+  username?: string,
+  devicesMax: number = 1
+): number {
+  if (!username) return 0
+  const clean = username.trim().toLowerCase()
+  if (clean === 'debajoyti' || clean === 'rymon') return 0
+
+  const map = getEffectivePriceMap(username)
+  const devMult = Math.max(1, Number(devicesMax) || 1)
+  let unit = 0
+  if (days === 1) unit = map['1 Day'] ?? 35
+  else if (days === 3) unit = map['3 Days'] ?? 50
+  else if (days === 7) unit = map['7 Days'] ?? 100
+  else if (days === 15) unit = map['15 Days'] ?? 180
+  else if (days === 30) unit = map['30 Days'] ?? 350
+  else {
+    const dailyRate = map['1 Day'] ?? 35
+    unit = Math.round(dailyRate * Math.max(1, days))
+  }
+  return unit * devMult
+}
+
 export async function resetHwidBackend(
   licenseKey: string,
   actorUsername: string = 'debajoyti'
@@ -1209,6 +1364,11 @@ export async function bulkDeleteKeysBackend(
   keyType: 'expired' | 'unused' | 'all',
   actorUsername: string = 'debajoyti'
 ): Promise<number> {
+  const isRootOwner =
+    actorUsername.toLowerCase() === 'debajoyti' || actorUsername.toLowerCase() === 'rymon'
+  // Non-owners (Admins) can only clean 'expired' or 'unused' keys, never 'all' active keys
+  const effectiveKeyType = !isRootOwner && keyType === 'all' ? 'expired' : keyType
+
   if (supabase) {
     try {
       let fetchQ = supabase
@@ -1220,10 +1380,10 @@ export async function bulkDeleteKeysBackend(
       if (rows && rows.length > 0) {
         const keysToDelete = rows
           .filter((r) => {
-            if (keyType === 'expired') {
+            if (effectiveKeyType === 'expired') {
               return r.status === 'EXPIRED' || (r.expires_at && new Date(r.expires_at).getTime() < Date.now())
             }
-            if (keyType === 'unused') {
+            if (effectiveKeyType === 'unused') {
               return r.status === 'WAITING' && Number(r.devices_used || 0) === 0
             }
             return true
@@ -1236,7 +1396,7 @@ export async function bulkDeleteKeysBackend(
           await supabase.from('rymon_activities').insert({
             title: 'Keys Purged',
             event_type: 'CLEANUP',
-            details: `Purged ${keysToDelete.length} ${keyType} keys for @${creatorUsername}`,
+            details: `Purged ${keysToDelete.length} ${effectiveKeyType} keys for @${creatorUsername}`,
             actor_username: actorUsername,
             status: 'SUCCESS'
           })
@@ -1249,8 +1409,8 @@ export async function bulkDeleteKeysBackend(
   const licenses = getStoredLicenses()
   const remaining = licenses.filter((l) => {
     if (l.creator_username.toLowerCase() !== creatorUsername.toLowerCase()) return true
-    if (keyType === 'expired') return l.status !== 'EXPIRED'
-    if (keyType === 'unused') return l.status !== 'WAITING' || l.devices_used > 0
+    if (effectiveKeyType === 'expired') return l.status !== 'EXPIRED'
+    if (effectiveKeyType === 'unused') return l.status !== 'WAITING' || l.devices_used > 0
     return false
   })
   const count = licenses.length - remaining.length
@@ -1263,17 +1423,50 @@ export async function toggleBanStatusBackend(
   type: 'user' | 'key',
   isBan: boolean,
   actorUsername: string = 'debajoyti'
-): Promise<boolean> {
+): Promise<{ success: boolean; message: string }> {
   const status = isBan ? 'BANNED' : 'ACTIVE'
   const cleanTarget = target.trim()
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+  const isRootOwner =
+    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+
+  if (
+    type === 'user' &&
+    (cleanTarget.toLowerCase() === 'debajoyti' || cleanTarget.toLowerCase() === 'rymon')
+  ) {
+    return { success: false, message: 'Forbidden: Root Owner account cannot be banned.' }
+  }
 
   if (supabase) {
     try {
       if (type === 'user') {
+        const { data: targetAcc } = await supabase
+          .from('rymon_accounts')
+          .select('*')
+          .ilike('username', cleanTarget)
+          .maybeSingle()
+
+        if (!targetAcc) {
+          return { success: false, message: `User @${cleanTarget} not found.` }
+        }
+
+        if (!isRootOwner) {
+          // Admin can ONLY ban/unban their own downline Resellers
+          if (
+            targetAcc.role !== 'reseller' ||
+            (targetAcc.uplink || '').toLowerCase() !== cleanActor.toLowerCase()
+          ) {
+            return {
+              success: false,
+              message: 'Power restriction: Admins can only Ban/Unban Resellers that they invited.'
+            }
+          }
+        }
+
         await supabase
           .from('rymon_accounts')
           .update({ status, updated_at: new Date().toISOString() })
-          .ilike('username', cleanTarget)
+          .eq('id', targetAcc.id)
       } else {
         const cleanKey = cleanTarget.toUpperCase()
         await supabase
@@ -1288,10 +1481,11 @@ export async function toggleBanStatusBackend(
       await supabase.from('rymon_activities').insert({
         title: `Status Change (${isBan ? 'BAN' : 'UNBAN'})`,
         event_type: 'MODERATION',
-        details: `${type} ${cleanTarget} marked as ${status}`,
-        actor_username: actorUsername,
+        details: `${type} ${cleanTarget} marked as ${status} by @${cleanActor}`,
+        actor_username: cleanActor,
         status: 'SUCCESS'
       })
+      return { success: true, message: `${cleanTarget} has been ${isBan ? 'BANNED' : 'UNBANNED'}.` }
     } catch {}
   }
 
@@ -1299,6 +1493,9 @@ export async function toggleBanStatusBackend(
     const users = getStoredAccounts()
     const u = users.find((x) => x.username.toLowerCase() === cleanTarget.toLowerCase())
     if (u) {
+      if (!isRootOwner && (u.role !== 'reseller' || u.uplink.toLowerCase() !== cleanActor.toLowerCase())) {
+        return { success: false, message: 'Admins can only Ban/Unban their own downline Resellers.' }
+      }
       u.status = status
       saveStoredAccounts(users)
     }
@@ -1310,15 +1507,24 @@ export async function toggleBanStatusBackend(
       saveStoredLicenses(lics)
     }
   }
-  return true
+  return { success: true, message: `${cleanTarget} has been ${isBan ? 'BANNED' : 'UNBANNED'}.` }
 }
 
 export async function extendLicenseBackend(
   licenseKey: string,
   days: number,
   actorUsername: string = 'debajoyti'
-): Promise<string> {
+): Promise<{
+  success: boolean
+  newExpiresAt?: string
+  remainingBalance?: number
+  cost?: number
+  error?: string
+}> {
   const cleanKey = licenseKey.trim().toUpperCase()
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+  const isRootOwner =
+    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
 
   if (supabase) {
     try {
@@ -1329,6 +1535,34 @@ export async function extendLicenseBackend(
         .maybeSingle()
 
       if (licRow) {
+        const cost = isRootOwner
+          ? 0
+          : calculateExtensionCost(days, cleanActor, Number(licRow.devices_max || 1))
+        let remainingBalance: number | undefined = undefined
+
+        if (!isRootOwner && cost > 0) {
+          const { data: actorAcc } = await supabase
+            .from('rymon_accounts')
+            .select('*')
+            .ilike('username', cleanActor)
+            .maybeSingle()
+
+          const liveBal = actorAcc ? Number(actorAcc.balance || 0) : 0
+          if (liveBal < cost) {
+            return {
+              success: false,
+              error: `Insufficient wallet balance! Extending ${cleanKey} by +${days} Day(s) costs ₹${cost}, but your balance is ₹${liveBal}.`
+            }
+          }
+          remainingBalance = Math.max(0, liveBal - cost)
+          if (actorAcc) {
+            await supabase
+              .from('rymon_accounts')
+              .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
+              .eq('id', actorAcc.id)
+          }
+        }
+
         const base = licRow.expires_at ? new Date(licRow.expires_at).getTime() : Date.now()
         const newExp = new Date(Math.max(base, Date.now()) + days * 86400000).toISOString()
         const nextStatus = licRow.is_paused ? 'PAUSED' : 'ACTIVE'
@@ -1343,17 +1577,34 @@ export async function extendLicenseBackend(
         await supabase.from('rymon_activities').insert({
           title: `Key Extended (+${days}d)`,
           event_type: 'EXTEND_KEY',
-          details: `License ${cleanKey} extended by +${days} Day(s)`,
-          actor_username: actorUsername,
+          details: `License ${cleanKey} extended by +${days} Day(s) • Cost: ${isRootOwner ? 'FREE' : `₹${cost}`}`,
+          actor_username: cleanActor,
           status: 'SUCCESS'
         })
-        return newExp
+        return { success: true, newExpiresAt: newExp, remainingBalance, cost }
       }
     } catch {}
   }
 
   const lics = getStoredLicenses()
   const l = lics.find((x) => x.license_key === cleanKey)
+  const cost = isRootOwner ? 0 : calculateExtensionCost(days, cleanActor, l?.devices_max || 1)
+  let remainingBalance: number | undefined = undefined
+
+  if (!isRootOwner && cost > 0) {
+    const accounts = getStoredAccounts()
+    const actorAcc = accounts.find((a) => a.username.toLowerCase() === cleanActor.toLowerCase())
+    if (!actorAcc || actorAcc.balance < cost) {
+      return {
+        success: false,
+        error: `Insufficient wallet balance! Extending ${cleanKey} by +${days} Day(s) costs ₹${cost}.`
+      }
+    }
+    actorAcc.balance = Math.max(0, actorAcc.balance - cost)
+    remainingBalance = actorAcc.balance
+    saveStoredAccounts(accounts)
+  }
+
   let newExp = new Date(Date.now() + days * 86400000).toISOString()
   if (l) {
     const base = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
@@ -1362,7 +1613,7 @@ export async function extendLicenseBackend(
     l.status = 'ACTIVE'
     saveStoredLicenses(lics)
   }
-  return newExp
+  return { success: true, newExpiresAt: newExp, remainingBalance, cost }
 }
 
 export async function togglePauseLicenseBackend(
@@ -1373,16 +1624,6 @@ export async function togglePauseLicenseBackend(
 
   if (supabase) {
     try {
-      const { data, error } = await supabase.rpc('rpc_rymon_toggle_pause_key', {
-        p_license_key: cleanKey,
-        p_requester: requesterUsername
-      })
-      if (!error && data) {
-        return data as { success: boolean; is_paused: boolean; status: string; message: string }
-      }
-    } catch {}
-
-    try {
       const { data: current } = await supabase
         .from('rymon_streamer_controls')
         .select('is_paused')
@@ -1391,16 +1632,25 @@ export async function togglePauseLicenseBackend(
 
       const newPaused = !current?.is_paused
       const newStatus = newPaused ? 'PAUSED' : 'ACTIVE'
+      const nowIso = new Date().toISOString()
 
       await supabase
         .from('rymon_streamer_controls')
-        .update({ is_paused: newPaused, updated_at: new Date().toISOString() })
+        .update({ is_paused: newPaused, updated_at: nowIso })
         .eq('license_key', cleanKey)
 
       await supabase
         .from('rymon_licenses')
-        .update({ is_paused: newPaused, status: newStatus })
+        .update({ is_paused: newPaused, status: newStatus, updated_at: nowIso })
         .eq('license_key', cleanKey)
+
+      await supabase.from('rymon_activities').insert({
+        title: newPaused ? 'Key Paused' : 'Key Resumed',
+        event_type: newPaused ? 'KEY_PAUSE' : 'KEY_RESUME',
+        details: `License ${cleanKey} ${newPaused ? 'PAUSED' : 'RESUMED'} by @${requesterUsername}`,
+        actor_username: requesterUsername,
+        status: 'SUCCESS'
+      })
 
       return {
         success: true,
@@ -1438,14 +1688,15 @@ export async function bulkTogglePauseAllKeysBackend(
 ): Promise<{ success: boolean; count: number; message: string }> {
   const newStatus = pauseState ? 'PAUSED' : 'ACTIVE'
   let affected = 0
+  const nowIso = new Date().toISOString()
 
   if (supabase) {
     try {
       let ctrlQuery = supabase
         .from('rymon_streamer_controls')
-        .update({ is_paused: pauseState, updated_at: new Date().toISOString() })
+        .update({ is_paused: pauseState, updated_at: nowIso })
       if (creatorFilter) {
-        ctrlQuery = ctrlQuery.eq('creator', creatorFilter)
+        ctrlQuery = ctrlQuery.ilike('creator', creatorFilter)
       } else {
         ctrlQuery = ctrlQuery.neq('license_key', '')
       }
@@ -1453,11 +1704,11 @@ export async function bulkTogglePauseAllKeysBackend(
 
       let licQuery = supabase
         .from('rymon_licenses')
-        .update({ is_paused: pauseState, status: newStatus })
+        .update({ is_paused: pauseState, status: newStatus, updated_at: nowIso })
         .neq('status', 'BANNED')
         .neq('status', 'EXPIRED')
       if (creatorFilter) {
-        licQuery = licQuery.eq('creator_username', creatorFilter)
+        licQuery = licQuery.ilike('creator_username', creatorFilter)
       }
       const { data } = await licQuery.select('license_key')
       affected = data?.length || 0
@@ -1483,7 +1734,7 @@ export async function bulkTogglePauseAllKeysBackend(
     details: `${pauseState ? 'Paused' : 'Resumed'} all active keys by @${actorUsername}`,
     actor_username: actorUsername,
     status: 'SUCCESS',
-    created_at: new Date().toISOString()
+    created_at: nowIso
   }
   saveStoredActivities([newAct, ...getStoredActivities()])
 
@@ -1500,22 +1751,23 @@ export async function bulkResetAllHwidBackend(
   actorUsername: string = 'rymon',
   creatorFilter?: string
 ): Promise<{ success: boolean; message: string }> {
+  const nowIso = new Date().toISOString()
   if (supabase) {
     try {
       let licQuery = supabase
         .from('rymon_licenses')
-        .update({ device_hwid: '', devices_used: 0 })
+        .update({ device_hwid: '', devices_used: 0, updated_at: nowIso })
         .neq('status', 'BANNED')
       if (creatorFilter) {
-        licQuery = licQuery.eq('creator_username', creatorFilter)
+        licQuery = licQuery.ilike('creator_username', creatorFilter)
       }
       await licQuery
 
       let ctrlQuery = supabase
         .from('rymon_streamer_controls')
-        .update({ device_hwid: '', devices_used: 0 })
+        .update({ device_hwid: '', devices_used: 0, is_online: false, updated_at: nowIso })
       if (creatorFilter) {
-        ctrlQuery = ctrlQuery.eq('creator', creatorFilter)
+        ctrlQuery = ctrlQuery.ilike('creator', creatorFilter)
       } else {
         ctrlQuery = ctrlQuery.neq('license_key', '')
       }
@@ -1539,7 +1791,7 @@ export async function bulkResetAllHwidBackend(
     details: `Reset all HWID bindings by @${actorUsername}`,
     actor_username: actorUsername,
     status: 'SUCCESS',
-    created_at: new Date().toISOString()
+    created_at: nowIso
   }
   saveStoredActivities([newAct, ...getStoredActivities()])
 
@@ -1553,18 +1805,50 @@ export async function bulkExtendAllKeysBackend(
   days: number,
   actorUsername: string = 'rymon',
   creatorFilter?: string
-): Promise<{ success: boolean; count: number; message: string }> {
+): Promise<{ success: boolean; count: number; remainingBalance?: number; message: string }> {
   let count = 0
   const msToAdd = days * 86400000
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+  const isRootOwner =
+    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  let remainingBalance: number | undefined = undefined
 
   if (supabase) {
     try {
       let fetchQuery = supabase.from('rymon_licenses').select('*').neq('status', 'BANNED')
       if (creatorFilter) {
-        fetchQuery = fetchQuery.eq('creator_username', creatorFilter)
+        fetchQuery = fetchQuery.ilike('creator_username', creatorFilter)
       }
       const { data: rows } = await fetchQuery
       if (rows && rows.length > 0) {
+        if (!isRootOwner) {
+          let totalCost = 0
+          for (const r of rows) {
+            totalCost += calculateExtensionCost(days, cleanActor, Number(r.devices_max || 1))
+          }
+          const { data: actorAcc } = await supabase
+            .from('rymon_accounts')
+            .select('*')
+            .ilike('username', cleanActor)
+            .maybeSingle()
+
+          const liveBal = actorAcc ? Number(actorAcc.balance || 0) : 0
+          if (liveBal < totalCost) {
+            return {
+              success: false,
+              count: 0,
+              message: `Insufficient wallet balance! Bulk extending ${rows.length} key(s) by +${days} Day(s) costs ₹${totalCost}, but your balance is ₹${liveBal}.`
+            }
+          }
+          remainingBalance = Math.max(0, liveBal - totalCost)
+          if (actorAcc) {
+            await supabase
+              .from('rymon_accounts')
+              .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
+              .eq('id', actorAcc.id)
+          }
+        }
+
         for (const r of rows) {
           const base = r.expires_at ? new Date(r.expires_at).getTime() : Date.now()
           const nextExp = new Date(Math.max(base, Date.now()) + msToAdd).toISOString()
@@ -1595,8 +1879,8 @@ export async function bulkExtendAllKeysBackend(
     id: Date.now(),
     title: `Bulk Extend (+${days}d)`,
     event_type: 'BULK_EXTEND',
-    details: `Added +${days} Day(s) to all keys by @${actorUsername}`,
-    actor_username: actorUsername,
+    details: `Added +${days} Day(s) to ${count} key(s) by @${cleanActor}`,
+    actor_username: cleanActor,
     status: 'SUCCESS',
     created_at: new Date().toISOString()
   }
@@ -1605,7 +1889,8 @@ export async function bulkExtendAllKeysBackend(
   return {
     success: true,
     count,
-    message: `Added +${days} Day(s) to all active licenses.`
+    remainingBalance,
+    message: `Added +${days} Day(s) to ${count} active license(s).`
   }
 }
 
@@ -1956,10 +2241,13 @@ export async function createReferralCode(
   initialBalance: number = 0,
   customCode?: string,
   maxUses: number = 1
-): Promise<{ success: boolean; code?: string; message: string }> {
+): Promise<{ success: boolean; code?: string; remainingBalance?: number; message: string }> {
   const cleanOwner = (owner || 'debajoyti').trim()
+  const isRootOwner =
+    cleanOwner.toLowerCase() === 'debajoyti' || cleanOwner.toLowerCase() === 'rymon'
+
   // Strict hierarchy: Only Root Owner (debajoyti / rymon) can issue Admin referrals
-  if (cleanOwner.toLowerCase() !== 'debajoyti' && cleanOwner.toLowerCase() !== 'rymon' && targetRole === 'admin') {
+  if (!isRootOwner && targetRole === 'admin') {
     return {
       success: false,
       message: 'Power restriction: Only Root Owner (debajoyti) can issue Admin referral codes. Admins can only invite Resellers.'
@@ -1972,6 +2260,8 @@ export async function createReferralCode(
 
   const safeBalance = Math.max(0, Number(initialBalance) || 0)
   const safeMaxUses = Math.max(1, Number(maxUses) || 1)
+  const totalFundingRequired = isRootOwner ? 0 : safeBalance * safeMaxUses
+  let remainingBalance: number | undefined = undefined
 
   if (supabase) {
     try {
@@ -1983,6 +2273,29 @@ export async function createReferralCode(
 
       if (existing) {
         return { success: false, message: `Referral code ${code} already exists` }
+      }
+
+      if (!isRootOwner && totalFundingRequired > 0) {
+        const { data: adminAcc } = await supabase
+          .from('rymon_accounts')
+          .select('*')
+          .ilike('username', cleanOwner)
+          .maybeSingle()
+
+        const adminBal = adminAcc ? Number(adminAcc.balance || 0) : 0
+        if (adminBal < totalFundingRequired) {
+          return {
+            success: false,
+            message: `Insufficient wallet balance! Creating this invite code requires ₹${totalFundingRequired.toLocaleString('en-IN')} (₹${safeBalance} × ${safeMaxUses} uses), but your wallet has ₹${adminBal.toLocaleString('en-IN')}.`
+          }
+        }
+        remainingBalance = Math.max(0, adminBal - totalFundingRequired)
+        if (adminAcc) {
+          await supabase
+            .from('rymon_accounts')
+            .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
+            .eq('id', adminAcc.id)
+        }
       }
 
       const { data: inserted, error: insErr } = await supabase
@@ -2008,7 +2321,7 @@ export async function createReferralCode(
           await supabase.from('rymon_activities').insert({
             title: `Invite Code Created (${targetRole.toUpperCase()})`,
             event_type: 'REFERRAL_CREATE',
-            details: `Code ${code} ($${safeBalance} start, ${safeMaxUses}x uses) created by @${cleanOwner}`,
+            details: `Code ${code} (₹${safeBalance} start, ${safeMaxUses}x uses${!isRootOwner && totalFundingRequired > 0 ? `, Wallet Deducted: ₹${totalFundingRequired}` : ''}) created by @${cleanOwner}`,
             actor_username: cleanOwner,
             status: 'SUCCESS'
           })
@@ -2017,6 +2330,7 @@ export async function createReferralCode(
         return {
           success: true,
           code,
+          remainingBalance,
           message: `Referral code ${code} created successfully!`
         }
       }
@@ -2026,6 +2340,20 @@ export async function createReferralCode(
   const stored = getStoredReferrals()
   if (stored.some((r) => r.code.toUpperCase() === code)) {
     return { success: false, message: 'Referral code already exists' }
+  }
+
+  if (!isRootOwner && totalFundingRequired > 0) {
+    const accounts = getStoredAccounts()
+    const adminAcc = accounts.find((a) => a.username.toLowerCase() === cleanOwner.toLowerCase())
+    if (!adminAcc || adminAcc.balance < totalFundingRequired) {
+      return {
+        success: false,
+        message: `Insufficient wallet balance! Requires ₹${totalFundingRequired}.`
+      }
+    }
+    adminAcc.balance = Math.max(0, adminAcc.balance - totalFundingRequired)
+    remainingBalance = adminAcc.balance
+    saveStoredAccounts(accounts)
   }
 
   const newRef: RymonReferral = {
@@ -2042,7 +2370,7 @@ export async function createReferralCode(
   stored.unshift(newRef)
   saveStoredReferrals(stored)
 
-  return { success: true, code, message: 'Referral code created successfully' }
+  return { success: true, code, remainingBalance, message: 'Referral code created successfully' }
 }
 
 export async function registerWithReferral(
