@@ -5,7 +5,6 @@ import {
   type RymonLicense,
   type RymonActivity,
   type StreamerControlRecord,
-  type RymonNotification,
   type TelegramConfig,
   loginWithCredentials,
   verifyLicenseKey,
@@ -20,9 +19,6 @@ import {
   toggleBanStatusBackend,
   extendLicenseBackend,
   checkSupabaseSchemaStatus,
-  fetchNotifications,
-  sendBroadcastBackend,
-  deleteNotificationBackend,
   fetchTelegramConfigBackend,
   saveTelegramConfigBackend,
   dispatchTelegramMessage,
@@ -37,12 +33,8 @@ import {
   unlinkTelegramResellerBackend,
   autoDetectTelegramChatId,
   pollAndReplyTelegramBotCommands,
-  type RymonReferral,
   SOVEREIGN_CONNECT_CONFIG,
-  fetchReferralCodes,
-  createReferralCode,
   registerWithReferral,
-  deleteReferralCode,
   renewUserSubscriptionBackend,
   togglePauseLicenseBackend,
   bulkTogglePauseAllKeysBackend,
@@ -75,13 +67,10 @@ type TabType =
   | 'keys'
   | 'telegram'
   | 'users'
-  | 'referrals'
   | 'connect-api'
   | 'add-balance'
-  | 'ban'
   | 'delete'
   | 'extend'
-  | 'broadcast'
   | 'advance'
   | 'sql-setup'
 
@@ -141,6 +130,7 @@ export default function RymonConnect() {
   const [genGame, setGenGame] = useState('Free Fire MAX')
   const [genDuration, setGenDuration] = useState('1 Day')
   const [genCustomPrefix, setGenCustomPrefix] = useState('')
+  const [genIsVipRealtime, setGenIsVipRealtime] = useState(false)
   const [genDevicesMax, setGenDevicesMax] = useState(1)
   const [genQuantity, setGenQuantity] = useState(1)
   const [genCreatedKeysList, setGenCreatedKeysList] = useState<string[]>([])
@@ -158,13 +148,10 @@ export default function RymonConnect() {
   const [keyStatusFilter, setKeyStatusFilter] = useState<
     'ALL' | 'PLAYING' | 'ACTIVE' | 'PAUSED' | 'WAITING' | 'EXPIRED' | 'BANNED'
   >('ALL')
-  const [keyGameFilter, setKeyGameFilter] = useState<string>('ALL')
   const [keyCreatorFilter, setKeyCreatorFilter] = useState<string>('ALL')
   const [searchUserQuery, setSearchUserQuery] = useState('')
 
   // Management Action State
-  const [targetBanUser, setTargetBanUser] = useState('')
-  const [banActionType, setBanActionType] = useState<'ban' | 'unban'>('ban')
   const [targetDeleteUser, setTargetDeleteUser] = useState('__ALL__')
   const [deleteKeyType, setDeleteKeyType] = useState<'expired' | 'unused' | 'all'>('expired')
   const [targetExtendKey, setTargetExtendKey] = useState('')
@@ -182,20 +169,6 @@ export default function RymonConnect() {
   const [pwdModalUser, setPwdModalUser] = useState<string | null>(null)
   const [pwdNewValue, setPwdNewValue] = useState('')
   const [pwdLoading, setPwdLoading] = useState(false)
-
-  // Communication & Messaging Engine State
-  const [notifications, setNotifications] = useState<RymonNotification[]>([])
-  const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false)
-  const [notifFilter, setNotifFilter] = useState<'all' | 'broadcasts' | 'direct'>('all')
-  const [isAnnouncementDismissed, setIsAnnouncementDismissed] = useState(false)
-  const [broadcastTarget, setBroadcastTarget] = useState('ALL')
-  const [broadcastTitle, setBroadcastTitle] = useState('')
-  const [broadcastMessage, setBroadcastMessage] = useState('')
-  const [broadcastType, setBroadcastType] = useState<'INFO' | 'WARNING' | 'ALERT' | 'UPDATE'>('INFO')
-  const [broadcastPin, setBroadcastPin] = useState(true)
-  const [broadcastSendTelegram, setBroadcastSendTelegram] = useState(false)
-  const [broadcastLoading, setBroadcastLoading] = useState(false)
-  const [broadcastSuccessMsg, setBroadcastSuccessMsg] = useState('')
 
   // Telegram Bot Integration State (Pre-configured with RYMON OFFICIAL @Rymon007bot)
   const [telegramConfig, setTelegramConfig] = useState<TelegramConfig>({
@@ -219,21 +192,6 @@ export default function RymonConnect() {
   const [grantUserInput, setGrantUserInput] = useState('')
   const [grantBusy, setGrantBusy] = useState(false)
 
-  // Derived Notification computations
-  const pinnedAnnouncement = useMemo(() => {
-    return notifications.find((n) => n.is_pinned) || notifications[0] || null
-  }, [notifications])
-
-  const filteredNotifications = useMemo(() => {
-    if (notifFilter === 'broadcasts') {
-      return notifications.filter((n) => n.recipient === 'ALL')
-    }
-    if (notifFilter === 'direct') {
-      return notifications.filter((n) => n.recipient !== 'ALL')
-    }
-    return notifications
-  }, [notifications, notifFilter])
-
   // User Registration with Referral Code State
   const [isRegisterMode, setIsRegisterMode] = useState(false)
   const [regUsername, setRegUsername] = useState('')
@@ -243,21 +201,12 @@ export default function RymonConnect() {
   const [regLoading, setRegLoading] = useState(false)
   const [regError, setRegError] = useState('')
 
-  // Sovereign Referral Codes Engine State
-  const [referralList, setReferralList] = useState<RymonReferral[]>([])
-  const [refTargetRole, setRefTargetRole] = useState<'reseller' | 'admin'>('reseller')
-  const [refSubDays, setRefSubDays] = useState<30 | 60>(30)
-  const [refInitialBal, setRefInitialBal] = useState<number | ''>('')
-  const [refCustomCode, setRefCustomCode] = useState('')
-  const [refMaxUses, setRefMaxUses] = useState(1)
-  const [refCreating, setRefCreating] = useState(false)
-  const [copiedRefCode, setCopiedRefCode] = useState<string | null>(null)
-
   // Sovereign Connect URL & APK Test Sandbox State
   const [testConnectKey, setTestConnectKey] = useState('')
   const [testConnectHwid, setTestConnectHwid] = useState('DEVICE-SIM-ANDROID-9981')
   const [testConnectLoading, setTestConnectLoading] = useState(false)
   const [testConnectResult, setTestConnectResult] = useState<string>('')
+  const [codeSnippetTab, setCodeSnippetTab] = useState<'java' | 'cpp' | 'curl'>('java')
 
   // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
@@ -329,11 +278,10 @@ export default function RymonConnect() {
     async function loadLiveData() {
       const isStreamerRole = currentUser?.role === 'streamer'
       await Promise.all([syncPricingFromSupabase(), syncSecurityPolicyFromSupabase()])
-      const [lcs, usrs, acts, notifs, tgCfg, refs, ctrls, tgBindings] = await Promise.all([
+      const [lcs, usrs, acts, tgCfg, ctrls, tgBindings] = await Promise.all([
         fetchAllLicenses(currentUser),
         fetchAllAccounts(currentUser),
         isStreamerRole ? Promise.resolve([]) : fetchAllActivities(),
-        fetchNotifications(currentUser?.username),
         currentUser?.role === 'owner'
           ? fetchTelegramConfigBackend()
           : Promise.resolve({
@@ -342,7 +290,6 @@ export default function RymonConnect() {
               channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
               is_active: true
             }),
-        fetchReferralCodes(currentUser),
         fetchAllStreamerControls(currentUser),
         fetchTelegramResellerBindings()
       ])
@@ -354,9 +301,7 @@ export default function RymonConnect() {
         setKeysList(lcs)
         setUsersList(usrs)
         setActivities(acts)
-        setNotifications(notifs)
         setTelegramConfig(tgCfg)
-        setReferralList(refs)
         setStreamerControls(ctrls)
         setTgResellerBindings(tgBindings)
 
@@ -447,20 +392,6 @@ export default function RymonConnect() {
           { event: '*', schema: 'public', table: 'rymon_activities' },
           () => {
             fetchAllActivities().then((a) => isMounted && setActivities(a))
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'rymon_notifications' },
-          () => {
-            fetchNotifications(currentUser?.username).then((n) => isMounted && setNotifications(n))
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'rymon_referrals' },
-          () => {
-            fetchReferralCodes(currentUser).then((r) => isMounted && setReferralList(r))
           }
         )
         .subscribe()
@@ -584,6 +515,11 @@ export default function RymonConnect() {
     }
 
     loadTelemetry()
+    const fastSyncTimer = setInterval(() => {
+      if (isMounted && !sliderTimerRef.current) {
+        loadTelemetry()
+      }
+    }, 2500)
 
     const channel = supabase
       .channel(`streamer-remote-${currentKey}`)
@@ -651,6 +587,7 @@ export default function RymonConnect() {
 
     return () => {
       isMounted = false
+      clearInterval(fastSyncTimer)
       if (supabase) supabase.removeChannel(channel)
     }
   }, [isAuthenticated, currentKey, currentUser?.role])
@@ -751,6 +688,104 @@ export default function RymonConnect() {
     setActiveTab('overview')
   }
 
+  // ── Web Control Hourly Rate Limiter (Max 3 different keys per hour for normal users) ──
+  const getControlledKeysThisHour = (): string[] => {
+    try {
+      const username = currentUser?.username || 'streamer'
+      const raw = localStorage.getItem(`rymon_webctrl_keys_${username}`)
+      if (!raw) return []
+      const list: Array<{ key: string; timestamp: number }> = JSON.parse(raw)
+      const cutoff = Date.now() - 3600000
+      const valid = list.filter((item) => item.timestamp > cutoff)
+      return Array.from(new Set(valid.map((item) => item.key.toUpperCase())))
+    } catch {
+      return []
+    }
+  }
+
+  const handleSelectRemoteKey = (targetKey: string): boolean => {
+    if (!targetKey) {
+      setCurrentKey('')
+      return true
+    }
+    const clean = targetKey.trim().toUpperCase()
+
+    // 1. Owner has zero limits
+    if (isOwner) {
+      setCurrentKey(clean)
+      return true
+    }
+
+    // 2. VIP Realtime keys have zero limits
+    const targetLicense = keysList.find((k) => k.license_key.toUpperCase() === clean)
+    const isVipKey = Boolean(
+      targetLicense?.plan_duration?.includes('[VIP]') ||
+      record?.streamer_name?.includes('VIP_REALTIME')
+    )
+    if (isVipKey) {
+      setCurrentKey(clean)
+      return true
+    }
+
+    // 3. Normal users: Check 1-hour distinct key limit (max 3)
+    const username = currentUser?.username || 'streamer'
+    const recentKeys = getControlledKeysThisHour()
+
+    // If already controlling this key in current hour window, allow
+    if (recentKeys.includes(clean)) {
+      setCurrentKey(clean)
+      return true
+    }
+
+    // If trying to control a 4th distinct key within 1 hour, block
+    if (recentKeys.length >= 3) {
+      showToast(
+        `⛔ HOURLY KEY LIMIT: Normal accounts can only control 3 different keys per hour. Active this hour: ${recentKeys.join(', ')}. Upgrade to VIP Realtime for unlimited keys.`
+      )
+      return false
+    }
+
+    // Record new key in current hour window
+    try {
+      const raw = localStorage.getItem(`rymon_webctrl_keys_${username}`)
+      const list: Array<{ key: string; timestamp: number }> = raw ? JSON.parse(raw) : []
+      const cutoff = Date.now() - 3600000
+      const pruned = list.filter((item) => item.timestamp > cutoff)
+      pruned.push({ key: clean, timestamp: Date.now() })
+      localStorage.setItem(`rymon_webctrl_keys_${username}`, JSON.stringify(pruned))
+    } catch {}
+
+    setCurrentKey(clean)
+    return true
+  }
+
+  const handleToggleVipKey = async (licenseKey: string, makeVip: boolean) => {
+    if (!isOwner || !supabase) return
+    const keyRecord = keysList.find((k) => k.license_key === licenseKey)
+    if (!keyRecord) return
+    const curPlan = keyRecord.plan_duration || '30 Days'
+    const newPlan = makeVip
+      ? (curPlan.includes('[VIP]') ? curPlan : `${curPlan} [VIP]`)
+      : curPlan.replace(' [VIP]', '').replace('[VIP]', '').trim()
+
+    const { error } = await supabase
+      .from('rymon_licenses')
+      .update({ plan_duration: newPlan })
+      .eq('license_key', licenseKey)
+
+    if (!error) {
+      await supabase
+        .from('rymon_streamer_controls')
+        .update({ streamer_name: makeVip ? 'VIP_REALTIME' : 'VIP Streamer', plan_duration: newPlan })
+        .eq('license_key', licenseKey)
+
+      showToast(`Key ${licenseKey} ${makeVip ? 'upgraded to 👑 VIP Realtime' : 'set to ⚡ Standard'}!`)
+      fetchAllLicenses(currentUser).then(setKeysList)
+    } else {
+      showToast(`Failed to update key tier: ${error.message}`)
+    }
+  }
+
   // 7. KEY GENERATION ENGINE WITH DYNAMIC DEFAULT + INDIVIDUAL USER PRICING
   const effectiveUserPrices = useMemo(() => {
     return getEffectivePriceMap(currentUser?.username)
@@ -823,7 +858,8 @@ export default function RymonConnect() {
       duration: genDuration,
       customPrefix: genCustomPrefix,
       devicesMax: genDevicesMax,
-      quantity: genQuantity
+      quantity: genQuantity,
+      isVipRealtime: isOwner && genIsVipRealtime
     })
     setAuthLoading(false)
 
@@ -1059,6 +1095,52 @@ export default function RymonConnect() {
     )
   }
 
+  const handleToggleRemotePanelMode = async () => {
+    if (!currentKey) return
+    const curName = record?.streamer_name || 'VIP|P:1|E:0|B:0'
+    const isOverlayOn = !curName.includes('P:0')
+    const nextOverlayOn = !isOverlayOn
+    const eVal = curName.match(/E:(\d+)/)?.[1] || '0'
+    const bVal = curName.match(/B:(\d+)/)?.[1] || '0'
+    const nextName = `VIP|P:${nextOverlayOn ? '1' : '0'}|E:${eVal}|B:${bVal}`
+    const nowIso = new Date().toISOString()
+
+    setRecord((prev) => (prev ? { ...prev, streamer_name: nextName, updated_at: nowIso } : null))
+    if (supabase) {
+      try {
+        await supabase
+          .from('rymon_streamer_controls')
+          .update({ streamer_name: nextName, updated_at: nowIso })
+          .eq('license_key', currentKey)
+      } catch {}
+    }
+    showToast(
+      nextOverlayOn
+        ? '👁️ Mode: WEB + IN-GAME OVERLAY'
+        : '🕶️ Mode: WEB ONLY (In-Game Overlay Hidden)'
+    )
+  }
+
+  const handleToggleStealthFreeze = async () => {
+    if (!currentKey) return
+    if (isStaff) {
+      await handleTogglePauseKey(currentKey)
+      return
+    }
+    const nextPaused = !Boolean(record?.is_paused)
+    const nowIso = new Date().toISOString()
+    setRecord((prev) => (prev ? { ...prev, is_paused: nextPaused, updated_at: nowIso } : null))
+    if (supabase) {
+      try {
+        await supabase
+          .from('rymon_streamer_controls')
+          .update({ is_paused: nextPaused, updated_at: nowIso })
+          .eq('license_key', currentKey)
+      } catch {}
+    }
+    showToast(nextPaused ? '❄️ Stealth Freeze Active (Visuals Hidden)' : '▶️ Resumed Live Controls')
+  }
+
   // 10. MANAGEMENT ACTION HANDLERS
   const handleCopyKey = (keyString: string) => {
     navigator.clipboard.writeText(keyString)
@@ -1257,20 +1339,20 @@ export default function RymonConnect() {
     fetchAllActivities(currentUser).then(setActivities)
   }
 
-  const handleApplyBanStatus = async () => {
-    if (!targetBanUser) {
-      alert('Please select a target user.')
-      return
-    }
-    if (targetBanUser.toLowerCase() === 'debajoyti' || targetBanUser.toLowerCase() === 'rymon') {
+  const handleToggleUserBan = async (targetUser: string, currentlyBanned: boolean) => {
+    if (targetUser.toLowerCase() === 'debajoyti' || targetUser.toLowerCase() === 'rymon') {
       alert('Action forbidden: Root Owner account cannot be banned.')
       return
     }
-    const isBan = banActionType === 'ban'
+    const confirmMsg = currentlyBanned
+      ? `Restore and unban account "${targetUser}"?`
+      : `Revoke access and ban account "${targetUser}"?`
+    if (!window.confirm(confirmMsg)) return
+
     const res = await toggleBanStatusBackend(
-      targetBanUser,
+      targetUser,
       'user',
-      isBan,
+      !currentlyBanned,
       currentUser?.username || 'debajoyti'
     )
     if (res.success) {
@@ -1343,53 +1425,7 @@ export default function RymonConnect() {
     }
   }
 
-  // 11. COMMUNICATION & BROADCAST HANDLERS
-  const handleSendBroadcast = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
-      alert('Please enter both title and message.')
-      return
-    }
-
-    setBroadcastLoading(true)
-    setBroadcastSuccessMsg('')
-
-    const sender = currentUser?.username || 'debajoyti'
-    const res = await sendBroadcastBackend(
-      sender,
-      broadcastTarget,
-      broadcastTitle,
-      broadcastMessage,
-      broadcastType,
-      broadcastPin
-    )
-
-    if (broadcastSendTelegram && telegramConfig.bot_token && telegramConfig.chat_id) {
-      const tgText = `<b>[${broadcastType}] ${broadcastTitle}</b>\n\n${broadcastMessage}\n\n<i>From: ${sender} via greenvest.shop</i>`
-      await dispatchTelegramMessage(telegramConfig.bot_token, telegramConfig.chat_id, tgText)
-    }
-
-    setBroadcastLoading(false)
-    if (res.success) {
-      setBroadcastSuccessMsg(res.message)
-      showToast(`Broadcast dispatched to ${broadcastTarget}!`)
-      setBroadcastTitle('')
-      setBroadcastMessage('')
-      setIsAnnouncementDismissed(false)
-      const fresh = await fetchNotifications(currentUser?.username)
-      setNotifications(fresh)
-    } else {
-      setBroadcastSuccessMsg(`Error: ${res.message}`)
-    }
-  }
-
-  const handleDeleteNotification = async (id: number) => {
-    const ok = await deleteNotificationBackend(id)
-    if (ok) {
-      setNotifications((prev) => prev.filter((n) => n.id !== id))
-      showToast('Notification removed.')
-    }
-  }
+  // 11. TELEGRAM BOT HANDLERS
 
   const handleSaveTelegram = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1536,39 +1572,6 @@ export default function RymonConnect() {
     }
   }
 
-  const handleCreateReferral = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!isOwner && refTargetRole !== 'reseller') {
-      alert('Power restriction: Only the Root Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
-      return
-    }
-    setRefCreating(true)
-    const bal = typeof refInitialBal === 'number' ? refInitialBal : 0
-    const res = await createReferralCode(
-      currentUser?.username || 'debajoyti',
-      isOwner ? refTargetRole : 'reseller',
-      bal,
-      refCustomCode,
-      refMaxUses,
-      refSubDays
-    )
-    setRefCreating(false)
-    if (res.success) {
-      if (res.remainingBalance !== undefined && currentUser) {
-        setWalletBalance(res.remainingBalance)
-        const updatedMe = { ...currentUser, balance: res.remainingBalance }
-        setCurrentUser(updatedMe)
-        localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
-      }
-      showToast(`Created ${refSubDays}D subscription invite code: ${res.code}`)
-      setRefCustomCode('')
-      setRefInitialBal('')
-      fetchReferralCodes(currentUser).then(setReferralList)
-    } else {
-      alert(`Error: ${res.message}`)
-    }
-  }
-
   const handleRenewUserSubscription = async (targetUsername: string, days: 30 | 60) => {
     const res = await renewUserSubscriptionBackend(
       targetUsername,
@@ -1620,14 +1623,6 @@ export default function RymonConnect() {
     setSecurityPolicy(nextPolicy)
     await saveSovereignSecurityPolicy(nextPolicy)
     showToast('🛡️ Sovereign Enterprise Security Policy saved!')
-  }
-
-  const handleDeleteReferral = async (id: number) => {
-    const ok = await deleteReferralCode(id)
-    if (ok) {
-      setReferralList((prev) => prev.filter((r) => r.id !== id))
-      showToast('Referral code deleted.')
-    }
   }
 
   const handleTogglePauseKey = async (keyString: string) => {
@@ -1759,7 +1754,6 @@ export default function RymonConnect() {
       if (keyStatusFilter === 'WAITING' && k.status !== 'WAITING') return false
       if (keyStatusFilter === 'EXPIRED' && k.status !== 'EXPIRED') return false
       if (keyStatusFilter === 'BANNED' && k.status !== 'BANNED') return false
-      if (keyGameFilter !== 'ALL' && k.game !== keyGameFilter) return false
       if (
         keyCreatorFilter !== 'ALL' &&
         k.creator_username.toLowerCase() !== keyCreatorFilter.toLowerCase()
@@ -1775,7 +1769,7 @@ export default function RymonConnect() {
         (k.device_hwid && k.device_hwid.toLowerCase().includes(q))
       )
     })
-  }, [keysList, searchKeyQuery, keyStatusFilter, keyGameFilter, keyCreatorFilter, onlineKeySet])
+  }, [keysList, searchKeyQuery, keyStatusFilter, keyCreatorFilter, onlineKeySet])
 
   const filteredUsers = useMemo(() => {
     if (!searchUserQuery.trim()) return usersList
@@ -1818,7 +1812,7 @@ export default function RymonConnect() {
       setActiveTab('remote')
     } else if (
       isReseller &&
-      !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend', 'delete'].includes(activeTab)
+      !['remote', 'overview', 'generate', 'keys', 'extend', 'delete'].includes(activeTab)
     ) {
       setActiveTab('overview')
     } else if (
@@ -1828,19 +1822,18 @@ export default function RymonConnect() {
         'overview',
         'generate',
         'keys',
-        'connect-api',
         'extend',
         'users',
-        'referrals',
         'add-balance',
-        'ban',
         'delete',
         'advance'
       ].includes(activeTab)
     ) {
       setActiveTab('overview')
+    } else if (!isOwner && activeTab === 'connect-api') {
+      setActiveTab('overview')
     }
-  }, [isStreamer, isReseller, isAdmin, activeTab])
+  }, [isStreamer, isReseller, isAdmin, isOwner, activeTab])
 
   return (
     <div style={styles.appShell}>
@@ -1906,50 +1899,6 @@ export default function RymonConnect() {
             <span style={styles.pingText}>{ping}ms</span>
           </div>
 
-          {/* Notification Bell with Badge */}
-          {isAuthenticated && (
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setIsNotifDrawerOpen(!isNotifDrawerOpen)}
-                style={{
-                  background: isNotifDrawerOpen ? 'rgba(0, 217, 255, 0.25)' : 'rgba(15, 23, 42, 0.85)',
-                  border: isNotifDrawerOpen ? '1px solid #00d9ff' : '1px solid rgba(0, 217, 255, 0.35)',
-                  borderRadius: '10px',
-                  padding: '7px 12px',
-                  color: '#f8fafc',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  transition: 'all 0.2s',
-                  position: 'relative'
-                }}
-                title="System Broadcasts & User Messages"
-              >
-                <span style={{ fontSize: '15px' }}>🔔</span>
-                {notifications.length > 0 && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: '-4px',
-                      right: '-4px',
-                      background: '#ff3366',
-                      color: '#ffffff',
-                      fontSize: '10px',
-                      fontWeight: 800,
-                      borderRadius: '999px',
-                      padding: '1px 6px',
-                      boxShadow: '0 0 10px rgba(255, 51, 102, 0.8)'
-                    }}
-                  >
-                    {notifications.length}
-                  </span>
-                )}
-              </button>
-            </div>
-          )}
 
           {/* User Profile Pill */}
           {isAuthenticated ? (
@@ -1984,106 +1933,6 @@ export default function RymonConnect() {
         </div>
       </header>
 
-      {/* ── GLOBAL ANNOUNCEMENT / BROADCAST MARQUEE ────────────────────────────── */}
-      {pinnedAnnouncement && !isAnnouncementDismissed && (
-        <div
-          style={{
-            background:
-              pinnedAnnouncement.type === 'ALERT'
-                ? 'linear-gradient(90deg, rgba(255, 51, 102, 0.25) 0%, rgba(15, 23, 42, 0.98) 50%, rgba(255, 51, 102, 0.25) 100%)'
-                : pinnedAnnouncement.type === 'WARNING'
-                ? 'linear-gradient(90deg, rgba(255, 183, 0, 0.25) 0%, rgba(15, 23, 42, 0.98) 50%, rgba(255, 183, 0, 0.25) 100%)'
-                : 'linear-gradient(90deg, rgba(0, 217, 255, 0.2) 0%, rgba(15, 23, 42, 0.98) 50%, rgba(0, 217, 255, 0.2) 100%)',
-            borderBottom:
-              pinnedAnnouncement.type === 'ALERT'
-                ? '1px solid rgba(255, 51, 102, 0.5)'
-                : pinnedAnnouncement.type === 'WARNING'
-                ? '1px solid rgba(255, 183, 0, 0.5)'
-                : '1px solid rgba(0, 217, 255, 0.4)',
-            padding: '9px 24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '14px',
-            fontSize: '13px',
-            color: '#e2e8f0',
-            position: 'relative',
-            zIndex: 45
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-            <span
-              style={{
-                background:
-                  pinnedAnnouncement.type === 'ALERT'
-                    ? 'rgba(255, 51, 102, 0.25)'
-                    : pinnedAnnouncement.type === 'WARNING'
-                    ? 'rgba(255, 183, 0, 0.25)'
-                    : 'rgba(0, 217, 255, 0.25)',
-                color:
-                  pinnedAnnouncement.type === 'ALERT'
-                    ? '#ff3366'
-                    : pinnedAnnouncement.type === 'WARNING'
-                    ? '#ffb700'
-                    : '#00d9ff',
-                padding: '2px 8px',
-                borderRadius: '4px',
-                fontWeight: 800,
-                fontSize: '10px',
-                letterSpacing: '0.6px',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              📢 {pinnedAnnouncement.type}
-            </span>
-            <span style={{ fontWeight: 700, color: '#f8fafc', whiteSpace: 'nowrap' }}>
-              {pinnedAnnouncement.title}:
-            </span>
-            <span
-              style={{
-                color: '#cbd5e1',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                flex: 1
-              }}
-            >
-              {pinnedAnnouncement.message}
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-            <button
-              onClick={() => setIsNotifDrawerOpen(true)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#00d9ff',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                textDecoration: 'underline'
-              }}
-            >
-              View All
-            </button>
-            <button
-              onClick={() => setIsAnnouncementDismissed(true)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#94a3b8',
-                fontSize: '16px',
-                cursor: 'pointer',
-                padding: '0 4px',
-                lineHeight: 1
-              }}
-              title="Dismiss announcement banner"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── NOTIFICATION TOAST ──────────────────────────────────────────────── */}
       {actionSuccessMsg && (
@@ -2454,26 +2303,103 @@ export default function RymonConnect() {
               {/* Staff-Only Navigation Sections (Hidden from key-login Streamers) */}
               {!isStreamer && (
                 <>
-                  {/* Dashboards */}
-                  <div style={styles.navCategoryHeader}>DASHBOARDS</div>
-                  <button
-                    onClick={() => {
-                      setActiveTab('overview')
-                      setMobileMenuOpen(false)
-                    }}
-                    style={{
-                      ...styles.navItem,
-                      ...(activeTab === 'overview' ? styles.navItemActive : {})
-                    }}
-                  >
-                    <span style={styles.navIcon}>📊</span>
-                    <span>Overview</span>
-                  </button>
 
-                  {/* User System */}
-                  {isStaff && (
+                  {/* Reseller — Focused simplified view */}
+                  {isReseller && (
                     <>
-                      <div style={styles.navCategoryHeader}>USER SYSTEM</div>
+                      <div style={styles.navCategoryHeader}>DASHBOARDS</div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('overview')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'overview' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>📊</span>
+                        <span>Overview</span>
+                      </button>
+
+                      <div style={styles.navCategoryHeader}>LICENSE ENGINE</div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('generate')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'generate' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>⚡</span>
+                        <span>Generate Key</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('keys')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'keys' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>🔑</span>
+                        <span>License Keys</span>
+                      </button>
+
+                      <div style={styles.navCategoryHeader}>MY WALLET</div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('add-balance')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'add-balance' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>💼</span>
+                        <span>Transfer Balance</span>
+                        <span style={styles.cyanMiniBadge}>WALLET</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('advance')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'advance' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>💰</span>
+                        <span>Reseller Pricing</span>
+                      </button>
+                    </>
+                  )}
+
+                  {/* Owner & Admin — Full management view */}
+                  {(isOwner || isAdmin) && (
+                    <>
+                      <div style={styles.navCategoryHeader}>DASHBOARDS</div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('overview')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'overview' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>📊</span>
+                        <span>Overview</span>
+                      </button>
+
+                      <div style={styles.navCategoryHeader}>LICENSE ENGINE</div>
                       <button
                         onClick={() => {
                           setActiveTab('generate')
@@ -2516,46 +2442,20 @@ export default function RymonConnect() {
                           <span style={styles.cyanMiniBadge}>OWNER</span>
                         </button>
                       )}
-                      <button
-                        onClick={() => {
-                          setActiveTab('connect-api')
-                          setMobileMenuOpen(false)
-                        }}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'connect-api' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}>🔗</span>
-                        <span>Connect URL & APK</span>
-                        <span style={styles.cyanMiniBadge}>SOVEREIGN</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setActiveTab('extend')
-                          setMobileMenuOpen(false)
-                        }}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'extend' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}>📅</span>
-                        <span>Extend Keys</span>
-                      </button>
-                      {isReseller && (
+                      {isOwner && (
                         <button
                           onClick={() => {
-                            setActiveTab('delete')
+                            setActiveTab('connect-api')
                             setMobileMenuOpen(false)
                           }}
                           style={{
                             ...styles.navItem,
-                            ...(activeTab === 'delete' ? styles.navItemActive : {})
+                            ...(activeTab === 'connect-api' ? styles.navItemActive : {})
                           }}
                         >
-                          <span style={styles.navIcon}>🗑️</span>
-                          <span>Clean Expired / Unused</span>
+                          <span style={styles.navIcon}>🔌</span>
+                          <span>Connect & API</span>
+                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>OWNER</span>
                         </button>
                       )}
                     </>
@@ -2578,36 +2478,6 @@ export default function RymonConnect() {
                         <span style={styles.navIcon}>👥</span>
                         <span>{isOwner ? 'Users (All)' : 'My Resellers'}</span>
                       </button>
-                      {isOwner && (
-                        <button
-                          onClick={() => {
-                            setActiveTab('broadcast')
-                            setMobileMenuOpen(false)
-                          }}
-                          style={{
-                            ...styles.navItem,
-                            ...(activeTab === 'broadcast' ? styles.navItemActive : {})
-                          }}
-                        >
-                          <span style={styles.navIcon}>📢</span>
-                          <span>Talk to Users / Broadcast</span>
-                          <span style={styles.cyanMiniBadge}>OWNER</span>
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          setActiveTab('referrals')
-                          setMobileMenuOpen(false)
-                        }}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'referrals' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}>🎟️</span>
-                        <span>Invite Codes</span>
-                        <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER' : 'ADMIN'}</span>
-                      </button>
                       <button
                         onClick={() => {
                           setActiveTab('add-balance')
@@ -2622,39 +2492,7 @@ export default function RymonConnect() {
                         <span>{isOwner ? 'Add Balance' : 'Transfer Balance'}</span>
                         <span style={styles.cyanMiniBadge}>{isOwner ? 'FREE' : 'WALLET'}</span>
                       </button>
-                      <button
-                        onClick={() => {
-                          setActiveTab('delete')
-                          setMobileMenuOpen(false)
-                        }}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'delete' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}>🗑️</span>
-                        <span>{isOwner ? 'Delete Keys' : 'Clean Expired Keys'}</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setActiveTab('ban')
-                          setMobileMenuOpen(false)
-                        }}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'ban' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}>🛡️</span>
-                        <span>Ban / Unban</span>
-                      </button>
-                    </>
-                  )}
 
-                  {/* Core Config (Owner & Admin Pricing) */}
-                  {(isOwner || isAdmin) && (
-                    <>
-                      <div style={styles.navCategoryHeader}>CORE CONFIG</div>
                       <button
                         onClick={() => {
                           setActiveTab('advance')
@@ -2666,23 +2504,8 @@ export default function RymonConnect() {
                         }}
                       >
                         <span style={styles.navIcon}>💰</span>
-                        <span>{isOwner ? 'Pricing & Advance' : 'Reseller Pricing'}</span>
+                        <span>{isOwner ? 'Pricing & Rates' : 'Reseller Pricing'}</span>
                       </button>
-                      {isOwner && (
-                        <button
-                          onClick={() => {
-                            setActiveTab('sql-setup')
-                            setMobileMenuOpen(false)
-                          }}
-                          style={{
-                            ...styles.navItem,
-                            ...(activeTab === 'sql-setup' ? styles.navItemActive : {})
-                          }}
-                        >
-                          <span style={styles.navIcon}>🗄️</span>
-                          <span>Database SQL</span>
-                        </button>
-                      )}
                     </>
                   )}
                 </>
@@ -2698,9 +2521,6 @@ export default function RymonConnect() {
                 <div style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>Operational Matrix</h2>
-                    <p style={styles.pageSubtitle}>
-                      Live telemetry, active authorizations, and real-time licensing transactions. Click any counter to filter keys.
-                    </p>
                   </div>
                   <div style={styles.badgeCluster}>
                     <span style={styles.greenPulseBadge}>● SUPABASE ACTIVE</span>
@@ -2872,8 +2692,9 @@ export default function RymonConnect() {
                         <button
                           key={k.license_key}
                           onClick={() => {
-                            setCurrentKey(k.license_key)
-                            setActiveTab('remote')
+                            if (handleSelectRemoteKey(k.license_key)) {
+                              setActiveTab('remote')
+                            }
                           }}
                           style={{
                             padding: '5px 10px',
@@ -3201,9 +3022,7 @@ export default function RymonConnect() {
                             onChange={(e) => setGenGame(e.target.value)}
                             style={styles.selectInput}
                           >
-                            <option value="Free Fire MAX">Free Fire MAX</option>
-                            <option value="BGMI">BGMI</option>
-                            <option value="PUBG">PUBG Mobile</option>
+                            <option value="Free Fire MAX">Free Fire MAX (Dedicated)</option>
                           </select>
                         </div>
 
@@ -3263,6 +3082,42 @@ export default function RymonConnect() {
                           style={styles.keyInput}
                         />
                       </div>
+
+                      {isOwner && (
+                        <div
+                          style={{
+                            marginTop: '16px',
+                            padding: '12px 14px',
+                            background: genIsVipRealtime ? 'rgba(250, 204, 21, 0.12)' : 'rgba(15, 23, 42, 0.65)',
+                            border: genIsVipRealtime ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid rgba(148, 163, 184, 0.25)',
+                            borderRadius: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '12px'
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: 800, color: '#fde047', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>👑</span> VIP REALTIME TIER (OWNER ONLY)
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                              Enables ultra-low latency (15ms) WebSocket sync and unlimited web controls.
+                            </div>
+                          </div>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={genIsVipRealtime}
+                              onChange={(e) => setGenIsVipRealtime(e.target.checked)}
+                              style={{ width: '18px', height: '18px', accentColor: '#eab308', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontSize: '11px', fontWeight: 800, color: genIsVipRealtime ? '#fde047' : '#64748b' }}>
+                              {genIsVipRealtime ? '👑 VIP ACTIVE' : '⚡ STANDARD'}
+                            </span>
+                          </label>
+                        </div>
+                      )}
 
                       {/* Cost Summary Box */}
                       <div style={styles.invoiceSummaryBox}>
@@ -3416,21 +3271,7 @@ export default function RymonConnect() {
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <select
-                      value={keyGameFilter}
-                      onChange={(e) => setKeyGameFilter(e.target.value)}
-                      style={{
-                        ...styles.selectInput,
-                        width: 'auto',
-                        padding: '8px 12px',
-                        fontSize: '12px'
-                      }}
-                    >
-                      <option value="ALL">🎮 All Games</option>
-                      <option value="Free Fire MAX">Free Fire MAX</option>
-                      <option value="BGMI">BGMI</option>
-                      <option value="PUBG">PUBG Mobile</option>
-                    </select>
+
                     {(isOwner || isAdmin) && (
                       <select
                         value={keyCreatorFilter}
@@ -3809,7 +3650,28 @@ export default function RymonConnect() {
                                 </div>
                               </td>
                               <td style={styles.td}>
-                                <span style={styles.planBadge}>{k.plan_duration}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={styles.planBadge}>{k.plan_duration?.replace(' [VIP]', '')}</span>
+                                  {isOwner && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleVipKey(k.license_key, !k.plan_duration?.includes('[VIP]'))}
+                                      style={{
+                                        border: k.plan_duration?.includes('[VIP]') ? '1px solid rgba(250, 204, 21, 0.55)' : '1px solid rgba(148, 163, 184, 0.3)',
+                                        background: k.plan_duration?.includes('[VIP]') ? 'rgba(250, 204, 21, 0.18)' : 'rgba(148, 163, 184, 0.12)',
+                                        color: k.plan_duration?.includes('[VIP]') ? '#fde047' : '#94a3b8',
+                                        fontSize: '9.5px',
+                                        fontWeight: 800,
+                                        padding: '2px 6px',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer'
+                                      }}
+                                      title={k.plan_duration?.includes('[VIP]') ? 'Owner: Click to downgrade to Standard' : 'Owner: Click to upgrade to VIP Realtime'}
+                                    >
+                                      {k.plan_duration?.includes('[VIP]') ? '👑 VIP' : '⚡ STD'}
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                               <td style={styles.td}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -3894,8 +3756,9 @@ export default function RymonConnect() {
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                   <button
                                     onClick={() => {
-                                      setCurrentKey(k.license_key)
-                                      setActiveTab('remote')
+                                      if (handleSelectRemoteKey(k.license_key)) {
+                                        setActiveTab('remote')
+                                      }
                                     }}
                                     style={{ ...styles.actionIconBtn, color: '#00d9ff' }}
                                     title="Open Streamer Remote for this Key"
@@ -4158,14 +4021,15 @@ export default function RymonConnect() {
                                       🔑 Pass
                                     </button>
                                     <button
-                                      onClick={() => {
-                                        setTargetBanUser(u.username)
-                                        setActiveTab('ban')
+                                      onClick={() => handleToggleUserBan(u.username, u.status === 'BANNED')}
+                                      style={{
+                                        ...styles.actionIconBtn,
+                                        color: u.status === 'BANNED' ? '#ef4444' : '#94a3b8',
+                                        borderColor: u.status === 'BANNED' ? 'rgba(239, 68, 68, 0.4)' : undefined
                                       }}
-                                      style={styles.actionIconBtn}
-                                      title="Ban / Unban User"
+                                      title={u.status === 'BANNED' ? 'Unban User (Restore Access)' : 'Ban User (Revoke Access)'}
                                     >
-                                      🛡️
+                                      {u.status === 'BANNED' ? '🚫' : '🛡️'}
                                     </button>
                                   </div>
                                 ) : (
@@ -4177,76 +4041,6 @@ export default function RymonConnect() {
                         })}
                       </tbody>
                     </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 6. BULK BAN / UNBAN (MEDIA_1791705541648_1FDBB7B4.PNG) */}
-            {activeTab === 'ban' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
-                  <div>
-                    <h2 style={styles.pageTitle}>Bulk Ban / Unban Facility</h2>
-                    <p style={styles.pageSubtitle}>
-                      {isOwner
-                        ? 'Banning an Admin or Reseller immediately revokes access for their account.'
-                        : 'Suspend or restore access for any Reseller in your downline team.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div style={styles.centerCardWrapper}>
-                  <div style={styles.managementCard}>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>
-                        Target {isOwner ? 'User (Admin / Reseller)' : 'Downline Reseller'} <span style={{ color: '#ef4444' }}>*</span>
-                      </label>
-                      <select
-                        value={targetBanUser}
-                        onChange={(e) => setTargetBanUser(e.target.value)}
-                        style={styles.selectInput}
-                      >
-                        <option value="">-- Select a User --</option>
-                        {usersList
-                          .filter((u) =>
-                            isOwner
-                              ? u.role !== 'owner'
-                              : u.role === 'reseller' && u.username.toLowerCase() !== currentUser?.username.toLowerCase()
-                          )
-                          .map((u) => (
-                            <option key={u.id} value={u.username}>
-                              {u.username} ({u.role.toUpperCase()} • {u.status})
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-
-                    <div style={{ ...styles.formGroup, marginTop: '16px' }}>
-                      <label style={styles.formLabel}>
-                        Action to Perform <span style={{ color: '#ef4444' }}>*</span>
-                      </label>
-                      <select
-                        value={banActionType}
-                        onChange={(e) => setBanActionType(e.target.value as any)}
-                        style={styles.selectInput}
-                      >
-                        <option value="ban">Ban User (Revoke Access)</option>
-                        <option value="unban">Unban User (Restore Access)</option>
-                      </select>
-                    </div>
-
-                    <button
-                      onClick={handleApplyBanStatus}
-                      style={{
-                        ...styles.submitBtn,
-                        marginTop: '24px',
-                        background: banActionType === 'ban' ? '#ef4444' : '#05df72',
-                        color: banActionType === 'ban' ? '#fff' : '#07090e'
-                      }}
-                    >
-                      Apply Status Change
-                    </button>
                   </div>
                 </div>
               </div>
@@ -4511,355 +4305,7 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {/* 8B. TALK TO USERS & BROADCAST SYSTEM */}
-            {activeTab === 'broadcast' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
-                  <div>
-                    <h2 style={styles.pageTitle}>Talk to Users & Broadcast System</h2>
-                    <p style={styles.pageSubtitle}>
-                      Send live announcements, maintenance alerts, and private notices to all registered users or specific accounts in real-time.
-                    </p>
-                  </div>
-                  <div style={styles.badgeCluster}>
-                    <span style={styles.greenPulseBadge}>● SUPABASE REALTIME LIVE</span>
-                    <span style={styles.cyanMiniBadge}>ZERO LATENCY</span>
-                  </div>
-                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
-                  {/* Left Column: Compose Message */}
-                  <div style={styles.cardBox}>
-                    <div style={styles.cardHeader}>
-                      <h4>📢 Compose Real-Time Broadcast</h4>
-                      <span style={styles.cyanMiniBadge}>DISPATCH GATEWAY</span>
-                    </div>
-
-                    <form onSubmit={handleSendBroadcast} style={{ marginTop: '16px' }}>
-                      {/* Recipient */}
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>
-                          TARGET AUDIENCE / RECIPIENT <span style={{ color: '#00d9ff' }}>*</span>
-                        </label>
-                        <select
-                          value={broadcastTarget}
-                          onChange={(e) => setBroadcastTarget(e.target.value)}
-                          style={styles.selectInput}
-                        >
-                          <option value="ALL">📢 ALL USERS (Global Announcement - Everyone Sees)</option>
-                          <optgroup label="Specific Registered Users">
-                            {usersList.map((u) => (
-                              <option key={u.id} value={u.username}>
-                                👤 {u.username} ({u.role.toUpperCase()} • ₹{u.balance.toLocaleString('en-IN')})
-                              </option>
-                            ))}
-                          </optgroup>
-                        </select>
-                      </div>
-
-                      {/* Message Severity/Type */}
-                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
-                        <label style={styles.formLabel}>MESSAGE CATEGORY & SEVERITY</label>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-                          {(['INFO', 'UPDATE', 'WARNING', 'ALERT'] as const).map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => setBroadcastType(t)}
-                              style={{
-                                padding: '8px 4px',
-                                borderRadius: '8px',
-                                border: broadcastType === t ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
-                                background:
-                                  broadcastType === t
-                                    ? t === 'ALERT'
-                                      ? 'rgba(255,51,102,0.25)'
-                                      : t === 'WARNING'
-                                      ? 'rgba(255,183,0,0.25)'
-                                      : t === 'UPDATE'
-                                      ? 'rgba(5,223,114,0.25)'
-                                      : 'rgba(0,217,255,0.25)'
-                                    : 'rgba(15,23,42,0.6)',
-                                color:
-                                  t === 'ALERT'
-                                    ? '#ff3366'
-                                    : t === 'WARNING'
-                                    ? '#ffb700'
-                                    : t === 'UPDATE'
-                                    ? '#05df72'
-                                    : '#00d9ff',
-                                fontSize: '11px',
-                                fontWeight: 800,
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
-                              }}
-                            >
-                              {t === 'ALERT' ? '🚨 ALERT' : t === 'WARNING' ? '⚠️ WARN' : t === 'UPDATE' ? '⚡ UPDATE' : 'ℹ️ INFO'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Title */}
-                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
-                        <label style={styles.formLabel}>
-                          NOTICE TITLE <span style={{ color: '#00d9ff' }}>*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={broadcastTitle}
-                          onChange={(e) => setBroadcastTitle(e.target.value)}
-                          placeholder="e.g. PUBG Mobile 3.7 Injection Bypass Released"
-                          style={styles.keyInput}
-                          required
-                        />
-                      </div>
-
-                      {/* Message Body */}
-                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
-                        <label style={styles.formLabel}>
-                          MESSAGE CONTENT <span style={{ color: '#00d9ff' }}>*</span>
-                        </label>
-                        <textarea
-                          rows={4}
-                          value={broadcastMessage}
-                          onChange={(e) => setBroadcastMessage(e.target.value)}
-                          placeholder="Write your announcement or direct instructions here..."
-                          style={{
-                            ...styles.keyInput,
-                            height: 'auto',
-                            resize: 'vertical',
-                            lineHeight: 1.5,
-                            fontFamily: 'inherit'
-                          }}
-                          required
-                        />
-                      </div>
-
-                      {/* Quick Presets */}
-                      <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: '#64748b', alignSelf: 'center' }}>Presets:</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBroadcastType('UPDATE')
-                            setBroadcastTitle('⚡ PUBG 3.7 & FreeFire V42 Update Released')
-                            setBroadcastMessage('All memory tables, safe ESP overlays, and bypass drivers updated. Streamers can resume live games safely.')
-                            setBroadcastPin(true)
-                          }}
-                          style={styles.chipBtn}
-                        >
-                          Game Update
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBroadcastType('WARNING')
-                            setBroadcastTitle('⚠️ Scheduled 15-Minute Cloud Maintenance')
-                            setBroadcastMessage('Database synchronization will undergo brief maintenance at 12:00 AM UTC. Active keys remain valid.')
-                            setBroadcastPin(true)
-                          }}
-                          style={styles.chipBtn}
-                        >
-                          Maintenance
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBroadcastType('INFO')
-                            setBroadcastTitle('💼 Reseller Balance Top-Up Bonus')
-                            setBroadcastMessage('Special wallet credit promotion active today for all certified distributors. Contact owner on Telegram.')
-                            setBroadcastPin(false)
-                          }}
-                          style={styles.chipBtn}
-                        >
-                          Balance Promo
-                        </button>
-                      </div>
-
-                      {/* Options */}
-                      <div style={{ marginTop: '18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#cbd5e1', cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={broadcastPin}
-                            onChange={(e) => setBroadcastPin(e.target.checked)}
-                            style={{ accentColor: '#00d9ff' }}
-                          />
-                          <span>📌 Pin as Top Marquee Banner across all user dashboards</span>
-                        </label>
-
-                        {telegramConfig.bot_token && telegramConfig.chat_id && (
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#cbd5e1', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={broadcastSendTelegram}
-                              onChange={(e) => setBroadcastSendTelegram(e.target.checked)}
-                              style={{ accentColor: '#00d9ff' }}
-                            />
-                            <span>✈️ Also dispatch to Telegram channel ({telegramConfig.channel_username || telegramConfig.chat_id})</span>
-                          </label>
-                        )}
-                      </div>
-
-                      {broadcastSuccessMsg && (
-                        <div style={{ marginTop: '14px', fontSize: '12px', color: '#05df72', fontWeight: 600 }}>
-                          ✓ {broadcastSuccessMsg}
-                        </div>
-                      )}
-
-                      <button
-                        type="submit"
-                        disabled={broadcastLoading}
-                        style={{
-                          ...styles.submitBtn,
-                          marginTop: '20px',
-                          background: 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)',
-                          color: '#07090e',
-                          fontWeight: 800
-                        }}
-                      >
-                        {broadcastLoading ? 'DISPATCHING ACROSS SUPABASE REALTIME...' : '📢 DISPATCH BROADCAST IN REAL-TIME'}
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* Right Column: Live Feed & History */}
-                  <div style={styles.cardBox}>
-                    <div style={styles.cardHeader}>
-                      <h4>📋 Active Broadcasts & Message Log ({notifications.length})</h4>
-                      <span style={styles.cyanMiniBadge}>LIVE AUDIT FEED</span>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '8px', margin: '14px 0' }}>
-                      <button
-                        onClick={() => setNotifFilter('all')}
-                        style={{
-                          ...styles.chipBtn,
-                          background: notifFilter === 'all' ? 'rgba(0,217,255,0.2)' : 'rgba(15,23,42,0.6)',
-                          color: notifFilter === 'all' ? '#00d9ff' : '#94a3b8'
-                        }}
-                      >
-                        All ({notifications.length})
-                      </button>
-                      <button
-                        onClick={() => setNotifFilter('broadcasts')}
-                        style={{
-                          ...styles.chipBtn,
-                          background: notifFilter === 'broadcasts' ? 'rgba(0,217,255,0.2)' : 'rgba(15,23,42,0.6)',
-                          color: notifFilter === 'broadcasts' ? '#00d9ff' : '#94a3b8'
-                        }}
-                      >
-                        Broadcasts ({notifications.filter((n) => n.recipient === 'ALL').length})
-                      </button>
-                      <button
-                        onClick={() => setNotifFilter('direct')}
-                        style={{
-                          ...styles.chipBtn,
-                          background: notifFilter === 'direct' ? 'rgba(0,217,255,0.2)' : 'rgba(15,23,42,0.6)',
-                          color: notifFilter === 'direct' ? '#00d9ff' : '#94a3b8'
-                        }}
-                      >
-                        Direct ({notifications.filter((n) => n.recipient !== 'ALL').length})
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '520px', overflowY: 'auto', paddingRight: '4px' }}>
-                      {filteredNotifications.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
-                          No messages found. Dispatch your first broadcast above!
-                        </div>
-                      ) : (
-                        filteredNotifications.map((n) => (
-                          <div
-                            key={n.id}
-                            style={{
-                              background: 'rgba(15, 23, 42, 0.7)',
-                              border: '1px solid rgba(30, 41, 59, 0.7)',
-                              borderRadius: '12px',
-                              padding: '14px 16px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '8px'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span
-                                  style={{
-                                    fontSize: '9px',
-                                    fontWeight: 800,
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    background:
-                                      n.type === 'ALERT'
-                                        ? 'rgba(255,51,102,0.2)'
-                                        : n.type === 'WARNING'
-                                        ? 'rgba(255,183,0,0.2)'
-                                        : n.type === 'UPDATE'
-                                        ? 'rgba(5,223,114,0.2)'
-                                        : 'rgba(0,217,255,0.2)',
-                                    color:
-                                      n.type === 'ALERT'
-                                        ? '#ff3366'
-                                        : n.type === 'WARNING'
-                                        ? '#ffb700'
-                                        : n.type === 'UPDATE'
-                                        ? '#05df72'
-                                        : '#00d9ff'
-                                  }}
-                                >
-                                  {n.type}
-                                </span>
-                                <span style={{ fontSize: '11px', color: n.recipient === 'ALL' ? '#00d9ff' : '#a855f7', fontWeight: 700 }}>
-                                  {n.recipient === 'ALL' ? '📢 To: ALL USERS' : `👤 To: @${n.recipient}`}
-                                </span>
-                                {n.is_pinned && (
-                                  <span style={{ fontSize: '10px', color: '#eab308' }} title="Pinned as Marquee Banner">
-                                    📌 PINNED
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '11px', color: '#64748b' }}>
-                                  {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                                {(isOwner || isAdmin) && (
-                                  <button
-                                    onClick={() => handleDeleteNotification(n.id)}
-                                    style={{
-                                      background: 'none',
-                                      border: 'none',
-                                      color: '#ef4444',
-                                      cursor: 'pointer',
-                                      fontSize: '13px',
-                                      padding: '2px 4px'
-                                    }}
-                                    title="Delete notification"
-                                  >
-                                    🗑️
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>
-                              {n.title}
-                            </div>
-                            <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.5 }}>
-                              {n.message}
-                            </div>
-                            <div style={{ fontSize: '10px', color: '#475569' }}>
-                              Dispatched by <strong>{n.sender}</strong>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* 8C. TELEGRAM BOT DISPATCH GATEWAY */}
             {activeTab === 'telegram' && (
@@ -5968,333 +5414,26 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {/* 11. REFERRAL / INVITE CODE ENGINE (OWNER & ADMIN) */}
-            {activeTab === 'referrals' && (
+            {/* 12. SOVEREIGN CONNECT URL & APK ENGINE (OWNER ONLY) */}
+            {activeTab === 'connect-api' && isOwner && (
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Role Invite Codes Engine</h2>
+                    <h2 style={styles.pageTitle}>Sovereign Connect Engine &amp; Integration Suite</h2>
                     <p style={styles.pageSubtitle}>
-                      {isOwner
-                        ? 'Generate role-bound invitation codes for prospective Resellers and Admins. Users self-register with their own username and password.'
-                        : 'Generate role-bound invitation codes for prospective downline Resellers. Users self-register with their own username and password.'}
+                      Direct sovereign key verification and hardware binding endpoints for any Safe Streamer APK, custom native daemon, or external mod. 100% self-hosted on Supabase and greenvest.shop.
                     </p>
                   </div>
                   <div style={styles.badgeCluster}>
-                    <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER CONSOLE' : 'ADMIN CONSOLE'}</span>
-                    <span style={styles.greenPulseBadge}>● SOVEREIGN PROTOCOL</span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '24px', alignItems: 'start' }}>
-                  {/* Card 1: Generate Code */}
-                  <div style={styles.managementCard}>
-                    <div style={styles.cardHeader}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ ...styles.actionIconCircle, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff' }}>
-                          🎟️
-                        </div>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Create Role Invite Code</h3>
-                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            Binds role & initial balance atomically upon user registration
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <form onSubmit={handleCreateReferral} style={{ marginTop: '20px' }}>
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>TARGET USER ROLE</label>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setRefTargetRole('reseller')}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              borderRadius: '8px',
-                              border: refTargetRole === 'reseller' ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
-                              background: refTargetRole === 'reseller' ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                              color: refTargetRole === 'reseller' ? '#00d9ff' : '#94a3b8',
-                              fontWeight: 700,
-                              fontSize: '12px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            💼 RESELLER
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!isOwner) {
-                                alert('Power restriction: Only the Supreme Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
-                                return
-                              }
-                              setRefTargetRole('admin')
-                            }}
-                            disabled={!isOwner}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              borderRadius: '8px',
-                              border: refTargetRole === 'admin' ? '1px solid #05df72' : '1px solid rgba(255,255,255,0.08)',
-                              background: refTargetRole === 'admin' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                              color: !isOwner ? '#475569' : refTargetRole === 'admin' ? '#05df72' : '#94a3b8',
-                              fontWeight: 700,
-                              fontSize: '12px',
-                              cursor: !isOwner ? 'not-allowed' : 'pointer',
-                              opacity: !isOwner ? 0.5 : 1
-                            }}
-                            title={!isOwner ? 'Supreme Owner only' : 'Create Administrator invite code'}
-                          >
-                            🛡️ ADMINISTRATOR {!isOwner && '(OWNER ONLY)'}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>RESELLER / ROLE SUBSCRIPTION VALIDITY (NO LIFETIME)</label>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setRefSubDays(30)}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              borderRadius: '8px',
-                              border: refSubDays === 30 ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
-                              background: refSubDays === 30 ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                              color: refSubDays === 30 ? '#00d9ff' : '#94a3b8',
-                              fontWeight: 800,
-                              fontSize: '12px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            ⏳ 30 DAYS SUBSCRIPTION
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setRefSubDays(60)}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              borderRadius: '8px',
-                              border: refSubDays === 60 ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.08)',
-                              background: refSubDays === 60 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                              color: refSubDays === 60 ? '#c084fc' : '#94a3b8',
-                              fontWeight: 800,
-                              fontSize: '12px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            💎 60 DAYS SUBSCRIPTION
-                          </button>
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
-                          Reseller account expires automatically after {refSubDays} days unless renewed by Owner/Admin.
-                        </div>
-                      </div>
-
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>STARTING WALLET BALANCE (₹ INR)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="100"
-                          value={refInitialBal}
-                          onChange={(e) => setRefInitialBal(e.target.value === '' ? '' : Number(e.target.value))}
-                          placeholder="e.g. 5000 (Credits to wallet upon signup)"
-                          style={styles.keyInput}
-                        />
-                        <div style={{ fontSize: '11px', color: isOwner ? '#fde047' : '#38bdf8', marginTop: '4px', fontWeight: 600 }}>
-                          {isOwner
-                            ? '👑 Owner Privilege: Starting balance is minted for FREE (₹0 deducted).'
-                            : `💳 Admin Wallet Notice: ₹${((Number(refInitialBal) || 0) * refMaxUses).toLocaleString('en-IN')} will be deducted from your wallet (${refMaxUses} use × ₹${(Number(refInitialBal) || 0).toLocaleString('en-IN')}).`}
-                        </div>
-                      </div>
-
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>CUSTOM CODE (OPTIONAL)</label>
-                        <input
-                          type="text"
-                          value={refCustomCode}
-                          onChange={(e) => setRefCustomCode(e.target.value.toUpperCase())}
-                          placeholder="e.g. RYMON-RESELLER-VIP (Blank for auto)"
-                          style={styles.keyInput}
-                        />
-                      </div>
-
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>MAX USES / REDEMPTIONS</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          value={refMaxUses}
-                          onChange={(e) => setRefMaxUses(Math.max(1, parseInt(e.target.value) || 1))}
-                          style={styles.keyInput}
-                          required
-                        />
-                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                          Each use creates 1 unique real account. Recommended: 1 use per person.
-                        </div>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={refCreating}
-                        style={{ ...styles.submitBtn, marginTop: '16px' }}
-                      >
-                        {refCreating ? 'CREATING CODE IN SUPABASE...' : `🎟️ GENERATE ${refSubDays}D INVITE CODE`}
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* Card 2: Active Codes Table */}
-                  <div style={styles.managementCard}>
-                    <div style={styles.cardHeader}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Active Referral Codes ({referralList.length})</h3>
-                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            Real codes stored in Supabase <code>public.rymon_referrals</code>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => fetchReferralCodes(currentUser).then(setReferralList)}
-                          style={{ ...styles.chipBtn, fontSize: '11px' }}
-                        >
-                          🔄 Refresh
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: '16px', overflowX: 'auto' }}>
-                      <table style={styles.dataTable}>
-                        <thead>
-                          <tr>
-                            <th style={styles.th}>INVITE CODE</th>
-                            <th style={styles.th}>ROLE & SUB</th>
-                            <th style={styles.th}>STARTING BAL</th>
-                            <th style={styles.th}>USES</th>
-                            <th style={styles.th}>STATUS</th>
-                            <th style={styles.th}>ACTION</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {referralList.length === 0 ? (
-                            <tr>
-                              <td colSpan={6} style={{ ...styles.td, textAlign: 'center', color: '#64748b', padding: '30px' }}>
-                                No active invite codes. Generate one on the left to onboard real staff.
-                              </td>
-                            </tr>
-                          ) : (
-                            referralList.map((ref) => (
-                              <tr key={ref.id} style={styles.tr}>
-                                <td style={styles.td}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#00d9ff', fontSize: '13px' }}>
-                                      {ref.code}
-                                    </span>
-                                    <button
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(ref.code)
-                                        setCopiedRefCode(ref.code)
-                                        setTimeout(() => setCopiedRefCode(null), 2000)
-                                      }}
-                                      style={styles.miniCopyBtn}
-                                      title="Copy code"
-                                    >
-                                      {copiedRefCode === ref.code ? '✓' : '📋'}
-                                    </button>
-                                  </div>
-                                </td>
-                                <td style={styles.td}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                    <span style={{
-                                      ...styles.planBadge,
-                                      background: ref.target_role === 'admin' ? 'rgba(5, 223, 114, 0.15)' : 'rgba(0, 217, 255, 0.15)',
-                                      color: ref.target_role === 'admin' ? '#05df72' : '#00d9ff'
-                                    }}>
-                                      {ref.target_role.toUpperCase()}
-                                    </span>
-                                    <span style={{
-                                      fontSize: '10px',
-                                      fontWeight: 800,
-                                      padding: '2px 6px',
-                                      borderRadius: '6px',
-                                      background: ref.subscription_days === 60 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(0, 217, 255, 0.15)',
-                                      color: ref.subscription_days === 60 ? '#c084fc' : '#38bdf8',
-                                      border: ref.subscription_days === 60 ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(0, 217, 255, 0.3)'
-                                    }}>
-                                      {ref.subscription_days === 60 ? '60D SUB' : '30D SUB'}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td style={styles.td}>
-                                  <span style={{ color: '#05df72', fontWeight: 700 }}>
-                                    ₹{ref.initial_balance.toLocaleString('en-IN')}
-                                  </span>
-                                </td>
-                                <td style={styles.td}>
-                                  <span style={{ color: '#cbd5e1', fontSize: '12px' }}>
-                                    {ref.times_used} / {ref.max_uses}
-                                  </span>
-                                </td>
-                                <td style={styles.td}>
-                                  <span style={{
-                                    fontSize: '11px',
-                                    fontWeight: 700,
-                                    color: ref.is_active ? '#05df72' : '#ef4444'
-                                  }}>
-                                    ● {ref.is_active ? 'ACTIVE' : 'DEPLETED'}
-                                  </span>
-                                </td>
-                                <td style={styles.td}>
-                                  <button
-                                    onClick={() => handleDeleteReferral(ref.id)}
-                                    style={{ ...styles.actionIconBtn, color: '#ef4444' }}
-                                    title="Revoke / Delete Code"
-                                  >
-                                    🗑️
-                                  </button>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div style={{ marginTop: '20px', padding: '12px 16px', background: 'rgba(0, 217, 255, 0.05)', border: '1px solid rgba(0, 217, 255, 0.15)', borderRadius: '10px', fontSize: '12px', color: '#94a3b8' }}>
-                      💡 <strong style={{ color: '#00d9ff' }}>How New Staff Onboard:</strong> Give this invite code to your reseller or admin. When they open this site, they click <strong>"Register with Invite Code"</strong> on the login screen, enter their own desired username, password, email, and the invite code. Their account is created immediately with a <strong>30-Day or 60-Day subscription</strong> and starting wallet balance!
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 12. SOVEREIGN CONNECT URL & APK ENGINE */}
-            {activeTab === 'connect-api' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
-                  <div>
-                    <h2 style={styles.pageTitle}>Sovereign Connect URL & APK Engine</h2>
-                    <p style={styles.pageSubtitle}>
-                      Direct sovereign key verification and hardware binding endpoint for the Safe Streamer Android APK (Free Fire MAX). Zero third-party ghostpanel reliance.
-                    </p>
-                  </div>
-                  <div style={styles.badgeCluster}>
-                    <span style={styles.greenPulseBadge}>● 100% SOVEREIGN</span>
-                    <span style={styles.cyanMiniBadge}>ANDROID APK READY</span>
+                    <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>👑 OWNER EXCLUSIVE</span>
+                    <span style={styles.greenPulseBadge}>● ENDPOINTS LIVE</span>
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
-                  {/* Left Column: Endpoints & APK Config */}
+                  {/* Left Column: Live Endpoints & Code Snippets */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    {/* Endpoint Overview Card */}
+                    {/* Live Endpoints Matrix Card */}
                     <div style={styles.managementCard}>
                       <div style={styles.cardHeader}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -6302,27 +5441,28 @@ export default function RymonConnect() {
                             🔗
                           </div>
                           <div>
-                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Live Connect Endpoints</h3>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Production Connect Endpoints</h3>
                             <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                              Primary RPC endpoint & Web Gateway
+                              Direct RPC verification, controls telemetry, and anon authorization key
                             </div>
                           </div>
                         </div>
                       </div>
 
                       <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        {/* RPC Endpoint */}
                         <div>
                           <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
-                            PRIMARY DIRECT SUPABASE RPC ENDPOINT:
+                            LICENSE VERIFICATION RPC ENDPOINT (POST):
                           </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.8)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(0, 217, 255, 0.25)' }}>
-                            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#00d9ff', flex: 1, wordBreak: 'break-all' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.85)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(0, 217, 255, 0.25)' }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#00d9ff', flex: 1, wordBreak: 'break-all' }}>
                               {SOVEREIGN_CONNECT_CONFIG.endpoint_url}
                             </span>
                             <button
                               onClick={() => {
                                 navigator.clipboard.writeText(SOVEREIGN_CONNECT_CONFIG.endpoint_url)
-                                showToast('Copied endpoint URL')
+                                showToast('Copied RPC Endpoint URL')
                               }}
                               style={styles.miniCopyBtn}
                               title="Copy URL"
@@ -6332,58 +5472,257 @@ export default function RymonConnect() {
                           </div>
                         </div>
 
+                        {/* Streamer Controls Telemetry Endpoint */}
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
+                            STREAMER REMOTE CONTROLS REST URL (GET / PATCH):
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.85)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(5, 223, 114, 0.25)' }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#05df72', flex: 1, wordBreak: 'break-all' }}>
+                              https://zvjqpigduyvczidzafus.supabase.co/rest/v1/rymon_streamer_controls
+                            </span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText('https://zvjqpigduyvczidzafus.supabase.co/rest/v1/rymon_streamer_controls')
+                                showToast('Copied Controls REST URL')
+                              }}
+                              style={styles.miniCopyBtn}
+                              title="Copy URL"
+                            >
+                              📋
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Anon API Key */}
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
+                            SUPABASE ANON PUBLISHABLE KEY (HEADER <code>apikey</code>):
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.85)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255, 183, 0, 0.25)' }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#ffb700', flex: 1, wordBreak: 'break-all' }}>
+                              {SOVEREIGN_CONNECT_CONFIG.anon_key}
+                            </span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(SOVEREIGN_CONNECT_CONFIG.anon_key)
+                                showToast('Copied Supabase Anon Key')
+                              }}
+                              style={styles.miniCopyBtn}
+                              title="Copy API Key"
+                            >
+                              📋
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Web Portal URL */}
                         <div>
                           <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
                             WEB PORTAL GATEWAY CONNECT URL:
                           </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.8)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#05df72', flex: 1 }}>
-                              https://greenvest.shop/connect
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.85)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#cbd5e1', flex: 1 }}>
+                              https://greenvest.shop/
                             </span>
                             <button
                               onClick={() => {
-                                navigator.clipboard.writeText('https://greenvest.shop/connect')
-                                showToast('Copied portal URL')
+                                navigator.clipboard.writeText('https://greenvest.shop/')
+                                showToast('Copied Portal URL')
                               }}
                               style={styles.miniCopyBtn}
                               title="Copy URL"
                             >
                               📋
                             </button>
-                          </div>
-                        </div>
-
-                        <div style={{ padding: '12px', background: 'rgba(15, 23, 42, 0.5)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', fontSize: '12px' }}>
-                          <div style={{ color: '#f8fafc', fontWeight: 700, marginBottom: '6px' }}>Request Specifications:</div>
-                          <div style={{ color: '#94a3b8', lineHeight: '1.6' }}>
-                            • <strong>Method:</strong> <code>POST</code><br />
-                            • <strong>Header <code>apikey</code>:</strong> <code>{SOVEREIGN_CONNECT_CONFIG.anon_key.substring(0, 20)}...</code><br />
-                            • <strong>Header <code>Content-Type</code>:</strong> <code>application/json</code><br />
-                            • <strong>JSON Payload:</strong> <code>{`{"p_license_key": "YOUR_KEY", "p_hwid": "YOUR_DEVICE_HWID"}`}</code>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* ServerConfig.java APK Integration Card */}
+                    {/* Drop-in Integration Code Snippets Card */}
                     <div style={styles.managementCard}>
                       <div style={styles.cardHeader}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div style={{ ...styles.actionIconCircle, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72' }}>
-                            📱
+                            💻
                           </div>
                           <div>
-                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Android APK Configuration</h3>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Drop-in Client Verification Code</h3>
                             <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                              In <code>c:\SAFE STREAMER\app\src\main\java\com\rymon\external\ServerConfig.java</code>
+                              Copy-paste verification logic for any APK, C++ daemon, or automation tool
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      <div style={{ marginTop: '16px' }}>
+                      {/* Code Snippet Tabs */}
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '10px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setCodeSnippetTab('java')}
+                          style={{
+                            ...styles.chipBtn,
+                            background: codeSnippetTab === 'java' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                            color: codeSnippetTab === 'java' ? '#05df72' : '#94a3b8',
+                            border: codeSnippetTab === 'java' ? '1px solid #05df72' : '1px solid rgba(255, 255, 255, 0.08)',
+                            fontWeight: 700
+                          }}
+                        >
+                          📱 Android (Java / Kotlin)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCodeSnippetTab('cpp')}
+                          style={{
+                            ...styles.chipBtn,
+                            background: codeSnippetTab === 'cpp' ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                            color: codeSnippetTab === 'cpp' ? '#00d9ff' : '#94a3b8',
+                            border: codeSnippetTab === 'cpp' ? '1px solid #00d9ff' : '1px solid rgba(255, 255, 255, 0.08)',
+                            fontWeight: 700
+                          }}
+                        >
+                          ⚡ C / C++ (Native Daemon)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCodeSnippetTab('curl')}
+                          style={{
+                            ...styles.chipBtn,
+                            background: codeSnippetTab === 'curl' ? 'rgba(255, 183, 0, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                            color: codeSnippetTab === 'curl' ? '#ffb700' : '#94a3b8',
+                            border: codeSnippetTab === 'curl' ? '1px solid #ffb700' : '1px solid rgba(255, 255, 255, 0.08)',
+                            fontWeight: 700
+                          }}
+                        >
+                          🌐 cURL / Shell
+                        </button>
+                      </div>
+
+                      {/* Snippet Display */}
+                      <div style={{ marginTop: '12px', position: 'relative' }}>
+                        <button
+                          onClick={() => {
+                            let textToCopy = ''
+                            if (codeSnippetTab === 'java') {
+                              textToCopy = `// Safe Streamer License Verification - Android Java (HttpURLConnection)
+package com.rymon.external;
+
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import org.json.JSONObject;
+
+public class KeyAuthClient {
+    private static final String RPC_URL = "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}";
+    private static final String ANON_KEY = "${SOVEREIGN_CONNECT_CONFIG.anon_key}";
+
+    public static boolean verifyKey(String licenseKey, String hwid) {
+        HttpURLConnection conn = null;
+        try {
+            JSONObject body = new JSONObject();
+            body.put("p_license_key", licenseKey);
+            body.put("p_hwid", hwid);
+
+            URL url = new URL(RPC_URL);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(12000);
+            conn.setRequestProperty("apikey", ANON_KEY);
+            conn.setRequestProperty("Authorization", "Bearer " + ANON_KEY);
+            conn.setRequestProperty("Content-Type", "application/json");
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+
+            if (conn.getResponseCode() == 200) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                JSONObject res = new JSONObject(sb.toString());
+                return res.optBoolean("valid", false) && !res.optBoolean("is_paused", false);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+        return false;
+    }
+}`
+                            } else if (codeSnippetTab === 'cpp') {
+                              textToCopy = `// Safe Streamer License Verification - C++ Native Daemon (libcurl)
+#include <iostream>
+#include <string>
+#include <curl/curl.h>
+
+static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
+
+bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
+    CURL* curl = curl_easy_init();
+    if (!curl) return false;
+
+    std::string response;
+    std::string post_data = "{\\"p_license_key\\":\\"" + license_key + "\\",\\"p_hwid\\":\\"" + hwid + "\\"}";
+
+    struct curl_slist* headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    headers = curl_slist_append(headers, "apikey: ${SOVEREIGN_CONNECT_CONFIG.anon_key}");
+    headers = curl_slist_append(headers, "Authorization: Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}");
+
+    curl_easy_setopt(curl, CURLOPT_URL, "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+    CURLcode res = curl_easy_perform(curl);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    // Simple check: contains "valid":true and not "is_paused":true
+    return (res == CURLE_OK && http_code == 200 && response.find("\\"valid\\":true") != std::string::npos);
+}`
+                            } else {
+                              textToCopy = `curl -X POST "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}" \\
+  -H "apikey: ${SOVEREIGN_CONNECT_CONFIG.anon_key}" \\
+  -H "Authorization: Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"p_license_key": "YOUR_LICENSE_KEY", "p_hwid": "YOUR_DEVICE_HWID"}'`
+                            }
+                            navigator.clipboard.writeText(textToCopy)
+                            showToast(`Copied ${codeSnippetTab.toUpperCase()} Snippet`)
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            background: 'rgba(15, 23, 42, 0.85)',
+                            border: '1px solid rgba(0, 217, 255, 0.4)',
+                            borderRadius: '6px',
+                            color: '#00d9ff',
+                            fontSize: '11px',
+                            padding: '4px 10px',
+                            cursor: 'pointer',
+                            fontWeight: 700
+                          }}
+                        >
+                          📋 Copy Code
+                        </button>
+
                         <pre style={{
-                          background: '#07090e',
+                          background: '#04060a',
                           border: '1px solid rgba(30, 41, 59, 0.8)',
                           borderRadius: '10px',
                           padding: '16px',
@@ -6391,105 +5730,212 @@ export default function RymonConnect() {
                           fontFamily: 'Consolas, monospace',
                           color: '#cbd5e1',
                           overflowX: 'auto',
-                          lineHeight: '1.5'
+                          lineHeight: '1.5',
+                          maxHeight: '340px'
                         }}>
-{`// Sovereign Server Configuration for Safe Streamer
+                          {codeSnippetTab === 'java' && `// Safe Streamer License Verification - Android Java (HttpURLConnection)
 package com.rymon.external;
 
-public class ServerConfig {
-    public static final String SUPABASE_REST_URL = 
-        "https://zvjqpigduyvczidzafus.supabase.co/rest/v1/rymon_streamer_controls";
-    public static final String CONNECT_URL = 
-        "https://greenvest.shop/";
-    public static final String VERIFY_LICENSE_RPC = 
-        "https://zvjqpigduyvczidzafus.supabase.co/rest/v1/rpc/rpc_rymon_verify_license";
-    public static final String SUPABASE_KEY = 
-        "${SOVEREIGN_CONNECT_CONFIG.anon_key}";
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import org.json.JSONObject;
+
+public class KeyAuthClient {
+    private static final String RPC_URL = "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}";
+    private static final String ANON_KEY = "${SOVEREIGN_CONNECT_CONFIG.anon_key}";
+
+    public static boolean verifyKey(String licenseKey, String hwid) {
+        HttpURLConnection conn = null;
+        try {
+            JSONObject body = new JSONObject();
+            body.put("p_license_key", licenseKey);
+            body.put("p_hwid", hwid);
+
+            URL url = new URL(RPC_URL);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(12000);
+            conn.setRequestProperty("apikey", ANON_KEY);
+            conn.setRequestProperty("Authorization", "Bearer " + ANON_KEY);
+            conn.setRequestProperty("Content-Type", "application/json");
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+
+            if (conn.getResponseCode() == 200) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                JSONObject res = new JSONObject(sb.toString());
+                return res.optBoolean("valid", false) && !res.optBoolean("is_paused", false);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+        return false;
+    }
 }`}
+                          {codeSnippetTab === 'cpp' && `// Safe Streamer License Verification - C++ Native Daemon (libcurl)
+#include <iostream>
+#include <string>
+#include <curl/curl.h>
+
+static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
+
+bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
+    CURL* curl = curl_easy_init();
+    if (!curl) return false;
+
+    std::string response;
+    std::string post_data = "{\\"p_license_key\\":\\"" + license_key + "\\",\\"p_hwid\\":\\"" + hwid + "\\"}";
+
+    struct curl_slist* headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    headers = curl_slist_append(headers, "apikey: ${SOVEREIGN_CONNECT_CONFIG.anon_key}");
+    headers = curl_slist_append(headers, "Authorization: Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}");
+
+    curl_easy_setopt(curl, CURLOPT_URL, "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+    CURLcode res = curl_easy_perform(curl);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    return (res == CURLE_OK && http_code == 200 && response.find("\\"valid\\":true") != std::string::npos);
+}`}
+                          {codeSnippetTab === 'curl' && `curl -X POST "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}" \\
+  -H "apikey: ${SOVEREIGN_CONNECT_CONFIG.anon_key}" \\
+  -H "Authorization: Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"p_license_key": "YOUR_LICENSE_KEY", "p_hwid": "YOUR_DEVICE_HWID"}'`}
                         </pre>
                       </div>
                     </div>
                   </div>
 
-                  {/* Right Column: Live Test Sandbox */}
-                  <div style={styles.managementCard}>
-                    <div style={styles.cardHeader}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ ...styles.actionIconCircle, background: 'rgba(255, 183, 0, 0.15)', color: '#ffb700' }}>
-                          🧪
+                  {/* Right Column: Live RPC Test Sandbox */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    <div style={styles.managementCard}>
+                      <div style={styles.cardHeader}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ ...styles.actionIconCircle, background: 'rgba(255, 183, 0, 0.15)', color: '#ffb700' }}>
+                            🧪
+                          </div>
+                          <div>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Live Verification Test Sandbox</h3>
+                            <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                              Simulate Android APK key verification against live Supabase RPC
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Live Verification Test Sandbox</h3>
-                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            Simulate Android APK key verification against live Supabase RPC
+                      </div>
+
+                      <div style={{ marginTop: '20px' }}>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>LICENSE KEY TO TEST</label>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                              type="text"
+                              value={testConnectKey}
+                              onChange={(e) => setTestConnectKey(e.target.value.toUpperCase())}
+                              placeholder="Enter key e.g. RYMON-FF-XXXX-XXXX"
+                              style={{ ...styles.keyInput, flex: 1 }}
+                            />
+                            {keysList.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setTestConnectKey(keysList[0].license_key)}
+                                style={{ ...styles.chipBtn, fontSize: '11px', whiteSpace: 'nowrap' }}
+                                title="Pick first active key from database"
+                              >
+                                Pick Key ({keysList[0].license_key.substring(0, 10)}...)
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>DEVICE HARDWARE ID (HWID)</label>
+                          <input
+                            type="text"
+                            value={testConnectHwid}
+                            onChange={(e) => setTestConnectHwid(e.target.value)}
+                            placeholder="e.g. DEVICE-SIM-ANDROID-9981"
+                            style={styles.keyInput}
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleTestConnectApi}
+                          disabled={testConnectLoading}
+                          style={{
+                            ...styles.submitBtn,
+                            marginTop: '8px',
+                            background: 'linear-gradient(135deg, #05df72 0%, #047857 100%)',
+                            color: '#07090e',
+                            fontWeight: 800
+                          }}
+                        >
+                          {testConnectLoading ? 'CONNECTING &amp; VERIFYING...' : '🚀 TEST KEY VERIFICATION NOW'}
+                        </button>
+
+                        <div style={{ marginTop: '20px' }}>
+                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '6px' }}>
+                            LIVE RPC RESPONSE TERMINAL:
+                          </div>
+                          <div style={{
+                            background: '#04060a',
+                            border: '1px solid rgba(0, 217, 255, 0.3)',
+                            borderRadius: '8px',
+                            padding: '14px',
+                            fontFamily: 'Consolas, monospace',
+                            fontSize: '11px',
+                            color: '#00d9ff',
+                            minHeight: '140px',
+                            maxHeight: '260px',
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap'
+                          }}>
+                            {testConnectResult || '// Click "TEST KEY VERIFICATION NOW" to dispatch live RPC call...'}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div style={{ marginTop: '20px' }}>
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>LICENSE KEY TO TEST</label>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <input
-                            type="text"
-                            value={testConnectKey}
-                            onChange={(e) => setTestConnectKey(e.target.value.toUpperCase())}
-                            placeholder="Enter key e.g. RYMON-XXXX-XXXX"
-                            style={{ ...styles.keyInput, flex: 1 }}
-                          />
-                          {keysList.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setTestConnectKey(keysList[0].license_key)}
-                              style={{ ...styles.chipBtn, fontSize: '11px', whiteSpace: 'nowrap' }}
-                              title="Pick first active key from database"
-                            >
-                              Pick Key ({keysList[0].license_key.substring(0, 10)}...)
-                            </button>
-                          )}
-                        </div>
+                    {/* Protocol Specifications Summary */}
+                    <div style={{ padding: '16px 18px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', fontSize: '12px' }}>
+                      <div style={{ color: '#f8fafc', fontWeight: 700, marginBottom: '8px', fontSize: '13px' }}>
+                        📋 RPC Request &amp; Response Contract
                       </div>
-
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>DEVICE HARDWARE ID (HWID)</label>
-                        <input
-                          type="text"
-                          value={testConnectHwid}
-                          onChange={(e) => setTestConnectHwid(e.target.value)}
-                          placeholder="e.g. DEVICE-SIM-ANDROID-9981"
-                          style={styles.keyInput}
-                        />
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleTestConnectApi}
-                        disabled={testConnectLoading}
-                        style={{ ...styles.submitBtn, marginTop: '8px' }}
-                      >
-                        {testConnectLoading ? 'CONNECTING & VERIFYING...' : '🚀 TEST KEY VERIFICATION NOW'}
-                      </button>
-
-                      <div style={{ marginTop: '20px' }}>
-                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '6px' }}>
-                          LIVE RPC RESPONSE TERMINAL:
-                        </div>
-                        <div style={{
-                          background: '#04060a',
-                          border: '1px solid rgba(0, 217, 255, 0.3)',
-                          borderRadius: '8px',
-                          padding: '14px',
-                          fontFamily: 'Consolas, monospace',
-                          fontSize: '11px',
-                          color: '#00d9ff',
-                          minHeight: '140px',
-                          maxHeight: '260px',
-                          overflowY: 'auto',
-                          whiteSpace: 'pre-wrap'
-                        }}>
-                          {testConnectResult || '// Click "TEST KEY VERIFICATION NOW" to dispatch live RPC call...'}
-                        </div>
+                      <div style={{ color: '#94a3b8', lineHeight: '1.7' }}>
+                        • <strong>Required HTTP Headers:</strong><br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;<code>apikey: {SOVEREIGN_CONNECT_CONFIG.anon_key.substring(0, 18)}...</code><br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;<code>Content-Type: application/json</code><br />
+                        • <strong>Request Body:</strong> <code>{`{"p_license_key": "...", "p_hwid": "..."}`}</code><br />
+                        • <strong>Response Fields:</strong><br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;<code>valid</code> (boolean): Key authenticity &amp; device match<br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;<code>is_paused</code> (boolean): Reseller pause status<br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;<code>expires_at</code> (ISO 8601 string): Exact expiration timestamp<br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;<code>creator</code> (string): Generating reseller username<br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;<code>game</code> (string): Target game name (e.g. Free Fire MAX)
                       </div>
                     </div>
                   </div>
@@ -6500,310 +5946,337 @@ public class ServerConfig {
             {/* 13. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
             {activeTab === 'remote' && (
               <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
-                  <div>
-                    <h2 style={styles.pageTitle}>Streamer Remote Control</h2>
-                    <p style={styles.pageSubtitle}>
-                      Live hardware telemetry synchronization with target Android device running Stranger daemon.
-                    </p>
-                  </div>
-                  <div style={styles.badgeCluster}>
+                {/* Compact Executive Action Header */}
+                <div style={{ ...styles.bannerRow, marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h2 style={{ ...styles.pageTitle, margin: 0, fontSize: '20px' }}>Streamer Remote</h2>
                     <span
                       style={{
                         ...styles.greenPulseBadge,
+                        padding: '5px 10px',
+                        fontSize: '11px',
                         background: isStreamerKeyActivelyPlaying(record)
-                          ? 'rgba(5, 223, 114, 0.2)'
-                          : 'rgba(148, 163, 184, 0.15)',
+                          ? 'rgba(5, 223, 114, 0.18)'
+                          : 'rgba(148, 163, 184, 0.12)',
                         color: isStreamerKeyActivelyPlaying(record) ? '#05df72' : '#cbd5e1',
                         border: isStreamerKeyActivelyPlaying(record)
-                          ? '1px solid rgba(5, 223, 114, 0.5)'
-                          : '1px solid rgba(148, 163, 184, 0.3)'
+                          ? '1px solid rgba(5, 223, 114, 0.45)'
+                          : '1px solid rgba(148, 163, 184, 0.28)'
                       }}
                     >
-                      {isStreamerKeyActivelyPlaying(record) ? '🟢 PLAYING NOW (IN-GAME)' : '⚪ NOT PLAYING (IDLE)'}
+                      {isStreamerKeyActivelyPlaying(record) ? '🟢 IN-GAME' : '⚪ IDLE'}
                     </span>
-                    {isStaff && currentKey && (
-                      <button
-                        onClick={() => handleTogglePauseKey(currentKey)}
-                        style={{
-                          ...styles.emergencyPurgeBtn,
-                          background: record?.is_paused ? 'rgba(5, 223, 114, 0.2)' : 'rgba(255, 183, 0, 0.2)',
-                          border: record?.is_paused ? '1px solid #05df72' : '1px solid #ffb700',
-                          color: record?.is_paused ? '#05df72' : '#ffb700'
-                        }}
-                      >
-                        {record?.is_paused ? '▶️ RESUME KEY' : '⏸️ PAUSE KEY'}
-                      </button>
-                    )}
+
+                    {/* Live Radar Telemetry Badge (Enemies / Bots) */}
+                    {(() => {
+                      const playing = isStreamerKeyActivelyPlaying(record)
+                      const liveEnemies = playing ? Number(record?.streamer_name?.match(/E:(\d+)/)?.[1] || 0) : 0
+                      const liveBots = playing ? Number(record?.streamer_name?.match(/B:(\d+)/)?.[1] || 0) : 0
+                      const hasThreat = liveEnemies + liveBots > 0
+                      return (
+                        <span
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            letterSpacing: '0.3px',
+                            background: hasThreat
+                              ? 'rgba(239, 68, 68, 0.18)'
+                              : 'rgba(15, 23, 42, 0.75)',
+                            border: hasThreat
+                              ? '1px solid rgba(239, 68, 68, 0.5)'
+                              : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: hasThreat ? '#fca5a5' : '#94a3b8'
+                          }}
+                        >
+                          🎯 {liveEnemies} ENEMIES • 🤖 {liveBots} BOTS
+                        </span>
+                      )
+                    })()}
+                  </div>
+
+                  <div style={{ ...styles.badgeCluster, gap: '8px' }}>
+                    {/* Hourly Web Control Limit / VIP Realtime Badge */}
+                    {(() => {
+                      if (isOwner) {
+                        return (
+                          <span
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              background: 'rgba(250, 204, 21, 0.15)',
+                              border: '1px solid rgba(250, 204, 21, 0.45)',
+                              color: '#fde047'
+                            }}
+                          >
+                            👑 OWNER (UNLIMITED KEYS)
+                          </span>
+                        )
+                      }
+                      const isVipKey = Boolean(
+                        keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())?.plan_duration?.includes('[VIP]') ||
+                        record?.streamer_name?.includes('VIP_REALTIME')
+                      )
+                      if (isVipKey) {
+                        return (
+                          <span
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              background: 'rgba(0, 217, 255, 0.15)',
+                              border: '1px solid rgba(0, 217, 255, 0.45)',
+                              color: '#00d9ff'
+                            }}
+                          >
+                            👑 VIP REALTIME (UNLIMITED)
+                          </span>
+                        )
+                      }
+                      const recentKeys = getControlledKeysThisHour()
+                      const count = recentKeys.length
+                      return (
+                        <span
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            background: count >= 3 ? 'rgba(239, 68, 68, 0.18)' : 'rgba(5, 223, 114, 0.15)',
+                            border: count >= 3 ? '1px solid rgba(239, 68, 68, 0.45)' : '1px solid rgba(5, 223, 114, 0.4)',
+                            color: count >= 3 ? '#ef4444' : '#05df72'
+                          }}
+                          title={`Standard accounts: max 3 keys per hour. Active: ${recentKeys.join(', ') || 'None'}`}
+                        >
+                          🕒 1-HR LIMIT: {count}/3 KEYS USED
+                        </span>
+                      )
+                    })()}
+
                     {currentKey && (
-                      <button
-                        onClick={() => handleCustomerSelfResetHwid(currentKey)}
-                        disabled={selfResetBusy}
-                        style={{
-                          backgroundColor: 'rgba(5, 223, 114, 0.15)',
-                          border: '1px solid #05df72',
-                          color: '#05df72',
-                          borderRadius: '8px',
-                          padding: '6px 12px',
-                          fontSize: '12px',
-                          fontWeight: 800,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {selfResetBusy ? 'RESETTING...' : isOwner ? '🔄 RESET HWID' : '🔄 RESET HWID (2/DAY)'}
-                      </button>
+                      <>
+                        {/* 1-Click Remote Overlay vs Web-Only Switch */}
+                        <button
+                          onClick={handleToggleRemotePanelMode}
+                          style={{
+                            backgroundColor: record?.streamer_name?.includes('P:0')
+                              ? 'rgba(168, 85, 247, 0.18)'
+                              : 'rgba(0, 217, 255, 0.15)',
+                            border: record?.streamer_name?.includes('P:0')
+                              ? '1px solid #c084fc'
+                              : '1px solid #00d9ff',
+                            color: record?.streamer_name?.includes('P:0') ? '#e9d5ff' : '#00d9ff',
+                            borderRadius: '8px',
+                            padding: '6px 11px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                          title="Switch phone between Web + In-Game Overlay and Web-Only Stealth Mode"
+                        >
+                          {record?.streamer_name?.includes('P:0') ? '🕶️ WEB ONLY' : '👁️ OVERLAY ON'}
+                        </button>
+
+                        {/* 1-Click Stealth Freeze (Boss Key) */}
+                        <button
+                          onClick={handleToggleStealthFreeze}
+                          style={{
+                            backgroundColor: record?.is_paused
+                              ? 'rgba(5, 223, 114, 0.18)'
+                              : 'rgba(255, 183, 0, 0.16)',
+                            border: record?.is_paused ? '1px solid #05df72' : '1px solid #ffb700',
+                            color: record?.is_paused ? '#05df72' : '#ffb700',
+                            borderRadius: '8px',
+                            padding: '6px 11px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                          title="Instant Stealth Freeze / Resume without killing daemon"
+                        >
+                          {record?.is_paused ? '▶️ RESUME' : '❄️ FREEZE'}
+                        </button>
+
+                        {/* 1-Click HWID Reset */}
+                        <button
+                          onClick={() => handleCustomerSelfResetHwid(currentKey)}
+                          disabled={selfResetBusy}
+                          style={{
+                            backgroundColor: 'rgba(5, 223, 114, 0.14)',
+                            border: '1px solid rgba(5, 223, 114, 0.5)',
+                            color: '#05df72',
+                            borderRadius: '8px',
+                            padding: '6px 11px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {selfResetBusy ? '...' : '🔄 HWID'}
+                        </button>
+                      </>
                     )}
                     <a
                       href="https://t.me/Rymon007bot?start=reset"
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
-                        backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                        border: '1px solid #38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.14)',
+                        border: '1px solid rgba(56, 189, 248, 0.45)',
                         color: '#38bdf8',
                         borderRadius: '8px',
-                        padding: '6px 12px',
-                        fontSize: '12px',
+                        padding: '6px 11px',
+                        fontSize: '11px',
                         fontWeight: 800,
                         textDecoration: 'none',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '5px'
+                        gap: '4px'
                       }}
                     >
-                      <span>✈️</span> @Rymon007bot
+                      <span>✈️</span> BOT
                     </a>
                     <button
                       onClick={() => setShowDownloadModal(true)}
                       style={{
-                        backgroundColor: 'rgba(0, 217, 255, 0.15)',
-                        border: '1px solid #00d9ff',
+                        backgroundColor: 'rgba(0, 217, 255, 0.14)',
+                        border: '1px solid rgba(0, 217, 255, 0.45)',
                         color: '#00d9ff',
                         borderRadius: '8px',
-                        padding: '6px 14px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
+                        padding: '6px 11px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: 'pointer'
                       }}
                     >
-                      <span>📥</span> DOWNLOAD APK
+                      📥 APK
                     </button>
                     <button
                       onClick={() => setShowPurgeModal(true)}
-                      style={styles.emergencyPurgeBtn}
+                      style={{ ...styles.emergencyPurgeBtn, padding: '6px 11px', fontSize: '11px' }}
                     >
-                      🚨 EMERGENCY PURGE
+                      🚨 PURGE
                     </button>
                   </div>
                 </div>
 
-                {/* Staff Target Key Selector Bar */}
-                {isStaff && (
-                  <div
-                    style={{
-                      background: 'rgba(13, 17, 26, 0.92)',
-                      border: '1px solid rgba(0, 217, 255, 0.3)',
-                      borderRadius: '12px',
-                      padding: '12px 18px',
-                      marginBottom: '16px',
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '12px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '18px' }}>🎮</span>
-                      <div>
-                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#00d9ff', letterSpacing: '0.5px' }}>
-                          SELECT TARGET LICENSE KEY TO CONTROL REMOTELY
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                          Any toggle or slider you change here immediately syncs to the selected key&apos;s Android APK
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 320px', maxWidth: '520px' }}>
-                      <select
-                        value={currentKey}
-                        onChange={(e) => setCurrentKey(e.target.value)}
-                        style={{ ...styles.selectInput, flex: 1, fontWeight: 700, color: '#f8fafc' }}
-                      >
-                        <option value="">-- Choose License Key to Control --</option>
-                        {keysList.map((k) => {
-                          const isKeyPlaying = onlineKeySet.has(k.license_key.toUpperCase())
-                          return (
-                            <option key={k.license_key} value={k.license_key}>
-                              {isKeyPlaying ? '🟢 [PLAYING NOW] ' : k.device_hwid ? '📱 [BOUND] ' : '🟡 [UNUSED] '}
-                              {k.license_key} ({k.game} • {k.plan_duration} • @{k.creator_username})
-                            </option>
-                          )
-                        })}
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/* Status Bar */}
-                <div style={styles.telemetryBar}>
-                  <div style={styles.telemetryBarItem}>
-                    <span style={styles.telemetryBarLabel}>TARGET KEY:</span>
-                    <span style={styles.telemetryBarVal}>{currentKey || 'NONE SELECTED'}</span>
-                  </div>
-                  <div style={styles.telemetryBarItem}>
-                    <span style={styles.telemetryBarLabel}>GAME SESSION:</span>
-                    <span
-                      style={{
-                        ...styles.telemetryBarVal,
-                        color: isStreamerKeyActivelyPlaying(record) ? '#05df72' : '#94a3b8'
-                      }}
-                    >
-                      {isStreamerKeyActivelyPlaying(record) ? '🟢 PLAYING NOW' : '⚪ NOT PLAYING'}
-                    </span>
-                  </div>
-                  <div style={styles.telemetryBarItem}>
-                    <span style={styles.telemetryBarLabel}>KEY STATE:</span>
-                    <span style={{ ...styles.telemetryBarVal, color: record?.is_paused ? '#ffb700' : '#05df72' }}>
-                      {record?.is_paused ? '⏸️ PAUSED / FROZEN' : '● ACTIVE'}
-                    </span>
-                  </div>
-                  <div style={styles.telemetryBarItem}>
-                    <span style={styles.telemetryBarLabel}>EXPIRES IN:</span>
-                    <span style={{ ...styles.telemetryBarVal, color: '#00d9ff' }}>{countdown}</span>
-                  </div>
-                </div>
-
-                {/* Real Hardware & Daemon Binding HUD Card */}
+                {/* Unified Single-Line Compact Telemetry Bar */}
                 <div
                   style={{
-                    background: isStreamerKeyActivelyPlaying(record)
-                      ? 'linear-gradient(90deg, rgba(5, 223, 114, 0.14) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(5, 223, 114, 0.08) 100%)'
-                      : record?.device_hwid
-                      ? 'linear-gradient(90deg, rgba(0, 217, 255, 0.1) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(0, 217, 255, 0.06) 100%)'
-                      : 'linear-gradient(90deg, rgba(255, 183, 0, 0.12) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(255, 183, 0, 0.08) 100%)',
+                    background: 'rgba(13, 17, 26, 0.92)',
                     border: isStreamerKeyActivelyPlaying(record)
-                      ? '1px solid rgba(5, 223, 114, 0.45)'
-                      : record?.device_hwid
-                      ? '1px solid rgba(0, 217, 255, 0.35)'
-                      : '1px solid rgba(255, 183, 0, 0.4)',
-                    borderRadius: '12px',
-                    padding: '14px 20px',
-                    marginBottom: '20px',
+                      ? '1px solid rgba(5, 223, 114, 0.38)'
+                      : '1px solid rgba(0, 217, 255, 0.22)',
+                    borderRadius: '10px',
+                    padding: '9px 14px',
+                    marginBottom: '14px',
                     display: 'flex',
                     flexWrap: 'wrap',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    gap: '14px'
+                    gap: '12px'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '26px' }}>
-                      {isStreamerKeyActivelyPlaying(record) ? '🎮' : record?.device_hwid ? '📱' : '⏳'}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: isStaff ? '1 1 280px' : '0 1 auto' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', letterSpacing: '0.5px' }}>
+                      KEY:
                     </span>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span
-                          style={{
-                            fontWeight: 800,
-                            fontSize: '13px',
-                            letterSpacing: '0.5px',
-                            color: isStreamerKeyActivelyPlaying(record)
-                              ? '#05df72'
-                              : record?.device_hwid
-                              ? '#00d9ff'
-                              : '#ffb700'
-                          }}
-                        >
-                          {isStreamerKeyActivelyPlaying(record)
-                            ? '● PLAYER IS IN-GAME & PLAYING NOW'
-                            : record?.device_hwid
-                            ? '● DEVICE BOUND (CURRENTLY NOT PLAYING / OFFLINE)'
-                            : '○ AWAITING 1ST PHONE APK LOGIN'}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: '10px',
-                            padding: '2px 8px',
-                            borderRadius: '10px',
-                            fontWeight: 700,
-                            background: isStreamerKeyActivelyPlaying(record)
-                              ? 'rgba(5, 223, 114, 0.2)'
-                              : record?.device_hwid
-                              ? 'rgba(0, 217, 255, 0.15)'
-                              : 'rgba(255, 183, 0, 0.2)',
-                            color: isStreamerKeyActivelyPlaying(record)
-                              ? '#05df72'
-                              : record?.device_hwid
-                              ? '#00d9ff'
-                              : '#ffb700',
-                            border: isStreamerKeyActivelyPlaying(record)
-                              ? '1px solid #05df72'
-                              : record?.device_hwid
-                              ? '1px solid #00d9ff'
-                              : '1px solid #ffb700'
-                          }}
-                        >
-                          {isStreamerKeyActivelyPlaying(record)
-                            ? 'LIVE IN-GAME'
-                            : record?.device_hwid
-                            ? 'IDLE / OFFLINE'
-                            : 'UNBOUND'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '3px', fontFamily: 'monospace' }}>
-                        HWID: <strong style={{ color: '#f8fafc' }}>{record?.device_hwid || 'None (Open APK on phone & tap INITIALIZE STREAMER)'}</strong>
-                      </div>
-                    </div>
+                    {isStaff ? (
+                      <select
+                        value={currentKey}
+                        onChange={(e) => handleSelectRemoteKey(e.target.value)}
+                        style={{
+                          ...styles.selectInput,
+                          padding: '5px 10px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          color: '#f8fafc',
+                          maxWidth: '380px'
+                        }}
+                      >
+                        <option value="">-- Select Target Key --</option>
+                        {keysList.map((k) => {
+                          const isKeyPlaying = onlineKeySet.has(k.license_key.toUpperCase())
+                          return (
+                            <option key={k.license_key} value={k.license_key}>
+                              {isKeyPlaying ? '🟢 ' : k.device_hwid ? '📱 ' : '🟡 '}
+                              {k.license_key} ({k.plan_duration} • @{k.creator_username})
+                            </option>
+                          )
+                        })}
+                      </select>
+                    ) : (
+                      <span style={{ fontFamily: 'monospace', fontSize: '12px', fontWeight: 800, color: '#00d9ff' }}>
+                        {currentKey || 'NONE'}
+                      </span>
+                    )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '20px', alignItems: 'center', fontSize: '12px', color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', fontSize: '11px' }}>
                     <div>
-                      <span style={{ display: 'block', fontSize: '10px', color: '#64748b' }}>DEVICE SLOTS:</span>
-                      <strong style={{ color: '#38bdf8' }}>{record?.devices_used || (record?.device_hwid ? 1 : 0)} / {record?.devices_max || 1} Used</strong>
-                    </div>
-                    <div>
-                      <span style={{ display: 'block', fontSize: '10px', color: '#64748b' }}>LAST HEARTBEAT:</span>
-                      <strong style={{ color: isStreamerKeyActivelyPlaying(record) ? '#05df72' : '#94a3b8' }}>
-                        {record?.last_heartbeat
-                          ? `${new Date(record.last_heartbeat).toLocaleTimeString()} (${isStreamerKeyActivelyPlaying(record) ? 'Live' : 'Offline'})`
-                          : 'No Game Session Yet'}
+                      <span style={{ color: '#64748b', marginRight: '5px' }}>HWID:</span>
+                      <strong style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>
+                        {record?.device_hwid ? record.device_hwid.slice(0, 22) : 'Unbound'}
                       </strong>
                     </div>
                     <div>
-                      <span style={{ display: 'block', fontSize: '10px', color: '#64748b' }}>ENGINE TARGET:</span>
-                      <strong style={{ color: '#05df72' }}>Stranger (ARM64)</strong>
+                      <span style={{ color: '#64748b', marginRight: '5px' }}>SLOTS:</span>
+                      <strong style={{ color: '#38bdf8' }}>
+                        {record?.devices_used || (record?.device_hwid ? 1 : 0)}/{record?.devices_max || 1}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b', marginRight: '5px' }}>SYNC:</span>
+                      <strong style={{ color: isStreamerKeyActivelyPlaying(record) ? '#05df72' : '#94a3b8' }}>
+                        {record?.last_heartbeat
+                          ? new Date(record.last_heartbeat).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                          : 'Idle'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b', marginRight: '5px' }}>EXPIRY:</span>
+                      <strong style={{ color: '#00d9ff', fontFamily: 'monospace' }}>{countdown}</strong>
                     </div>
                   </div>
                 </div>
 
-                {/* Paused Warning Banner */}
+                {/* Compact Freeze Indicator (Only when Paused) */}
                 {record?.is_paused && (
                   <div
                     style={{
-                      background: 'linear-gradient(90deg, rgba(255, 183, 0, 0.2) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(255, 183, 0, 0.2) 100%)',
-                      border: '1px solid rgba(255, 183, 0, 0.5)',
-                      borderRadius: '12px',
-                      padding: '14px 20px',
-                      marginBottom: '20px',
+                      background: 'rgba(255, 183, 0, 0.12)',
+                      border: '1px solid rgba(255, 183, 0, 0.45)',
+                      borderRadius: '8px',
+                      padding: '8px 14px',
+                      marginBottom: '12px',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '14px',
+                      justifyContent: 'space-between',
+                      fontSize: '12px',
+                      fontWeight: 700,
                       color: '#ffb700'
                     }}
                   >
-                    <span style={{ fontSize: '24px' }}>⏸️</span>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '14px', letterSpacing: '0.5px' }}>
-                        THIS LICENSE KEY IS CURRENTLY PAUSED BY STAFF
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
-                        In-game Stranger daemon hook and telemetry adjustments are frozen until resumed by an authorized reseller or admin.
-                      </div>
-                    </div>
+                    <span>❄️ STEALTH FREEZE ACTIVE — All in-game visuals &amp; memory hooks temporarily suspended</span>
+                    <button
+                      onClick={handleToggleStealthFreeze}
+                      style={{
+                        background: '#05df72',
+                        color: '#07090e',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ▶️ RESUME
+                    </button>
                   </div>
                 )}
 
@@ -6817,10 +6290,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Silent Aim</div>
-                        <div style={styles.toggleDesc}>Direct vector redirection</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Silent Aim</div>
                       <div
                         onClick={() => toggleFeature('aim_silent')}
                         style={{
@@ -6868,10 +6338,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>FOV Target Ring</div>
-                        <div style={styles.toggleDesc}>Dynamic screen radius indicator</div>
-                      </div>
+                      <div style={styles.toggleTitle}>FOV Target Ring</div>
                       <div
                         onClick={() => toggleFeature('show_aim_fov')}
                         style={{
@@ -6889,10 +6356,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Aim Snap Line</div>
-                        <div style={styles.toggleDesc}>Vector ray from crosshair to target</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Aim Snap Line</div>
                       <div
                         onClick={() => toggleFeature('show_aim_line')}
                         style={{
@@ -6910,10 +6374,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Ignore Knocked</div>
-                        <div style={styles.toggleDesc}>Prioritize active standing threats</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Ignore Knocked</div>
                       <div
                         onClick={() => toggleFeature('ignore_knocked')}
                         style={{
@@ -6939,10 +6400,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>3D Bounding Box</div>
-                        <div style={styles.toggleDesc}>Entity corner alignment</div>
-                      </div>
+                      <div style={styles.toggleTitle}>3D Bounding Box</div>
                       <div
                         onClick={() => toggleFeature('esp_box')}
                         style={{
@@ -6960,10 +6418,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Skeleton Bone Structure</div>
-                        <div style={styles.toggleDesc}>14-point joint tracking</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Skeleton Bone Structure</div>
                       <div
                         onClick={() => toggleFeature('esp_skeleton')}
                         style={{
@@ -6981,10 +6436,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Player Nicknames</div>
-                        <div style={styles.toggleDesc}>In-game enemy name labels</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Player Nicknames</div>
                       <div
                         onClick={() => toggleFeature('esp_name')}
                         style={{
@@ -7002,10 +6454,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Tracer Snaplines</div>
-                        <div style={styles.toggleDesc}>Origin vector lines to targets</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Tracer Snaplines</div>
                       <div
                         onClick={() => toggleFeature('esp_line')}
                         style={{
@@ -7023,10 +6472,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Distance Indicator</div>
-                        <div style={styles.toggleDesc}>Proximity range in meters</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Distance Indicator</div>
                       <div
                         onClick={() => toggleFeature('esp_distance')}
                         style={{
@@ -7044,10 +6490,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Health Bar Visual</div>
-                        <div style={styles.toggleDesc}>Real-time HP gauge</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Health Bar Visual</div>
                       <div
                         onClick={() => toggleFeature('esp_health')}
                         style={{
@@ -7065,10 +6508,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Enemy Alert Count</div>
-                        <div style={styles.toggleDesc}>Surrounding threat badge</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Enemy Alert Count</div>
                       <div
                         onClick={() => toggleFeature('esp_count')}
                         style={{
@@ -7086,10 +6526,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Tactical 360° Radar</div>
-                        <div style={styles.toggleDesc}>Top-down minimap threat proximity</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Tactical 360° Radar</div>
                       <div
                         onClick={() => toggleFeature('esp_radar')}
                         style={{
@@ -7115,10 +6552,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Kinematic Speed Boost</div>
-                        <div style={styles.toggleDesc}>Velocity vector scaling</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Kinematic Speed Boost</div>
                       <div
                         onClick={() => toggleFeature('speed_hack')}
                         style={{
@@ -7152,10 +6586,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Ghost Mode (Desync)</div>
-                        <div style={styles.toggleDesc}>Detached client body positioning</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Ghost Mode (Desync)</div>
                       <div
                         onClick={() => toggleFeature('ghost_hack')}
                         style={{
@@ -7173,10 +6604,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Instant No-Reload</div>
-                        <div style={styles.toggleDesc}>Zero magazine reload delay</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Instant No-Reload</div>
                       <div
                         onClick={() => toggleFeature('no_reload')}
                         style={{
@@ -7194,10 +6622,7 @@ public class ServerConfig {
                     </div>
 
                     <div style={styles.toggleRow}>
-                      <div>
-                        <div style={styles.toggleTitle}>Recoil Suppression</div>
-                        <div style={styles.toggleDesc}>Zero crosshair displacement</div>
-                      </div>
+                      <div style={styles.toggleTitle}>Recoil Suppression</div>
                       <div
                         onClick={() => toggleFeature('no_recoil')}
                         style={{
@@ -7538,229 +6963,7 @@ public class ServerConfig {
       )}
 
       {/* ── NOTIFICATION DRAWER / NOTIFICATION CENTER ───────────────────────── */}
-      {isNotifDrawerOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '70px',
-            right: '24px',
-            width: '430px',
-            maxWidth: '92vw',
-            maxHeight: '85vh',
-            backgroundColor: 'rgba(10, 13, 22, 0.96)',
-            backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(0, 217, 255, 0.35)',
-            borderRadius: '16px',
-            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 217, 255, 0.15)',
-            zIndex: 100,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden'
-          }}
-        >
-          {/* Drawer Header */}
-          <div
-            style={{
-              padding: '16px 20px',
-              borderBottom: '1px solid rgba(30, 41, 59, 0.8)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'rgba(15, 23, 42, 0.8)'
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '14px', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🔔 NOTIFICATIONS & BROADCASTS</span>
-                <span style={styles.cyanMiniBadge}>{notifications.length}</span>
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                Real-time messages for {currentUser?.username || 'user'}
-              </div>
-            </div>
-            <button
-              onClick={() => setIsNotifDrawerOpen(false)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#94a3b8',
-                fontSize: '18px',
-                cursor: 'pointer',
-                padding: '4px'
-              }}
-              title="Close drawer"
-            >
-              ✕
-            </button>
-          </div>
 
-          {/* Drawer Filters */}
-          <div
-            style={{
-              padding: '10px 16px',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-              display: 'flex',
-              gap: '6px',
-              background: 'rgba(10, 13, 20, 0.6)'
-            }}
-          >
-            <button
-              onClick={() => setNotifFilter('all')}
-              style={{
-                ...styles.chipBtn,
-                background: notifFilter === 'all' ? 'rgba(0, 217, 255, 0.2)' : 'transparent',
-                color: notifFilter === 'all' ? '#00d9ff' : '#94a3b8',
-                fontSize: '11px'
-              }}
-            >
-              All ({notifications.length})
-            </button>
-            <button
-              onClick={() => setNotifFilter('broadcasts')}
-              style={{
-                ...styles.chipBtn,
-                background: notifFilter === 'broadcasts' ? 'rgba(0, 217, 255, 0.2)' : 'transparent',
-                color: notifFilter === 'broadcasts' ? '#00d9ff' : '#94a3b8',
-                fontSize: '11px'
-              }}
-            >
-              📢 Broadcasts ({notifications.filter((n) => n.recipient === 'ALL').length})
-            </button>
-            <button
-              onClick={() => setNotifFilter('direct')}
-              style={{
-                ...styles.chipBtn,
-                background: notifFilter === 'direct' ? 'rgba(0, 217, 255, 0.2)' : 'transparent',
-                color: notifFilter === 'direct' ? '#00d9ff' : '#94a3b8',
-                fontSize: '11px'
-              }}
-            >
-              👤 Direct ({notifications.filter((n) => n.recipient !== 'ALL').length})
-            </button>
-          </div>
-
-          {/* Messages list */}
-          <div
-            style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '14px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px'
-            }}
-          >
-            {filteredNotifications.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 10px', color: '#64748b', fontSize: '13px' }}>
-                🎉 All caught up! No notifications right now.
-              </div>
-            ) : (
-              filteredNotifications.map((n) => (
-                <div
-                  key={n.id}
-                  style={{
-                    background: 'rgba(15, 23, 42, 0.85)',
-                    border: '1px solid rgba(30, 41, 59, 0.8)',
-                    borderRadius: '12px',
-                    padding: '12px 14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span
-                        style={{
-                          fontSize: '9px',
-                          fontWeight: 800,
-                          padding: '1px 5px',
-                          borderRadius: '4px',
-                          background:
-                            n.type === 'ALERT'
-                              ? 'rgba(255, 51, 102, 0.2)'
-                              : n.type === 'WARNING'
-                              ? 'rgba(255, 183, 0, 0.2)'
-                              : n.type === 'UPDATE'
-                              ? 'rgba(5, 223, 114, 0.2)'
-                              : 'rgba(0, 217, 255, 0.2)',
-                          color:
-                            n.type === 'ALERT'
-                              ? '#ff3366'
-                              : n.type === 'WARNING'
-                              ? '#ffb700'
-                              : n.type === 'UPDATE'
-                              ? '#05df72'
-                              : '#00d9ff'
-                        }}
-                      >
-                        {n.type}
-                      </span>
-                      <span style={{ fontSize: '10px', color: n.recipient === 'ALL' ? '#00d9ff' : '#a855f7', fontWeight: 700 }}>
-                        {n.recipient === 'ALL' ? '📢 GLOBAL' : `@${n.recipient}`}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '10px', color: '#64748b' }}>
-                        {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      {(isOwner || isAdmin) && (
-                        <button
-                          onClick={() => handleDeleteNotification(n.id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                          title="Delete message"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#f8fafc' }}>
-                    {n.title}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: 1.4 }}>
-                    {n.message}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Drawer Footer */}
-          {(isOwner || isAdmin) && (
-            <div
-              style={{
-                padding: '12px 16px',
-                borderTop: '1px solid rgba(30, 41, 59, 0.8)',
-                background: 'rgba(15, 23, 42, 0.95)'
-              }}
-            >
-              <button
-                onClick={() => {
-                  setIsNotifDrawerOpen(false)
-                  setActiveTab('broadcast')
-                }}
-                style={{
-                  ...styles.submitBtn,
-                  padding: '8px 16px',
-                  fontSize: '12px',
-                  background: 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)',
-                  color: '#07090e'
-                }}
-              >
-                📢 Compose Broadcast / Message Users
-              </button>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -8230,22 +7433,20 @@ const styles: Record<string, React.CSSProperties> = {
   },
   bannerRow: {
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '28px',
+    marginBottom: '18px',
     flexWrap: 'wrap',
-    gap: '16px'
+    gap: '14px'
   },
   pageTitle: {
-    fontSize: '24px',
+    fontSize: '21px',
     fontWeight: 800,
     margin: 0,
     color: '#f8fafc'
   },
   pageSubtitle: {
-    fontSize: '13px',
-    color: '#94a3b8',
-    margin: '4px 0 0 0'
+    display: 'none'
   },
   badgeCluster: {
     display: 'flex',
@@ -8651,33 +7852,33 @@ const styles: Record<string, React.CSSProperties> = {
   },
   controlGrid3Col: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: '20px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
+    gap: '16px'
   },
   columnCard: {
-    padding: '20px',
-    backgroundColor: 'rgba(13, 17, 26, 0.8)',
+    padding: '16px 18px',
+    backgroundColor: 'rgba(13, 17, 26, 0.85)',
     border: '1px solid rgba(30, 41, 59, 0.6)',
-    borderRadius: '16px',
+    borderRadius: '14px',
     backdropFilter: 'blur(10px)'
   },
   columnHead: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    marginBottom: '16px',
-    paddingBottom: '12px',
+    gap: '8px',
+    marginBottom: '10px',
+    paddingBottom: '10px',
     borderBottom: '1px solid rgba(30, 41, 59, 0.5)'
   },
   columnIcon: {
-    fontSize: '18px'
+    fontSize: '16px'
   },
   toggleRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '12px 0',
-    borderBottom: '1px solid rgba(30, 41, 59, 0.3)'
+    padding: '9px 0',
+    borderBottom: '1px solid rgba(30, 41, 59, 0.28)'
   },
   toggleTitle: {
     fontSize: '13px',
@@ -8685,12 +7886,11 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#f8fafc'
   },
   toggleDesc: {
-    fontSize: '11px',
-    color: '#64748b'
+    display: 'none'
   },
   sliderBlock: {
-    padding: '14px 0',
-    borderBottom: '1px solid rgba(30, 41, 59, 0.3)'
+    padding: '10px 0',
+    borderBottom: '1px solid rgba(30, 41, 59, 0.28)'
   },
   sliderLabelRow: {
     display: 'flex',

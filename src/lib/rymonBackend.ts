@@ -1192,6 +1192,7 @@ export async function generateLicenseKeyBackend(params: {
   customPrefix?: string
   devicesMax?: number
   quantity?: number
+  isVipRealtime?: boolean
 }): Promise<{
   success: boolean
   key?: string
@@ -1273,10 +1274,13 @@ export async function generateLicenseKeyBackend(params: {
       }
 
       const creatorName = accRow?.username || creator.username
+      const effectivePlanDuration = params.isVipRealtime ? `${duration} [VIP]` : duration
+      const effectiveStreamerName = params.isVipRealtime ? 'VIP_REALTIME' : 'VIP Streamer'
+
       const licPayloads = generatedKeys.map((k) => ({
         license_key: k,
         game,
-        plan_duration: duration,
+        plan_duration: effectivePlanDuration,
         creator_username: creatorName,
         devices_used: 0,
         devices_max: safeDevices,
@@ -1295,8 +1299,9 @@ export async function generateLicenseKeyBackend(params: {
         const ctrlPayloads = generatedKeys.map((k) =>
           buildDefaultStreamerControlPayload({
             license_key: k,
+            streamer_name: effectiveStreamerName,
             game_name: game,
-            plan_duration: duration,
+            plan_duration: effectivePlanDuration,
             creator: creatorName,
             devices_max: safeDevices,
             devices_used: 0,
@@ -1314,7 +1319,7 @@ export async function generateLicenseKeyBackend(params: {
               : `Key Generated #${insertedLics[0].id}`,
           event_type: 'KEY_GENERATED',
           game,
-          details: `${safeQuantity}x ${duration} • ${safeDevices} Device(s) • Cost: ${liveRole === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
+          details: `${safeQuantity}x ${effectivePlanDuration} • ${safeDevices} Device(s) • Cost: ${liveRole === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
           actor_username: creatorName,
           status: 'SUCCESS'
         })
