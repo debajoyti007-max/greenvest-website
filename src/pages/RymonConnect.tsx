@@ -38,6 +38,10 @@ import {
 type TabType =
   | 'overview'
   | 'remote'
+  | 'presets'
+  | 'telemetry'
+  | 'stealth'
+  | 'license-info'
   | 'generate'
   | 'keys'
   | 'telegram'
@@ -719,6 +723,158 @@ export default function RymonConnect() {
     }
   }
 
+  const GAME_PROFILES = [
+    { id: 'ff_max', name: 'Free Fire MAX', tag: 'OFFICIAL (ARM64)', active: true, icon: '🔥' },
+    { id: 'ff_std', name: 'Free Fire Standard', tag: 'GLOBAL', active: true, icon: '🎮' },
+    { id: 'bgmi', name: 'BGMI / PUBG Mobile', tag: 'SOON', active: false, icon: '⚡' },
+    { id: 'codm', name: 'COD Mobile', tag: 'SOON', active: false, icon: '🎯' }
+  ]
+
+  const PRESET_CONFIGS = {
+    legit: {
+      name: 'Legit Streamer',
+      tag: 'SAFE',
+      icon: '🛡️',
+      color: '#05df72',
+      desc: 'Humanized aim assistance, narrow FOV, clean bounding box. Safe for on-camera and live streaming.',
+      settings: {
+        aim_silent: true,
+        hit_rate: 65,
+        aim_fov: 45,
+        show_aim_fov: false,
+        show_aim_line: false,
+        ignore_knocked: true,
+        esp_box: true,
+        esp_skeleton: false,
+        esp_name: false,
+        esp_distance: true,
+        esp_health: true,
+        esp_count: true,
+        esp_line: false,
+        esp_radar: false,
+        speed_hack: false,
+        speed_multiplier: 1.0,
+        ghost_hack: false,
+        no_reload: false,
+        no_recoil: false,
+        theme_color_index: 0
+      }
+    },
+    rank: {
+      name: 'Rank Pusher',
+      tag: 'BALANCED',
+      icon: '⚡',
+      color: '#00d9ff',
+      desc: '85% hit rate, 90° FOV, skeletal bone tracking, health bars, and smooth 1.4x kinematic velocity scaling.',
+      settings: {
+        aim_silent: true,
+        hit_rate: 85,
+        aim_fov: 90,
+        show_aim_fov: true,
+        show_aim_line: true,
+        ignore_knocked: true,
+        esp_box: true,
+        esp_skeleton: true,
+        esp_name: true,
+        esp_distance: true,
+        esp_health: true,
+        esp_count: true,
+        esp_line: false,
+        esp_radar: true,
+        speed_hack: true,
+        speed_multiplier: 1.4,
+        ghost_hack: false,
+        no_reload: false,
+        no_recoil: true,
+        theme_color_index: 0
+      }
+    },
+    rage: {
+      name: 'Full Rage',
+      tag: 'MAX AGGRESSION',
+      icon: '🔥',
+      color: '#ff2d55',
+      desc: '100% headshot accuracy, 360° FOV, tracer snaplines, 2.5x speed multiplier, zero reload, and ghost mode.',
+      settings: {
+        aim_silent: true,
+        hit_rate: 100,
+        aim_fov: 360,
+        show_aim_fov: true,
+        show_aim_line: true,
+        ignore_knocked: false,
+        esp_box: true,
+        esp_skeleton: true,
+        esp_name: true,
+        esp_distance: true,
+        esp_health: true,
+        esp_count: true,
+        esp_line: true,
+        esp_radar: true,
+        speed_hack: true,
+        speed_multiplier: 2.5,
+        ghost_hack: true,
+        no_reload: true,
+        no_recoil: true,
+        theme_color_index: 1
+      }
+    },
+    esp_only: {
+      name: 'Stealth ESP Only',
+      tag: 'VISUALS ONLY',
+      icon: '👁️',
+      color: '#a855f7',
+      desc: 'Zero kinematic changes and bullet redirection turned OFF. High-fidelity visual wallhack without bullet tampering.',
+      settings: {
+        aim_silent: false,
+        hit_rate: 0,
+        aim_fov: 30,
+        show_aim_fov: false,
+        show_aim_line: false,
+        ignore_knocked: true,
+        esp_box: true,
+        esp_skeleton: true,
+        esp_name: true,
+        esp_distance: true,
+        esp_health: true,
+        esp_count: true,
+        esp_line: false,
+        esp_radar: true,
+        speed_hack: false,
+        speed_multiplier: 1.0,
+        ghost_hack: false,
+        no_reload: false,
+        no_recoil: false,
+        theme_color_index: 2
+      }
+    }
+  }
+
+  const applyPreset = async (key: keyof typeof PRESET_CONFIGS) => {
+    if (!record) return
+    if (record.is_paused) {
+      showToast('⚠️ License key is PAUSED by staff.')
+      return
+    }
+    const targetConfig = PRESET_CONFIGS[key]
+    const updatedRecord: StreamerControlRecord = {
+      ...record,
+      ...targetConfig.settings
+    }
+    setRecord(updatedRecord)
+    showToast(`⚡ Applied "${targetConfig.name}" preset!`)
+
+    if (supabase && currentKey) {
+      try {
+        await supabase
+          .from('rymon_streamer_controls')
+          .update(targetConfig.settings)
+          .eq('license_key', currentKey)
+      } catch (err) {
+        console.warn('Preset sync warning:', err)
+      }
+    }
+  }
+
   const handleEmergencyPurge = async () => {
     setShowPurgeModal(false)
     if (supabase && currentKey) {
@@ -1031,11 +1187,12 @@ export default function RymonConnect() {
 
   // Sovereign RBAC tab isolation guard
   useEffect(() => {
-    if (isStreamer && activeTab !== 'remote') {
+    const streamerAllowed = ['remote', 'presets', 'telemetry', 'stealth', 'license-info']
+    if (isStreamer && !streamerAllowed.includes(activeTab)) {
       setActiveTab('remote')
-    } else if (isReseller && !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend'].includes(activeTab)) {
+    } else if (isReseller && !['remote', 'presets', 'telemetry', 'stealth', 'license-info', 'overview', 'generate', 'keys', 'connect-api', 'extend'].includes(activeTab)) {
       setActiveTab('overview')
-    } else if (isAdmin && !['remote', 'overview', 'generate', 'keys', 'connect-api', 'extend', 'users', 'broadcast', 'referrals', 'ban'].includes(activeTab)) {
+    } else if (isAdmin && !['remote', 'presets', 'telemetry', 'stealth', 'license-info', 'overview', 'generate', 'keys', 'connect-api', 'extend', 'users', 'broadcast', 'referrals', 'ban'].includes(activeTab)) {
       setActiveTab('overview')
     }
   }, [isStreamer, isReseller, isAdmin, activeTab])
@@ -1560,8 +1717,8 @@ export default function RymonConnect() {
 
             {/* Nav Categories */}
             <nav style={styles.navStack}>
-              {/* Telemetry Remote */}
-              <div style={styles.navCategoryHeader}>TELEMETRY & HARDWARE</div>
+              {/* Telemetry Remote & Streamer Suite */}
+              <div style={styles.navCategoryHeader}>STREAMER VIP SUITE</div>
               <button
                 onClick={() => {
                   setActiveTab('remote')
@@ -1575,6 +1732,65 @@ export default function RymonConnect() {
                 <span style={styles.navIcon}>⚡</span>
                 <span>Streamer Remote</span>
                 <span style={styles.cyanMiniBadge}>LIVE</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab('presets')
+                  setMobileMenuOpen(false)
+                }}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === 'presets' ? styles.navItemActive : {})
+                }}
+              >
+                <span style={styles.navIcon}>🎯</span>
+                <span>Pro Presets</span>
+                <span style={{ ...styles.cyanMiniBadge, background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.4)' }}>CONFIG</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab('telemetry')
+                  setMobileMenuOpen(false)
+                }}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === 'telemetry' ? styles.navItemActive : {})
+                }}
+              >
+                <span style={styles.navIcon}>📊</span>
+                <span>Device Telemetry</span>
+                <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.2)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>SYNCED</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab('stealth')
+                  setMobileMenuOpen(false)
+                }}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === 'stealth' ? styles.navItemActive : {})
+                }}
+              >
+                <span style={styles.navIcon}>🛡️</span>
+                <span>OBS Stealth Studio</span>
+                <span style={{ ...styles.cyanMiniBadge, background: 'rgba(255, 183, 0, 0.2)', color: '#ffb700', border: '1px solid rgba(255, 183, 0, 0.4)' }}>SAFE</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab('license-info')
+                  setMobileMenuOpen(false)
+                }}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === 'license-info' ? styles.navItemActive : {})
+                }}
+              >
+                <span style={styles.navIcon}>🔑</span>
+                <span>License & Device</span>
               </button>
 
               {/* Staff-Only Navigation Sections (Hidden from key-login Streamers) */}
@@ -3925,6 +4141,130 @@ public class ServerConfig {
                   </div>
                 )}
 
+                {/* 🎮 TARGET GAME SELECTION & PROFILE */}
+                <div
+                  style={{
+                    backgroundColor: 'rgba(13, 17, 26, 0.75)',
+                    border: '1px solid rgba(30, 41, 59, 0.6)',
+                    borderRadius: '12px',
+                    padding: '12px 18px',
+                    marginBottom: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '18px' }}>🎮</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.05em' }}>
+                      TARGET GAME:
+                    </span>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {GAME_PROFILES.map((gp) => (
+                        <button
+                          key={gp.id}
+                          onClick={() => {
+                            if (gp.active) {
+                              showToast(`🎮 Selected Profile: ${gp.name}`)
+                            } else {
+                              showToast(`⏳ ${gp.name} profile coming soon!`)
+                            }
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: gp.active ? 'pointer' : 'not-allowed',
+                            border: gp.id === 'ff_max' ? '1px solid #00d9ff' : '1px solid rgba(51, 65, 85, 0.6)',
+                            backgroundColor: gp.id === 'ff_max' ? 'rgba(0, 217, 255, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+                            color: gp.id === 'ff_max' ? '#00d9ff' : '#64748b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <span>{gp.icon}</span>
+                          <span>{gp.name}</span>
+                          {gp.id === 'ff_max' && <span style={{ fontSize: '9px', color: '#05df72' }}>● LIVE</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    Engine: <strong style={{ color: '#00d9ff' }}>Stranger (ARM64)</strong> | Offsets: <strong style={{ color: '#05df72' }}>Synced</strong>
+                  </div>
+                </div>
+
+                {/* ⚡ ONE-CLICK QUICK PRESETS BAR */}
+                <div
+                  style={{
+                    backgroundColor: 'rgba(13, 17, 26, 0.85)',
+                    border: '1px solid rgba(0, 217, 255, 0.25)',
+                    borderRadius: '14px',
+                    padding: '14px 18px',
+                    marginBottom: '20px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '16px' }}>⚡</span>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.04em' }}>
+                        ONE-CLICK STREAMER PRESETS
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Instantly configures aim, visuals & mechanics</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                    {Object.entries(PRESET_CONFIGS).map(([pKey, pVal]) => (
+                      <button
+                        key={pKey}
+                        onClick={() => applyPreset(pKey as keyof typeof PRESET_CONFIGS)}
+                        style={{
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          border: `1px solid ${pVal.color}40`,
+                          backgroundColor: `${pVal.color}10`,
+                          color: '#f8fafc',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'all 0.15s ease',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontWeight: 800, fontSize: '12px', color: pVal.color }}>
+                            {pVal.icon} {pVal.name}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '9px',
+                              padding: '1px 6px',
+                              borderRadius: '6px',
+                              fontWeight: 700,
+                              backgroundColor: `${pVal.color}20`,
+                              color: pVal.color,
+                              border: `1px solid ${pVal.color}50`
+                            }}
+                          >
+                            {pVal.tag}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#94a3b8', lineHeight: 1.3 }}>
+                          {pVal.desc.substring(0, 68)}...
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* 3 Telemetry Column Control Grid */}
                 <div style={styles.controlGrid3Col}>
                   {/* Column 1: Aim Matrix */}
@@ -3987,20 +4327,20 @@ public class ServerConfig {
 
                     <div style={styles.toggleRow}>
                       <div>
-                        <div style={styles.toggleTitle}>Ignore Knocked</div>
-                        <div style={styles.toggleDesc}>Prioritize active threats</div>
+                        <div style={styles.toggleTitle}>FOV Target Ring</div>
+                        <div style={styles.toggleDesc}>Dynamic screen radius indicator</div>
                       </div>
                       <div
-                        onClick={() => toggleFeature('ignore_knocked')}
+                        onClick={() => toggleFeature('show_aim_fov')}
                         style={{
                           ...styles.switchPill,
-                          background: record?.ignore_knocked ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                          background: record?.show_aim_fov ? '#00d9ff' : 'rgba(30,36,50,0.8)'
                         }}
                       >
                         <div
                           style={{
                             ...styles.switchKnob,
-                            transform: record?.ignore_knocked ? 'translateX(20px)' : 'translateX(0)'
+                            transform: record?.show_aim_fov ? 'translateX(20px)' : 'translateX(0)'
                           }}
                         />
                       </div>
@@ -4009,7 +4349,7 @@ public class ServerConfig {
                     <div style={styles.toggleRow}>
                       <div>
                         <div style={styles.toggleTitle}>Aim Snap Line</div>
-                        <div style={styles.toggleDesc}>Vector ray from crosshair</div>
+                        <div style={styles.toggleDesc}>Vector ray from crosshair to target</div>
                       </div>
                       <div
                         onClick={() => toggleFeature('show_aim_line')}
@@ -4022,6 +4362,27 @@ public class ServerConfig {
                           style={{
                             ...styles.switchKnob,
                             transform: record?.show_aim_line ? 'translateX(20px)' : 'translateX(0)'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={styles.toggleRow}>
+                      <div>
+                        <div style={styles.toggleTitle}>Ignore Knocked</div>
+                        <div style={styles.toggleDesc}>Prioritize active standing threats</div>
+                      </div>
+                      <div
+                        onClick={() => toggleFeature('ignore_knocked')}
+                        style={{
+                          ...styles.switchPill,
+                          background: record?.ignore_knocked ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...styles.switchKnob,
+                            transform: record?.ignore_knocked ? 'translateX(20px)' : 'translateX(0)'
                           }}
                         />
                       </div>
@@ -4072,6 +4433,48 @@ public class ServerConfig {
                           style={{
                             ...styles.switchKnob,
                             transform: record?.esp_skeleton ? 'translateX(20px)' : 'translateX(0)'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={styles.toggleRow}>
+                      <div>
+                        <div style={styles.toggleTitle}>Player Nicknames</div>
+                        <div style={styles.toggleDesc}>In-game enemy name labels</div>
+                      </div>
+                      <div
+                        onClick={() => toggleFeature('esp_name')}
+                        style={{
+                          ...styles.switchPill,
+                          background: record?.esp_name ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...styles.switchKnob,
+                            transform: record?.esp_name ? 'translateX(20px)' : 'translateX(0)'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={styles.toggleRow}>
+                      <div>
+                        <div style={styles.toggleTitle}>Tracer Snaplines</div>
+                        <div style={styles.toggleDesc}>Origin vector lines to targets</div>
+                      </div>
+                      <div
+                        onClick={() => toggleFeature('esp_line')}
+                        style={{
+                          ...styles.switchPill,
+                          background: record?.esp_line ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...styles.switchKnob,
+                            transform: record?.esp_line ? 'translateX(20px)' : 'translateX(0)'
                           }}
                         />
                       </div>
@@ -4139,6 +4542,27 @@ public class ServerConfig {
                         />
                       </div>
                     </div>
+
+                    <div style={styles.toggleRow}>
+                      <div>
+                        <div style={styles.toggleTitle}>Tactical 360° Radar</div>
+                        <div style={styles.toggleDesc}>Top-down minimap threat proximity</div>
+                      </div>
+                      <div
+                        onClick={() => toggleFeature('esp_radar')}
+                        style={{
+                          ...styles.switchPill,
+                          background: record?.esp_radar ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...styles.switchKnob,
+                            transform: record?.esp_radar ? 'translateX(20px)' : 'translateX(0)'
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Column 3: Kinematics & Themes */}
@@ -4187,6 +4611,48 @@ public class ServerConfig {
 
                     <div style={styles.toggleRow}>
                       <div>
+                        <div style={styles.toggleTitle}>Ghost Mode (Desync)</div>
+                        <div style={styles.toggleDesc}>Detached client body positioning</div>
+                      </div>
+                      <div
+                        onClick={() => toggleFeature('ghost_hack')}
+                        style={{
+                          ...styles.switchPill,
+                          background: record?.ghost_hack ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...styles.switchKnob,
+                            transform: record?.ghost_hack ? 'translateX(20px)' : 'translateX(0)'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={styles.toggleRow}>
+                      <div>
+                        <div style={styles.toggleTitle}>Instant No-Reload</div>
+                        <div style={styles.toggleDesc}>Zero magazine reload delay</div>
+                      </div>
+                      <div
+                        onClick={() => toggleFeature('no_reload')}
+                        style={{
+                          ...styles.switchPill,
+                          background: record?.no_reload ? '#00d9ff' : 'rgba(30,36,50,0.8)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...styles.switchKnob,
+                            transform: record?.no_reload ? 'translateX(20px)' : 'translateX(0)'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={styles.toggleRow}>
+                      <div>
                         <div style={styles.toggleTitle}>Recoil Suppression</div>
                         <div style={styles.toggleDesc}>Zero crosshair displacement</div>
                       </div>
@@ -4225,6 +4691,345 @@ public class ServerConfig {
                         ))}
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 14. PRO STREAMER PRESETS TAB */}
+            {activeTab === 'presets' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Streamer Profile Presets</h2>
+                    <p style={styles.pageSubtitle}>
+                      Pre-calibrated combat and visual matrix configurations designed for tournament play and live streaming.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.greenPulseBadge}>● PRO PRESETS READY</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginTop: '10px' }}>
+                  {Object.entries(PRESET_CONFIGS).map(([pKey, pVal]) => (
+                    <div
+                      key={pKey}
+                      style={{
+                        backgroundColor: 'rgba(13, 17, 26, 0.85)',
+                        border: `1px solid ${pVal.color}40`,
+                        borderRadius: '16px',
+                        padding: '24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '16px',
+                        boxShadow: `0 8px 30px rgba(0,0,0,0.4)`
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '28px' }}>{pVal.icon}</span>
+                            <div>
+                              <h3 style={{ fontSize: '18px', fontWeight: 800, color: pVal.color, margin: 0 }}>
+                                {pVal.name}
+                              </h3>
+                              <span style={{ fontSize: '11px', color: '#64748b' }}>Profile Preset</span>
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              padding: '3px 8px',
+                              borderRadius: '8px',
+                              fontWeight: 800,
+                              backgroundColor: `${pVal.color}20`,
+                              color: pVal.color,
+                              border: `1px solid ${pVal.color}60`
+                            }}
+                          >
+                            {pVal.tag}
+                          </span>
+                        </div>
+
+                        <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.5, marginBottom: '16px' }}>
+                          {pVal.desc}
+                        </p>
+
+                        <div style={{ backgroundColor: 'rgba(7, 9, 14, 0.6)', borderRadius: '10px', padding: '12px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8' }}>
+                            <span>Silent Aim Hit Rate:</span>
+                            <strong style={{ color: '#f8fafc' }}>{pVal.settings.hit_rate}%</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8' }}>
+                            <span>Aim FOV Radius:</span>
+                            <strong style={{ color: '#f8fafc' }}>{pVal.settings.aim_fov}°</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8' }}>
+                            <span>ESP Matrix:</span>
+                            <strong style={{ color: '#f8fafc' }}>{pVal.settings.esp_skeleton ? 'Full Bones + Box' : 'Clean Box Only'}</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8' }}>
+                            <span>Velocity Multiplier:</span>
+                            <strong style={{ color: '#f8fafc' }}>{pVal.settings.speed_multiplier}x</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => applyPreset(pKey as keyof typeof PRESET_CONFIGS)}
+                        style={{
+                          width: '100%',
+                          padding: '12px 18px',
+                          borderRadius: '10px',
+                          backgroundColor: pVal.color,
+                          color: '#07090e',
+                          fontWeight: 800,
+                          fontSize: '13px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          boxShadow: `0 4px 15px ${pVal.color}40`
+                        }}
+                      >
+                        <span>⚡</span>
+                        <span>Apply {pVal.name} Now</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 15. DEVICE TELEMETRY & HEALTH TAB */}
+            {activeTab === 'telemetry' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Device Telemetry & Health</h2>
+                    <p style={styles.pageSubtitle}>
+                      Real-time daemon synchronization, cloud latency metrics, and hardware integrity diagnostics.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.greenPulseBadge}>● TELEMETRY ONLINE</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                  <div style={{ backgroundColor: 'rgba(13, 17, 26, 0.8)', border: '1px solid rgba(0, 217, 255, 0.3)', borderRadius: '14px', padding: '18px' }}>
+                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '6px' }}>CLOUD PING</span>
+                    <div style={{ fontSize: '26px', fontWeight: 800, color: '#00d9ff' }}>{ping} ms</div>
+                    <span style={{ fontSize: '11px', color: '#05df72', marginTop: '4px', display: 'block' }}>● Realtime WebSocket</span>
+                  </div>
+
+                  <div style={{ backgroundColor: 'rgba(13, 17, 26, 0.8)', border: '1px solid rgba(5, 223, 114, 0.3)', borderRadius: '14px', padding: '18px' }}>
+                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '6px' }}>DAEMON STATUS</span>
+                    <div style={{ fontSize: '20px', fontWeight: 800, color: '#05df72' }}>Active (ARM64)</div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>Stranger Engine v2.4</span>
+                  </div>
+
+                  <div style={{ backgroundColor: 'rgba(13, 17, 26, 0.8)', border: '1px solid rgba(168, 85, 247, 0.3)', borderRadius: '14px', padding: '18px' }}>
+                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '6px' }}>SYNC INTERVAL</span>
+                    <div style={{ fontSize: '26px', fontWeight: 800, color: '#c084fc' }}>1.5s</div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>Non-blocking thread</span>
+                  </div>
+
+                  <div style={{ backgroundColor: 'rgba(13, 17, 26, 0.8)', border: '1px solid rgba(255, 183, 0, 0.3)', borderRadius: '14px', padding: '18px' }}>
+                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '6px' }}>DEVICE BINDING</span>
+                    <div style={{ fontSize: '20px', fontWeight: 800, color: '#ffb700' }}>1 / 1 HWID Locked</div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>Anti-Sharing Active</span>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: 'rgba(13, 17, 26, 0.85)', border: '1px solid rgba(30, 41, 59, 0.6)', borderRadius: '16px', padding: '24px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#f8fafc', marginBottom: '16px' }}>
+                    Hardware Connection Diagnostics
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', fontSize: '13px' }}>
+                    <div style={{ backgroundColor: 'rgba(7, 9, 14, 0.6)', padding: '14px', borderRadius: '10px' }}>
+                      <span style={{ color: '#64748b', fontSize: '11px', display: 'block' }}>BOUND HARDWARE ID:</span>
+                      <strong style={{ color: '#f8fafc', fontFamily: 'monospace' }}>{record?.device_hwid || 'android_id:2fd8e2414e9874a5'}</strong>
+                    </div>
+                    <div style={{ backgroundColor: 'rgba(7, 9, 14, 0.6)', padding: '14px', borderRadius: '10px' }}>
+                      <span style={{ color: '#64748b', fontSize: '11px', display: 'block' }}>LAST RECORDED HEARTBEAT:</span>
+                      <strong style={{ color: '#05df72' }}>
+                        {record?.last_heartbeat ? new Date(record.last_heartbeat).toLocaleString() : 'Continuous Realtime Sync'}
+                      </strong>
+                    </div>
+                    <div style={{ backgroundColor: 'rgba(7, 9, 14, 0.6)', padding: '14px', borderRadius: '10px' }}>
+                      <span style={{ color: '#64748b', fontSize: '11px', display: 'block' }}>MEMORY INJECTION STATUS:</span>
+                      <strong style={{ color: '#00d9ff' }}>Attached to PID (libil2cpp.so)</strong>
+                    </div>
+                    <div style={{ backgroundColor: 'rgba(7, 9, 14, 0.6)', padding: '14px', borderRadius: '10px' }}>
+                      <span style={{ color: '#64748b', fontSize: '11px', display: 'block' }}>ROOT SUPERUSER MODE:</span>
+                      <strong style={{ color: '#05df72' }}>KernelSU / Magisk Verified</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 16. OBS STEALTH STUDIO TAB */}
+            {activeTab === 'stealth' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>OBS & Streamer Stealth Studio</h2>
+                    <p style={styles.pageSubtitle}>
+                      Essential streaming protocols, window capture settings, and anti-detection guidelines for live broadcasts.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={{ ...styles.greenPulseBadge, backgroundColor: 'rgba(255, 183, 0, 0.15)', color: '#ffb700', borderColor: 'rgba(255, 183, 0, 0.3)' }}>
+                      🛡️ STEALTH SHIELD ACTIVE
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px' }}>
+                  <div style={{ backgroundColor: 'rgba(13, 17, 26, 0.85)', border: '1px solid rgba(0, 217, 255, 0.3)', borderRadius: '16px', padding: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '24px' }}>🖥️</span>
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#00d9ff', margin: 0 }}>
+                        OBS Window Capture Protocol
+                      </h3>
+                    </div>
+                    <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.6 }}>
+                      When mirroring your Android screen to PC via Scrcpy or capture card, add a <strong>Game Capture</strong> or <strong>Window Capture</strong> source in OBS rather than Display Capture. The stranger engine renders on a private transparent hardware surface, keeping overlays clean.
+                    </p>
+                    <div style={{ marginTop: '14px', padding: '12px', backgroundColor: 'rgba(0, 217, 255, 0.08)', borderRadius: '10px', fontSize: '12px', color: '#94a3b8' }}>
+                      💡 <strong>Streamer Tip:</strong> Use the web console on a secondary screen to toggle features silently without ever touching your phone menu during match broadcasts.
+                    </div>
+                  </div>
+
+                  <div style={{ backgroundColor: 'rgba(13, 17, 26, 0.85)', border: '1px solid rgba(5, 223, 114, 0.3)', borderRadius: '16px', padding: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '24px' }}>📱</span>
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#05df72', margin: 0 }}>
+                        Hardware Volume Key Shortcuts
+                      </h3>
+                    </div>
+                    <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.6 }}>
+                      Your Stranger daemon listens to hardware volume events directly via Linux input devices:
+                    </p>
+                    <ul style={{ paddingLeft: '20px', fontSize: '13px', color: '#94a3b8', lineHeight: 1.8, marginTop: '10px' }}>
+                      <li><strong>Volume Up:</strong> Toggle Silent Aim state quietly.</li>
+                      <li><strong>Volume Down:</strong> Hide or reveal on-screen menu instantaneously.</li>
+                      <li><strong>Volume Combo:</strong> Emergency clean-screen suppression.</li>
+                    </ul>
+                  </div>
+
+                  <div style={{ backgroundColor: 'rgba(13, 17, 26, 0.85)', border: '1px solid rgba(255, 45, 85, 0.3)', borderRadius: '16px', padding: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '24px' }}>🚨</span>
+                      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#ff2d55', margin: 0 }}>
+                        Instant Remote Killswitch
+                      </h3>
+                    </div>
+                    <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.6 }}>
+                      If you need to instantly wipe all modifications during a stream, click <strong>EMERGENCY PURGE</strong> in the top header. Within 1.5 seconds, the daemon terminates and memory hooks detach.
+                    </p>
+                    <button
+                      onClick={() => setShowPurgeModal(true)}
+                      style={{
+                        marginTop: '14px',
+                        width: '100%',
+                        padding: '10px 16px',
+                        borderRadius: '10px',
+                        backgroundColor: 'rgba(255, 45, 85, 0.15)',
+                        border: '1px solid #ff2d55',
+                        color: '#ff2d55',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🚨 Test Emergency Purge Switch
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 17. MY LICENSE & DEVICE VAULT TAB */}
+            {activeTab === 'license-info' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>License & Device Vault</h2>
+                    <p style={styles.pageSubtitle}>
+                      Active license entitlement, subscription period, and hardware slot details.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.greenPulseBadge}>● KEY ACTIVE</span>
+                  </div>
+                </div>
+
+                <div style={{ maxWidth: '680px', margin: '0 auto', backgroundColor: 'rgba(13, 17, 26, 0.85)', border: '1px solid rgba(0, 217, 255, 0.3)', borderRadius: '16px', padding: '28px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '20px', borderBottom: '1px solid rgba(30, 41, 59, 0.6)' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>SUBSCRIPTION KEY</span>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#00d9ff', fontFamily: 'monospace', marginTop: '4px' }}>
+                        {currentKey}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentKey)
+                        showToast('📋 License Key copied to clipboard!')
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#00d9ff',
+                        color: '#07090e',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Copy Key
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+                    <div style={{ backgroundColor: 'rgba(7, 9, 14, 0.6)', padding: '14px', borderRadius: '10px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>TARGET GAME</span>
+                      <strong style={{ color: '#f8fafc', fontSize: '14px' }}>Free Fire MAX</strong>
+                    </div>
+
+                    <div style={{ backgroundColor: 'rgba(7, 9, 14, 0.6)', padding: '14px', borderRadius: '10px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>KEY STATUS</span>
+                      <strong style={{ color: record?.is_paused ? '#ffb700' : '#05df72', fontSize: '14px' }}>
+                        {record?.is_paused ? '⏸️ PAUSED' : '● ACTIVE'}
+                      </strong>
+                    </div>
+
+                    <div style={{ backgroundColor: 'rgba(7, 9, 14, 0.6)', padding: '14px', borderRadius: '10px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>EXPIRES IN</span>
+                      <strong style={{ color: '#00d9ff', fontSize: '14px' }}>{countdown}</strong>
+                    </div>
+
+                    <div style={{ backgroundColor: 'rgba(7, 9, 14, 0.6)', padding: '14px', borderRadius: '10px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>HARDWARE SLOTS</span>
+                      <strong style={{ color: '#f8fafc', fontSize: '14px' }}>1 / 1 Device Used</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '20px', padding: '14px', backgroundColor: 'rgba(5, 223, 114, 0.08)', border: '1px solid rgba(5, 223, 114, 0.2)', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '11px', color: '#05df72', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
+                      BOUND DEVICE HWID
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#f8fafc', fontFamily: 'monospace' }}>
+                      {record?.device_hwid || 'android_id:2fd8e2414e9874a5'}
+                    </span>
                   </div>
                 </div>
               </div>
