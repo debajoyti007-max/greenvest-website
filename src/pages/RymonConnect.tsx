@@ -31,6 +31,10 @@ import {
   OFFICIAL_TELEGRAM_BOT_TOKEN,
   OFFICIAL_OWNER_CHAT_ID,
   selfServiceResetKeyHwidBackend,
+  type TelegramResellerBinding,
+  fetchTelegramResellerBindings,
+  grantTelegramResellerBackend,
+  unlinkTelegramResellerBackend,
   autoDetectTelegramChatId,
   pollAndReplyTelegramBotCommands,
   type RymonReferral,
@@ -206,6 +210,14 @@ export default function RymonConnect() {
   const [telegramStatusMsg, setTelegramStatusMsg] = useState('')
   const [selfResetMsg, setSelfResetMsg] = useState('')
   const [selfResetBusy, setSelfResetBusy] = useState(false)
+  const [tgResellerBindings, setTgResellerBindings] = useState<
+    Record<string, TelegramResellerBinding>
+  >({})
+  const [grantChatIdInput, setGrantChatIdInput] = useState('')
+  const [grantSubDaysInput, setGrantSubDaysInput] = useState<30 | 60>(30)
+  const [grantBalInput, setGrantBalInput] = useState<number | ''>('')
+  const [grantUserInput, setGrantUserInput] = useState('')
+  const [grantBusy, setGrantBusy] = useState(false)
 
   // Derived Notification computations
   const pinnedAnnouncement = useMemo(() => {
@@ -317,7 +329,7 @@ export default function RymonConnect() {
     async function loadLiveData() {
       const isStreamerRole = currentUser?.role === 'streamer'
       await Promise.all([syncPricingFromSupabase(), syncSecurityPolicyFromSupabase()])
-      const [lcs, usrs, acts, notifs, tgCfg, refs, ctrls] = await Promise.all([
+      const [lcs, usrs, acts, notifs, tgCfg, refs, ctrls, tgBindings] = await Promise.all([
         fetchAllLicenses(currentUser),
         fetchAllAccounts(currentUser),
         isStreamerRole ? Promise.resolve([]) : fetchAllActivities(),
@@ -331,7 +343,8 @@ export default function RymonConnect() {
               is_active: true
             }),
         fetchReferralCodes(currentUser),
-        fetchAllStreamerControls(currentUser)
+        fetchAllStreamerControls(currentUser),
+        fetchTelegramResellerBindings()
       ])
 
       if (isMounted) {
@@ -345,6 +358,7 @@ export default function RymonConnect() {
         setTelegramConfig(tgCfg)
         setReferralList(refs)
         setStreamerControls(ctrls)
+        setTgResellerBindings(tgBindings)
 
         // Auto-select a target license key for Staff so Streamer Remote works immediately
         setCurrentKey((prevKey) => {
@@ -1461,6 +1475,44 @@ export default function RymonConnect() {
         )
       )
     }
+  }
+
+  const handleGrantTelegramReseller = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!grantChatIdInput.trim()) {
+      showToast('Please enter the user Telegram Chat ID!')
+      return
+    }
+    setGrantBusy(true)
+    const res = await grantTelegramResellerBackend({
+      chatId: grantChatIdInput.trim(),
+      subDays: grantSubDaysInput,
+      initialBalance: typeof grantBalInput === 'number' ? grantBalInput : 0,
+      customUsername: grantUserInput.trim() || undefined
+    })
+    setGrantBusy(false)
+    if (res.success) {
+      showToast(res.message)
+      setTelegramStatusMsg(res.message)
+      setGrantChatIdInput('')
+      setGrantBalInput('')
+      setGrantUserInput('')
+      const [freshBindings, freshUsers] = await Promise.all([
+        fetchTelegramResellerBindings(),
+        fetchAllAccounts(currentUser)
+      ])
+      setTgResellerBindings(freshBindings)
+      setUsersList(freshUsers)
+    } else {
+      alert(res.message)
+    }
+  }
+
+  const handleUnlinkTelegramReseller = async (chatId: string) => {
+    await unlinkTelegramResellerBackend(chatId)
+    const freshBindings = await fetchTelegramResellerBindings()
+    setTgResellerBindings(freshBindings)
+    showToast(`Unlinked Telegram Chat ID ${chatId}`)
   }
 
   // 12. REFERRAL ONBOARDING & CONNECT API HANDLERS
@@ -5055,25 +5107,243 @@ export default function RymonConnect() {
 
                     <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
                       <h5 style={{ fontSize: '13px', color: '#05df72', marginBottom: '6px', fontWeight: 800 }}>
-                        🔄 Normal User Self-Service Commands (Max 2 Resets / Day):
+                        🔄 Normal User Self-Service (Max 2 Resets / Day):
                       </h5>
-                      <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.75, marginBottom: '12px' }}>
+                      <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.7, marginBottom: '10px' }}>
                         <div>• <b>Paste Key Directly</b> (e.g. <code>RYMON-FF-XXXX-XXXX</code>) — Instant HWID Reset (Max 2/Day)</div>
-                        <div>• <code>/reset RYMON-XXXX</code> — Unbind device HWID (2 resets/day limit enforced)</div>
-                        <div>• <code>/check RYMON-XXXX</code> — Check key status, expiry &amp; remaining daily resets (<code>2/2</code>)</div>
-                        <div>• <code>/apk</code> — Direct download link for Latest RYMON STREAMER APK</div>
+                        <div>• <code>/reset KEY</code> | <code>/check KEY</code> | <code>/apk</code> | <code>/apply</code> (Apply for Reseller)</div>
+                      </div>
+                      <h5 style={{ fontSize: '13px', color: '#c084fc', marginBottom: '6px', fontWeight: 800 }}>
+                        💼 Reseller Bot Store (Recognized Automatically by Chat ID):
+                      </h5>
+                      <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.7, marginBottom: '10px' }}>
+                        <div>• <b>Tap-to-Buy Buttons:</b> <code>🛒 Buy 2H / 1D / 3D / 7D / 15D / 30D</code> inside Telegram</div>
+                        <div>• <code>/wallet</code> — View live ₹ Balance, Custom Price List &amp; 30D/60D Sub</div>
+                        <div>• <code>/mykeys</code> — Copy Unused/Active keys | <code>/topup 500</code> — Request Balance</div>
                       </div>
                       <h5 style={{ fontSize: '13px', color: '#00d9ff', marginBottom: '6px', fontWeight: 800 }}>
                         👑 Root Owner Commands (@montage007pc • ID {OFFICIAL_OWNER_CHAT_ID}):
                       </h5>
-                      <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.75 }}>
-                        <div>• <code>/status</code> — Live Playing Now, Active, Unused &amp; Expired key counts</div>
-                        <div>• <code>/unused</code> — Instant copyable list of all Unused (Waiting) keys</div>
-                        <div>• <code>/playing</code> — Lists all players currently IN-GAME right now</div>
-                        <div>• <code>/gen 1d</code> | <code>3d</code> | <code>7d</code> | <code>15d</code> | <code>30d</code> | <code>2h</code> — Mint a VIP Key from Telegram</div>
-                        <div>• <code>/pause KEY</code> &amp; <code>/resume KEY</code> — Freeze or restore key countdown timer</div>
-                        <div>• <code>/reset KEY</code> — Unlimited Owner Override Reset (restores user&apos;s 2/2 quota)</div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.7 }}>
+                        <div>• <code>/givereseller CHAT_ID 30d 500</code> — Grant Reseller by Chat ID + ₹500 Wallet</div>
+                        <div>• <code>/addbal CHAT_ID 1000</code> — Credit ₹1000 to Reseller &amp; notify on Telegram</div>
+                        <div>• <code>/renew CHAT_ID 30d</code> | <code>/resellers</code> | <code>/status</code> | <code>/unused</code> | <code>/playing</code> | <code>/gen 7d</code></div>
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grant & Manage Telegram Resellers by Chat ID */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+                    gap: '24px',
+                    marginTop: '24px'
+                  }}
+                >
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>💼 Grant Reseller in Bot by Telegram Chat ID</h4>
+                      <span style={styles.cyanMiniBadge}>INSTANT BOT STORE</span>
+                    </div>
+                    <p style={styles.settingDesc}>
+                      Enter a user&apos;s Telegram Chat ID (they can get it by sending <code>/id</code> or tapping <b>Apply for Reseller</b> in {OFFICIAL_TELEGRAM_BOT_USERNAME}). They will immediately unlock the Tap-to-Buy Reseller Store inside Telegram AND receive a synced website account!
+                    </p>
+
+                    <form onSubmit={handleGrantTelegramReseller} style={{ marginTop: '14px' }}>
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>
+                          USER TELEGRAM CHAT ID <span style={{ color: '#05df72' }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={grantChatIdInput}
+                          onChange={(e) => setGrantChatIdInput(e.target.value)}
+                          placeholder="e.g. 987654321 (User sends /id in @Rymon007bot)"
+                          style={{ ...styles.keyInput, fontFamily: 'monospace' }}
+                          required
+                        />
+                      </div>
+
+                      <div style={{ ...styles.formGroup, marginTop: '14px' }}>
+                        <label style={styles.formLabel}>RESELLER SUBSCRIPTION DURATION</label>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setGrantSubDaysInput(30)}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border:
+                                grantSubDaysInput === 30
+                                  ? '1px solid #00d9ff'
+                                  : '1px solid rgba(255,255,255,0.1)',
+                              background:
+                                grantSubDaysInput === 30
+                                  ? 'rgba(0, 217, 255, 0.18)'
+                                  : 'rgba(15, 23, 42, 0.7)',
+                              color: grantSubDaysInput === 30 ? '#00d9ff' : '#94a3b8',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ⚡ 30 DAYS SUB
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setGrantSubDaysInput(60)}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border:
+                                grantSubDaysInput === 60
+                                  ? '1px solid #a855f7'
+                                  : '1px solid rgba(255,255,255,0.1)',
+                              background:
+                                grantSubDaysInput === 60
+                                  ? 'rgba(168, 85, 247, 0.2)'
+                                  : 'rgba(15, 23, 42, 0.7)',
+                              color: grantSubDaysInput === 60 ? '#c084fc' : '#94a3b8',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💎 60 DAYS SUB
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '14px' }}>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>STARTING WALLET (₹ INR)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="50"
+                            value={grantBalInput}
+                            onChange={(e) =>
+                              setGrantBalInput(e.target.value === '' ? '' : Number(e.target.value))
+                            }
+                            placeholder="e.g. 500"
+                            style={styles.keyInput}
+                          />
+                        </div>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>USERNAME (OPTIONAL)</label>
+                          <input
+                            type="text"
+                            value={grantUserInput}
+                            onChange={(e) => setGrantUserInput(e.target.value)}
+                            placeholder="Auto if blank"
+                            style={styles.keyInput}
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={grantBusy}
+                        style={{
+                          ...styles.submitBtn,
+                          marginTop: '18px',
+                          background: '#05df72',
+                          color: '#04090d'
+                        }}
+                      >
+                        {grantBusy
+                          ? 'GRANTING RESELLER & MESSAGING BOT...'
+                          : `⚡ GRANT ${grantSubDaysInput}D RESELLER BY CHAT ID`}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Active Telegram-Linked Resellers Table */}
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>
+                        🔗 Linked Telegram Bot Resellers ({Object.keys(tgResellerBindings).length})
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => fetchTelegramResellerBindings().then(setTgResellerBindings)}
+                        style={{ ...styles.chipBtn, fontSize: '11px' }}
+                      >
+                        🔄 Refresh
+                      </button>
+                    </div>
+                    <p style={styles.settingDesc}>
+                      Resellers listed below can buy &amp; generate keys directly inside <strong>{OFFICIAL_TELEGRAM_BOT_USERNAME}</strong> using their wallet balance.
+                    </p>
+
+                    <div style={{ marginTop: '14px', maxHeight: '300px', overflowY: 'auto' }}>
+                      {Object.values(tgResellerBindings).length === 0 ? (
+                        <div
+                          style={{
+                            padding: '24px',
+                            textAlign: 'center',
+                            color: '#64748b',
+                            fontSize: '12px',
+                            border: '1px dashed rgba(255,255,255,0.1)',
+                            borderRadius: '10px'
+                          }}
+                        >
+                          No Telegram Chat IDs linked to Resellers yet. Use the form on the left or send <code>/givereseller CHAT_ID 30d 500</code> in @Rymon007bot!
+                        </div>
+                      ) : (
+                        Object.values(tgResellerBindings).map((b) => {
+                          const acc = usersList.find(
+                            (u) => u.username.toLowerCase() === b.username.toLowerCase()
+                          )
+                          return (
+                            <div
+                              key={b.chat_id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '10px 12px',
+                                borderRadius: '8px',
+                                background: 'rgba(15, 23, 42, 0.75)',
+                                border: '1px solid rgba(255,255,255,0.07)',
+                                marginBottom: '8px'
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc' }}>
+                                  @{b.username}{' '}
+                                  <span style={{ color: '#05df72', fontSize: '11px' }}>
+                                    • ₹{Number(acc?.balance ?? 0).toLocaleString('en-IN')}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                                  Chat ID: <strong style={{ color: '#00d9ff' }}>{b.chat_id}</strong> • Sub:{' '}
+                                  {acc?.expires_at
+                                    ? new Date(acc.expires_at).toLocaleDateString('en-IN')
+                                    : '30D'}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleUnlinkTelegramReseller(b.chat_id)}
+                                style={{
+                                  ...styles.chipBtn,
+                                  color: '#ef4444',
+                                  border: '1px solid rgba(239,68,68,0.35)',
+                                  background: 'rgba(239,68,68,0.1)',
+                                  fontSize: '11px'
+                                }}
+                              >
+                                Unlink
+                              </button>
+                            </div>
+                          )
+                        })
+                      )}
                     </div>
                   </div>
                 </div>

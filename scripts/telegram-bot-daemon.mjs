@@ -7,6 +7,15 @@ const SUPABASE_ANON_KEY = 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+const DEFAULT_PRICES = {
+  '2 Hours': 15,
+  '1 Day': 35,
+  '3 Days': 50,
+  '7 Days': 100,
+  '15 Days': 180,
+  '30 Days': 350
+}
+
 function formatDurationShort(ms) {
   const totalMins = Math.max(1, Math.round(ms / 60000))
   const days = Math.floor(totalMins / (60 * 24))
@@ -24,46 +33,271 @@ function isActivelyPlaying(ctrl) {
   return ageMs >= -60000 && ageMs <= 75000
 }
 
-async function sendTelegramReply(chatId, htmlText) {
+function buildCustomerInlineKeyboard(isReseller, isOwner) {
+  const rows = [
+    [
+      { text: '🔄 Reset Key (2/Day)', callback_data: 'cmd:help_reset' },
+      { text: '🔍 Check Key Status', callback_data: 'cmd:help_check' }
+    ],
+    [
+      { text: '📲 Download APK', callback_data: 'cmd:apk' },
+      { text: '🆔 My Chat ID', callback_data: 'cmd:id' }
+    ]
+  ]
+  if (isReseller || isOwner) {
+    rows.push([{ text: '💼 Open Reseller Store & Wallet', callback_data: 'cmd:reseller_menu' }])
+  } else {
+    rows.push([{ text: '💼 Apply for Reseller (30D / 60D)', callback_data: 'cmd:apply_reseller' }])
+  }
+  if (isOwner) {
+    rows.push([{ text: '👑 Open Root Owner Panel', callback_data: 'cmd:owner_menu' }])
+  }
+  return { inline_keyboard: rows }
+}
+
+function buildResellerInlineKeyboard(priceMap = DEFAULT_PRICES) {
+  const p2h = priceMap['2 Hours'] ?? 15
+  const p1 = priceMap['1 Day'] ?? 35
+  const p3 = priceMap['3 Days'] ?? 50
+  const p7 = priceMap['7 Days'] ?? 100
+  const p15 = priceMap['15 Days'] ?? 180
+  const p30 = priceMap['30 Days'] ?? 350
+  return {
+    inline_keyboard: [
+      [
+        { text: '💰 My Wallet & Sub', callback_data: 'res:wallet' },
+        { text: '📋 My Keys', callback_data: 'res:mykeys' }
+      ],
+      [
+        { text: `🛒 Buy 2H (₹${p2h})`, callback_data: 'res:buy:2h' },
+        { text: `🛒 Buy 1D (₹${p1})`, callback_data: 'res:buy:1d' }
+      ],
+      [
+        { text: `🛒 Buy 3D (₹${p3})`, callback_data: 'res:buy:3d' },
+        { text: `🛒 Buy 7D (₹${p7})`, callback_data: 'res:buy:7d' }
+      ],
+      [
+        { text: `🛒 Buy 15D (₹${p15})`, callback_data: 'res:buy:15d' },
+        { text: `🛒 Buy 30D (₹${p30})`, callback_data: 'res:buy:30d' }
+      ],
+      [
+        { text: '💳 Top-Up +₹500', callback_data: 'res:topup:500' },
+        { text: '💳 Top-Up +₹1000', callback_data: 'res:topup:1000' }
+      ],
+      [{ text: '🏠 Main Menu', callback_data: 'cmd:main_menu' }]
+    ]
+  }
+}
+
+function buildOwnerInlineKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '📊 Live Status', callback_data: 'own:status' },
+        { text: '🟢 Playing Now', callback_data: 'own:playing' },
+        { text: '🟡 Unused Keys', callback_data: 'own:unused' }
+      ],
+      [
+        { text: '⚡ Mint 1D Key', callback_data: 'own:gen:1d' },
+        { text: '⚡ Mint 7D Key', callback_data: 'own:gen:7d' },
+        { text: '⚡ Mint 30D Key', callback_data: 'own:gen:30d' }
+      ],
+      [
+        { text: '👥 All Resellers', callback_data: 'own:resellers' },
+        { text: '🎟️ 30D Invite', callback_data: 'own:invite:30' },
+        { text: '🎟️ 60D Invite', callback_data: 'own:invite:60' }
+      ],
+      [{ text: '🏠 Main Menu', callback_data: 'cmd:main_menu' }]
+    ]
+  }
+}
+
+async function sendTelegramReply(chatId, htmlText, replyMarkup) {
   try {
+    const payload = {
+      chat_id: chatId,
+      text: htmlText,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true
+    }
+    if (replyMarkup) payload.reply_markup = replyMarkup
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: htmlText,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true
-      })
+      body: JSON.stringify(payload)
     })
   } catch (err) {
     console.error('[TG Send Error]', err)
   }
 }
 
-async function getDailyResetLog() {
+async function answerCallback(callbackQueryId, text) {
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        callback_query_id: callbackQueryId,
+        ...(text ? { text } : {})
+      })
+    })
+  } catch {}
+}
+
+async function getSystemConfigValue(key, fallback = {}) {
   try {
     const { data } = await supabase
       .from('rymon_system_config')
       .select('value')
-      .eq('key', 'hwid_reset_daily_log')
+      .eq('key', key)
       .maybeSingle()
-    if (data?.value && typeof data.value === 'object') {
-      return data.value
-    }
+    if (data?.value && typeof data.value === 'object') return data.value
   } catch {}
-  return {}
+  return fallback
 }
 
-async function saveDailyResetLog(logMap) {
+async function saveSystemConfigValue(key, value) {
   try {
     await supabase
       .from('rymon_system_config')
-      .upsert(
-        { key: 'hwid_reset_daily_log', value: logMap, updated_at: new Date().toISOString() },
-        { onConflict: 'key' }
-      )
+      .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
   } catch {}
+}
+
+async function getResellerPriceMap(username) {
+  const [globalPrices, userCustomMaps] = await Promise.all([
+    getSystemConfigValue('global_default_key_prices', DEFAULT_PRICES),
+    getSystemConfigValue('user_custom_key_prices', {})
+  ])
+  const base = { ...DEFAULT_PRICES, ...globalPrices }
+  const clean = (username || '').toLowerCase()
+  if (userCustomMaps[clean] && typeof userCustomMaps[clean] === 'object') {
+    return { ...base, ...userCustomMaps[clean] }
+  }
+  return base
+}
+
+async function resolveTelegramReseller(chatId) {
+  const bindings = await getSystemConfigValue('telegram_reseller_bindings', {})
+  const bound = bindings[chatId]
+  if (!bound || !bound.username) return null
+  const { data } = await supabase
+    .from('rymon_accounts')
+    .select('*')
+    .ilike('username', bound.username)
+    .maybeSingle()
+  return data || null
+}
+
+async function grantResellerByChatId({
+  chatId,
+  subDays = 30,
+  initialBalance = 0,
+  customUsername,
+  customPassword,
+  tgName,
+  tgHandle
+}) {
+  const cleanChatId = String(chatId).trim()
+  const safeDays = Number(subDays) === 60 ? 60 : 30
+  const addBal = Math.max(0, Number(initialBalance) || 0)
+  const nowMs = Date.now()
+  const nowIso = new Date(nowMs).toISOString()
+  const expiresAtIso = new Date(nowMs + safeDays * 86400000).toISOString()
+
+  const bindings = await getSystemConfigValue('telegram_reseller_bindings', {})
+  const existingBinding = bindings[cleanChatId]
+  const suffix = cleanChatId.replace(/[^0-9]/g, '').slice(-4) || '0007'
+  const desiredUsername = (
+    customUsername?.trim() ||
+    existingBinding?.username ||
+    `reseller_${suffix}`
+  ).toLowerCase()
+  const generatedPassword = customPassword?.trim() || `Rymon@${suffix}`
+
+  let finalUsername = desiredUsername
+  let finalBalance = addBal
+  let createdNew = false
+
+  const { data: existingAcc } = await supabase
+    .from('rymon_accounts')
+    .select('*')
+    .ilike('username', desiredUsername)
+    .maybeSingle()
+
+  if (existingAcc) {
+    finalUsername = existingAcc.username
+    finalBalance = Number(existingAcc.balance || 0) + addBal
+    const nextRole =
+      existingAcc.role === 'owner' || existingAcc.role === 'admin' ? existingAcc.role : 'reseller'
+    await supabase
+      .from('rymon_accounts')
+      .update({
+        role: nextRole,
+        balance: finalBalance,
+        expires_at: expiresAtIso,
+        status: 'ACTIVE',
+        updated_at: nowIso
+      })
+      .eq('id', existingAcc.id)
+  } else {
+    createdNew = true
+    const { data: inserted } = await supabase
+      .from('rymon_accounts')
+      .insert({
+        username: desiredUsername,
+        password_hash: generatedPassword,
+        email: `${desiredUsername}@rymon.vip`,
+        role: 'reseller',
+        balance: addBal,
+        uplink: 'debajoyti',
+        devices_used: 0,
+        devices_max: 500,
+        status: 'ACTIVE',
+        expires_at: expiresAtIso
+      })
+      .select('*')
+      .maybeSingle()
+    if (inserted) {
+      finalUsername = inserted.username
+      finalBalance = Number(inserted.balance || addBal)
+    }
+  }
+
+  bindings[cleanChatId] = {
+    chat_id: cleanChatId,
+    username: finalUsername,
+    tg_name: tgName || existingBinding?.tg_name || finalUsername,
+    tg_handle: tgHandle || existingBinding?.tg_handle || '',
+    linked_at: nowIso
+  }
+  await saveSystemConfigValue('telegram_reseller_bindings', bindings)
+
+  const priceMap = await getResellerPriceMap(finalUsername)
+  const welcomeLines = [
+    `🎉 <b>CONGRATULATIONS! YOU ARE NOW AN OFFICIAL RYMON RESELLER!</b>`,
+    ``,
+    `🆔 <b>Linked Telegram Chat ID:</b> <code>${cleanChatId}</code>`,
+    `👤 <b>Reseller Account:</b> <code>${finalUsername}</code>`,
+    ...(createdNew ? [`🔑 <b>Web Password:</b> <code>${generatedPassword}</code>`] : []),
+    `💰 <b>Wallet Balance:</b> <b>₹${finalBalance.toLocaleString('en-IN')}</b>`,
+    `⏳ <b>Subscription Plan:</b> <b>${safeDays} Days</b> (Expires ${new Date(expiresAtIso).toLocaleDateString('en-IN')})`,
+    ``,
+    `🛒 <b>Tap any button below to buy/generate keys directly inside Telegram, or login at:</b>`,
+    `🌐 https://greenvest.shop/`
+  ]
+  await sendTelegramReply(
+    cleanChatId,
+    welcomeLines.join('\n'),
+    buildResellerInlineKeyboard(priceMap)
+  )
+
+  return {
+    username: finalUsername,
+    password: createdNew ? generatedPassword : null,
+    subDays: safeDays,
+    balance: finalBalance
+  }
 }
 
 async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel) {
@@ -98,7 +332,7 @@ async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel) {
     return `⏰ <b>Key Expired:</b> <code>${cleanKey}</code> has expired. Please contact your seller to renew.`
   }
 
-  const logMap = await getDailyResetLog()
+  const logMap = await getSystemConfigValue('hwid_reset_daily_log', {})
   const exactKey = licRecord.license_key.toUpperCase()
   const recentResets = (logMap[exactKey] || []).filter((ts) => nowMs - Number(ts) < DAY_WINDOW_MS)
 
@@ -123,7 +357,7 @@ async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel) {
     delete logMap[exactKey]
   }
 
-  await saveDailyResetLog(logMap)
+  await saveSystemConfigValue('hwid_reset_daily_log', logMap)
 
   const nextStatus = licRecord.is_paused
     ? 'PAUSED'
@@ -187,50 +421,153 @@ async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel) {
 }
 
 async function processUpdate(upd) {
-  const msg = upd.message || upd.channel_post
-  if (!msg || !msg.chat || !msg.text) return
+  const cbq = upd.callback_query
+  const msg = cbq ? cbq.message : upd.message || upd.channel_post
+  if (!msg || !msg.chat) return
 
   const chatId = String(msg.chat.id)
-  const text = String(msg.text).trim()
-  const lowerText = text.toLowerCase()
-  const senderName = msg.from?.first_name || msg.chat.title || 'VIP User'
-  const senderUser = msg.from?.username ? `@${msg.from.username}` : senderName
+  const senderFrom = cbq ? cbq.from : msg.from
+  const senderName = senderFrom?.first_name || msg.chat.title || 'VIP User'
+  const senderUser = senderFrom?.username ? `@${senderFrom.username}` : senderName
   const isOwnerChat = chatId === OWNER_CHAT_ID
+
+  const linkedReseller = await resolveTelegramReseller(chatId)
+  const isResellerChat = Boolean(linkedReseller)
+
+  let text = String(msg.text || '').trim()
+  if (cbq && cbq.data) {
+    const data = String(cbq.data)
+    await answerCallback(cbq.id)
+
+    if (data === 'cmd:main_menu') text = '/start'
+    else if (data === 'cmd:help_reset') {
+      await sendTelegramReply(
+        chatId,
+        `🔄 <b>HOW TO RESET YOUR KEY HWID (MAX 2/DAY):</b>\n\nSimply <b>paste &amp; send your License Key</b> right here in the chat (e.g. <code>RYMON-FF-XXXX-XXXX</code>) or send:\n<code>/reset RYMON-FF-XXXX-XXXX</code>`
+      )
+      return
+    } else if (data === 'cmd:help_check') {
+      await sendTelegramReply(
+        chatId,
+        `🔍 <b>CHECK KEY STATUS &amp; DAILY RESETS:</b>\n\nSend:\n<code>/check RYMON-FF-XXXX-XXXX</code>`
+      )
+      return
+    } else if (data === 'cmd:apk') text = '/apk'
+    else if (data === 'cmd:id') text = '/id'
+    else if (data === 'cmd:apply_reseller') text = '/apply'
+    else if (data === 'cmd:reseller_menu') text = '/wallet'
+    else if (data === 'cmd:owner_menu') text = '/owner'
+    else if (data === 'res:wallet') text = '/wallet'
+    else if (data === 'res:mykeys') text = '/mykeys'
+    else if (data.startsWith('res:buy:')) {
+      const planCode = data.split(':')[2] || '1d'
+      text = `/buy ${planCode} 1`
+    } else if (data.startsWith('res:topup:')) {
+      const amt = data.split(':')[2] || '500'
+      text = `/topup ${amt}`
+    } else if (data === 'own:status') text = '/status'
+    else if (data === 'own:playing') text = '/playing'
+    else if (data === 'own:unused') text = '/unused'
+    else if (data.startsWith('own:gen:')) {
+      const planCode = data.split(':')[2] || '1d'
+      text = `/gen ${planCode}`
+    } else if (data === 'own:resellers') text = '/resellers'
+    else if (data.startsWith('own:invite:')) {
+      const days = data.split(':')[2] || '30'
+      text = `/invite ${days}d 0`
+    } else if (data.startsWith('own:grant:')) {
+      if (!isOwnerChat) return
+      const [, , targetChatId, daysStr, balStr] = data.split(':')
+      const grantRes = await grantResellerByChatId({
+        chatId: targetChatId,
+        subDays: Number(daysStr) === 60 ? 60 : 30,
+        initialBalance: Number(balStr) || 0
+      })
+      await sendTelegramReply(
+        chatId,
+        `👑 <b>RESELLER GRANTED VIA 1-TAP</b>\n\n• <b>Chat ID:</b> <code>${targetChatId}</code>\n• <b>Username:</b> <code>${grantRes.username}</code>${grantRes.password ? `\n• <b>Password:</b> <code>${grantRes.password}</code>` : ''}\n• <b>Plan:</b> ${grantRes.subDays} Days\n• <b>Wallet:</b> ₹${grantRes.balance}`,
+        buildOwnerInlineKeyboard()
+      )
+      return
+    } else if (data.startsWith('own:addbal:')) {
+      if (!isOwnerChat) return
+      const [, , targetChatId, amtStr] = data.split(':')
+      text = `/addbal ${targetChatId} ${amtStr}`
+    } else if (data.startsWith('own:rejecttopup:')) {
+      if (!isOwnerChat) return
+      const [, , targetChatId, amtStr] = data.split(':')
+      await sendTelegramReply(
+        targetChatId,
+        `❌ Your wallet top-up request of <b>₹${amtStr}</b> was declined by the Owner. Please contact @montage007pc with your payment proof.`
+      )
+      await sendTelegramReply(
+        chatId,
+        `✅ Top-up request (₹${amtStr}) for Chat ID <code>${targetChatId}</code> rejected.`
+      )
+      return
+    }
+  }
+
+  if (!text) return
+  const lowerText = text.toLowerCase()
 
   if (lowerText.startsWith('/start') || lowerText.startsWith('/help')) {
     const lines = [
       `⚡ <b>RYMON OFFICIAL BOT (@Rymon007bot)</b>`,
       `Welcome, <b>${senderName}</b>!`,
+      `🆔 <b>Chat ID:</b> <code>${chatId}</code>${isOwnerChat ? ' (👑 Root Owner)' : isResellerChat ? ` (💼 Reseller: @${linkedReseller?.username})` : ''}`,
       ``,
-      `🔄 <b>24/7 Self-Service Key Reset (Max 2/Day):</b>`,
-      `• Simply <b>send your License Key</b> (e.g. <code>RYMON-FF-XXXX-XXXX</code>) or type:`,
-      `• /reset <code>YOUR_KEY</code> — Unbind device HWID (2 resets/day)`,
-      `• /check <code>YOUR_KEY</code> — Check key expiry, status &amp; daily resets`,
-      `• /apk — Download Latest RYMON STREAMER APK`,
-      `• /id — Show your Telegram Chat ID (<code>${chatId}</code>)`
+      `🔄 <b>Customer Self-Service Key Reset (Max 2/Day):</b>`,
+      `• <b>Paste your License Key directly</b> (e.g. <code>RYMON-FF-XXXX-XXXX</code>) or use <code>/reset KEY</code>`,
+      `• <code>/check KEY</code> — Check key status &amp; daily resets`,
+      `• <code>/apk</code> — Download Latest RYMON STREAMER APK`
     ]
+    if (isResellerChat && linkedReseller) {
+      lines.push(
+        ``,
+        `💼 <b>RESELLER STORE ACTIVE (@${linkedReseller.username}):</b>`,
+        `• <b>Wallet Balance:</b> ₹${Number(linkedReseller.balance || 0).toLocaleString('en-IN')}`,
+        `• Tap <b>Open Reseller Store &amp; Wallet</b> below to buy keys in 1 click!`
+      )
+    }
     if (isOwnerChat) {
       lines.push(
         ``,
-        `👑 <b>ROOT OWNER COMMAND CENTER (@montage007pc):</b>`,
-        `• /status — Live Server &amp; Key Telemetry`,
-        `• /unused — Copy all Unused (Waiting) Keys`,
-        `• /playing — View Players Currently In-Game`,
-        `• /gen <code>1d</code> | <code>3d</code> | <code>7d</code> | <code>15d</code> | <code>30d</code> | <code>2h</code> — Mint VIP Key`,
-        `• /pause <code>KEY</code> — Freeze Key &amp; Timer`,
-        `• /resume <code>KEY</code> — Resume Key &amp; Restore Timer`,
-        `• /reset <code>KEY</code> — Unlimited Owner Override Reset`
+        `👑 <b>OWNER QUICK COMMANDS:</b>`,
+        `• <code>/givereseller CHAT_ID 30d 500</code> — Grant Reseller by Chat ID`,
+        `• <code>/addbal CHAT_ID 1000</code> — Add ₹ Balance to Reseller`,
+        `• <code>/renew CHAT_ID 30d</code> — Renew 30D/60D Reseller Sub`,
+        `• <code>/resellers</code> — View all Resellers &amp; Chat IDs`
       )
     }
-    lines.push(``, `🌐 <b>Portal:</b> https://greenvest.shop/`)
-    await sendTelegramReply(chatId, lines.join('\n'))
+    await sendTelegramReply(
+      chatId,
+      lines.join('\n'),
+      buildCustomerInlineKeyboard(isResellerChat, isOwnerChat)
+    )
+    return
+  }
+
+  if (lowerText.startsWith('/owner') && isOwnerChat) {
+    const reply = [
+      `👑 <b>ROOT OWNER COMMAND CENTER (@montage007pc)</b>`,
+      ``,
+      `<b>Tap a button below or use slash commands:</b>`,
+      `• <code>/givereseller &lt;CHAT_ID&gt; &lt;30d|60d&gt; [balance] [username]</code>`,
+      `• <code>/addbal &lt;CHAT_ID_OR_USER&gt; &lt;amount&gt;</code>`,
+      `• <code>/renew &lt;CHAT_ID_OR_USER&gt; &lt;30d|60d&gt;</code>`,
+      `• <code>/banuser &lt;CHAT_ID_OR_USER&gt;</code> | <code>/unbanuser &lt;CHAT_ID_OR_USER&gt;</code>`,
+      `• <code>/gen 1d|3d|7d|15d|30d|2h</code>`,
+      `• <code>/pause KEY</code> | <code>/resume KEY</code> | <code>/reset KEY</code>`
+    ].join('\n')
+    await sendTelegramReply(chatId, reply, buildOwnerInlineKeyboard())
     return
   }
 
   if (lowerText.startsWith('/id')) {
     await sendTelegramReply(
       chatId,
-      `🆔 <b>Your Telegram Chat ID:</b> <code>${chatId}</code>${isOwnerChat ? ' (👑 Root Owner Verified)' : ''}`
+      `🆔 <b>Your Telegram Chat ID:</b> <code>${chatId}</code>${isOwnerChat ? ' (👑 Root Owner Verified)' : isResellerChat ? ` (💼 Reseller @${linkedReseller?.username})` : ''}`
     )
     return
   }
@@ -247,6 +584,318 @@ async function processUpdate(upd) {
     ].join('\n')
     await sendTelegramReply(chatId, reply)
     return
+  }
+
+  if (lowerText.startsWith('/apply')) {
+    await sendTelegramReply(
+      chatId,
+      `✅ <b>Reseller Application Sent to Owner (@montage007pc)!</b>\n\n🆔 <b>Your Chat ID:</b> <code>${chatId}</code>\nAs soon as the Owner approves your 30-Day or 60-Day Reseller plan, @Rymon007bot will notify you here automatically.`
+    )
+    const ownerAlert = [
+      `📩 <b>NEW RESELLER APPLICATION</b>`,
+      ``,
+      `• <b>Applicant:</b> ${senderName} (${senderUser})`,
+      `• <b>Telegram Chat ID:</b> <code>${chatId}</code>`,
+      ``,
+      `<i>Tap a button below to make them an Official Reseller immediately:</i>`
+    ].join('\n')
+    await sendTelegramReply(OWNER_CHAT_ID, ownerAlert, {
+      inline_keyboard: [
+        [
+          { text: '✅ Give 30D Reseller (₹0)', callback_data: `own:grant:${chatId}:30:0` },
+          { text: '💎 Give 60D Reseller (₹0)', callback_data: `own:grant:${chatId}:60:0` }
+        ],
+        [
+          { text: '✅ 30D + ₹500 Wallet', callback_data: `own:grant:${chatId}:30:500` },
+          { text: '💎 60D + ₹1000 Wallet', callback_data: `own:grant:${chatId}:60:1000` }
+        ]
+      ]
+    })
+    return
+  }
+
+  if (lowerText.startsWith('/login')) {
+    const parts = text.split(/\s+/)
+    const uName = (parts[1] || '').trim()
+    const uPass = (parts[2] || '').trim()
+    if (!uName || !uPass) {
+      await sendTelegramReply(
+        chatId,
+        `ℹ️ <b>Link Existing Reseller Account:</b>\n<code>/login YOUR_USERNAME YOUR_PASSWORD</code>`
+      )
+      return
+    }
+    const { data: userRow } = await supabase
+      .from('rymon_accounts')
+      .select('*')
+      .ilike('username', uName)
+      .maybeSingle()
+    if (!userRow || userRow.password_hash !== uPass) {
+      await sendTelegramReply(chatId, `❌ Invalid username or password.`)
+      return
+    }
+    const bindings = await getSystemConfigValue('telegram_reseller_bindings', {})
+    bindings[chatId] = {
+      chat_id: chatId,
+      username: userRow.username,
+      tg_name: senderName,
+      tg_handle: senderUser,
+      linked_at: new Date().toISOString()
+    }
+    await saveSystemConfigValue('telegram_reseller_bindings', bindings)
+    const priceMap = await getResellerPriceMap(userRow.username)
+    await sendTelegramReply(
+      chatId,
+      `✅ <b>Telegram Linked to @${userRow.username}!</b>\n\n• <b>Role:</b> ${String(userRow.role).toUpperCase()}\n• <b>Wallet Balance:</b> ₹${Number(userRow.balance || 0).toLocaleString('en-IN')}\n\n<i>Tap any button below to buy keys directly from Telegram:</i>`,
+      buildResellerInlineKeyboard(priceMap)
+    )
+    return
+  }
+
+  if (
+    lowerText.startsWith('/wallet') ||
+    lowerText.startsWith('/me') ||
+    lowerText.startsWith('/buy') ||
+    lowerText.startsWith('/mykeys') ||
+    lowerText.startsWith('/topup') ||
+    lowerText.startsWith('/extend')
+  ) {
+    const activeAccount = isOwnerChat
+      ? {
+          id: '1',
+          username: 'debajoyti',
+          role: 'owner',
+          balance: 9999999,
+          status: 'ACTIVE'
+        }
+      : linkedReseller
+
+    if (!activeAccount) {
+      await sendTelegramReply(
+        chatId,
+        `🔒 <b>Reseller Access Required</b>\n\nYour Telegram Chat ID (<code>${chatId}</code>) is not linked to a Reseller account yet.\n• Tap <b>💼 Apply for Reseller</b> below, or\n• If you already have a website account, type <code>/login username password</code>.`,
+        buildCustomerInlineKeyboard(false, false)
+      )
+      return
+    }
+
+    const priceMap = await getResellerPriceMap(activeAccount.username)
+
+    if (lowerText.startsWith('/wallet') || lowerText.startsWith('/me')) {
+      const isSubExpired =
+        activeAccount.role !== 'owner' &&
+        Boolean(activeAccount.expires_at && new Date(activeAccount.expires_at).getTime() < Date.now())
+      const subText =
+        activeAccount.role === 'owner'
+          ? '👑 Unlimited (Root Owner)'
+          : activeAccount.expires_at
+          ? `${isSubExpired ? '🔴 EXPIRED' : '🟢 ACTIVE'} (Until ${new Date(activeAccount.expires_at).toLocaleDateString('en-IN')})`
+          : '🟢 ACTIVE (30D/60D)'
+
+      const reply = [
+        `💼 <b>RESELLER STORE &amp; WALLET (@${activeAccount.username})</b>`,
+        ``,
+        `🆔 <b>Chat ID:</b> <code>${chatId}</code>`,
+        `💰 <b>Wallet Balance:</b> <b>${activeAccount.role === 'owner' ? '∞ UNLIMITED' : `₹${Number(activeAccount.balance || 0).toLocaleString('en-IN')}`}</b>`,
+        `⏳ <b>Subscription:</b> ${subText}`,
+        ``,
+        `🏷️ <b>Your Key Price List (1 Device):</b>`,
+        `• 2 Hours: <b>₹${priceMap['2 Hours'] ?? 15}</b> | 1 Day: <b>₹${priceMap['1 Day'] ?? 35}</b>`,
+        `• 3 Days: <b>₹${priceMap['3 Days'] ?? 50}</b> | 7 Days: <b>₹${priceMap['7 Days'] ?? 100}</b>`,
+        `• 15 Days: <b>₹${priceMap['15 Days'] ?? 180}</b> | 30 Days: <b>₹${priceMap['30 Days'] ?? 350}</b>`,
+        ``,
+        `<i>Tap any plan button below to buy &amp; generate a key immediately:</i>`
+      ].join('\n')
+      await sendTelegramReply(chatId, reply, buildResellerInlineKeyboard(priceMap))
+      return
+    }
+
+    if (lowerText.startsWith('/buy')) {
+      const parts = text.split(/\s+/)
+      const arg = (parts[1] || '1d').toLowerCase()
+      const qty = Math.min(10, Math.max(1, parseInt(parts[2] || '1') || 1))
+      const durationMap = {
+        '2h': '2 Hours',
+        '1d': '1 Day',
+        '3d': '3 Days',
+        '7d': '7 Days',
+        '15d': '15 Days',
+        '30d': '30 Days'
+      }
+      const planDuration = durationMap[arg]
+      if (!planDuration) {
+        await sendTelegramReply(
+          chatId,
+          `ℹ️ <b>Usage:</b> Tap a Buy button below or send:\n<code>/buy 1d</code> | <code>/buy 3d</code> | <code>/buy 7d</code> | <code>/buy 15d</code> | <code>/buy 30d</code>`,
+          buildResellerInlineKeyboard(priceMap)
+        )
+        return
+      }
+
+      if (activeAccount.status === 'BANNED') {
+        await sendTelegramReply(chatId, `🚫 Your account is suspended and cannot generate keys.`)
+        return
+      }
+      if (
+        activeAccount.role !== 'owner' &&
+        activeAccount.expires_at &&
+        new Date(activeAccount.expires_at).getTime() < Date.now()
+      ) {
+        await sendTelegramReply(
+          chatId,
+          `⏰ Your Reseller subscription expired on ${new Date(activeAccount.expires_at).toLocaleDateString('en-IN')}. Contact @montage007pc to renew (30 Days / 60 Days).`
+        )
+        return
+      }
+
+      const unitPrice = priceMap[planDuration] ?? 35
+      const totalCost = unitPrice * qty
+      const liveBal = Number(activeAccount.balance || 0)
+
+      if (activeAccount.role !== 'owner' && liveBal < totalCost) {
+        await sendTelegramReply(
+          chatId,
+          `❌ <b>Insufficient Wallet Balance!</b>\n• <b>Cost:</b> ₹${totalCost.toLocaleString('en-IN')} (${qty}x ${planDuration} @ ₹${unitPrice})\n• <b>Your Wallet:</b> ₹${liveBal.toLocaleString('en-IN')}\n\nTap <b>💳 Top-Up</b> below to request wallet credit from Owner!`,
+          buildResellerInlineKeyboard(priceMap)
+        )
+        return
+      }
+
+      const nextBalance = activeAccount.role === 'owner' ? liveBal : Math.max(0, liveBal - totalCost)
+      if (activeAccount.role !== 'owner') {
+        await supabase
+          .from('rymon_accounts')
+          .update({ balance: nextBalance, updated_at: new Date().toISOString() })
+          .eq('id', activeAccount.id)
+      }
+
+      const generatedKeys = []
+      for (let i = 0; i < qty; i++) {
+        const b1 = Math.random().toString(36).substring(2, 6).toUpperCase()
+        const b2 = Math.random().toString(36).substring(2, 6).toUpperCase()
+        generatedKeys.push(`RYMON-FF-${b1}-${b2}`)
+      }
+
+      const licPayloads = generatedKeys.map((k) => ({
+        license_key: k,
+        game: 'Free Fire',
+        plan_duration: planDuration,
+        creator_username: activeAccount.username,
+        devices_used: 0,
+        devices_max: 1,
+        device_hwid: '',
+        status: 'WAITING',
+        is_paused: false,
+        expires_at: null
+      }))
+      await supabase.from('rymon_licenses').insert(licPayloads)
+
+      const ctrlPayloads = generatedKeys.map((k) => ({
+        license_key: k,
+        game_name: 'Free Fire',
+        plan_duration: planDuration,
+        creator: activeAccount.username,
+        devices_max: 1,
+        devices_used: 0,
+        device_hwid: '',
+        is_active: true,
+        is_paused: false,
+        is_online: false,
+        updated_at: new Date().toISOString()
+      }))
+      await supabase.from('rymon_streamer_controls').upsert(ctrlPayloads, { onConflict: 'license_key' })
+
+      const keyLines = generatedKeys.map((k, idx) => `${idx + 1}. <code>${k}</code>`).join('\n')
+      const reply = [
+        `✅ <b>KEY PURCHASED &amp; GENERATED!</b>`,
+        ``,
+        `🔑 <b>Tap Key to Copy:</b>`,
+        keyLines,
+        ``,
+        `• <b>Game:</b> Free Fire`,
+        `• <b>Plan:</b> ${planDuration} (Starts on 1st APK Login)`,
+        `• <b>Cost Deducted:</b> ${activeAccount.role === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
+        `• <b>Remaining Wallet:</b> <b>${activeAccount.role === 'owner' ? '∞ UNLIMITED' : `₹${nextBalance.toLocaleString('en-IN')}`}</b>`
+      ].join('\n')
+      await sendTelegramReply(chatId, reply, buildResellerInlineKeyboard(priceMap))
+
+      if (!isOwnerChat) {
+        await sendTelegramReply(
+          OWNER_CHAT_ID,
+          `🛒 <b>RESELLER KEY PURCHASE (@${activeAccount.username})</b>\n• <b>Plan:</b> ${qty}x ${planDuration} (₹${totalCost})\n• <b>Key:</b> <code>${generatedKeys.join(', ')}</code>\n• <b>New Balance:</b> ₹${nextBalance.toLocaleString('en-IN')}`
+        )
+      }
+      return
+    }
+
+    if (lowerText.startsWith('/mykeys')) {
+      const { data: myKeys } = await supabase
+        .from('rymon_licenses')
+        .select('*')
+        .ilike('creator_username', activeAccount.username)
+        .order('created_at', { ascending: false })
+        .limit(30)
+      const list = myKeys || []
+      if (list.length === 0) {
+        await sendTelegramReply(
+          chatId,
+          `📋 You have 0 generated keys yet. Tap a <b>🛒 Buy</b> button below to generate your first key!`,
+          buildResellerInlineKeyboard(priceMap)
+        )
+      } else {
+        const waitingCount = list.filter((k) => k.status === 'WAITING').length
+        const activeCount = list.filter((k) => k.status === 'ACTIVE').length
+        const lines = list
+          .slice(0, 25)
+          .map((k, i) => `${i + 1}. <code>${k.license_key}</code> — ${k.plan_duration} [${k.status}]`)
+          .join('\n')
+        await sendTelegramReply(
+          chatId,
+          `📋 <b>YOUR GENERATED KEYS (@${activeAccount.username})</b>\n🟡 Unused: <b>${waitingCount}</b> | ⚡ Active: <b>${activeCount}</b>\n\n${lines}`,
+          buildResellerInlineKeyboard(priceMap)
+        )
+      }
+      return
+    }
+
+    if (lowerText.startsWith('/topup')) {
+      const parts = text.split(/\s+/)
+      const reqAmt = Math.max(100, parseInt(parts[1] || '500') || 500)
+      const note = parts.slice(2).join(' ') || 'Via Telegram Bot'
+      await sendTelegramReply(
+        chatId,
+        `💳 <b>Top-Up Request Sent (₹${reqAmt.toLocaleString('en-IN')})!</b>\nOwner (@montage007pc) has been notified with a 1-tap approval button.`
+      )
+      await sendTelegramReply(
+        OWNER_CHAT_ID,
+        [
+          `💳 <b>RESELLER WALLET TOP-UP REQUEST</b>`,
+          ``,
+          `• <b>Reseller:</b> @${activeAccount.username} (${senderUser})`,
+          `• <b>Chat ID:</b> <code>${chatId}</code>`,
+          `• <b>Current Balance:</b> ₹${Number(activeAccount.balance || 0).toLocaleString('en-IN')}`,
+          `• <b>Requested Add:</b> <b>+₹${reqAmt.toLocaleString('en-IN')}</b>`,
+          `• <b>Note:</b> ${note}`,
+          ``,
+          `<i>Tap below to credit their wallet immediately:</i>`
+        ].join('\n'),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: `✅ Approve +₹${reqAmt}`,
+                callback_data: `own:addbal:${chatId}:${reqAmt}`
+              },
+              {
+                text: '❌ Reject',
+                callback_data: `own:rejecttopup:${chatId}:${reqAmt}`
+              }
+            ]
+          ]
+        }
+      )
+      return
+    }
   }
 
   if (lowerText.startsWith('/reset')) {
@@ -267,7 +916,7 @@ async function processUpdate(upd) {
     const [{ data: found }, { data: ctrl }, logMap] = await Promise.all([
       supabase.from('rymon_licenses').select('*').ilike('license_key', queryKey).maybeSingle(),
       supabase.from('rymon_streamer_controls').select('*').ilike('license_key', queryKey).maybeSingle(),
-      getDailyResetLog()
+      getSystemConfigValue('hwid_reset_daily_log', {})
     ])
     if (!found) {
       await sendTelegramReply(chatId, `❌ Key <code>${queryKey}</code> not found in database.`)
@@ -298,21 +947,31 @@ async function processUpdate(upd) {
     lowerText.startsWith('/playing') ||
     lowerText.startsWith('/gen') ||
     lowerText.startsWith('/pause') ||
-    lowerText.startsWith('/resume')
+    lowerText.startsWith('/resume') ||
+    lowerText.startsWith('/givereseller') ||
+    lowerText.startsWith('/addreseller') ||
+    lowerText.startsWith('/addbal') ||
+    lowerText.startsWith('/renew') ||
+    lowerText.startsWith('/resellers') ||
+    lowerText.startsWith('/invite') ||
+    lowerText.startsWith('/banuser') ||
+    lowerText.startsWith('/unbanuser') ||
+    lowerText.startsWith('/broadcast')
   ) {
     if (!isOwnerChat) {
       await sendTelegramReply(
         chatId,
-        `🔒 <b>Restricted Command:</b> This command is reserved for the Root Owner (@montage007pc).\n\n💡 <i>Normal users can send their key directly or use <code>/reset KEY</code> (max 2/day), <code>/check KEY</code>, or <code>/apk</code>.</i>`
+        `🔒 <b>Restricted Command:</b> This command is reserved for the Root Owner (@montage007pc).`
       )
       return
     }
 
     if (lowerText.startsWith('/status')) {
-      const [{ data: lics }, { data: ctrls }, { data: usrs }] = await Promise.all([
+      const [{ data: lics }, { data: ctrls }, { data: usrs }, bindings] = await Promise.all([
         supabase.from('rymon_licenses').select('*'),
         supabase.from('rymon_streamer_controls').select('*'),
-        supabase.from('rymon_accounts').select('id')
+        supabase.from('rymon_accounts').select('id'),
+        getSystemConfigValue('telegram_reseller_bindings', {})
       ])
       const allLics = lics || []
       const playingCount = (ctrls || []).filter((c) => isActivelyPlaying(c)).length
@@ -329,11 +988,12 @@ async function processUpdate(upd) {
         `⏸️ <b>Paused Keys:</b> ${pausedCount}`,
         `🔴 <b>Expired Keys:</b> ${expiredCount}`,
         `🔑 <b>Total Keys:</b> ${allLics.length}`,
-        `👥 <b>Registered Staff/Resellers:</b> ${(usrs || []).length}`,
+        `💼 <b>Telegram-Linked Resellers:</b> ${Object.keys(bindings).length}`,
+        `👥 <b>Total Staff/Resellers:</b> ${(usrs || []).length}`,
         ``,
         `🌐 https://greenvest.shop/`
       ].join('\n')
-      await sendTelegramReply(chatId, reply)
+      await sendTelegramReply(chatId, reply, buildOwnerInlineKeyboard())
       return
     }
 
@@ -345,7 +1005,11 @@ async function processUpdate(upd) {
         .order('created_at', { ascending: false })
       const list = unusedKeys || []
       if (list.length === 0) {
-        await sendTelegramReply(chatId, `🟡 No Unused (WAITING) keys found right now.`)
+        await sendTelegramReply(
+          chatId,
+          `🟡 No Unused (WAITING) keys found right now.`,
+          buildOwnerInlineKeyboard()
+        )
       } else {
         const listStr = list
           .slice(0, 30)
@@ -358,7 +1022,7 @@ async function processUpdate(upd) {
           listStr,
           list.length > 30 ? `\n<i>...and ${list.length - 30} more on greenvest.shop</i>` : ''
         ].join('\n')
-        await sendTelegramReply(chatId, reply)
+        await sendTelegramReply(chatId, reply, buildOwnerInlineKeyboard())
       }
       return
     }
@@ -369,7 +1033,8 @@ async function processUpdate(upd) {
       if (playingList.length === 0) {
         await sendTelegramReply(
           chatId,
-          `⚪ <b>0 Players In-Game Right Now.</b> All bound keys are currently idle/offline.`
+          `⚪ <b>0 Players In-Game Right Now.</b> All bound keys are currently idle/offline.`,
+          buildOwnerInlineKeyboard()
         )
       } else {
         const listStr = playingList
@@ -380,7 +1045,8 @@ async function processUpdate(upd) {
           .join('\n')
         await sendTelegramReply(
           chatId,
-          `🟢 <b>CURRENTLY PLAYING IN-GAME (${playingList.length})</b>\n\n${listStr}`
+          `🟢 <b>CURRENTLY PLAYING IN-GAME (${playingList.length})</b>\n\n${listStr}`,
+          buildOwnerInlineKeyboard()
         )
       }
       return
@@ -442,10 +1108,201 @@ async function processUpdate(upd) {
           `• <b>Duration:</b> ${planDuration} (Starts on 1st APK Login)`,
           `• <b>Devices:</b> 1 Device (Max 2 Self-Resets/Day)`
         ].join('\n')
-        await sendTelegramReply(chatId, reply)
+        await sendTelegramReply(chatId, reply, buildOwnerInlineKeyboard())
       } else {
         await sendTelegramReply(chatId, `❌ Failed to generate key: ${error.message}`)
       }
+      return
+    }
+
+    if (lowerText.startsWith('/givereseller')) {
+      const parts = text.split(/\s+/)
+      const targetChatId = (parts[1] || '').trim()
+      const subArg = (parts[2] || '30d').toLowerCase()
+      const subDays = subArg.includes('60') ? 60 : 30
+      const startBal = Math.max(0, parseInt(parts[3] || '0') || 0)
+      const customUser = (parts[4] || '').trim()
+
+      if (!targetChatId) {
+        await sendTelegramReply(
+          chatId,
+          `ℹ️ <b>Grant Reseller by Telegram Chat ID:</b>\n<code>/givereseller &lt;CHAT_ID&gt; &lt;30d|60d&gt; [starting_balance] [username]</code>\n\nExample:\n<code>/givereseller 987654321 30d 500</code>`
+        )
+        return
+      }
+
+      const grantRes = await grantResellerByChatId({
+        chatId: targetChatId,
+        subDays,
+        initialBalance: startBal,
+        customUsername: customUser || undefined
+      })
+
+      await sendTelegramReply(
+        chatId,
+        [
+          `👑 <b>RESELLER GRANTED BY CHAT ID</b>`,
+          ``,
+          `• <b>Telegram Chat ID:</b> <code>${targetChatId}</code>`,
+          `• <b>Username:</b> <code>${grantRes.username}</code>`,
+          ...(grantRes.password ? [`• <b>Password:</b> <code>${grantRes.password}</code>`] : []),
+          `• <b>Subscription:</b> ${subDays} Days`,
+          `• <b>Wallet Balance:</b> ₹${grantRes.balance.toLocaleString('en-IN')}`,
+          ``,
+          `<i>The reseller has been notified on Telegram with their tap-to-buy store!</i>`
+        ].join('\n'),
+        buildOwnerInlineKeyboard()
+      )
+      return
+    }
+
+    if (lowerText.startsWith('/addbal')) {
+      const parts = text.split(/\s+/)
+      const targetIdOrUser = (parts[1] || '').trim()
+      const amt = parseInt(parts[2] || '0') || 0
+      if (!targetIdOrUser || !amt) {
+        await sendTelegramReply(
+          chatId,
+          `ℹ️ <b>Usage:</b> <code>/addbal &lt;CHAT_ID_OR_USERNAME&gt; &lt;amount&gt;</code>\nExample: <code>/addbal 987654321 500</code>`
+        )
+        return
+      }
+      const bindings = await getSystemConfigValue('telegram_reseller_bindings', {})
+      const resolvedUser = bindings[targetIdOrUser]?.username || targetIdOrUser
+      const { data: userRow } = await supabase
+        .from('rymon_accounts')
+        .select('*')
+        .ilike('username', resolvedUser)
+        .maybeSingle()
+
+      if (!userRow) {
+        await sendTelegramReply(chatId, `❌ Reseller <code>${resolvedUser}</code> not found.`)
+        return
+      }
+
+      const nextBal = Math.max(0, Number(userRow.balance || 0) + amt)
+      await supabase
+        .from('rymon_accounts')
+        .update({ balance: nextBal, updated_at: new Date().toISOString() })
+        .eq('id', userRow.id)
+
+      await sendTelegramReply(
+        chatId,
+        `✅ Credited <b>₹${amt.toLocaleString('en-IN')}</b> to @${userRow.username}! New Balance: <b>₹${nextBal.toLocaleString('en-IN')}</b>`
+      )
+
+      const targetChat =
+        bindings[targetIdOrUser]?.chat_id ||
+        Object.values(bindings).find(
+          (b) => b.username && b.username.toLowerCase() === userRow.username.toLowerCase()
+        )?.chat_id
+
+      if (targetChat) {
+        const pMap = await getResellerPriceMap(userRow.username)
+        await sendTelegramReply(
+          targetChat,
+          `💰 <b>WALLET CREDITED BY OWNER!</b>\n\n• <b>Added:</b> +₹${amt.toLocaleString('en-IN')}\n• <b>New Wallet Balance:</b> <b>₹${nextBal.toLocaleString('en-IN')}</b>\n\n<i>Tap any button below to buy keys:</i>`,
+          buildResellerInlineKeyboard(pMap)
+        )
+      }
+      return
+    }
+
+    if (lowerText.startsWith('/renew')) {
+      const parts = text.split(/\s+/)
+      const targetIdOrUser = (parts[1] || '').trim()
+      const subDays = (parts[2] || '30d').includes('60') ? 60 : 30
+      if (!targetIdOrUser) {
+        await sendTelegramReply(
+          chatId,
+          `ℹ️ <b>Usage:</b> <code>/renew &lt;CHAT_ID_OR_USERNAME&gt; &lt;30d|60d&gt;</code>`
+        )
+        return
+      }
+      const bindings = await getSystemConfigValue('telegram_reseller_bindings', {})
+      const resolvedUser = bindings[targetIdOrUser]?.username || targetIdOrUser
+      const { data: userRow } = await supabase
+        .from('rymon_accounts')
+        .select('*')
+        .ilike('username', resolvedUser)
+        .maybeSingle()
+      if (!userRow) {
+        await sendTelegramReply(chatId, `❌ Reseller <code>${resolvedUser}</code> not found.`)
+        return
+      }
+      const newExpIso = new Date(Date.now() + subDays * 86400000).toISOString()
+      await supabase
+        .from('rymon_accounts')
+        .update({ expires_at: newExpIso, status: 'ACTIVE', updated_at: new Date().toISOString() })
+        .eq('id', userRow.id)
+      await sendTelegramReply(
+        chatId,
+        `✅ Renewed @${userRow.username} subscription for <b>${subDays} Days</b> (Until ${new Date(newExpIso).toLocaleDateString('en-IN')})!`
+      )
+      return
+    }
+
+    if (lowerText.startsWith('/resellers')) {
+      const [{ data: allAccs }, bindings] = await Promise.all([
+        supabase
+          .from('rymon_accounts')
+          .select('*')
+          .neq('role', 'owner')
+          .order('balance', { ascending: false }),
+        getSystemConfigValue('telegram_reseller_bindings', {})
+      ])
+      const chatByUsername = {}
+      Object.values(bindings).forEach((b) => {
+        if (b && b.username) chatByUsername[b.username.toLowerCase()] = b.chat_id
+      })
+      const rows = (allAccs || []).slice(0, 25).map((a, idx) => {
+        const cid = chatByUsername[a.username.toLowerCase()] || 'Unlinked'
+        const expStr = a.expires_at ? new Date(a.expires_at).toLocaleDateString('en-IN') : '30D'
+        return `${idx + 1}. <b>@${a.username}</b> (${String(a.role).toUpperCase()}) • ₹${Number(a.balance || 0).toLocaleString('en-IN')} • Sub: ${expStr} • ChatID: <code>${cid}</code>`
+      })
+      const reply = [
+        `👥 <b>RESELLERS &amp; STAFF (${(allAccs || []).length})</b>`,
+        ``,
+        rows.length > 0 ? rows.join('\n') : 'No resellers found yet.',
+        ``,
+        `💡 <b>Give Reseller by Chat ID:</b>`,
+        `<code>/givereseller CHAT_ID 30d 500</code>`,
+        `💡 <b>Add Wallet Balance:</b>`,
+        `<code>/addbal CHAT_ID 1000</code>`
+      ].join('\n')
+      await sendTelegramReply(chatId, reply, buildOwnerInlineKeyboard())
+      return
+    }
+
+    if (lowerText.startsWith('/invite')) {
+      const parts = text.split(/\s+/)
+      const subDays = (parts[1] || '30d').includes('60') ? 60 : 30
+      const initBal = Math.max(0, parseInt(parts[2] || '0') || 0)
+      const rand = Math.random().toString(36).substring(2, 6).toUpperCase()
+      const code = `RYMON-RES-${subDays}D-${rand}`
+      await supabase.from('rymon_referrals').insert({
+        code,
+        creator_username: 'debajoyti',
+        target_role: 'reseller',
+        initial_balance: initBal,
+        max_uses: 1,
+        times_used: 0,
+        is_active: true
+      })
+      await sendTelegramReply(
+        chatId,
+        [
+          `🎟️ <b>NEW ${subDays}-DAY RESELLER INVITE CODE</b>`,
+          ``,
+          `🔑 <b>Tap to Copy Code:</b>`,
+          `<code>${code}</code>`,
+          ``,
+          `• <b>Role:</b> RESELLER (${subDays} Days Subscription)`,
+          `• <b>Starting Balance:</b> ₹${initBal.toLocaleString('en-IN')}`,
+          `• <b>Redeem at:</b> https://greenvest.shop/`
+        ].join('\n'),
+        buildOwnerInlineKeyboard()
+      )
       return
     }
 
@@ -496,8 +1353,39 @@ async function processUpdate(upd) {
   }
 }
 
+async function registerBotCommands() {
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        commands: [
+          { command: 'start', description: 'Open Interactive Menu & Store' },
+          { command: 'reset', description: 'Reset Key HWID (Max 2/Day)' },
+          { command: 'check', description: 'Check Key Status & Daily Resets' },
+          { command: 'wallet', description: 'Reseller Store, Wallet & Buy Keys' },
+          { command: 'buy', description: 'Buy Key from Reseller Wallet' },
+          { command: 'mykeys', description: 'View Your Generated Reseller Keys' },
+          { command: 'apply', description: 'Apply for 30D/60D Reseller Access' },
+          { command: 'apk', description: 'Download Latest RYMON STREAMER APK' },
+          { command: 'id', description: 'Get Your Telegram Chat ID' }
+        ]
+      })
+    })
+  } catch {}
+}
+
 async function startDaemon() {
-  console.log('🚀 [@Rymon007bot Daemon] Starting 24/7 Long-Polling Responder...')
+  console.log('🚀 [@Rymon007bot Daemon] Starting 24/7 Reseller Store & 2/Day Reset Responder...')
+  await registerBotCommands()
+
+  // Publish daemon heartbeat to Supabase so browser tabs yield polling (zero 409 Conflict)
+  const publishHeartbeat = () => {
+    saveSystemConfigValue('tg_daemon_heartbeat', { ts: Date.now() })
+  }
+  publishHeartbeat()
+  setInterval(publishHeartbeat, 12000)
+
   let offset = 0
   while (true) {
     try {
@@ -510,7 +1398,6 @@ async function startDaemon() {
           offset = Math.max(offset, upd.update_id + 1)
           await processUpdate(upd)
         }
-        // Immediately acknowledge processed updates on Telegram server
         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?timeout=0&offset=${offset}`)
       }
     } catch (err) {
