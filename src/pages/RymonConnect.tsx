@@ -5,6 +5,8 @@ import {
   type RymonLicense,
   type RymonActivity,
   type StreamerControlRecord,
+  type RymonNotification,
+  type TelegramConfig,
   loginWithCredentials,
   verifyLicenseKey,
   fetchAllLicenses,
@@ -17,7 +19,13 @@ import {
   bulkDeleteKeysBackend,
   toggleBanStatusBackend,
   extendLicenseBackend,
-  checkSupabaseSchemaStatus
+  checkSupabaseSchemaStatus,
+  fetchNotifications,
+  sendBroadcastBackend,
+  deleteNotificationBackend,
+  fetchTelegramConfigBackend,
+  saveTelegramConfigBackend,
+  dispatchTelegramMessage
 } from '../lib/rymonBackend'
 
 type TabType =
@@ -25,11 +33,13 @@ type TabType =
   | 'remote'
   | 'generate'
   | 'keys'
+  | 'telegram'
   | 'users'
   | 'add-balance'
   | 'ban'
   | 'delete'
   | 'extend'
+  | 'broadcast'
   | 'advance'
   | 'sql-setup'
 
@@ -109,6 +119,47 @@ export default function RymonConnect() {
   const [trialAdmin, setTrialAdmin] = useState(true)
   const [trialReseller, setTrialReseller] = useState(false)
 
+  // Communication & Messaging Engine State
+  const [notifications, setNotifications] = useState<RymonNotification[]>([])
+  const [isNotifDrawerOpen, setIsNotifDrawerOpen] = useState(false)
+  const [notifFilter, setNotifFilter] = useState<'all' | 'broadcasts' | 'direct'>('all')
+  const [isAnnouncementDismissed, setIsAnnouncementDismissed] = useState(false)
+  const [broadcastTarget, setBroadcastTarget] = useState('ALL')
+  const [broadcastTitle, setBroadcastTitle] = useState('')
+  const [broadcastMessage, setBroadcastMessage] = useState('')
+  const [broadcastType, setBroadcastType] = useState<'INFO' | 'WARNING' | 'ALERT' | 'UPDATE'>('INFO')
+  const [broadcastPin, setBroadcastPin] = useState(true)
+  const [broadcastSendTelegram, setBroadcastSendTelegram] = useState(false)
+  const [broadcastLoading, setBroadcastLoading] = useState(false)
+  const [broadcastSuccessMsg, setBroadcastSuccessMsg] = useState('')
+
+  // Telegram Bot Integration State
+  const [telegramConfig, setTelegramConfig] = useState<TelegramConfig>({
+    bot_token: '',
+    chat_id: '',
+    channel_username: '@RymonGhostStreamer',
+    is_active: true
+  })
+  const [telegramSaving, setTelegramSaving] = useState(false)
+  const [telegramTestMsg, setTelegramTestMsg] = useState('')
+  const [telegramTesting, setTelegramTesting] = useState(false)
+  const [telegramStatusMsg, setTelegramStatusMsg] = useState('')
+
+  // Derived Notification computations
+  const pinnedAnnouncement = useMemo(() => {
+    return notifications.find((n) => n.is_pinned) || notifications[0] || null
+  }, [notifications])
+
+  const filteredNotifications = useMemo(() => {
+    if (notifFilter === 'broadcasts') {
+      return notifications.filter((n) => n.recipient === 'ALL')
+    }
+    if (notifFilter === 'direct') {
+      return notifications.filter((n) => n.recipient !== 'ALL')
+    }
+    return notifications
+  }, [notifications, notifFilter])
+
   // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
     // Check Supabase Database health
@@ -152,16 +203,20 @@ export default function RymonConnect() {
     let isMounted = true
 
     async function loadLiveData() {
-      const [lcs, usrs, acts] = await Promise.all([
+      const [lcs, usrs, acts, notifs, tgCfg] = await Promise.all([
         fetchAllLicenses(currentUser),
         fetchAllAccounts(),
-        fetchAllActivities()
+        fetchAllActivities(),
+        fetchNotifications(currentUser?.username),
+        fetchTelegramConfigBackend()
       ])
 
       if (isMounted) {
         setKeysList(lcs)
         setUsersList(usrs)
         setActivities(acts)
+        setNotifications(notifs)
+        setTelegramConfig(tgCfg)
 
         // Sync fresh balance if currentUser in list
         if (currentUser) {
@@ -215,6 +270,13 @@ export default function RymonConnect() {
           { event: '*', schema: 'public', table: 'rymon_activities' },
           () => {
             fetchAllActivities().then((a) => isMounted && setActivities(a))
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'rymon_notifications' },
+          () => {
+            fetchNotifications(currentUser?.username).then((n) => isMounted && setNotifications(n))
           }
         )
         .subscribe()
@@ -619,6 +681,86 @@ export default function RymonConnect() {
     fetchAllLicenses(currentUser).then(setKeysList)
   }
 
+  // 11. COMMUNICATION & BROADCAST HANDLERS
+  const handleSendBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
+      alert('Please enter both title and message.')
+      return
+    }
+
+    setBroadcastLoading(true)
+    setBroadcastSuccessMsg('')
+
+    const sender = currentUser?.username || 'rymon'
+    const res = await sendBroadcastBackend(
+      sender,
+      broadcastTarget,
+      broadcastTitle,
+      broadcastMessage,
+      broadcastType,
+      broadcastPin
+    )
+
+    if (broadcastSendTelegram && telegramConfig.bot_token && telegramConfig.chat_id) {
+      const tgText = `<b>[${broadcastType}] ${broadcastTitle}</b>\n\n${broadcastMessage}\n\n<i>From: ${sender} via greenvest.shop</i>`
+      await dispatchTelegramMessage(telegramConfig.bot_token, telegramConfig.chat_id, tgText)
+    }
+
+    setBroadcastLoading(false)
+    if (res.success) {
+      setBroadcastSuccessMsg(res.message)
+      showToast(`Broadcast dispatched to ${broadcastTarget}!`)
+      setBroadcastTitle('')
+      setBroadcastMessage('')
+      setIsAnnouncementDismissed(false)
+      const fresh = await fetchNotifications(currentUser?.username)
+      setNotifications(fresh)
+    } else {
+      setBroadcastSuccessMsg(`Error: ${res.message}`)
+    }
+  }
+
+  const handleDeleteNotification = async (id: number) => {
+    const ok = await deleteNotificationBackend(id)
+    if (ok) {
+      setNotifications((prev) => prev.filter((n) => n.id !== id))
+      showToast('Notification removed.')
+    }
+  }
+
+  const handleSaveTelegram = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setTelegramSaving(true)
+    setTelegramStatusMsg('')
+    const ok = await saveTelegramConfigBackend(telegramConfig)
+    setTelegramSaving(false)
+    if (ok) {
+      setTelegramStatusMsg('Telegram Bot configuration saved to Supabase!')
+      showToast('Telegram settings updated!')
+    } else {
+      setTelegramStatusMsg('Failed to save Telegram settings.')
+    }
+  }
+
+  const handleTestTelegram = async () => {
+    if (!telegramConfig.bot_token || !telegramConfig.chat_id) {
+      setTelegramStatusMsg('Please enter both Bot Token and Chat/Channel ID first!')
+      return
+    }
+    setTelegramTesting(true)
+    setTelegramStatusMsg('')
+    const txt =
+      telegramTestMsg.trim() ||
+      `⚡ <b>Rymon Sovereign Bot Test</b>\nBroadcast system active on greenvest.shop!\nDispatched by: ${currentUser?.username || 'rymon'}\nTimestamp: ${new Date().toLocaleTimeString()}`
+    const res = await dispatchTelegramMessage(telegramConfig.bot_token, telegramConfig.chat_id, txt)
+    setTelegramTesting(false)
+    setTelegramStatusMsg(res.message)
+    if (res.success) {
+      showToast('Telegram message sent successfully!')
+    }
+  }
+
   const showToast = (msg: string) => {
     setActionSuccessMsg(msg)
     setTimeout(() => setActionSuccessMsg(''), 3500)
@@ -724,6 +866,51 @@ export default function RymonConnect() {
             <span style={styles.pingText}>{ping}ms</span>
           </div>
 
+          {/* Notification Bell with Badge */}
+          {isAuthenticated && (
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setIsNotifDrawerOpen(!isNotifDrawerOpen)}
+                style={{
+                  background: isNotifDrawerOpen ? 'rgba(0, 217, 255, 0.25)' : 'rgba(15, 23, 42, 0.85)',
+                  border: isNotifDrawerOpen ? '1px solid #00d9ff' : '1px solid rgba(0, 217, 255, 0.35)',
+                  borderRadius: '10px',
+                  padding: '7px 12px',
+                  color: '#f8fafc',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  transition: 'all 0.2s',
+                  position: 'relative'
+                }}
+                title="System Broadcasts & User Messages"
+              >
+                <span style={{ fontSize: '15px' }}>🔔</span>
+                {notifications.length > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-4px',
+                      background: '#ff3366',
+                      color: '#ffffff',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      borderRadius: '999px',
+                      padding: '1px 6px',
+                      boxShadow: '0 0 10px rgba(255, 51, 102, 0.8)'
+                    }}
+                  >
+                    {notifications.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* User Profile Pill */}
           {isAuthenticated ? (
             <div style={styles.userProfilePill}>
@@ -756,6 +943,107 @@ export default function RymonConnect() {
           )}
         </div>
       </header>
+
+      {/* ── GLOBAL ANNOUNCEMENT / BROADCAST MARQUEE ────────────────────────────── */}
+      {pinnedAnnouncement && !isAnnouncementDismissed && (
+        <div
+          style={{
+            background:
+              pinnedAnnouncement.type === 'ALERT'
+                ? 'linear-gradient(90deg, rgba(255, 51, 102, 0.25) 0%, rgba(15, 23, 42, 0.98) 50%, rgba(255, 51, 102, 0.25) 100%)'
+                : pinnedAnnouncement.type === 'WARNING'
+                ? 'linear-gradient(90deg, rgba(255, 183, 0, 0.25) 0%, rgba(15, 23, 42, 0.98) 50%, rgba(255, 183, 0, 0.25) 100%)'
+                : 'linear-gradient(90deg, rgba(0, 217, 255, 0.2) 0%, rgba(15, 23, 42, 0.98) 50%, rgba(0, 217, 255, 0.2) 100%)',
+            borderBottom:
+              pinnedAnnouncement.type === 'ALERT'
+                ? '1px solid rgba(255, 51, 102, 0.5)'
+                : pinnedAnnouncement.type === 'WARNING'
+                ? '1px solid rgba(255, 183, 0, 0.5)'
+                : '1px solid rgba(0, 217, 255, 0.4)',
+            padding: '9px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '14px',
+            fontSize: '13px',
+            color: '#e2e8f0',
+            position: 'relative',
+            zIndex: 45
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+            <span
+              style={{
+                background:
+                  pinnedAnnouncement.type === 'ALERT'
+                    ? 'rgba(255, 51, 102, 0.25)'
+                    : pinnedAnnouncement.type === 'WARNING'
+                    ? 'rgba(255, 183, 0, 0.25)'
+                    : 'rgba(0, 217, 255, 0.25)',
+                color:
+                  pinnedAnnouncement.type === 'ALERT'
+                    ? '#ff3366'
+                    : pinnedAnnouncement.type === 'WARNING'
+                    ? '#ffb700'
+                    : '#00d9ff',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                fontWeight: 800,
+                fontSize: '10px',
+                letterSpacing: '0.6px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              📢 {pinnedAnnouncement.type}
+            </span>
+            <span style={{ fontWeight: 700, color: '#f8fafc', whiteSpace: 'nowrap' }}>
+              {pinnedAnnouncement.title}:
+            </span>
+            <span
+              style={{
+                color: '#cbd5e1',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                flex: 1
+              }}
+            >
+              {pinnedAnnouncement.message}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            <button
+              onClick={() => setIsNotifDrawerOpen(true)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#00d9ff',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              View All
+            </button>
+            <button
+              onClick={() => setIsAnnouncementDismissed(true)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                fontSize: '16px',
+                cursor: 'pointer',
+                padding: '0 4px',
+                lineHeight: 1
+              }}
+              title="Dismiss announcement banner"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── NOTIFICATION TOAST ──────────────────────────────────────────────── */}
       {actionSuccessMsg && (
@@ -1016,6 +1304,19 @@ export default function RymonConnect() {
                     <span style={styles.navIcon}>🔑</span>
                     <span>License Keys</span>
                   </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab('telegram')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'telegram' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>✈️</span>
+                    <span>Telegram Bot</span>
+                  </button>
                 </>
               )}
 
@@ -1035,6 +1336,20 @@ export default function RymonConnect() {
                   >
                     <span style={styles.navIcon}>👥</span>
                     <span>Users</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveTab('broadcast')
+                      setMobileMenuOpen(false)
+                    }}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'broadcast' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}>📢</span>
+                    <span>Talk to Users / Broadcast</span>
+                    <span style={styles.cyanMiniBadge}>REALTIME</span>
                   </button>
                   {isOwner && (
                     <button
@@ -1924,6 +2239,525 @@ export default function RymonConnect() {
               </div>
             )}
 
+            {/* 8B. TALK TO USERS & BROADCAST SYSTEM */}
+            {activeTab === 'broadcast' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Talk to Users & Broadcast System</h2>
+                    <p style={styles.pageSubtitle}>
+                      Send live announcements, maintenance alerts, and private notices to all registered users or specific accounts in real-time.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.greenPulseBadge}>● SUPABASE REALTIME LIVE</span>
+                    <span style={styles.cyanMiniBadge}>ZERO LATENCY</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
+                  {/* Left Column: Compose Message */}
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>📢 Compose Real-Time Broadcast</h4>
+                      <span style={styles.cyanMiniBadge}>DISPATCH GATEWAY</span>
+                    </div>
+
+                    <form onSubmit={handleSendBroadcast} style={{ marginTop: '16px' }}>
+                      {/* Recipient */}
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>
+                          TARGET AUDIENCE / RECIPIENT <span style={{ color: '#00d9ff' }}>*</span>
+                        </label>
+                        <select
+                          value={broadcastTarget}
+                          onChange={(e) => setBroadcastTarget(e.target.value)}
+                          style={styles.selectInput}
+                        >
+                          <option value="ALL">📢 ALL USERS (Global Announcement - Everyone Sees)</option>
+                          <optgroup label="Specific Registered Users">
+                            {usersList.map((u) => (
+                              <option key={u.id} value={u.username}>
+                                👤 {u.username} ({u.role.toUpperCase()} • ₹{u.balance.toLocaleString('en-IN')})
+                              </option>
+                            ))}
+                          </optgroup>
+                        </select>
+                      </div>
+
+                      {/* Message Severity/Type */}
+                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
+                        <label style={styles.formLabel}>MESSAGE CATEGORY & SEVERITY</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                          {(['INFO', 'UPDATE', 'WARNING', 'ALERT'] as const).map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setBroadcastType(t)}
+                              style={{
+                                padding: '8px 4px',
+                                borderRadius: '8px',
+                                border: broadcastType === t ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
+                                background:
+                                  broadcastType === t
+                                    ? t === 'ALERT'
+                                      ? 'rgba(255,51,102,0.25)'
+                                      : t === 'WARNING'
+                                      ? 'rgba(255,183,0,0.25)'
+                                      : t === 'UPDATE'
+                                      ? 'rgba(5,223,114,0.25)'
+                                      : 'rgba(0,217,255,0.25)'
+                                    : 'rgba(15,23,42,0.6)',
+                                color:
+                                  t === 'ALERT'
+                                    ? '#ff3366'
+                                    : t === 'WARNING'
+                                    ? '#ffb700'
+                                    : t === 'UPDATE'
+                                    ? '#05df72'
+                                    : '#00d9ff',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                            >
+                              {t === 'ALERT' ? '🚨 ALERT' : t === 'WARNING' ? '⚠️ WARN' : t === 'UPDATE' ? '⚡ UPDATE' : 'ℹ️ INFO'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Title */}
+                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
+                        <label style={styles.formLabel}>
+                          NOTICE TITLE <span style={{ color: '#00d9ff' }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={broadcastTitle}
+                          onChange={(e) => setBroadcastTitle(e.target.value)}
+                          placeholder="e.g. PUBG Mobile 3.7 Injection Bypass Released"
+                          style={styles.keyInput}
+                          required
+                        />
+                      </div>
+
+                      {/* Message Body */}
+                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
+                        <label style={styles.formLabel}>
+                          MESSAGE CONTENT <span style={{ color: '#00d9ff' }}>*</span>
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={broadcastMessage}
+                          onChange={(e) => setBroadcastMessage(e.target.value)}
+                          placeholder="Write your announcement or direct instructions here..."
+                          style={{
+                            ...styles.keyInput,
+                            height: 'auto',
+                            resize: 'vertical',
+                            lineHeight: 1.5,
+                            fontFamily: 'inherit'
+                          }}
+                          required
+                        />
+                      </div>
+
+                      {/* Quick Presets */}
+                      <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: '#64748b', alignSelf: 'center' }}>Presets:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBroadcastType('UPDATE')
+                            setBroadcastTitle('⚡ PUBG 3.7 & FreeFire V42 Update Released')
+                            setBroadcastMessage('All memory tables, safe ESP overlays, and bypass drivers updated. Streamers can resume live games safely.')
+                            setBroadcastPin(true)
+                          }}
+                          style={styles.chipBtn}
+                        >
+                          Game Update
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBroadcastType('WARNING')
+                            setBroadcastTitle('⚠️ Scheduled 15-Minute Cloud Maintenance')
+                            setBroadcastMessage('Database synchronization will undergo brief maintenance at 12:00 AM UTC. Active keys remain valid.')
+                            setBroadcastPin(true)
+                          }}
+                          style={styles.chipBtn}
+                        >
+                          Maintenance
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBroadcastType('INFO')
+                            setBroadcastTitle('💼 Reseller Balance Top-Up Bonus')
+                            setBroadcastMessage('Special wallet credit promotion active today for all certified distributors. Contact owner on Telegram.')
+                            setBroadcastPin(false)
+                          }}
+                          style={styles.chipBtn}
+                        >
+                          Balance Promo
+                        </button>
+                      </div>
+
+                      {/* Options */}
+                      <div style={{ marginTop: '18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#cbd5e1', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={broadcastPin}
+                            onChange={(e) => setBroadcastPin(e.target.checked)}
+                            style={{ accentColor: '#00d9ff' }}
+                          />
+                          <span>📌 Pin as Top Marquee Banner across all user dashboards</span>
+                        </label>
+
+                        {telegramConfig.bot_token && telegramConfig.chat_id && (
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#cbd5e1', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={broadcastSendTelegram}
+                              onChange={(e) => setBroadcastSendTelegram(e.target.checked)}
+                              style={{ accentColor: '#00d9ff' }}
+                            />
+                            <span>✈️ Also dispatch to Telegram channel ({telegramConfig.channel_username || telegramConfig.chat_id})</span>
+                          </label>
+                        )}
+                      </div>
+
+                      {broadcastSuccessMsg && (
+                        <div style={{ marginTop: '14px', fontSize: '12px', color: '#05df72', fontWeight: 600 }}>
+                          ✓ {broadcastSuccessMsg}
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={broadcastLoading}
+                        style={{
+                          ...styles.submitBtn,
+                          marginTop: '20px',
+                          background: 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)',
+                          color: '#07090e',
+                          fontWeight: 800
+                        }}
+                      >
+                        {broadcastLoading ? 'DISPATCHING ACROSS SUPABASE REALTIME...' : '📢 DISPATCH BROADCAST IN REAL-TIME'}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Right Column: Live Feed & History */}
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>📋 Active Broadcasts & Message Log ({notifications.length})</h4>
+                      <span style={styles.cyanMiniBadge}>LIVE AUDIT FEED</span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', margin: '14px 0' }}>
+                      <button
+                        onClick={() => setNotifFilter('all')}
+                        style={{
+                          ...styles.chipBtn,
+                          background: notifFilter === 'all' ? 'rgba(0,217,255,0.2)' : 'rgba(15,23,42,0.6)',
+                          color: notifFilter === 'all' ? '#00d9ff' : '#94a3b8'
+                        }}
+                      >
+                        All ({notifications.length})
+                      </button>
+                      <button
+                        onClick={() => setNotifFilter('broadcasts')}
+                        style={{
+                          ...styles.chipBtn,
+                          background: notifFilter === 'broadcasts' ? 'rgba(0,217,255,0.2)' : 'rgba(15,23,42,0.6)',
+                          color: notifFilter === 'broadcasts' ? '#00d9ff' : '#94a3b8'
+                        }}
+                      >
+                        Broadcasts ({notifications.filter((n) => n.recipient === 'ALL').length})
+                      </button>
+                      <button
+                        onClick={() => setNotifFilter('direct')}
+                        style={{
+                          ...styles.chipBtn,
+                          background: notifFilter === 'direct' ? 'rgba(0,217,255,0.2)' : 'rgba(15,23,42,0.6)',
+                          color: notifFilter === 'direct' ? '#00d9ff' : '#94a3b8'
+                        }}
+                      >
+                        Direct ({notifications.filter((n) => n.recipient !== 'ALL').length})
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '520px', overflowY: 'auto', paddingRight: '4px' }}>
+                      {filteredNotifications.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                          No messages found. Dispatch your first broadcast above!
+                        </div>
+                      ) : (
+                        filteredNotifications.map((n) => (
+                          <div
+                            key={n.id}
+                            style={{
+                              background: 'rgba(15, 23, 42, 0.7)',
+                              border: '1px solid rgba(30, 41, 59, 0.7)',
+                              borderRadius: '12px',
+                              padding: '14px 16px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span
+                                  style={{
+                                    fontSize: '9px',
+                                    fontWeight: 800,
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    background:
+                                      n.type === 'ALERT'
+                                        ? 'rgba(255,51,102,0.2)'
+                                        : n.type === 'WARNING'
+                                        ? 'rgba(255,183,0,0.2)'
+                                        : n.type === 'UPDATE'
+                                        ? 'rgba(5,223,114,0.2)'
+                                        : 'rgba(0,217,255,0.2)',
+                                    color:
+                                      n.type === 'ALERT'
+                                        ? '#ff3366'
+                                        : n.type === 'WARNING'
+                                        ? '#ffb700'
+                                        : n.type === 'UPDATE'
+                                        ? '#05df72'
+                                        : '#00d9ff'
+                                  }}
+                                >
+                                  {n.type}
+                                </span>
+                                <span style={{ fontSize: '11px', color: n.recipient === 'ALL' ? '#00d9ff' : '#a855f7', fontWeight: 700 }}>
+                                  {n.recipient === 'ALL' ? '📢 To: ALL USERS' : `👤 To: @${n.recipient}`}
+                                </span>
+                                {n.is_pinned && (
+                                  <span style={{ fontSize: '10px', color: '#eab308' }} title="Pinned as Marquee Banner">
+                                    📌 PINNED
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                  {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                {(isOwner || isAdmin) && (
+                                  <button
+                                    onClick={() => handleDeleteNotification(n.id)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#ef4444',
+                                      cursor: 'pointer',
+                                      fontSize: '13px',
+                                      padding: '2px 4px'
+                                    }}
+                                    title="Delete notification"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>
+                              {n.title}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.5 }}>
+                              {n.message}
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#475569' }}>
+                              Dispatched by <strong>{n.sender}</strong>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 8C. TELEGRAM BOT DISPATCH GATEWAY */}
+            {activeTab === 'telegram' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Telegram Bot Automation</h2>
+                    <p style={styles.pageSubtitle}>
+                      Deliver live key deliveries, reseller balance credits, and server broadcasts straight to your Telegram channel and subscribers.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.greenPulseBadge}>● TELEGRAM API ACTIVE</span>
+                    <span style={styles.timeTag}>@RymonGhostStreamer</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
+                  {/* Configuration Card */}
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>🤖 Bot Credentials & Channel Binding</h4>
+                      <span style={styles.cyanMiniBadge}>GATEWAY CONFIG</span>
+                    </div>
+
+                    <form onSubmit={handleSaveTelegram} style={{ marginTop: '16px' }}>
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>
+                          BOT TOKEN (FROM @BOTFATHER) <span style={{ color: '#00d9ff' }}>*</span>
+                        </label>
+                        <input
+                          type="password"
+                          value={telegramConfig.bot_token}
+                          onChange={(e) => setTelegramConfig({ ...telegramConfig, bot_token: e.target.value })}
+                          placeholder="e.g. 7123456789:AAHk2..."
+                          style={styles.keyInput}
+                        />
+                        <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                          Create your bot via @BotFather and copy the HTTP API token.
+                        </span>
+                      </div>
+
+                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
+                        <label style={styles.formLabel}>
+                          CHANNEL OR CHAT ID <span style={{ color: '#00d9ff' }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={telegramConfig.chat_id}
+                          onChange={(e) => setTelegramConfig({ ...telegramConfig, chat_id: e.target.value })}
+                          placeholder="e.g. @RymonGhostStreamer or -1001234567890"
+                          style={styles.keyInput}
+                        />
+                        <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                          Your public channel username (e.g. @MyChannel) or private group chat ID.
+                        </span>
+                      </div>
+
+                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
+                        <label style={styles.formLabel}>DISPLAY CHANNEL USERNAME</label>
+                        <input
+                          type="text"
+                          value={telegramConfig.channel_username}
+                          onChange={(e) => setTelegramConfig({ ...telegramConfig, channel_username: e.target.value })}
+                          placeholder="e.g. @RymonGhostStreamer"
+                          style={styles.keyInput}
+                        />
+                      </div>
+
+                      <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                          type="checkbox"
+                          id="tgActive"
+                          checked={telegramConfig.is_active}
+                          onChange={(e) => setTelegramConfig({ ...telegramConfig, is_active: e.target.checked })}
+                          style={{ accentColor: '#00d9ff' }}
+                        />
+                        <label htmlFor="tgActive" style={{ fontSize: '12px', color: '#cbd5e1', cursor: 'pointer' }}>
+                          Enable automatic Telegram bot dispatching
+                        </label>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={telegramSaving}
+                        style={{
+                          ...styles.submitBtn,
+                          marginTop: '20px',
+                          background: '#00d9ff',
+                          color: '#07090e'
+                        }}
+                      >
+                        {telegramSaving ? 'SAVING CONFIGURATION...' : '💾 SAVE TELEGRAM CONFIGURATION'}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Dispatcher & Setup Instructions */}
+                  <div style={styles.cardBox}>
+                    <div style={styles.cardHeader}>
+                      <h4>✈️ Instant Telegram Dispatcher</h4>
+                      <span style={styles.cyanMiniBadge}>TEST MESSAGE</span>
+                    </div>
+
+                    <p style={styles.settingDesc}>
+                      Test your live bot link by sending a broadcast directly to your connected Telegram channel:
+                    </p>
+
+                    <div style={{ ...styles.formGroup, marginTop: '12px' }}>
+                      <label style={styles.formLabel}>TEST MESSAGE / ANNOUNCEMENT</label>
+                      <textarea
+                        rows={3}
+                        value={telegramTestMsg}
+                        onChange={(e) => setTelegramTestMsg(e.target.value)}
+                        placeholder="Write message to dispatch to Telegram channel..."
+                        style={{
+                          ...styles.keyInput,
+                          height: 'auto',
+                          resize: 'vertical',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleTestTelegram}
+                      disabled={telegramTesting}
+                      style={{
+                        ...styles.submitBtn,
+                        marginTop: '14px',
+                        background: 'rgba(0, 217, 255, 0.15)',
+                        border: '1px solid #00d9ff',
+                        color: '#00d9ff'
+                      }}
+                    >
+                      {telegramTesting ? 'DISPATCHING TO TELEGRAM...' : '✈️ TEST DISPATCH TO TELEGRAM'}
+                    </button>
+
+                    {telegramStatusMsg && (
+                      <div
+                        style={{
+                          marginTop: '14px',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          background: 'rgba(15, 23, 42, 0.8)',
+                          border: '1px solid rgba(0, 217, 255, 0.3)',
+                          fontSize: '12px',
+                          color: '#e2e8f0'
+                        }}
+                      >
+                        {telegramStatusMsg}
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
+                      <h5 style={{ fontSize: '13px', color: '#f8fafc', marginBottom: '8px', fontWeight: 700 }}>
+                        📖 4-Step Quick Setup Guide
+                      </h5>
+                      <ol style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.8, paddingLeft: '18px', margin: 0 }}>
+                        <li>Open Telegram, search for <strong>@BotFather</strong> and send <code>/newbot</code>.</li>
+                        <li>Give your bot a name and username, then copy the <strong>HTTP API Token</strong>.</li>
+                        <li>Create or open your Telegram channel, tap <strong>Administrators ➔ Add Admin</strong>, and add your bot.</li>
+                        <li>Paste your token and channel username above, click <strong>Save</strong>, then test!</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 9. ADVANCE SYSTEM (MEDIA_1791705541653_4BB001FC.PNG) */}
             {activeTab === 'advance' && (
               <div style={styles.viewContainer}>
@@ -2466,6 +3300,231 @@ export default function RymonConnect() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── NOTIFICATION DRAWER / NOTIFICATION CENTER ───────────────────────── */}
+      {isNotifDrawerOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '70px',
+            right: '24px',
+            width: '430px',
+            maxWidth: '92vw',
+            maxHeight: '85vh',
+            backgroundColor: 'rgba(10, 13, 22, 0.96)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(0, 217, 255, 0.35)',
+            borderRadius: '16px',
+            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 217, 255, 0.15)',
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Drawer Header */}
+          <div
+            style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid rgba(30, 41, 59, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'rgba(15, 23, 42, 0.8)'
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🔔 NOTIFICATIONS & BROADCASTS</span>
+                <span style={styles.cyanMiniBadge}>{notifications.length}</span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                Real-time messages for {currentUser?.username || 'user'}
+              </div>
+            </div>
+            <button
+              onClick={() => setIsNotifDrawerOpen(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                fontSize: '18px',
+                cursor: 'pointer',
+                padding: '4px'
+              }}
+              title="Close drawer"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Drawer Filters */}
+          <div
+            style={{
+              padding: '10px 16px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+              display: 'flex',
+              gap: '6px',
+              background: 'rgba(10, 13, 20, 0.6)'
+            }}
+          >
+            <button
+              onClick={() => setNotifFilter('all')}
+              style={{
+                ...styles.chipBtn,
+                background: notifFilter === 'all' ? 'rgba(0, 217, 255, 0.2)' : 'transparent',
+                color: notifFilter === 'all' ? '#00d9ff' : '#94a3b8',
+                fontSize: '11px'
+              }}
+            >
+              All ({notifications.length})
+            </button>
+            <button
+              onClick={() => setNotifFilter('broadcasts')}
+              style={{
+                ...styles.chipBtn,
+                background: notifFilter === 'broadcasts' ? 'rgba(0, 217, 255, 0.2)' : 'transparent',
+                color: notifFilter === 'broadcasts' ? '#00d9ff' : '#94a3b8',
+                fontSize: '11px'
+              }}
+            >
+              📢 Broadcasts ({notifications.filter((n) => n.recipient === 'ALL').length})
+            </button>
+            <button
+              onClick={() => setNotifFilter('direct')}
+              style={{
+                ...styles.chipBtn,
+                background: notifFilter === 'direct' ? 'rgba(0, 217, 255, 0.2)' : 'transparent',
+                color: notifFilter === 'direct' ? '#00d9ff' : '#94a3b8',
+                fontSize: '11px'
+              }}
+            >
+              👤 Direct ({notifications.filter((n) => n.recipient !== 'ALL').length})
+            </button>
+          </div>
+
+          {/* Messages list */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '14px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}
+          >
+            {filteredNotifications.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 10px', color: '#64748b', fontSize: '13px' }}>
+                🎉 All caught up! No notifications right now.
+              </div>
+            ) : (
+              filteredNotifications.map((n) => (
+                <div
+                  key={n.id}
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.85)',
+                    border: '1px solid rgba(30, 41, 59, 0.8)',
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 800,
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          background:
+                            n.type === 'ALERT'
+                              ? 'rgba(255, 51, 102, 0.2)'
+                              : n.type === 'WARNING'
+                              ? 'rgba(255, 183, 0, 0.2)'
+                              : n.type === 'UPDATE'
+                              ? 'rgba(5, 223, 114, 0.2)'
+                              : 'rgba(0, 217, 255, 0.2)',
+                          color:
+                            n.type === 'ALERT'
+                              ? '#ff3366'
+                              : n.type === 'WARNING'
+                              ? '#ffb700'
+                              : n.type === 'UPDATE'
+                              ? '#05df72'
+                              : '#00d9ff'
+                        }}
+                      >
+                        {n.type}
+                      </span>
+                      <span style={{ fontSize: '10px', color: n.recipient === 'ALL' ? '#00d9ff' : '#a855f7', fontWeight: 700 }}>
+                        {n.recipient === 'ALL' ? '📢 GLOBAL' : `@${n.recipient}`}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', color: '#64748b' }}>
+                        {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {(isOwner || isAdmin) && (
+                        <button
+                          onClick={() => handleDeleteNotification(n.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                          title="Delete message"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#f8fafc' }}>
+                    {n.title}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: 1.4 }}>
+                    {n.message}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Drawer Footer */}
+          {(isOwner || isAdmin) && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderTop: '1px solid rgba(30, 41, 59, 0.8)',
+                background: 'rgba(15, 23, 42, 0.95)'
+              }}
+            >
+              <button
+                onClick={() => {
+                  setIsNotifDrawerOpen(false)
+                  setActiveTab('broadcast')
+                }}
+                style={{
+                  ...styles.submitBtn,
+                  padding: '8px 16px',
+                  fontSize: '12px',
+                  background: 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)',
+                  color: '#07090e'
+                }}
+              >
+                📢 Compose Broadcast / Message Users
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

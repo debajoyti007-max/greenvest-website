@@ -89,6 +89,24 @@ export interface StreamerControlRecord {
   emergency_purge: boolean
 }
 
+export interface RymonNotification {
+  id: number
+  sender: string
+  recipient: string
+  title: string
+  message: string
+  type: 'INFO' | 'WARNING' | 'ALERT' | 'UPDATE'
+  is_pinned?: boolean
+  created_at: string
+}
+
+export interface TelegramConfig {
+  bot_token: string
+  chat_id: string
+  channel_username: string
+  is_active: boolean
+}
+
 // Sovereign In-Memory Fallback Seed (Active if Supabase SQL migration has not been run yet)
 export const SOVEREIGN_FALLBACK_ACCOUNTS: RymonAccount[] = [
   {
@@ -1073,3 +1091,267 @@ export function saveStoredActivities(activities: RymonActivity[]): void {
     localStorage.setItem('rymon_sovereign_activities', JSON.stringify(activities))
   } catch {}
 }
+
+export const SOVEREIGN_FALLBACK_NOTIFICATIONS: RymonNotification[] = [
+  {
+    id: 1,
+    sender: 'rymon',
+    recipient: 'ALL',
+    title: '🚨 SYSTEM ACTIVE: Welcome to Rymon Sovereign Network',
+    message: 'The sovereign portal is online on greenvest.shop with zero external latency. All reseller balances, key generators, and streamer telemetry are linked directly to database.',
+    type: 'UPDATE',
+    is_pinned: true,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    sender: 'rymon',
+    recipient: 'ALL',
+    title: '⚡ PUBG 3.7 & FreeFire Bypass Live',
+    message: 'All memory injection modules and safe telemetry controls are updated. Ensure your streamers bind HWID before joining live matches.',
+    type: 'INFO',
+    is_pinned: false,
+    created_at: new Date(Date.now() - 7200000).toISOString()
+  },
+  {
+    id: 3,
+    sender: 'rymon',
+    recipient: 'ROGER',
+    title: '💼 Reseller Tier Verified',
+    message: 'Your reseller account has been credited. You can generate PUBG and FreeFire keys directly from the Generate Key panel.',
+    type: 'INFO',
+    is_pinned: false,
+    created_at: new Date(Date.now() - 3600000).toISOString()
+  }
+]
+
+function getStoredNotifications(): RymonNotification[] {
+  try {
+    const raw = localStorage.getItem('rymon_sovereign_notifications')
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return [...SOVEREIGN_FALLBACK_NOTIFICATIONS]
+}
+
+export function saveStoredNotifications(notifications: RymonNotification[]): void {
+  try {
+    localStorage.setItem('rymon_sovereign_notifications', JSON.stringify(notifications))
+  } catch {}
+}
+
+export async function fetchNotifications(
+  userFilter?: string
+): Promise<RymonNotification[]> {
+  if (supabase) {
+    try {
+      let query = supabase
+        .from('rymon_notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (userFilter && userFilter.toLowerCase() !== 'rymon') {
+        query = query.or(`recipient.eq.ALL,recipient.ilike.${userFilter}`)
+      }
+
+      const { data, error } = await query
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data as RymonNotification[]
+      }
+    } catch {}
+  }
+
+  const stored = getStoredNotifications()
+  if (userFilter && userFilter.toLowerCase() !== 'rymon') {
+    return stored.filter(
+      (n) => n.recipient === 'ALL' || n.recipient.toLowerCase() === userFilter.toLowerCase()
+    )
+  }
+  return stored
+}
+
+export async function sendBroadcastBackend(
+  sender: string,
+  recipient: string,
+  title: string,
+  message: string,
+  type: 'INFO' | 'WARNING' | 'ALERT' | 'UPDATE' = 'INFO',
+  isPinned: boolean = false
+): Promise<{ success: boolean; message: string; notification?: RymonNotification }> {
+  const cleanRecipient = recipient.trim() || 'ALL'
+  const cleanTitle = title.trim()
+  const cleanMessage = message.trim()
+
+  if (!cleanTitle || !cleanMessage) {
+    return { success: false, message: 'Title and message cannot be empty' }
+  }
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_rymon_send_broadcast', {
+        p_sender: sender || 'rymon',
+        p_recipient: cleanRecipient,
+        p_title: cleanTitle,
+        p_message: cleanMessage,
+        p_type: type,
+        p_is_pinned: isPinned
+      })
+
+      if (!error && data && data.success) {
+        const newNotif: RymonNotification = {
+          id: data.notification_id || Date.now(),
+          sender: sender || 'rymon',
+          recipient: cleanRecipient,
+          title: cleanTitle,
+          message: cleanMessage,
+          type,
+          is_pinned: isPinned,
+          created_at: new Date().toISOString()
+        }
+        return { success: true, message: data.message || 'Broadcast dispatched successfully', notification: newNotif }
+      }
+    } catch {}
+
+    try {
+      const { data, error } = await supabase
+        .from('rymon_notifications')
+        .insert({
+          sender: sender || 'rymon',
+          recipient: cleanRecipient,
+          title: cleanTitle,
+          message: cleanMessage,
+          type,
+          is_pinned: isPinned
+        })
+        .select()
+        .single()
+
+      if (!error && data) {
+        return { success: true, message: 'Broadcast dispatched to database', notification: data as RymonNotification }
+      }
+    } catch {}
+  }
+
+  const stored = getStoredNotifications()
+  const newNotif: RymonNotification = {
+    id: Date.now(),
+    sender: sender || 'rymon',
+    recipient: cleanRecipient,
+    title: cleanTitle,
+    message: cleanMessage,
+    type,
+    is_pinned: isPinned,
+    created_at: new Date().toISOString()
+  }
+  stored.unshift(newNotif)
+  saveStoredNotifications(stored)
+
+  return { success: true, message: 'Broadcast dispatched to users', notification: newNotif }
+}
+
+export async function deleteNotificationBackend(id: number): Promise<boolean> {
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('rymon_notifications')
+        .delete()
+        .eq('id', id)
+      if (!error) return true
+    } catch {}
+  }
+
+  const stored = getStoredNotifications()
+  const filtered = stored.filter((n) => n.id !== id)
+  saveStoredNotifications(filtered)
+  return true
+}
+
+export async function fetchTelegramConfigBackend(): Promise<TelegramConfig> {
+  const defaultCfg: TelegramConfig = {
+    bot_token: '',
+    chat_id: '',
+    channel_username: '@RymonGhostStreamer',
+    is_active: true
+  }
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('rymon_telegram_config')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle()
+
+      if (!error && data) {
+        return {
+          bot_token: data.bot_token || '',
+          chat_id: data.chat_id || '',
+          channel_username: data.channel_username || '@RymonGhostStreamer',
+          is_active: data.is_active ?? true
+        }
+      }
+    } catch {}
+  }
+
+  try {
+    const raw = localStorage.getItem('rymon_telegram_config')
+    if (raw) return JSON.parse(raw)
+  } catch {}
+
+  return defaultCfg
+}
+
+export async function saveTelegramConfigBackend(config: TelegramConfig): Promise<boolean> {
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('rymon_telegram_config')
+        .upsert({
+          id: 1,
+          bot_token: config.bot_token,
+          chat_id: config.chat_id,
+          channel_username: config.channel_username,
+          is_active: config.is_active,
+          updated_at: new Date().toISOString()
+        })
+      if (!error) return true
+    } catch {}
+  }
+
+  try {
+    localStorage.setItem('rymon_telegram_config', JSON.stringify(config))
+  } catch {}
+  return true
+}
+
+export async function dispatchTelegramMessage(
+  botToken: string,
+  chatId: string,
+  text: string
+): Promise<{ success: boolean; message: string }> {
+  if (!botToken || !chatId) {
+    return { success: false, message: 'Please provide both Bot Token and Chat/Channel ID' }
+  }
+
+  try {
+    const resp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'HTML'
+      })
+    })
+
+    const json = await resp.json()
+    if (json.ok) {
+      return { success: true, message: 'Successfully dispatched to Telegram channel/chat!' }
+    } else {
+      return { success: false, message: json.description || 'Telegram API returned error' }
+    }
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : 'Network error'
+    return { success: false, message: `Failed to dispatch Telegram message: ${errMsg}` }
+  }
+}
+
