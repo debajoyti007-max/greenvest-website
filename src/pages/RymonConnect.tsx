@@ -539,11 +539,11 @@ export default function RymonConnect() {
 
       const streamerUser: RymonAccount = {
         id: 'usr-streamer',
-        username: res.isMaster ? 'rymon' : 'Streamer VIP',
+        username: res.isMaster ? 'debajoyti' : 'Streamer VIP',
         email: 'streamer@rymon.vip',
         role: res.isMaster ? 'owner' : 'streamer',
-        balance: res.isMaster ? 999628464 : 0,
-        uplink: 'rymon',
+        balance: res.isMaster ? 999628429 : 0,
+        uplink: 'debajoyti',
         status: 'ACTIVE'
       }
       setCurrentUser(streamerUser)

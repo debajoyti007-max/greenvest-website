@@ -448,7 +448,8 @@ export async function loginWithCredentials(
 // ============================================================================
 export async function verifyLicenseKey(
   keyInput: string,
-  hwidInput?: string
+  hwidInput?: string,
+  isWebConsole: boolean = true
 ): Promise<{
   valid: boolean
   key?: string
@@ -463,12 +464,6 @@ export async function verifyLicenseKey(
 }> {
   const cleanKey = keyInput.trim().toUpperCase()
   if (!cleanKey) return { valid: false, error: 'License key is required.' }
-
-  const effectiveHwid =
-    hwidInput ||
-    localStorage.getItem('rymon_client_hwid') ||
-    'HWID-' + Math.random().toString(36).substring(2, 8).toUpperCase()
-  localStorage.setItem('rymon_client_hwid', effectiveHwid)
 
   // Master Owner Bypass
   if (
@@ -488,6 +483,86 @@ export async function verifyLicenseKey(
       devicesMax: 999
     }
   }
+
+  // 1. Web Dashboard / Streamer Remote Console Login:
+  // The web dashboard is used to control telemetry & aim settings remotely — it is NOT a gaming client!
+  // It must verify license validity without checking HWID and without consuming a gaming device slot.
+  if (isWebConsole && !hwidInput) {
+    if (supabase) {
+      try {
+        const { data: licRow, error: licErr } = await supabase
+          .from('rymon_licenses')
+          .select('*')
+          .eq('license_key', cleanKey)
+          .maybeSingle()
+
+        if (licRow && !licErr) {
+          if (licRow.status === 'BANNED') {
+            return { valid: false, error: 'License key has been banned by Administrator.' }
+          }
+          if (licRow.expires_at && new Date(licRow.expires_at).getTime() < Date.now()) {
+            return { valid: false, error: `License key expired on ${new Date(licRow.expires_at).toLocaleDateString()}` }
+          }
+
+          // Ensure controls record exists for this streamer key
+          await supabase
+            .from('rymon_streamer_controls')
+            .upsert(
+              {
+                license_key: licRow.license_key,
+                streamer_name: 'VIP Streamer',
+                game_name: licRow.game || 'Free Fire MAX',
+                is_active: licRow.status === 'ACTIVE',
+                is_paused: Boolean(licRow.is_paused),
+                plan_duration: licRow.plan_duration,
+                creator: licRow.creator_username,
+                devices_max: licRow.devices_max || 1,
+                devices_used: licRow.devices_used || 0
+              },
+              { onConflict: 'license_key' }
+            )
+
+          return {
+            valid: true,
+            key: licRow.license_key,
+            game: licRow.game || 'Free Fire MAX',
+            plan: licRow.plan_duration || '30 Days',
+            status: licRow.status,
+            expiresAt: licRow.expires_at || undefined,
+            devicesUsed: licRow.devices_used || 0,
+            devicesMax: licRow.devices_max || 1
+          }
+        }
+      } catch {}
+    }
+
+    // Local fallback check for offline / memory demo
+    const localLicenses = getStoredLicenses()
+    const matched = localLicenses.find((l) => l.license_key.toUpperCase() === cleanKey)
+    if (matched) {
+      if (matched.status === 'BANNED') {
+        return { valid: false, error: 'License key has been banned by Administrator.' }
+      }
+      if (matched.expires_at && new Date(matched.expires_at).getTime() < Date.now()) {
+        return { valid: false, error: 'License key has expired.' }
+      }
+      return {
+        valid: true,
+        key: matched.license_key,
+        game: matched.game,
+        plan: matched.plan_duration,
+        status: matched.status,
+        expiresAt: matched.expires_at || undefined,
+        devicesUsed: matched.devices_used,
+        devicesMax: matched.devices_max
+      }
+    }
+
+    return { valid: false, error: 'Invalid license key. Check key string or generate a new key.' }
+  }
+
+  // 2. Hardware Client Path (when hwidInput is explicitly provided, e.g. from APK / daemon)
+  const effectiveHwid = hwidInput || 'DEFAULT-DEVICE'
 
   // A. Supabase RPC / Table Verification
   if (supabase) {
@@ -532,7 +607,6 @@ export async function verifyLicenseKey(
           return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset HWID in dashboard.' }
         }
 
-        // Activate if first use
         const exp = licRow.expires_at || new Date(Date.now() + 30 * 86400000).toISOString()
         await supabase
           .from('rymon_licenses')
@@ -556,9 +630,7 @@ export async function verifyLicenseKey(
           devicesMax: licRow.devices_max
         }
       }
-    } catch {
-      // Continue to fallback
-    }
+    } catch {}
   }
 
   // B. Fallback Registry Verification
