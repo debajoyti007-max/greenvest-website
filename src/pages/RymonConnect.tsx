@@ -44,6 +44,7 @@ import {
   saveUserCustomPriceMap,
   clearUserCustomPriceMap,
   getEffectivePriceMap,
+  syncPricingFromSupabase,
   fetchAllStreamerControls
 } from '../lib/rymonBackend'
 
@@ -260,6 +261,7 @@ export default function RymonConnect() {
 
     async function loadLiveData() {
       const isStreamerRole = currentUser?.role === 'streamer'
+      await syncPricingFromSupabase()
       const [lcs, usrs, acts, notifs, tgCfg, refs, ctrls] = await Promise.all([
         fetchAllLicenses(currentUser),
         fetchAllAccounts(currentUser),
@@ -273,6 +275,8 @@ export default function RymonConnect() {
       ])
 
       if (isMounted) {
+        setGlobalPrices(getGlobalPriceMap())
+        setAllCustomUserMaps(getAllUserCustomPriceMaps())
         setKeysList(lcs)
         setUsersList(usrs)
         setActivities(acts)
@@ -399,7 +403,7 @@ export default function RymonConnect() {
           setRecord(merged)
           setIsLiveConnected(true)
         } else if (isMounted) {
-          // Initialize fresh local fallback record
+          // Initialize fresh local fallback record and ensure row exists in Supabase
           const initialRow: StreamerControlRecord = {
             license_key: currentKey,
             streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer',
@@ -435,6 +439,14 @@ export default function RymonConnect() {
           }
           setRecord(initialRow)
           setIsLiveConnected(true)
+          try {
+            await supabase
+              .from('rymon_streamer_controls')
+              .upsert(
+                { ...initialRow, updated_at: new Date().toISOString() },
+                { onConflict: 'license_key' }
+              )
+          } catch {}
         }
       } catch {
         // Fallback
@@ -735,13 +747,14 @@ export default function RymonConnect() {
       return
     }
     const newVal = !record[field]
-    setRecord({ ...record, [field]: newVal })
+    const nowIso = new Date().toISOString()
+    setRecord({ ...record, [field]: newVal, updated_at: nowIso })
 
     if (supabase && currentKey) {
       try {
         await supabase
           .from('rymon_streamer_controls')
-          .update({ [field]: newVal })
+          .update({ [field]: newVal, updated_at: nowIso })
           .eq('license_key', currentKey)
       } catch (err) {
         console.warn('Sync warning:', err)
@@ -755,7 +768,8 @@ export default function RymonConnect() {
       showToast('⏸️ License key is PAUSED. Slider adjustments are locked until unpaused by staff.')
       return
     }
-    setRecord({ ...record, [field]: val })
+    const nowIso = new Date().toISOString()
+    setRecord({ ...record, [field]: val, updated_at: nowIso })
 
     if (sliderTimerRef.current) clearTimeout(sliderTimerRef.current)
     sliderTimerRef.current = setTimeout(async () => {
@@ -763,13 +777,13 @@ export default function RymonConnect() {
         try {
           await supabase
             .from('rymon_streamer_controls')
-            .update({ [field]: val })
+            .update({ [field]: val, updated_at: new Date().toISOString() })
             .eq('license_key', currentKey)
         } catch (err) {
           console.warn('Sync warning:', err)
         }
       }
-    }, 100)
+    }, 80)
   }
 
   const setThemePreset = async (idx: number) => {
@@ -778,12 +792,13 @@ export default function RymonConnect() {
       showToast('⏸️ License key is PAUSED. Theme presets are locked until unpaused by staff.')
       return
     }
-    setRecord({ ...record, theme_color_index: idx })
+    const nowIso = new Date().toISOString()
+    setRecord({ ...record, theme_color_index: idx, updated_at: nowIso })
     if (supabase && currentKey) {
       try {
         await supabase
           .from('rymon_streamer_controls')
-          .update({ theme_color_index: idx })
+          .update({ theme_color_index: idx, updated_at: nowIso })
           .eq('license_key', currentKey)
       } catch {}
     }
@@ -795,7 +810,7 @@ export default function RymonConnect() {
       try {
         await supabase
           .from('rymon_streamer_controls')
-          .update({ emergency_purge: true })
+          .update({ emergency_purge: true, updated_at: new Date().toISOString() })
           .eq('license_key', currentKey)
       } catch {}
     }
