@@ -112,11 +112,11 @@ export interface TelegramConfig {
 // Sovereign In-Memory Fallback Seed (Only genuine Root Owner)
 export const SOVEREIGN_FALLBACK_ACCOUNTS: RymonAccount[] = [
   {
-    id: 'usr-rymon-01',
-    username: 'rymon',
-    email: 'swayamstar9@gmail.com',
+    id: 'usr-debajoyti-01',
+    username: 'debajoyti',
+    email: 'debajoyti@rymon.vip',
     role: 'owner',
-    balance: 999628464,
+    balance: 999628429,
     uplink: 'SOVEREIGN_ROOT',
     referral_code: 'ROOT001',
     status: 'ACTIVE',
@@ -1462,11 +1462,11 @@ export async function createReferralCode(
   customCode?: string,
   maxUses: number = 1
 ): Promise<{ success: boolean; code?: string; message: string }> {
-  // Strict hierarchy: Only Shadow Admin (rymon) can issue Admin referrals
-  if (owner.toLowerCase() !== 'rymon' && targetRole === 'admin') {
+  // Strict hierarchy: Only Shadow Admin (debajoyti / rymon) can issue Admin referrals
+  if (owner.toLowerCase() !== 'debajoyti' && owner.toLowerCase() !== 'rymon' && targetRole === 'admin') {
     return {
       success: false,
-      message: 'Power restriction: Only Shadow Admin (rymon) can issue Admin referral codes. Admins can only invite Resellers.'
+      message: 'Power restriction: Only Root Owner (debajoyti) can issue Admin referral codes. Admins can only invite Resellers.'
     }
   }
 

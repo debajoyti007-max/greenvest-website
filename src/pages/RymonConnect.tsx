@@ -342,23 +342,43 @@ export default function RymonConnect() {
     async function loadTelemetry() {
       if (!supabase) return
       try {
-        const { data } = await supabase
-          .from('rymon_streamer_controls')
-          .select('*')
-          .eq('license_key', currentKey)
-          .maybeSingle()
+        const [{ data: ctrlData }, { data: licData }] = await Promise.all([
+          supabase
+            .from('rymon_streamer_controls')
+            .select('*')
+            .eq('license_key', currentKey)
+            .maybeSingle(),
+          supabase
+            .from('rymon_licenses')
+            .select('device_hwid, devices_used, devices_max, last_heartbeat, status, is_paused')
+            .eq('license_key', currentKey)
+            .maybeSingle()
+        ])
 
-        if (data && isMounted) {
-          setRecord(data as StreamerControlRecord)
+        if (ctrlData && isMounted) {
+          const merged: StreamerControlRecord = {
+            ...(ctrlData as StreamerControlRecord),
+            device_hwid: licData?.device_hwid || ctrlData.device_hwid || '',
+            devices_used: licData?.devices_used ?? ctrlData.devices_used ?? 0,
+            devices_max: licData?.devices_max ?? ctrlData.devices_max ?? 1,
+            last_heartbeat: licData?.last_heartbeat || ctrlData.last_heartbeat,
+            is_paused: licData?.is_paused ?? ctrlData.is_paused ?? false
+          }
+          setRecord(merged)
           setIsLiveConnected(true)
         } else if (isMounted) {
           // Initialize fresh local fallback record
           const initialRow: StreamerControlRecord = {
             license_key: currentKey,
-            streamer_name: currentUser?.role === 'owner' ? 'Rymon Owner' : 'VIP Streamer',
+            streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer',
             game_name: 'Free Fire MAX',
-            is_online: true,
+            is_online: Boolean(licData?.device_hwid),
             is_active: true,
+            is_paused: licData?.is_paused ?? false,
+            device_hwid: licData?.device_hwid || '',
+            devices_used: licData?.devices_used ?? 0,
+            devices_max: licData?.devices_max ?? 1,
+            last_heartbeat: licData?.last_heartbeat,
             aim_silent: false,
             hit_rate: 80,
             ignore_knocked: false,
@@ -403,8 +423,37 @@ export default function RymonConnect() {
         },
         (payload) => {
           if (payload.new && isMounted) {
-            setRecord(payload.new as StreamerControlRecord)
+            setRecord((prev) => ({
+              ...(prev || ({} as StreamerControlRecord)),
+              ...(payload.new as StreamerControlRecord)
+            }))
             setIsLiveConnected(true)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'rymon_licenses',
+          filter: `license_key=eq.${currentKey}`
+        },
+        (payload) => {
+          if (payload.new && isMounted) {
+            const lic = payload.new as RymonLicense
+            setRecord((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    device_hwid: lic.device_hwid || prev.device_hwid,
+                    devices_used: lic.devices_used ?? prev.devices_used,
+                    devices_max: lic.devices_max ?? prev.devices_max,
+                    last_heartbeat: lic.last_heartbeat || prev.last_heartbeat,
+                    is_paused: lic.is_paused ?? prev.is_paused
+                  }
+                : null
+            )
           }
         }
       )
@@ -587,7 +636,7 @@ export default function RymonConnect() {
       topUpTargetUser,
       Number(topUpAmount),
       topUpMode,
-      currentUser?.username || 'rymon'
+      currentUser?.username || 'debajoyti'
     )
     setTopUpLoading(false)
 
@@ -715,12 +764,12 @@ export default function RymonConnect() {
       alert('Please select a target user.')
       return
     }
-    if (targetBanUser.toLowerCase() === 'rymon') {
+    if (targetBanUser.toLowerCase() === 'debajoyti' || targetBanUser.toLowerCase() === 'rymon') {
       alert('Action forbidden: Root Owner account cannot be banned.')
       return
     }
     const isBan = banActionType === 'ban'
-    await toggleBanStatusBackend(targetBanUser, 'user', isBan, currentUser?.username || 'rymon')
+    await toggleBanStatusBackend(targetBanUser, 'user', isBan, currentUser?.username || 'debajoyti')
     showToast(`User ${targetBanUser} has been ${isBan ? 'BANNED' : 'UNBANNED'}.`)
     fetchAllAccounts(currentUser).then(setUsersList)
   }
@@ -737,7 +786,7 @@ export default function RymonConnect() {
     const count = await bulkDeleteKeysBackend(
       targetDeleteUser,
       deleteKeyType,
-      currentUser?.username || 'rymon'
+      currentUser?.username || 'debajoyti'
     )
     showToast(`Purged ${count} ${deleteKeyType} keys for user ${targetDeleteUser}.`)
     fetchAllLicenses(currentUser).then(setKeysList)
@@ -748,7 +797,7 @@ export default function RymonConnect() {
       alert('Please select a target key.')
       return
     }
-    await extendLicenseBackend(targetExtendKey, extendAmount, currentUser?.username || 'rymon')
+    await extendLicenseBackend(targetExtendKey, extendAmount, currentUser?.username || 'debajoyti')
     showToast(`License ${targetExtendKey} extended by ${extendAmount} days!`)
     fetchAllLicenses(currentUser).then(setKeysList)
   }
@@ -764,7 +813,7 @@ export default function RymonConnect() {
     setBroadcastLoading(true)
     setBroadcastSuccessMsg('')
 
-    const sender = currentUser?.username || 'rymon'
+    const sender = currentUser?.username || 'debajoyti'
     const res = await sendBroadcastBackend(
       sender,
       broadcastTarget,
@@ -824,7 +873,7 @@ export default function RymonConnect() {
     setTelegramStatusMsg('')
     const txt =
       telegramTestMsg.trim() ||
-      `⚡ <b>Rymon Sovereign Bot Test</b>\nBroadcast system active on greenvest.shop!\nDispatched by: ${currentUser?.username || 'rymon'}\nTimestamp: ${new Date().toLocaleTimeString()}`
+      `⚡ <b>Rymon Sovereign Bot Test</b>\nBroadcast system active on greenvest.shop!\nDispatched by: ${currentUser?.username || 'debajoyti'}\nTimestamp: ${new Date().toLocaleTimeString()}`
     const res = await dispatchTelegramMessage(telegramConfig.bot_token, telegramConfig.chat_id, txt)
     setTelegramTesting(false)
     setTelegramStatusMsg(res.message)
@@ -857,13 +906,13 @@ export default function RymonConnect() {
   const handleCreateReferral = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isOwner && refTargetRole !== 'reseller') {
-      alert('Power restriction: Only the Shadow Admin / Root Owner (rymon) can issue Administrator invite codes. Admins can only invite downline Resellers.')
+      alert('Power restriction: Only the Shadow Admin / Root Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
       return
     }
     setRefCreating(true)
     const bal = typeof refInitialBal === 'number' ? refInitialBal : 0
     const res = await createReferralCode(
-      currentUser?.username || 'rymon',
+      currentUser?.username || 'debajoyti',
       isOwner ? refTargetRole : 'reseller',
       bal,
       refCustomCode,
@@ -889,7 +938,7 @@ export default function RymonConnect() {
   }
 
   const handleTogglePauseKey = async (keyString: string) => {
-    const res = await togglePauseLicenseBackend(keyString, currentUser?.username || 'rymon')
+    const res = await togglePauseLicenseBackend(keyString, currentUser?.username || 'debajoyti')
     if (res.success) {
       showToast(res.message)
       setKeysList((prev) =>
@@ -1119,8 +1168,8 @@ export default function RymonConnect() {
           ) : (
             <button
               onClick={() => {
-                setStaffUsername('rymon')
-                setStaffPassword('rymon@2026')
+                setStaffUsername('')
+                setStaffPassword('')
                 setAuthMode('staff')
               }}
               style={styles.quickLoginBtn}
@@ -1352,20 +1401,6 @@ export default function RymonConnect() {
                         style={styles.keyInput}
                         required
                       />
-                    </div>
-
-                    <div style={styles.quickAccountsRow}>
-                      <span style={styles.quickLabel}>Root Sign-in:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStaffUsername('rymon')
-                          setStaffPassword('rymon@2026')
-                        }}
-                        style={styles.chipBtn}
-                      >
-                        rymon (Root Owner)
-                      </button>
                     </div>
 
                     <button type="submit" disabled={authLoading} style={styles.submitBtn}>
@@ -3798,6 +3833,68 @@ public class ServerConfig {
                   <div style={styles.telemetryBarItem}>
                     <span style={styles.telemetryBarLabel}>EXPIRES IN:</span>
                     <span style={{ ...styles.telemetryBarVal, color: '#00d9ff' }}>{countdown}</span>
+                  </div>
+                </div>
+
+                {/* Real Hardware & Daemon Binding HUD Card */}
+                <div
+                  style={{
+                    background: record?.device_hwid
+                      ? 'linear-gradient(90deg, rgba(5, 223, 114, 0.12) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(5, 223, 114, 0.08) 100%)'
+                      : 'linear-gradient(90deg, rgba(255, 183, 0, 0.12) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(255, 183, 0, 0.08) 100%)',
+                    border: record?.device_hwid ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(255, 183, 0, 0.4)',
+                    borderRadius: '12px',
+                    padding: '14px 20px',
+                    marginBottom: '20px',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '14px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '26px' }}>{record?.device_hwid ? '📱' : '⏳'}</span>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '13px', letterSpacing: '0.5px', color: record?.device_hwid ? '#05df72' : '#ffb700' }}>
+                          {record?.device_hwid ? '● PHONE HARDWARE BINDED (ACTIVE)' : '○ AWAITING PHONE APK INITIALIZATION'}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontWeight: 700,
+                            background: record?.device_hwid ? 'rgba(5, 223, 114, 0.2)' : 'rgba(255, 183, 0, 0.2)',
+                            color: record?.device_hwid ? '#05df72' : '#ffb700',
+                            border: record?.device_hwid ? '1px solid #05df72' : '1px solid #ffb700'
+                          }}
+                        >
+                          {record?.device_hwid ? 'DAEMON LINKED' : 'UNBOUND'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '3px', fontFamily: 'monospace' }}>
+                        HWID: <strong style={{ color: '#f8fafc' }}>{record?.device_hwid || 'None (Open APK on phone & tap INITIALIZE STREAMER)'}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '20px', alignItems: 'center', fontSize: '12px', color: '#94a3b8' }}>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '10px', color: '#64748b' }}>DEVICE SLOTS:</span>
+                      <strong style={{ color: '#38bdf8' }}>{record?.devices_used || (record?.device_hwid ? 1 : 0)} / {record?.devices_max || 1} Used</strong>
+                    </div>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '10px', color: '#64748b' }}>LAST HEARTBEAT:</span>
+                      <strong style={{ color: '#f8fafc' }}>
+                        {record?.last_heartbeat ? new Date(record.last_heartbeat).toLocaleTimeString() : (record?.device_hwid ? 'Active' : 'Awaiting Connection')}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '10px', color: '#64748b' }}>ENGINE TARGET:</span>
+                      <strong style={{ color: '#05df72' }}>Stranger (ARM64)</strong>
+                    </div>
                   </div>
                 </div>
 
