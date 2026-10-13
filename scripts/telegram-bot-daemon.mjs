@@ -1,12 +1,21 @@
 import http from 'http'
+import ws from 'ws'
 import { createClient } from '@supabase/supabase-js'
+
+// Polyfill global WebSocket for Supabase Realtime across Node runtimes
+if (!globalThis.WebSocket) {
+  globalThis.WebSocket = ws
+}
 
 const BOT_TOKEN = '8866404681:AAGMdL_gxsI4yiwtZswc3Vp4xnwlKGQrnZE'
 const OWNER_CHAT_ID = '5831800759' // @montage007pc (Montage)
 const SUPABASE_URL = 'https://zvjqpigduyvczidzafus.supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR'
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false },
+  realtime: { transport: ws }
+})
 
 // Lightweight HTTP server for Render Cloud Web Service & Health Checks
 const PORT = parseInt(process.env.PORT, 10) || 10000
