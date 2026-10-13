@@ -17,24 +17,175 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { transport: ws }
 })
 
-// Lightweight HTTP server for Render Cloud Web Service & Health Checks
+// In-Memory VIP Realtime Bridge (Sub-50ms RAM latency, zero Supabase database load)
+const vipStates = new Map()
+
+function getVipState(key) {
+  const normKey = String(key || '').trim().toUpperCase()
+  if (!normKey) return null
+  if (!vipStates.has(normKey)) {
+    vipStates.set(normKey, {
+      license_key: normKey,
+      is_online: false,
+      is_paused: false,
+      is_active: true,
+      in_game_panel: true,
+      aim_silent: false,
+      esp_box: true,
+      esp_line: false,
+      esp_skeleton: false,
+      esp_name: false,
+      esp_distance: true,
+      esp_health: false,
+      esp_count: true,
+      speed_hack: false,
+      ghost_hack: false,
+      enemies: 0,
+      bots: 0,
+      emergency_purge: false,
+      last_heartbeat: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      version: 1
+    })
+  }
+  return vipStates.get(normKey)
+}
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey',
+  'Content-Type': 'application/json'
+}
+
+// Lightweight HTTP server for Render Cloud Web Service, Health Checks & VIP Bridge
 const PORT = parseInt(process.env.PORT, 10) || 10000
-const healthServer = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'application/json' })
+const healthServer = http.createServer(async (req, res) => {
+  const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+  const pathname = urlObj.pathname
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, CORS_HEADERS)
+    return res.end()
+  }
+
+  // 1. VIP Realtime State Query: GET /api/vip/state?key=RYMON-XXXX
+  if (req.method === 'GET' && pathname === '/api/vip/state') {
+    const key = urlObj.searchParams.get('key')
+    const state = getVipState(key)
+    if (!state) {
+      res.writeHead(400, CORS_HEADERS)
+      return res.end(JSON.stringify({ ok: false, error: 'Missing key parameter' }))
+    }
+    res.writeHead(200, CORS_HEADERS)
+    return res.end(JSON.stringify({ ok: true, state }))
+  }
+
+  // 2. VIP Realtime Patch: POST/PATCH /api/vip/patch
+  if ((req.method === 'POST' || req.method === 'PATCH') && pathname === '/api/vip/patch') {
+    let body = ''
+    req.on('data', (chunk) => { body += chunk })
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}')
+        const key = payload.license_key || payload.key || urlObj.searchParams.get('key')
+        const state = getVipState(key)
+        if (!state) {
+          res.writeHead(400, CORS_HEADERS)
+          return res.end(JSON.stringify({ ok: false, error: 'Invalid or missing key' }))
+        }
+
+        // Apply incoming fields
+        const allowed = [
+          'is_online', 'is_paused', 'is_active', 'in_game_panel',
+          'aim_silent', 'esp_box', 'esp_line', 'esp_skeleton',
+          'esp_name', 'esp_distance', 'esp_health', 'esp_count',
+          'speed_hack', 'ghost_hack', 'enemies', 'bots', 'emergency_purge'
+        ]
+        for (const f of allowed) {
+          if (payload[f] !== undefined) {
+            state[f] = payload[f]
+          }
+        }
+        state.last_heartbeat = new Date().toISOString()
+        state.updated_at = new Date().toISOString()
+        state.version = (state.version || 1) + 1
+
+        res.writeHead(200, CORS_HEADERS)
+        return res.end(JSON.stringify({ ok: true, state }))
+      } catch (e) {
+        res.writeHead(400, CORS_HEADERS)
+        return res.end(JSON.stringify({ ok: false, error: 'Malformed JSON payload' }))
+      }
+    })
+    return
+  }
+
+  // 3. VIP Command Toggle: POST /api/vip/command
+  if (req.method === 'POST' && pathname === '/api/vip/command') {
+    let body = ''
+    req.on('data', (chunk) => { body += chunk })
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}')
+        const key = payload.key || payload.license_key
+        const toggle = payload.toggle
+        const value = payload.value
+        const state = getVipState(key)
+        if (!state || !toggle) {
+          res.writeHead(400, CORS_HEADERS)
+          return res.end(JSON.stringify({ ok: false, error: 'Missing key or toggle' }))
+        }
+        state[toggle] = value
+        state.updated_at = new Date().toISOString()
+        state.version = (state.version || 1) + 1
+
+        res.writeHead(200, CORS_HEADERS)
+        return res.end(JSON.stringify({ ok: true, state }))
+      } catch (e) {
+        res.writeHead(400, CORS_HEADERS)
+        return res.end(JSON.stringify({ ok: false, error: 'Malformed JSON payload' }))
+      }
+    })
+    return
+  }
+
+  // 4. Default Health Check
+  res.writeHead(200, CORS_HEADERS)
   res.end(
     JSON.stringify({
       status: 'online',
-      service: 'RYMON OFFICIAL TELEGRAM BOT DAEMON',
+      service: 'RYMON OFFICIAL TELEGRAM BOT & VIP REALTIME BRIDGE',
       bot: '@Rymon007bot',
       owner: '@montage007pc',
+      active_vip_sessions: vipStates.size,
       uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString()
     })
   )
 })
 healthServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`🌐 [Render Web Service] Health server listening on 0.0.0.0:${PORT}`)
+  console.log(`🌐 [Render Web Service] Health & VIP Realtime Bridge listening on 0.0.0.0:${PORT}`)
 })
+
+// Gentle 60s background flush to Supabase for active VIP players (low DB load)
+setInterval(async () => {
+  for (const [key, state] of vipStates.entries()) {
+    if (state.is_online) {
+      try {
+        const telem = `VIP|P:${state.in_game_panel ? 1 : 0}|E:${state.enemies || 0}|B:${state.bots || 0}`
+        await supabase
+          .from('rymon_streamer_controls')
+          .update({
+            is_online: true,
+            last_heartbeat: new Date().toISOString(),
+            streamer_name: telem
+          })
+          .eq('license_key', key)
+      } catch {}
+    }
+  }
+}, 60000)
 
 // Auto Self-Ping to prevent Render free instance from sleeping
 if (process.env.RENDER_EXTERNAL_URL) {
