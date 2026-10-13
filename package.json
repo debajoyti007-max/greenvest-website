@@ -8,6 +8,8 @@
     "check:env": "node scripts/setup-env.mjs --check-only",
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build-all.mjs",
+    "start": "node scripts/telegram-bot-daemon.mjs",
+    "bot": "node scripts/telegram-bot-daemon.mjs",
     "lint": "oxlint",
     "test": "node --test tests/app.test.mjs",
     "preview": "vite preview"

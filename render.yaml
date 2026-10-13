@@ -3,11 +3,11 @@ services:
     name: rymon-telegram-bot
     runtime: node
     plan: free
-    region: singapore
+    region: oregon
     buildCommand: npm install
     startCommand: node scripts/telegram-bot-daemon.mjs
     envVars:
       - key: NODE_VERSION
-        value: 20.19.0
+        value: "20"
       - key: PORT
         value: 10000
