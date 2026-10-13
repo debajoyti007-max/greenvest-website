@@ -1,3 +1,4 @@
+import http from 'http'
 import { createClient } from '@supabase/supabase-js'
 
 const BOT_TOKEN = '8866404681:AAGMdL_gxsI4yiwtZswc3Vp4xnwlKGQrnZE'
@@ -6,6 +7,34 @@ const SUPABASE_URL = 'https://zvjqpigduyvczidzafus.supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+// Lightweight HTTP server for Render Cloud Web Service & Health Checks
+const PORT = process.env.PORT || 10000
+const healthServer = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(
+    JSON.stringify({
+      status: 'online',
+      service: 'RYMON OFFICIAL TELEGRAM BOT DAEMON',
+      bot: '@Rymon007bot',
+      owner: '@montage007pc',
+      uptime: Math.round(process.uptime()),
+      timestamp: new Date().toISOString()
+    })
+  )
+})
+healthServer.listen(PORT, () => {
+  console.log(`🌐 [Render Web Service] Health server listening on port ${PORT}`)
+})
+
+// Auto Self-Ping to prevent Render free instance from sleeping
+if (process.env.RENDER_EXTERNAL_URL) {
+  const pingUrl = `${process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '')}/health`
+  console.log(`⏱️ [Render Keep-Alive] Scheduled 10-minute self-ping: ${pingUrl}`)
+  setInterval(() => {
+    fetch(pingUrl).catch(() => {})
+  }, 10 * 60 * 1000)
+}
 
 const DEFAULT_PRICES = {
   '2 Hours': 15,

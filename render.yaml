@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: rymon-telegram-bot
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install
+    startCommand: node scripts/telegram-bot-daemon.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: PORT
+        value: 10000
