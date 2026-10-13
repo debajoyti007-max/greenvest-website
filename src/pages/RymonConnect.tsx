@@ -34,6 +34,10 @@ import {
   autoDetectTelegramChatId,
   pollAndReplyTelegramBotCommands,
   SOVEREIGN_CONNECT_CONFIG,
+  type RymonReferral,
+  fetchReferralCodes,
+  createReferralCode,
+  deleteReferralCode,
   registerWithReferral,
   renewUserSubscriptionBackend,
   togglePauseLicenseBackend,
@@ -68,6 +72,7 @@ type TabType =
   | 'telegram'
   | 'users'
   | 'connect-api'
+  | 'referrals'
   | 'add-balance'
   | 'delete'
   | 'extend'
@@ -201,6 +206,16 @@ export default function RymonConnect() {
   const [regLoading, setRegLoading] = useState(false)
   const [regError, setRegError] = useState('')
 
+  // Sovereign Referral Codes Engine State
+  const [referralList, setReferralList] = useState<RymonReferral[]>([])
+  const [refTargetRole, setRefTargetRole] = useState<'reseller' | 'admin'>('reseller')
+  const [refSubDays, setRefSubDays] = useState<30 | 60>(30)
+  const [refInitialBal, setRefInitialBal] = useState<number | ''>('')
+  const [refCustomCode, setRefCustomCode] = useState('')
+  const [refMaxUses, setRefMaxUses] = useState(1)
+  const [refCreating, setRefCreating] = useState(false)
+  const [copiedRefCode, setCopiedRefCode] = useState<string | null>(null)
+
   // Sovereign Connect URL & APK Test Sandbox State
   const [testConnectKey, setTestConnectKey] = useState('')
   const [testConnectHwid, setTestConnectHwid] = useState('DEVICE-SIM-ANDROID-9981')
@@ -278,7 +293,7 @@ export default function RymonConnect() {
     async function loadLiveData() {
       const isStreamerRole = currentUser?.role === 'streamer'
       await Promise.all([syncPricingFromSupabase(), syncSecurityPolicyFromSupabase()])
-      const [lcs, usrs, acts, tgCfg, ctrls, tgBindings] = await Promise.all([
+      const [lcs, usrs, acts, tgCfg, ctrls, tgBindings, refs] = await Promise.all([
         fetchAllLicenses(currentUser),
         fetchAllAccounts(currentUser),
         isStreamerRole ? Promise.resolve([]) : fetchAllActivities(),
@@ -291,7 +306,8 @@ export default function RymonConnect() {
               is_active: true
             }),
         fetchAllStreamerControls(currentUser),
-        fetchTelegramResellerBindings()
+        fetchTelegramResellerBindings(),
+        fetchReferralCodes(currentUser)
       ])
 
       if (isMounted) {
@@ -304,6 +320,7 @@ export default function RymonConnect() {
         setTelegramConfig(tgCfg)
         setStreamerControls(ctrls)
         setTgResellerBindings(tgBindings)
+        setReferralList(refs)
 
         // Auto-select a target license key for Staff so Streamer Remote works immediately
         setCurrentKey((prevKey) => {
@@ -1572,6 +1589,56 @@ export default function RymonConnect() {
     }
   }
 
+  const handleCreateReferral = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!isOwner && refTargetRole !== 'reseller') {
+      alert('Power restriction: Only the Root Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
+      return
+    }
+    setRefCreating(true)
+    const bal = typeof refInitialBal === 'number' ? refInitialBal : 0
+    const res = await createReferralCode(
+      currentUser?.username || 'debajoyti',
+      isOwner ? refTargetRole : 'reseller',
+      bal,
+      refCustomCode,
+      refMaxUses,
+      refSubDays
+    )
+    setRefCreating(false)
+    if (res.success) {
+      if (res.remainingBalance !== undefined && currentUser) {
+        setWalletBalance(res.remainingBalance)
+        const updatedMe = { ...currentUser, balance: res.remainingBalance }
+        setCurrentUser(updatedMe)
+        localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
+      }
+      showToast(`Created ${refSubDays}D subscription invite code: ${res.code}`)
+      setRefCustomCode('')
+      setRefInitialBal('')
+      const updatedList = await fetchReferralCodes(currentUser)
+      setReferralList(updatedList)
+    } else {
+      alert(res.message || 'Failed to create referral code')
+    }
+  }
+
+  const handleDeleteReferral = async (id: number) => {
+    if (!confirm('Are you sure you want to deactivate and remove this invite code?')) return
+    const success = await deleteReferralCode(id)
+    if (success) {
+      setReferralList((prev) => prev.filter((r) => r.id !== id))
+      showToast('Referral code deleted')
+    }
+  }
+
+  const handleCopyReferral = (code: string) => {
+    navigator.clipboard.writeText(code)
+    setCopiedRefCode(code)
+    showToast(`Copied ${code} to clipboard`)
+    setTimeout(() => setCopiedRefCode(null), 2500)
+  }
+
   const handleRenewUserSubscription = async (targetUsername: string, days: 30 | 60) => {
     const res = await renewUserSubscriptionBackend(
       targetUsername,
@@ -2465,6 +2532,20 @@ export default function RymonConnect() {
                   {(isOwner || isAdmin) && (
                     <>
                       <div style={styles.navCategoryHeader}>MANAGEMENT</div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('referrals')
+                          setMobileMenuOpen(false)
+                        }}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'referrals' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>🎟️</span>
+                        <span>Invite Codes</span>
+                        <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER' : 'ADMIN'}</span>
+                      </button>
                       <button
                         onClick={() => {
                           setActiveTab('users')
@@ -5415,6 +5496,309 @@ export default function RymonConnect() {
             )}
 
             {/* 12. SOVEREIGN CONNECT URL & APK ENGINE (OWNER ONLY) */}
+            {/* 11. REFERRAL / INVITE CODE ENGINE (OWNER & ADMIN) */}
+            {activeTab === 'referrals' && (
+              <div style={styles.viewContainer}>
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>Role Invite Codes Engine</h2>
+                    <p style={styles.pageSubtitle}>
+                      {isOwner
+                        ? 'Generate role-bound invitation codes for prospective Resellers and Admins. Users self-register with their own username and password.'
+                        : 'Generate role-bound invitation codes for prospective downline Resellers. Users self-register with their own username and password.'}
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER CONSOLE' : 'ADMIN CONSOLE'}</span>
+                    <span style={styles.greenPulseBadge}>● SOVEREIGN PROTOCOL</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '24px', alignItems: 'start' }}>
+                  {/* Card 1: Generate Code */}
+                  <div style={styles.managementCard}>
+                    <div style={styles.cardHeader}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ ...styles.actionIconCircle, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff' }}>
+                          🎟️
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Create Role Invite Code</h3>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                            Binds role & initial balance atomically upon user registration
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleCreateReferral} style={{ marginTop: '20px' }}>
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>TARGET USER ROLE</label>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setRefTargetRole('reseller')}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border: refTargetRole === 'reseller' ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
+                              background: refTargetRole === 'reseller' ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: refTargetRole === 'reseller' ? '#00d9ff' : '#94a3b8',
+                              fontWeight: 700,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💼 RESELLER
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!isOwner) {
+                                alert('Power restriction: Only the Supreme Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
+                                return
+                              }
+                              setRefTargetRole('admin')
+                            }}
+                            disabled={!isOwner}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border: refTargetRole === 'admin' ? '1px solid #05df72' : '1px solid rgba(255,255,255,0.08)',
+                              background: refTargetRole === 'admin' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: !isOwner ? '#475569' : refTargetRole === 'admin' ? '#05df72' : '#94a3b8',
+                              fontWeight: 700,
+                              fontSize: '12px',
+                              cursor: !isOwner ? 'not-allowed' : 'pointer',
+                              opacity: !isOwner ? 0.5 : 1
+                            }}
+                            title={!isOwner ? 'Supreme Owner only' : 'Create Administrator invite code'}
+                          >
+                            🛡️ ADMINISTRATOR {!isOwner && '(OWNER ONLY)'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>RESELLER / ROLE SUBSCRIPTION VALIDITY (NO LIFETIME)</label>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setRefSubDays(30)}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border: refSubDays === 30 ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
+                              background: refSubDays === 30 ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: refSubDays === 30 ? '#00d9ff' : '#94a3b8',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ⏳ 30 DAYS SUBSCRIPTION
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRefSubDays(60)}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border: refSubDays === 60 ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.08)',
+                              background: refSubDays === 60 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: refSubDays === 60 ? '#c084fc' : '#94a3b8',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💎 60 DAYS SUBSCRIPTION
+                          </button>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                          Reseller account expires automatically after {refSubDays} days unless renewed by Owner/Admin.
+                        </div>
+                      </div>
+
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>STARTING WALLET BALANCE (₹ INR)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="100"
+                          value={refInitialBal}
+                          onChange={(e) => setRefInitialBal(e.target.value === '' ? '' : Number(e.target.value))}
+                          placeholder="e.g. 5000 (Credits to wallet upon signup)"
+                          style={styles.keyInput}
+                        />
+                        <div style={{ fontSize: '11px', color: isOwner ? '#fde047' : '#38bdf8', marginTop: '4px', fontWeight: 600 }}>
+                          {isOwner
+                            ? '👑 Owner Privilege: Starting balance is minted for FREE (₹0 deducted).'
+                            : `💳 Admin Wallet Notice: ₹${((Number(refInitialBal) || 0) * refMaxUses).toLocaleString('en-IN')} will be deducted from your wallet (${refMaxUses} use × ₹${(Number(refInitialBal) || 0).toLocaleString('en-IN')}).`}
+                        </div>
+                      </div>
+
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>CUSTOM CODE (OPTIONAL)</label>
+                        <input
+                          type="text"
+                          value={refCustomCode}
+                          onChange={(e) => setRefCustomCode(e.target.value.toUpperCase())}
+                          placeholder="e.g. RYMON-RESELLER-VIP (Blank for auto)"
+                          style={styles.keyInput}
+                        />
+                      </div>
+
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>MAX USES / REDEMPTIONS</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={refMaxUses}
+                          onChange={(e) => setRefMaxUses(Math.max(1, parseInt(e.target.value) || 1))}
+                          style={styles.keyInput}
+                          required
+                        />
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                          Each use creates 1 unique real account. Recommended: 1 use per person.
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={refCreating}
+                        style={{ ...styles.submitBtn, marginTop: '16px' }}
+                      >
+                        {refCreating ? 'CREATING CODE IN SUPABASE...' : `🎟️ GENERATE ${refSubDays}D INVITE CODE`}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Card 2: Active Codes Table */}
+                  <div style={styles.managementCard}>
+                    <div style={styles.cardHeader}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Active Referral Codes ({referralList.length})</h3>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                            Real codes stored in Supabase <code>public.rymon_referrals</code>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => fetchReferralCodes(currentUser).then(setReferralList)}
+                          style={{ ...styles.chipBtn, fontSize: '11px' }}
+                        >
+                          🔄 Refresh
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '16px', overflowX: 'auto' }}>
+                      <table style={styles.dataTable}>
+                        <thead>
+                          <tr>
+                            <th style={styles.th}>INVITE CODE</th>
+                            <th style={styles.th}>ROLE & SUB</th>
+                            <th style={styles.th}>STARTING BAL</th>
+                            <th style={styles.th}>USES</th>
+                            <th style={styles.th}>STATUS</th>
+                            <th style={styles.th}>ACTION</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {referralList.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} style={{ ...styles.td, textAlign: 'center', color: '#64748b', padding: '30px' }}>
+                                No active invite codes. Generate one on the left to onboard real staff.
+                              </td>
+                            </tr>
+                          ) : (
+                            referralList.map((ref) => (
+                              <tr key={ref.id} style={styles.tr}>
+                                <td style={styles.td}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#00d9ff', fontSize: '13px' }}>
+                                      {ref.code}
+                                    </span>
+                                    <button
+                                      onClick={() => handleCopyReferral(ref.code)}
+                                      style={styles.miniCopyBtn}
+                                      title="Copy code"
+                                    >
+                                      {copiedRefCode === ref.code ? '✓' : '📋'}
+                                    </button>
+                                  </div>
+                                </td>
+                                <td style={styles.td}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span style={{
+                                      ...styles.planBadge,
+                                      background: ref.target_role === 'admin' ? 'rgba(5, 223, 114, 0.15)' : 'rgba(0, 217, 255, 0.15)',
+                                      color: ref.target_role === 'admin' ? '#05df72' : '#00d9ff'
+                                    }}>
+                                      {ref.target_role.toUpperCase()}
+                                    </span>
+                                    <span style={{
+                                      fontSize: '10px',
+                                      fontWeight: 800,
+                                      padding: '2px 6px',
+                                      borderRadius: '6px',
+                                      background: ref.subscription_days === 60 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(0, 217, 255, 0.15)',
+                                      color: ref.subscription_days === 60 ? '#c084fc' : '#38bdf8',
+                                      border: ref.subscription_days === 60 ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(0, 217, 255, 0.3)'
+                                    }}>
+                                      {ref.subscription_days === 60 ? '60D SUB' : '30D SUB'}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td style={styles.td}>
+                                  <span style={{ color: '#05df72', fontWeight: 700 }}>
+                                    ₹{ref.initial_balance.toLocaleString('en-IN')}
+                                  </span>
+                                </td>
+                                <td style={styles.td}>
+                                  <span style={{ color: '#cbd5e1', fontSize: '12px' }}>
+                                    {ref.times_used} / {ref.max_uses}
+                                  </span>
+                                </td>
+                                <td style={styles.td}>
+                                  <span style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    color: ref.is_active ? '#05df72' : '#ef4444'
+                                  }}>
+                                    ● {ref.is_active ? 'ACTIVE' : 'DEPLETED'}
+                                  </span>
+                                </td>
+                                <td style={styles.td}>
+                                  <button
+                                    onClick={() => handleDeleteReferral(ref.id)}
+                                    style={{ ...styles.actionIconBtn, color: '#ef4444' }}
+                                    title="Revoke / Delete Code"
+                                  >
+                                    🗑️
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div style={{ marginTop: '20px', padding: '12px 16px', background: 'rgba(0, 217, 255, 0.05)', border: '1px solid rgba(0, 217, 255, 0.15)', borderRadius: '10px', fontSize: '12px', color: '#94a3b8' }}>
+                      💡 <strong style={{ color: '#00d9ff' }}>How New Staff Onboard:</strong> Give this invite code to your reseller or admin. When they open this site, they click <strong>"Register with Invite Code"</strong> on the login screen, enter their own desired username, password, email, and the invite code. Their account is created immediately with a <strong>30-Day or 60-Day subscription</strong> and starting wallet balance!
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'connect-api' && isOwner && (
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
