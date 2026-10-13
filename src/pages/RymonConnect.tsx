@@ -57,7 +57,6 @@ import {
   fetchAllStreamerControls,
   isStreamerKeyActivelyPlaying,
   buildDefaultStreamerControlPayload,
-  isVipTierKey,
   fetchRenderVipState,
   sendRenderVipCommand,
   sendRenderVipPatch,
@@ -500,46 +499,41 @@ export default function RymonConnect() {
             devices_used: licData?.devices_used ?? ctrlData.devices_used ?? 0,
             devices_max: licData?.devices_max ?? ctrlData.devices_max ?? 1,
             last_heartbeat: ctrlData.last_heartbeat || licData?.last_heartbeat,
-            is_paused: licData?.is_paused ?? ctrlData.is_paused ?? false
+            is_paused: Boolean(ctrlData.is_paused || licData?.is_paused)
           }
-          const keyRecord = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
-          const isVip = isVipTierKey(rawMerged) || isVipTierKey(keyRecord)
-
-          if (isVip) {
-            try {
-              const vipState = await fetchRenderVipState(currentKey)
-              if (vipState && isMounted) {
-                const mergedVip: StreamerControlRecord = {
-                  ...rawMerged,
-                  aim_silent: vipState.aim_silent ?? rawMerged.aim_silent,
-                  hit_rate: vipState.hit_rate ?? rawMerged.hit_rate,
-                  aim_fov: vipState.aim_fov ?? rawMerged.aim_fov,
-                  esp_box: vipState.esp_box ?? rawMerged.esp_box,
-                  esp_line: vipState.esp_line ?? rawMerged.esp_line,
-                  esp_skeleton: vipState.esp_skeleton ?? rawMerged.esp_skeleton,
-                  esp_name: vipState.esp_name ?? rawMerged.esp_name,
-                  esp_distance: vipState.esp_distance ?? rawMerged.esp_distance,
-                  esp_health: vipState.esp_health ?? rawMerged.esp_health,
-                  esp_count: vipState.esp_count ?? rawMerged.esp_count,
-                  esp_radar: vipState.esp_radar ?? rawMerged.esp_radar,
-                  speed_hack: vipState.speed_hack ?? rawMerged.speed_hack,
-                  speed_multiplier: vipState.speed_multiplier ?? rawMerged.speed_multiplier,
-                  ghost_hack: vipState.ghost_hack ?? rawMerged.ghost_hack,
-                  no_reload: vipState.no_reload ?? rawMerged.no_reload,
-                  no_recoil: vipState.no_recoil ?? rawMerged.no_recoil,
-                  theme_color_index: vipState.theme_color_index ?? rawMerged.theme_color_index,
-                  streamer_name: vipState.streamer_name || rawMerged.streamer_name,
-                  is_online: vipState.is_online ?? rawMerged.is_online,
-                  is_paused: vipState.is_paused ?? rawMerged.is_paused,
-                  last_heartbeat: vipState.last_heartbeat || rawMerged.last_heartbeat
-                }
-                const activelyPlaying = isStreamerKeyActivelyPlaying(mergedVip)
-                setRecord({ ...mergedVip, is_online: activelyPlaying })
-                setIsLiveConnected(true)
-                return
+          try {
+            const vipState = await fetchRenderVipState(currentKey)
+            if (vipState && isMounted) {
+              const mergedVip: StreamerControlRecord = {
+                ...rawMerged,
+                aim_silent: vipState.aim_silent ?? rawMerged.aim_silent,
+                hit_rate: vipState.hit_rate ?? rawMerged.hit_rate,
+                aim_fov: vipState.aim_fov ?? rawMerged.aim_fov,
+                esp_box: vipState.esp_box ?? rawMerged.esp_box,
+                esp_line: vipState.esp_line ?? rawMerged.esp_line,
+                esp_skeleton: vipState.esp_skeleton ?? rawMerged.esp_skeleton,
+                esp_name: vipState.esp_name ?? rawMerged.esp_name,
+                esp_distance: vipState.esp_distance ?? rawMerged.esp_distance,
+                esp_health: vipState.esp_health ?? rawMerged.esp_health,
+                esp_count: vipState.esp_count ?? rawMerged.esp_count,
+                esp_radar: vipState.esp_radar ?? rawMerged.esp_radar,
+                speed_hack: vipState.speed_hack ?? rawMerged.speed_hack,
+                speed_multiplier: vipState.speed_multiplier ?? rawMerged.speed_multiplier,
+                ghost_hack: vipState.ghost_hack ?? rawMerged.ghost_hack,
+                no_reload: vipState.no_reload ?? rawMerged.no_reload,
+                no_recoil: vipState.no_recoil ?? rawMerged.no_recoil,
+                theme_color_index: vipState.theme_color_index ?? rawMerged.theme_color_index,
+                streamer_name: vipState.streamer_name || rawMerged.streamer_name,
+                is_online: vipState.is_online ?? rawMerged.is_online,
+                is_paused: Boolean(vipState.is_paused ?? (ctrlData.is_paused || licData?.is_paused)),
+                last_heartbeat: vipState.last_heartbeat || rawMerged.last_heartbeat
               }
-            } catch {}
-          }
+              const activelyPlaying = isStreamerKeyActivelyPlaying(mergedVip)
+              setRecord({ ...mergedVip, is_online: activelyPlaying })
+              setIsLiveConnected(true)
+              return
+            }
+          } catch {}
 
           const activelyPlaying = isStreamerKeyActivelyPlaying(rawMerged)
           setRecord({ ...rawMerged, is_online: activelyPlaying })
@@ -573,9 +567,7 @@ export default function RymonConnect() {
       }
     }
 
-    const activeKeyRec = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
-    const isVipKeyActive = isVipTierKey(activeKeyRec)
-    const pollInterval = isVipKeyActive ? 750 : 2500
+    const pollInterval = 750
 
     loadTelemetry()
     const fastSyncTimer = setInterval(() => {
@@ -1156,9 +1148,7 @@ export default function RymonConnect() {
 
   const handleEmergencyPurge = async () => {
     setShowPurgeModal(false)
-    const activeKeyRec = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
-    const isVip = isVipTierKey(record) || isVipTierKey(activeKeyRec)
-    if (isVip && currentKey) {
+    if (currentKey) {
       sendRenderVipPatch(currentKey, { emergency_purge: true, is_online: false })
     }
 
@@ -1187,11 +1177,8 @@ export default function RymonConnect() {
 
     setRecord((prev) => (prev ? { ...prev, streamer_name: nextName, updated_at: nowIso } : null))
 
-    const activeKeyRec = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
-    const isVip = isVipTierKey(record) || isVipTierKey(activeKeyRec)
-    if (isVip && currentKey) {
-      sendRenderVipPatch(currentKey, { streamer_name: nextName, in_game_panel: nextOverlayOn })
-    }
+    // Always send patch to Render VIP bridge (ensures in-memory zero-latency update)
+    sendRenderVipPatch(currentKey, { streamer_name: nextName, in_game_panel: nextOverlayOn })
 
     if (supabase) {
       try {
@@ -1210,20 +1197,14 @@ export default function RymonConnect() {
 
   const handleToggleStealthFreeze = async () => {
     if (!currentKey) return
-    if (isStaff) {
-      await handleTogglePauseKey(currentKey)
-      return
-    }
     const nextPaused = !Boolean(record?.is_paused)
     const nowIso = new Date().toISOString()
     setRecord((prev) => (prev ? { ...prev, is_paused: nextPaused, updated_at: nowIso } : null))
 
-    const activeKeyRec = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
-    const isVip = isVipTierKey(record) || isVipTierKey(activeKeyRec)
-    if (isVip && currentKey) {
-      sendRenderVipPatch(currentKey, { is_paused: nextPaused })
-    }
+    // 1. Immediately patch Render VIP bridge for zero-latency in-memory sync
+    sendRenderVipPatch(currentKey, { is_paused: nextPaused })
 
+    // 2. Patch Supabase streamer controls
     if (supabase) {
       try {
         await supabase
@@ -1231,7 +1212,25 @@ export default function RymonConnect() {
           .update({ is_paused: nextPaused, updated_at: nowIso })
           .eq('license_key', currentKey)
       } catch {}
+
+      // 3. Keep rymon_licenses in sync so telemetry refresh does not revert is_paused
+      try {
+        await supabase
+          .from('rymon_licenses')
+          .update({ is_paused: nextPaused, updated_at: nowIso })
+          .eq('license_key', currentKey)
+      } catch {}
     }
+
+    // 4. Update local keys list if staff viewing admin/reseller table
+    setKeysList((prev) =>
+      prev.map((k) =>
+        k.license_key.toUpperCase() === currentKey.toUpperCase()
+          ? { ...k, is_paused: nextPaused }
+          : k
+      )
+    )
+
     showToast(nextPaused ? '❄️ Stealth Freeze Active (Visuals Hidden)' : '▶️ Resumed Live Controls')
   }
 
@@ -1773,6 +1772,8 @@ export default function RymonConnect() {
     const res = await togglePauseLicenseBackend(keyString, currentUser?.username || 'debajoyti')
     if (res.success) {
       showToast(res.message)
+      // Keep Render VIP in sync if streamer daemon is attached
+      sendRenderVipPatch(keyString, { is_paused: res.is_paused })
       setKeysList((prev) =>
         prev.map((k) =>
           k.license_key === keyString
@@ -4573,7 +4574,7 @@ export default function RymonConnect() {
                           type="text"
                           value={telegramConfig.bot_token}
                           onChange={(e) => setTelegramConfig({ ...telegramConfig, bot_token: e.target.value })}
-                          placeholder={OFFICIAL_TELEGRAM_BOT_TOKEN}
+                          placeholder={telegramConfig.bot_token ? "••••••••:•••••••••••••••••••••••••••••••••••" : "Using Pre-Linked Server Bot (@Rymon007bot)"}
                           style={{ ...styles.keyInput, fontFamily: 'monospace', fontSize: '12px' }}
                         />
                         <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>

@@ -2967,7 +2967,8 @@ export async function deleteNotificationBackend(id: number): Promise<boolean> {
 
 export const OFFICIAL_TELEGRAM_BOT_NAME = 'RYMON OFFICIAL'
 export const OFFICIAL_TELEGRAM_BOT_USERNAME = '@Rymon007bot'
-export const OFFICIAL_TELEGRAM_BOT_TOKEN = '8866404681:AAGMdL_gxsI4yiwtZswc3Vp4xnwlKGQrnZE'
+// Bot token is securely managed on Render backend and never exposed to client bundles
+export const OFFICIAL_TELEGRAM_BOT_TOKEN = ''
 export const OFFICIAL_OWNER_CHAT_ID = '5831800759'
 
 export async function selfServiceResetKeyHwidBackend(
@@ -3224,6 +3225,21 @@ export async function autoDetectTelegramChatId(
   message: string
 }> {
   const cleanToken = (botToken || OFFICIAL_TELEGRAM_BOT_TOKEN).trim()
+  if (!cleanToken) {
+    await saveTelegramConfigBackend({
+      bot_token: '',
+      chat_id: OFFICIAL_OWNER_CHAT_ID,
+      channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
+      is_active: true
+    })
+    return {
+      success: true,
+      chatId: OFFICIAL_OWNER_CHAT_ID,
+      chatTitle: 'Montage (@montage007pc)',
+      chatUsername: OFFICIAL_TELEGRAM_BOT_USERNAME,
+      message: `✅ Linked to Owner Chat ID ${OFFICIAL_OWNER_CHAT_ID} (@montage007pc) via official bot!`
+    }
+  }
   try {
     const resp = await fetch(`https://api.telegram.org/bot${cleanToken}/getUpdates?limit=50`)
     const json = await resp.json()
@@ -3561,11 +3577,21 @@ export async function dispatchTelegramMessage(
       payload.reply_markup = replyMarkup
     }
 
-    const resp = await fetch(`https://api.telegram.org/bot${activeToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
+    let resp: Response
+    if (activeToken) {
+      resp = await fetch(`https://api.telegram.org/bot${activeToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    } else {
+      // Secure server-side relay via Render: keeps the official bot token protected from client bundles
+      resp = await fetch('https://rymon-telegram-bot.onrender.com/api/telegram/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    }
 
     const json = await resp.json()
     if (json.ok) {
@@ -3575,7 +3601,7 @@ export async function dispatchTelegramMessage(
         message: `✅ Dispatched via @Rymon007bot to Chat ID ${activeChatId}!`
       }
     } else {
-      return { success: false, message: json.description || 'Telegram API returned error' }
+      return { success: false, message: json.description || json.error || 'Telegram API returned error' }
     }
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : 'Network error'

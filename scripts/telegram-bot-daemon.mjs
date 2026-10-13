@@ -1,3 +1,6 @@
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import http from 'http'
 import ws from 'ws'
 import { createClient } from '@supabase/supabase-js'
@@ -7,10 +10,30 @@ if (!globalThis.WebSocket) {
   globalThis.WebSocket = ws
 }
 
-const BOT_TOKEN = '8866404681:AAGMdL_gxsI4yiwtZswc3Vp4xnwlKGQrnZE'
-const OWNER_CHAT_ID = '5831800759' // @montage007pc (Montage)
-const SUPABASE_URL = 'https://zvjqpigduyvczidzafus.supabase.co'
-const SUPABASE_ANON_KEY = 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR'
+// Safely resolve secrets from environment variables or local .env (never expose or hardcode in git)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const envPath = path.resolve(__dirname, '../.env')
+
+function resolveSecret(key, fallback = '') {
+  if (process.env[key]) return process.env[key].trim()
+  if (fs.existsSync(envPath)) {
+    try {
+      const content = fs.readFileSync(envPath, 'utf8')
+      const match = content.match(new RegExp(`^${key}\\s*=\\s*(.+)`, 'm'))
+      if (match) return match[1].trim()
+    } catch {}
+  }
+  return fallback
+}
+
+const BOT_TOKEN = resolveSecret('TELEGRAM_BOT_TOKEN') || resolveSecret('BOT_TOKEN')
+if (!BOT_TOKEN) {
+  console.error('❌ [CRITICAL] Neither TELEGRAM_BOT_TOKEN nor BOT_TOKEN found in environment!')
+}
+const OWNER_CHAT_ID = resolveSecret('OWNER_CHAT_ID', '5831800759') // @montage007pc (Montage)
+const SUPABASE_URL = resolveSecret('VITE_SUPABASE_URL', 'https://zvjqpigduyvczidzafus.supabase.co')
+const SUPABASE_ANON_KEY = resolveSecret('VITE_SUPABASE_ANON_KEY', 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR')
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false },
@@ -66,7 +89,7 @@ function getVipState(key) {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, X-License-Key',
   'Content-Type': 'application/json'
 }
 
@@ -180,7 +203,45 @@ const healthServer = http.createServer(async (req, res) => {
     return
   }
 
-  // 4. Default Health Check
+  // 4. Secure Telegram Message Dispatch Relay (Prevents exposing BOT_TOKEN to web clients)
+  if (req.method === 'POST' && pathname === '/api/telegram/dispatch') {
+    let body = ''
+    req.on('data', (chunk) => { body += chunk })
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}')
+        const targetChatId = payload.chat_id || OWNER_CHAT_ID
+        const messageText = payload.text || ''
+        const replyMarkup = payload.reply_markup
+
+        if (!messageText) {
+          res.writeHead(400, CORS_HEADERS)
+          return res.end(JSON.stringify({ ok: false, error: 'Missing text parameter' }))
+        }
+
+        const tgResp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: targetChatId,
+            text: messageText,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+            ...(replyMarkup ? { reply_markup: replyMarkup } : {})
+          })
+        })
+        const tgJson = await tgResp.json()
+        res.writeHead(200, CORS_HEADERS)
+        return res.end(JSON.stringify(tgJson))
+      } catch (err) {
+        res.writeHead(500, CORS_HEADERS)
+        return res.end(JSON.stringify({ ok: false, error: err.message || 'Telegram relay failed' }))
+      }
+    })
+    return
+  }
+
+  // 5. Default Health Check
   res.writeHead(200, CORS_HEADERS)
   res.end(
     JSON.stringify({
