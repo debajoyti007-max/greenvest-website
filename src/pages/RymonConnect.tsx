@@ -545,13 +545,12 @@ export default function RymonConnect() {
           setRecord({ ...rawMerged, is_online: activelyPlaying })
           setIsLiveConnected(true)
 
-          // If DB had stale is_online=true or null columns, normalize row in background
-          if ((ctrlData.is_online && !activelyPlaying) || ctrlData.esp_box === null || ctrlData.aim_silent === null) {
+          // If DB had stale is_online=true, reset is_online to false in background
+          if (ctrlData.is_online && !activelyPlaying) {
             supabase
               .from('rymon_streamer_controls')
               .update({
-                ...rawMerged,
-                is_online: activelyPlaying,
+                is_online: false,
                 updated_at: new Date().toISOString()
               })
               .eq('license_key', currentKey)
@@ -1041,37 +1040,41 @@ export default function RymonConnect() {
       ...baseRecord,
       license_key: currentKey,
       [field]: newVal,
+      ...(field === 'esp_radar' ? { esp_count: newVal } : {}),
       updated_at: nowIso
     }
     setRecord(nextRecord)
     setStreamerControls((prev) => {
       const exists = prev.some((c) => c.license_key === currentKey)
       if (!exists) return [nextRecord, ...prev]
-      return prev.map((c) => (c.license_key === currentKey ? { ...c, [field]: newVal, updated_at: nowIso } : c))
+      return prev.map((c) =>
+        c.license_key === currentKey
+          ? { ...c, [field]: newVal, ...(field === 'esp_radar' ? { esp_count: newVal } : {}), updated_at: nowIso }
+          : c
+      )
     })
 
-    const activeKeyRec = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
-    const isVip = isVipTierKey(baseRecord) || isVipTierKey(activeKeyRec)
-    if (isVip) {
-      sendRenderVipCommand(currentKey, field as string, newVal)
+    // Instant sub-50ms dispatch to Render VIP Bridge
+    sendRenderVipCommand(currentKey, field as string, newVal)
+    if (field === 'esp_radar') {
+      sendRenderVipCommand(currentKey, 'esp_count', newVal)
     }
 
     if (supabase) {
       try {
+        const updatePayload: Record<string, any> = {
+          [field]: newVal,
+          updated_at: nowIso
+        }
+        if (field === 'esp_radar') {
+          updatePayload.esp_count = newVal
+        }
         const { error } = await supabase
           .from('rymon_streamer_controls')
-          .upsert(
-            {
-              ...nextRecord,
-              updated_at: nowIso
-            },
-            { onConflict: 'license_key' }
-          )
+          .update(updatePayload)
+          .eq('license_key', currentKey)
         if (error) {
-          await supabase
-            .from('rymon_streamer_controls')
-            .update({ [field]: newVal, updated_at: nowIso })
-            .eq('license_key', currentKey)
+          console.warn('Sync update warning:', error)
         }
       } catch (err) {
         console.warn('Sync warning:', err)
@@ -1100,31 +1103,22 @@ export default function RymonConnect() {
     }
     setRecord(nextRecord)
 
-    const activeKeyRec = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
-    const isVip = isVipTierKey(baseRecord) || isVipTierKey(activeKeyRec)
-    if (isVip) {
-      sendRenderVipCommand(currentKey, field as string, val)
-    }
+    sendRenderVipCommand(currentKey, field as string, val)
 
     if (sliderTimerRef.current) clearTimeout(sliderTimerRef.current)
     sliderTimerRef.current = setTimeout(async () => {
       if (supabase && currentKey) {
         try {
           const ts = new Date().toISOString()
-          const { error } = await supabase
+          await supabase
             .from('rymon_streamer_controls')
-            .upsert({ ...nextRecord, [field]: val, updated_at: ts }, { onConflict: 'license_key' })
-          if (error) {
-            await supabase
-              .from('rymon_streamer_controls')
-              .update({ [field]: val, updated_at: ts })
-              .eq('license_key', currentKey)
-          }
+            .update({ [field]: val, updated_at: ts })
+            .eq('license_key', currentKey)
         } catch (err) {
           console.warn('Sync warning:', err)
         }
       }
-    }, isVip ? 1000 : 80)
+    }, 150)
   }
 
   const setThemePreset = async (idx: number) => {
@@ -1148,17 +1142,14 @@ export default function RymonConnect() {
     }
     setRecord(nextRecord)
 
-    const activeKeyRec = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
-    const isVip = isVipTierKey(baseRecord) || isVipTierKey(activeKeyRec)
-    if (isVip) {
-      sendRenderVipCommand(currentKey, 'theme_color_index', idx)
-    }
+    sendRenderVipCommand(currentKey, 'theme_color_index', idx)
 
     if (supabase && currentKey) {
       try {
         await supabase
           .from('rymon_streamer_controls')
-          .upsert(nextRecord, { onConflict: 'license_key' })
+          .update({ theme_color_index: idx, updated_at: nowIso })
+          .eq('license_key', currentKey)
       } catch {}
     }
   }

@@ -42,7 +42,7 @@ function getVipState(key) {
       esp_name: false,
       esp_distance: true,
       esp_health: false,
-      esp_count: true,
+      esp_count: false,
       esp_radar: false,
       speed_hack: false,
       speed_multiplier: 4.8,
@@ -159,6 +159,9 @@ const healthServer = http.createServer(async (req, res) => {
         }
         if (payload.toggle !== undefined) {
           state[payload.toggle] = payload.value
+          if (payload.toggle === 'esp_radar') {
+            state.esp_count = Boolean(payload.value)
+          }
         }
         if (payload.patch && typeof payload.patch === 'object') {
           Object.assign(state, payload.patch)

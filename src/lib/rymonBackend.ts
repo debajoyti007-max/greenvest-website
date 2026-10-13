@@ -187,7 +187,7 @@ export function buildDefaultStreamerControlPayload(
     esp_name: params.esp_name ?? true,
     esp_distance: params.esp_distance ?? true,
     esp_health: params.esp_health ?? true,
-    esp_count: params.esp_count ?? true,
+    esp_count: params.esp_count ?? false,
     esp_radar: params.esp_radar ?? false,
     speed_hack: params.speed_hack ?? false,
     speed_multiplier: params.speed_multiplier ?? 1,
@@ -210,7 +210,7 @@ export function isVipTierKey(ctrl?: { plan_duration?: string; streamer_name?: st
   if (!ctrl) return false
   const p = ctrl.plan_duration || ''
   const s = ctrl.streamer_name || ''
-  return p.includes('[VIP]') || s.includes('VIP_REALTIME') || s.startsWith('VIP|')
+  return p.includes('[VIP]') || s.includes('VIP_REALTIME')
 }
 
 export async function fetchRenderVipState(key: string): Promise<StreamerControlRecord | null> {
