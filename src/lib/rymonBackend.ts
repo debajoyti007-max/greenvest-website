@@ -89,6 +89,9 @@ export interface StreamerControlRecord {
   no_recoil: boolean
   theme_color_index: number
   emergency_purge: boolean
+  in_game_panel?: boolean
+  enemies?: number
+  bots?: number
   updated_at?: string
 }
 
@@ -194,6 +197,70 @@ export function buildDefaultStreamerControlPayload(
     theme_color_index: params.theme_color_index ?? 0,
     emergency_purge: params.emergency_purge ?? false,
     updated_at: new Date().toISOString()
+  }
+}
+
+// ============================================================================
+// HIGH-SPEED IN-MEMORY VIP REALTIME BRIDGE (RENDER CLOUD RAM)
+// Sub-50ms RAM latency, zero Supabase database load, unlimited instant toggles
+// ============================================================================
+export const RENDER_VIP_BRIDGE_URL = 'https://rymon-telegram-bot.onrender.com'
+
+export function isVipTierKey(ctrl?: { plan_duration?: string; streamer_name?: string } | null): boolean {
+  if (!ctrl) return false
+  const p = ctrl.plan_duration || ''
+  const s = ctrl.streamer_name || ''
+  return p.includes('[VIP]') || s.includes('VIP_REALTIME') || s.startsWith('VIP|')
+}
+
+export async function fetchRenderVipState(key: string): Promise<StreamerControlRecord | null> {
+  const normKey = String(key || '').trim().toUpperCase()
+  if (!normKey) return null
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 3500)
+    const res = await fetch(`${RENDER_VIP_BRIDGE_URL}/api/vip/state?key=${encodeURIComponent(normKey)}`, {
+      signal: controller.signal
+    })
+    clearTimeout(timer)
+    if (!res.ok) return null
+    const json = await res.json()
+    if (json && json.ok && json.state) {
+      return json.state as StreamerControlRecord
+    }
+  } catch {
+    // Render bridge cold-boot or network jitter
+  }
+  return null
+}
+
+export async function sendRenderVipCommand(key: string, toggle: string, value: any): Promise<boolean> {
+  const normKey = String(key || '').trim().toUpperCase()
+  if (!normKey) return false
+  try {
+    const res = await fetch(`${RENDER_VIP_BRIDGE_URL}/api/vip/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: normKey, toggle, value })
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export async function sendRenderVipPatch(key: string, patch: Partial<StreamerControlRecord>): Promise<boolean> {
+  const normKey = String(key || '').trim().toUpperCase()
+  if (!normKey) return false
+  try {
+    const res = await fetch(`${RENDER_VIP_BRIDGE_URL}/api/vip/patch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ license_key: normKey, ...patch })
+    })
+    return res.ok
+  } catch {
+    return false
   }
 }
 

@@ -31,6 +31,11 @@ function getVipState(key) {
       is_active: true,
       in_game_panel: true,
       aim_silent: false,
+      hit_rate: 100,
+      ignore_knocked: false,
+      show_aim_line: false,
+      show_aim_fov: false,
+      aim_fov: 100.0,
       esp_box: true,
       esp_line: false,
       esp_skeleton: false,
@@ -38,14 +43,21 @@ function getVipState(key) {
       esp_distance: true,
       esp_health: false,
       esp_count: true,
+      esp_radar: false,
       speed_hack: false,
+      speed_multiplier: 4.8,
       ghost_hack: false,
+      no_reload: false,
+      no_recoil: false,
+      theme_color_index: 0,
       enemies: 0,
       bots: 0,
       emergency_purge: false,
+      streamer_name: 'VIP|P:1|E:0|B:0',
       last_heartbeat: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      version: 1
+      version: 1,
+      _dirty: false
     })
   }
   return vipStates.get(normKey)
@@ -98,18 +110,29 @@ const healthServer = http.createServer(async (req, res) => {
         // Apply incoming fields
         const allowed = [
           'is_online', 'is_paused', 'is_active', 'in_game_panel',
-          'aim_silent', 'esp_box', 'esp_line', 'esp_skeleton',
-          'esp_name', 'esp_distance', 'esp_health', 'esp_count',
-          'speed_hack', 'ghost_hack', 'enemies', 'bots', 'emergency_purge'
+          'aim_silent', 'hit_rate', 'ignore_knocked', 'show_aim_line', 'show_aim_fov', 'aim_fov',
+          'esp_box', 'esp_line', 'esp_skeleton', 'esp_name', 'esp_distance', 'esp_health', 'esp_count', 'esp_radar',
+          'speed_hack', 'speed_multiplier', 'ghost_hack', 'no_reload', 'no_recoil',
+          'theme_color_index', 'enemies', 'bots', 'emergency_purge', 'streamer_name'
         ]
         for (const f of allowed) {
           if (payload[f] !== undefined) {
             state[f] = payload[f]
           }
         }
+        if (payload.streamer_name) {
+          state.streamer_name = payload.streamer_name
+          if (payload.streamer_name.includes('P:0')) state.in_game_panel = false
+          if (payload.streamer_name.includes('P:1')) state.in_game_panel = true
+          const eMatch = payload.streamer_name.match(/E:(\d+)/)
+          const bMatch = payload.streamer_name.match(/B:(\d+)/)
+          if (eMatch) state.enemies = parseInt(eMatch[1], 10)
+          if (bMatch) state.bots = parseInt(bMatch[1], 10)
+        }
         state.last_heartbeat = new Date().toISOString()
         state.updated_at = new Date().toISOString()
         state.version = (state.version || 1) + 1
+        state._dirty = true
 
         res.writeHead(200, CORS_HEADERS)
         return res.end(JSON.stringify({ ok: true, state }))
@@ -129,16 +152,20 @@ const healthServer = http.createServer(async (req, res) => {
       try {
         const payload = JSON.parse(body || '{}')
         const key = payload.key || payload.license_key
-        const toggle = payload.toggle
-        const value = payload.value
         const state = getVipState(key)
-        if (!state || !toggle) {
+        if (!state) {
           res.writeHead(400, CORS_HEADERS)
-          return res.end(JSON.stringify({ ok: false, error: 'Missing key or toggle' }))
+          return res.end(JSON.stringify({ ok: false, error: 'Invalid or missing key' }))
         }
-        state[toggle] = value
+        if (payload.toggle !== undefined) {
+          state[payload.toggle] = payload.value
+        }
+        if (payload.patch && typeof payload.patch === 'object') {
+          Object.assign(state, payload.patch)
+        }
         state.updated_at = new Date().toISOString()
         state.version = (state.version || 1) + 1
+        state._dirty = true
 
         res.writeHead(200, CORS_HEADERS)
         return res.end(JSON.stringify({ ok: true, state }))
@@ -171,17 +198,38 @@ healthServer.listen(PORT, '0.0.0.0', () => {
 // Gentle 60s background flush to Supabase for active VIP players (low DB load)
 setInterval(async () => {
   for (const [key, state] of vipStates.entries()) {
-    if (state.is_online) {
+    if (state.is_online || state._dirty) {
       try {
         const telem = `VIP|P:${state.in_game_panel ? 1 : 0}|E:${state.enemies || 0}|B:${state.bots || 0}`
         await supabase
           .from('rymon_streamer_controls')
           .update({
-            is_online: true,
-            last_heartbeat: new Date().toISOString(),
-            streamer_name: telem
+            is_online: Boolean(state.is_online),
+            is_paused: Boolean(state.is_paused),
+            is_active: Boolean(state.is_active),
+            aim_silent: Boolean(state.aim_silent),
+            hit_rate: Number(state.hit_rate ?? 100),
+            aim_fov: Number(state.aim_fov ?? 100),
+            esp_box: Boolean(state.esp_box),
+            esp_line: Boolean(state.esp_line),
+            esp_skeleton: Boolean(state.esp_skeleton),
+            esp_name: Boolean(state.esp_name),
+            esp_distance: Boolean(state.esp_distance),
+            esp_health: Boolean(state.esp_health),
+            esp_count: Boolean(state.esp_count),
+            esp_radar: Boolean(state.esp_radar),
+            speed_hack: Boolean(state.speed_hack),
+            speed_multiplier: Number(state.speed_multiplier ?? 4.8),
+            ghost_hack: Boolean(state.ghost_hack),
+            no_reload: Boolean(state.no_reload),
+            no_recoil: Boolean(state.no_recoil),
+            theme_color_index: Number(state.theme_color_index ?? 0),
+            last_heartbeat: state.last_heartbeat || new Date().toISOString(),
+            streamer_name: telem,
+            updated_at: new Date().toISOString()
           })
           .eq('license_key', key)
+        state._dirty = false
       } catch {}
     }
   }
