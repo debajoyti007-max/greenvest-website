@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const BOT_TOKEN = '8866404681:AAHQbK2PXyx_Y2ISGmhytxRF6G7Pm4oZO6A'
-const OWNER_CHAT_ID = '5831000769' // @montage007pc (Montage)
+const BOT_TOKEN = '8866404681:AAGMdL_gxsI4yiwtZswc3Vp4xnwlKGQrnZE'
+const OWNER_CHAT_ID = '5831800759' // @montage007pc (Montage)
 const SUPABASE_URL = 'https://zvjqpigduyvczidzafus.supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR'
 

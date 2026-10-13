@@ -2900,8 +2900,8 @@ export async function deleteNotificationBackend(id: number): Promise<boolean> {
 
 export const OFFICIAL_TELEGRAM_BOT_NAME = 'RYMON OFFICIAL'
 export const OFFICIAL_TELEGRAM_BOT_USERNAME = '@Rymon007bot'
-export const OFFICIAL_TELEGRAM_BOT_TOKEN = '8866404681:AAHQbK2PXyx_Y2ISGmhytxRF6G7Pm4oZO6A'
-export const OFFICIAL_OWNER_CHAT_ID = '5831000769'
+export const OFFICIAL_TELEGRAM_BOT_TOKEN = '8866404681:AAGMdL_gxsI4yiwtZswc3Vp4xnwlKGQrnZE'
+export const OFFICIAL_OWNER_CHAT_ID = '5831800759'
 
 export async function selfServiceResetKeyHwidBackend(
   rawKey: string,
