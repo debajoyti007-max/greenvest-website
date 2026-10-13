@@ -2266,7 +2266,7 @@ export default function RymonConnect() {
                     {selfResetBusy ? 'RESETTING HWID...' : '🔄 RESET KEY HWID (2/DAY)'}
                   </button>
                   <a
-                    href="https://t.me/Rymon007bot?start=reset"
+                    href="https://t.me/Rymon007bot"
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -4403,7 +4403,7 @@ export default function RymonConnect() {
                   <div style={styles.badgeCluster}>
                     <span style={styles.greenPulseBadge}>● {OFFICIAL_TELEGRAM_BOT_NAME} ACTIVE</span>
                     <a
-                      href="https://t.me/Rymon007bot?start=connect"
+                      href="https://t.me/Rymon007bot"
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -4446,7 +4446,7 @@ export default function RymonConnect() {
                       </div>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <a
-                          href="https://t.me/Rymon007bot?start=connect"
+                          href="https://t.me/Rymon007bot"
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{
@@ -6505,7 +6505,7 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                       </>
                     )}
                     <a
-                      href="https://t.me/Rymon007bot?start=reset"
+                      href="https://t.me/Rymon007bot"
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
