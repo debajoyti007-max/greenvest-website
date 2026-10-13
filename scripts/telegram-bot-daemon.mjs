@@ -584,8 +584,7 @@ async function grantResellerByChatId({
     `💰 <b>Wallet Balance:</b> <b>₹${finalBalance.toLocaleString('en-IN')}</b>`,
     `⏳ <b>Subscription Plan:</b> <b>${safeDays} Days</b> (Expires ${new Date(expiresAtIso).toLocaleDateString('en-IN')})`,
     ``,
-    `🛒 <b>Tap any button below to buy/generate keys directly inside Telegram, or login at:</b>`,
-    `🌐 https://greenvest.shop/`
+    `🛒 <b>Tap any button below to buy/generate keys directly inside Telegram:</b>`
   ]
   await sendTelegramReply(
     cleanChatId,
@@ -875,13 +874,13 @@ async function processUpdate(upd) {
 
   if (lowerText.startsWith('/apk')) {
     const reply = [
-      `📲 <b>RYMON STREAMER OFFICIAL APK (v2.4)</b>`,
+      `📲 <b>RYMON STREAMER OFFICIAL APK (v4.2.1)</b>`,
       ``,
-      `⬇️ <b>Direct Download:</b>`,
-      `https://greenvest.shop/download/RYMON_STREAMER_LATEST.apk`,
+      `✨ <b>Architecture:</b> ARM64-v8a (Android 5.0 - 15+)`,
+      `🛡️ <b>Engine:</b> Safe Streamer Overlay + Realtime Cloud Telemetry`,
+      `⚡ <b>Auth:</b> Sovereign License Key System`,
       ``,
-      `✨ <b>Features:</b> Instant Website Remote Hack Toggles + Live Heartbeat Engine`,
-      `🌐 <b>Web Remote Control:</b> https://greenvest.shop/`
+      `⬇️ <i>Contact @montage007pc to receive the latest release build APK directly in chat.</i>`
     ].join('\n')
     await sendTelegramReply(chatId, reply)
     return
@@ -1290,9 +1289,7 @@ async function processUpdate(upd) {
         `🔴 <b>Expired Keys:</b> ${expiredCount}`,
         `🔑 <b>Total Keys:</b> ${allLics.length}`,
         `💼 <b>Telegram-Linked Resellers:</b> ${Object.keys(bindings).length}`,
-        `👥 <b>Total Staff/Resellers:</b> ${(usrs || []).length}`,
-        ``,
-        `🌐 https://greenvest.shop/`
+        `👥 <b>Total Staff/Resellers:</b> ${(usrs || []).length}`
       ].join('\n')
       await sendTelegramReply(chatId, reply, buildOwnerInlineKeyboard())
       return
@@ -1321,7 +1318,7 @@ async function processUpdate(upd) {
           `<i>Tap any key below to copy:</i>`,
           ``,
           listStr,
-          list.length > 30 ? `\n<i>...and ${list.length - 30} more on greenvest.shop</i>` : ''
+          list.length > 30 ? `\n<i>...and ${list.length - 30} more keys</i>` : ''
         ].join('\n')
         await sendTelegramReply(chatId, reply, buildOwnerInlineKeyboard())
       }
@@ -1600,7 +1597,7 @@ async function processUpdate(upd) {
           ``,
           `• <b>Role:</b> RESELLER (${subDays} Days Subscription)`,
           `• <b>Starting Balance:</b> ₹${initBal.toLocaleString('en-IN')}`,
-          `• <b>Redeem at:</b> https://greenvest.shop/`
+          `• <b>Redeem via:</b> @Rymon007bot`
         ].join('\n'),
         buildOwnerInlineKeyboard()
       )

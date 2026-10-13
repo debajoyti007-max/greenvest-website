@@ -3999,15 +3999,14 @@ export async function pollAndReplyTelegramBotCommands(
           `🆔 <b>Your Telegram Chat ID:</b> <code>${chatId}</code>${isOwnerChat ? ' (👑 Root Owner)' : isResellerChat ? ` (💼 Reseller @${linkedReseller?.username})` : ''}`
         )
       } else if (lowerText.startsWith('/apk')) {
-        const policy = getSovereignSecurityPolicy()
         const reply = [
-          `📲 <b>RYMON STREAMER OFFICIAL APK (v${policy.apk_latest_version || '2.4'})</b>`,
+          `📲 <b>RYMON STREAMER OFFICIAL APK (v4.2.1)</b>`,
           ``,
-          `⬇️ <b>Direct Download:</b>`,
-          `https://greenvest.shop/download/RYMON_STREAMER_LATEST.apk`,
+          `✨ <b>Architecture:</b> ARM64-v8a (Android 5.0 - 15+)`,
+          `🛡️ <b>Engine:</b> Safe Streamer Overlay + Realtime Cloud Telemetry`,
+          `⚡ <b>Auth:</b> Sovereign License Key System`,
           ``,
-          `✨ <b>Release Notes:</b> ${policy.apk_release_notes || 'Instant Website Remote Hack Toggles + Live Heartbeat Engine'}`,
-          `🌐 <b>Web Remote Control:</b> https://greenvest.shop/`
+          `⬇️ <i>Contact @montage007pc to receive the latest release build APK directly in chat.</i>`
         ].join('\n')
         await dispatchTelegramMessage(OFFICIAL_TELEGRAM_BOT_TOKEN, chatId, reply)
       } else if (lowerText.startsWith('/apply')) {
