@@ -1651,6 +1651,40 @@ async function processUpdate(upd) {
   if (/^[A-Za-z0-9]{2,12}-[A-Za-z0-9-]+$/.test(text)) {
     const reply = await handleKeyHwidReset(text, isOwnerChat, senderUser)
     await sendTelegramReply(chatId, reply)
+    return
+  }
+
+  // Fallback for any other message: Always guide the user so the bot never ignores them
+  if (text.length > 0) {
+    const helpMarkup = {
+      inline_keyboard: [
+        [
+          { text: '🔄 How to Reset HWID', callback_data: 'cmd:help_reset' },
+          { text: '🔍 Check Key', callback_data: 'cmd:help_check' }
+        ],
+        [
+          { text: '📥 Download APK', callback_data: 'cmd:apk' },
+          { text: '🏠 Main Menu', callback_data: 'cmd:main_menu' }
+        ]
+      ]
+    }
+    const fallbackMsg = [
+      `🤖 <b>RYMON OFFICIAL BOT (@Rymon007bot)</b>`,
+      ``,
+      `Hello <b>${senderName}</b>! I am online and ready to assist you.`,
+      ``,
+      `🔄 <b>To Reset Your HWID (Max 2/Day):</b>`,
+      `Simply send your License Key directly here (e.g. <code>RYMON-FF-XXXX-XXXX</code>) or use <code>/reset KEY</code>`,
+      ``,
+      `🔍 <b>To Check Key Status & Resets:</b>`,
+      `Send <code>/check KEY</code>`,
+      ``,
+      `📲 <b>To Download Latest Streamer APK:</b>`,
+      `Send <code>/apk</code> or tap the button below.`,
+      ``,
+      `ℹ️ Type <code>/start</code> anytime to view the full interactive menu.`
+    ].join('\n')
+    await sendTelegramReply(chatId, fallbackMsg, helpMarkup)
   }
 }
 

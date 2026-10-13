@@ -740,7 +740,7 @@ export async function verifyLicenseKey(
           return { valid: false, error: `License key expired on ${new Date(licRow.expires_at).toLocaleDateString()}` }
         }
         if (licRow.device_hwid && licRow.device_hwid !== effectiveHwid && licRow.devices_used >= licRow.devices_max) {
-          return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset HWID in dashboard.' }
+          return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.' }
         }
 
         const exp = licRow.expires_at || new Date(Date.now() + 30 * 86400000).toISOString()
@@ -781,7 +781,7 @@ export async function verifyLicenseKey(
       return { valid: false, error: 'License key has expired.' }
     }
     if (matched.device_hwid && matched.device_hwid !== effectiveHwid && matched.devices_used >= matched.devices_max) {
-      return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset HWID in dashboard.' }
+      return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.' }
     }
 
     const exp = matched.expires_at || new Date(Date.now() + 30 * 86400000).toISOString()

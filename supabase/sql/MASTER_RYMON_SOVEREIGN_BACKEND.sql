@@ -354,7 +354,7 @@ BEGIN
         IF p_hwid != '' AND v_lic.device_hwid != '' AND v_lic.device_hwid != p_hwid AND v_lic.devices_used >= v_lic.devices_max THEN
             RETURN jsonb_build_object(
                 'valid', false,
-                'error', 'HWID mismatch! Key is locked to another device. Reset HWID in dashboard.'
+                'error', 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.'
             );
         END IF;
 
