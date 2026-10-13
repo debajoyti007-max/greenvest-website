@@ -138,7 +138,7 @@ export default function RymonConnect() {
   const [genGame, setGenGame] = useState('Free Fire MAX')
   const [genDuration, setGenDuration] = useState('1 Day')
   const [genCustomPrefix, setGenCustomPrefix] = useState('')
-  const [genIsVipRealtime, setGenIsVipRealtime] = useState(false)
+  const [genIsVipRealtime] = useState(true)
   const [genDevicesMax, setGenDevicesMax] = useState(1)
   const [genQuantity, setGenQuantity] = useState(1)
   const [genCreatedKeysList, setGenCreatedKeysList] = useState<string[]>([])
@@ -914,7 +914,7 @@ export default function RymonConnect() {
       customPrefix: genCustomPrefix,
       devicesMax: genDevicesMax,
       quantity: genQuantity,
-      isVipRealtime: isOwner && genIsVipRealtime
+      isVipRealtime: isOwner ? true : genIsVipRealtime
     })
     setAuthLoading(false)
 
@@ -3247,8 +3247,8 @@ export default function RymonConnect() {
                           style={{
                             marginTop: '16px',
                             padding: '12px 14px',
-                            background: genIsVipRealtime ? 'rgba(250, 204, 21, 0.12)' : 'rgba(15, 23, 42, 0.65)',
-                            border: genIsVipRealtime ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid rgba(148, 163, 184, 0.25)',
+                            background: 'rgba(250, 204, 21, 0.12)',
+                            border: '1px solid rgba(250, 204, 21, 0.5)',
                             borderRadius: '10px',
                             display: 'flex',
                             alignItems: 'center',
@@ -3258,23 +3258,15 @@ export default function RymonConnect() {
                         >
                           <div>
                             <div style={{ fontSize: '12px', fontWeight: 800, color: '#fde047', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span>👑</span> VIP REALTIME TIER (OWNER ONLY)
+                              <span>👑</span> VIP REALTIME ACTIVE (RENDER CLOUD RAM BRIDGE)
                             </div>
                             <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                              Enables ultra-low latency (15ms) WebSocket sync and unlimited web controls.
+                              All Owner keys automatically run on high-speed in-memory RAM bridge (&lt;15ms latency, unlimited web control).
                             </div>
                           </div>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={genIsVipRealtime}
-                              onChange={(e) => setGenIsVipRealtime(e.target.checked)}
-                              style={{ width: '18px', height: '18px', accentColor: '#eab308', cursor: 'pointer' }}
-                            />
-                            <span style={{ fontSize: '11px', fontWeight: 800, color: genIsVipRealtime ? '#fde047' : '#64748b' }}>
-                              {genIsVipRealtime ? '👑 VIP ACTIVE' : '⚡ STANDARD'}
-                            </span>
-                          </label>
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#fde047', background: 'rgba(250, 204, 21, 0.2)', padding: '5px 10px', borderRadius: '6px' }}>
+                            👑 100% VIP REALTIME
+                          </span>
                         </div>
                       )}
 
@@ -3812,23 +3804,40 @@ export default function RymonConnect() {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <span style={styles.planBadge}>{k.plan_duration?.replace(' [VIP]', '')}</span>
                                   {isOwner && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleToggleVipKey(k.license_key, !k.plan_duration?.includes('[VIP]'))}
-                                      style={{
-                                        border: k.plan_duration?.includes('[VIP]') ? '1px solid rgba(250, 204, 21, 0.55)' : '1px solid rgba(148, 163, 184, 0.3)',
-                                        background: k.plan_duration?.includes('[VIP]') ? 'rgba(250, 204, 21, 0.18)' : 'rgba(148, 163, 184, 0.12)',
-                                        color: k.plan_duration?.includes('[VIP]') ? '#fde047' : '#94a3b8',
-                                        fontSize: '9.5px',
-                                        fontWeight: 800,
-                                        padding: '2px 6px',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer'
-                                      }}
-                                      title={k.plan_duration?.includes('[VIP]') ? 'Owner: Click to downgrade to Standard' : 'Owner: Click to upgrade to VIP Realtime'}
-                                    >
-                                      {k.plan_duration?.includes('[VIP]') ? '👑 VIP' : '⚡ STD'}
-                                    </button>
+                                    k.plan_duration?.includes('[VIP]') ? (
+                                      <span
+                                        style={{
+                                          border: '1px solid rgba(250, 204, 21, 0.55)',
+                                          background: 'rgba(250, 204, 21, 0.18)',
+                                          color: '#fde047',
+                                          fontSize: '9.5px',
+                                          fontWeight: 800,
+                                          padding: '2px 6px',
+                                          borderRadius: '6px'
+                                        }}
+                                        title="VIP Realtime: Connected to Render In-Memory RAM Bridge"
+                                      >
+                                        👑 VIP REALTIME
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleVipKey(k.license_key, true)}
+                                        style={{
+                                          border: '1px solid rgba(0, 217, 255, 0.5)',
+                                          background: 'rgba(0, 217, 255, 0.15)',
+                                          color: '#00d9ff',
+                                          fontSize: '9.5px',
+                                          fontWeight: 800,
+                                          padding: '2px 6px',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer'
+                                        }}
+                                        title="Click to upgrade to VIP Realtime"
+                                      >
+                                        ⚡ UPGRADE TO VIP
+                                      </button>
+                                    )
                                   )}
                                 </div>
                               </td>
