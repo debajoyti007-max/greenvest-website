@@ -1707,6 +1707,34 @@ async function registerBotCommands() {
         ]
       })
     })
+
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyShortDescription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        short_description: '⚡ Official RYMON Bot • 24/7 Key HWID Reset, License Management & Streamer APK'
+      })
+    })
+
+    const fullDesc = [
+      '⚡ Welcome to RYMON OFFICIAL BOT (@Rymon007bot)',
+      '',
+      '🔐 Sovereign Licensing & Streamer Engine:',
+      '• Self-Service Key HWID Reset (Max 2/day)',
+      '• Real-time Key Status & Expiry Checker',
+      '• Latest RYMON STREAMER APK Downloads',
+      '• Official Reseller Store & Wallet',
+      '',
+      '👑 Maintained by @montage007pc'
+    ].join('\n')
+
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyDescription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        description: fullDesc
+      })
+    })
   } catch {}
 }
 
