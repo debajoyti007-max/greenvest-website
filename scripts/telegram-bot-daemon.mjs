@@ -9,7 +9,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR'
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // Lightweight HTTP server for Render Cloud Web Service & Health Checks
-const PORT = process.env.PORT || 10000
+const PORT = parseInt(process.env.PORT, 10) || 10000
 const healthServer = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' })
   res.end(
@@ -23,8 +23,8 @@ const healthServer = http.createServer((req, res) => {
     })
   )
 })
-healthServer.listen(PORT, () => {
-  console.log(`🌐 [Render Web Service] Health server listening on port ${PORT}`)
+healthServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 [Render Web Service] Health server listening on 0.0.0.0:${PORT}`)
 })
 
 // Auto Self-Ping to prevent Render free instance from sleeping
