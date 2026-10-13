@@ -756,14 +756,7 @@ GRANT EXECUTE ON FUNCTION public.rpc_rymon_extend_key(TEXT, INT, TEXT) TO anon, 
 -- 1. Insert Sovereign Accounts
 INSERT INTO public.rymon_accounts (username, password_hash, email, role, balance, uplink, referral_code, status, expires_at)
 VALUES 
-('rymon', 'rymon@2026', 'swayamstar9@gmail.com', 'owner', 999628464, 'SOVEREIGN_ROOT', 'ROOT001', 'ACTIVE', now() + INTERVAL '10 years'),
-('ROGER', 'roger', 'amarogerxd07@gmail.com', 'reseller', 9629, 'rymon', 'FMv2VX', 'ACTIVE', now() + INTERVAL '180 days'),
-('Satan', 'satan', 'saranshshrivastava7@gmail.com', 'reseller', 20, 'rymon', 'N6eedM', 'ACTIVE', now() + INTERVAL '210 days'),
-('SK2020', 'sk2020', 'spvk202008@gmail.com', 'reseller', 315, 'rymon', 'RLx94x', 'ACTIVE', now() + INTERVAL '210 days'),
-('REVERSE_EXE', 'reverse', 'harissnkardebnath02@gmail.com', 'reseller', 99999, 'rymon', 'GE2rS4', 'ACTIVE', now() + INTERVAL '210 days'),
-('Ashwani', 'ashwani', 'PandaXe23@gmail.com', 'reseller', 99999999, 'ASHWANIxTHOR', 'ASH001', 'ACTIVE', now() + INTERVAL '365 days'),
-('HARSHIL2829', 'harshil', 'harshil2829@gmail.com', 'reseller', 4325, 'rymon', 'HAR282', 'ACTIVE', now() + INTERVAL '180 days'),
-('THORBHAIxTRUSTED', 'thorbhai', 'thorbhai@gmail.com', 'reseller', 988824, 'rymon', 'THOR99', 'ACTIVE', now() + INTERVAL '365 days')
+('debajoyti', 'debajoyti@2026', 'debajoyti@rymon.vip', 'owner', 999628464, 'SOVEREIGN_ROOT', 'ROOT001', 'ACTIVE', now() + INTERVAL '10 years')
 ON CONFLICT (username) DO UPDATE
 SET balance = EXCLUDED.balance,
     role = EXCLUDED.role,
