@@ -38,7 +38,10 @@ scripts/deploy-rymon-sql.mjs
 .mcp.json
 supabase/.temp/
 
-# Internal blueprints & docs (keep local only)
+# Internal blueprints & docs (strict rule: NEVER commit or push any .md or secrets)
+*.md
+*.MD
+PROJECT_STRUCTURE.md
 PROJECT_BLUEPRINT.md
 *blueprint*.md
 *BLUEPRINT*.md
