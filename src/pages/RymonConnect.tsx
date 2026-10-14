@@ -231,10 +231,37 @@ export default function RymonConnect() {
     // Check Supabase Database health
     checkSupabaseSchemaStatus().then(setDbStatus)
 
+    // Check if key is provided via query parameter (?key=... or ?k=...)
+    let queryKey = ''
+    try {
+      const urlParams = new URLSearchParams(window.location.search)
+      queryKey = (urlParams.get('key') || urlParams.get('k') || '').trim()
+    } catch {}
+
     // Restore saved session
     const savedUserJson = localStorage.getItem('rymon_session_user')
-    const savedKey = localStorage.getItem('rymon_remote_key')
+    const savedKey = queryKey || localStorage.getItem('rymon_remote_key')
     const savedExp = localStorage.getItem('rymon_remote_expiry')
+
+    if (queryKey) {
+      try {
+        localStorage.setItem('rymon_remote_key', queryKey)
+      } catch {}
+      setCurrentKey(queryKey)
+      setIsAuthenticated(true)
+      setActiveTab('remote')
+      if (!savedUserJson) {
+        setCurrentUser({
+          id: 'usr-streamer',
+          username: 'Streamer VIP',
+          email: 'streamer@greenvest.shop',
+          role: 'streamer',
+          balance: 0,
+          uplink: 'debajoyti',
+          status: 'ACTIVE'
+        })
+      }
+    }
 
     if (savedUserJson) {
       try {
@@ -249,15 +276,17 @@ export default function RymonConnect() {
       setIsAuthenticated(true)
       const exp = savedExp ? new Date(savedExp) : new Date(Date.now() + 30 * 86400000)
       setExpiryDate(exp)
-      setCurrentUser({
-        id: 'usr-streamer',
-        username: 'Streamer VIP',
-        email: 'streamer@rymon.vip',
-        role: 'streamer',
-        balance: 0,
-        uplink: 'rymon',
-        status: 'ACTIVE'
-      })
+      if (!queryKey) {
+        setCurrentUser({
+          id: 'usr-streamer',
+          username: 'Streamer VIP',
+          email: 'streamer@greenvest.shop',
+          role: 'streamer',
+          balance: 0,
+          uplink: 'debajoyti',
+          status: 'ACTIVE'
+        })
+      }
       setActiveTab('remote')
     }
   }, [])
@@ -1261,7 +1290,7 @@ export default function RymonConnect() {
       '        ⚡ RYMON GHOST CONNECT VIP LICENSE KEYS       ',
       '======================================================',
       `Batch Type   : ${label.toUpperCase()} (${keys.length} Key${keys.length > 1 ? 's' : ''})`,
-      `Issued By    : @${currentUser?.username || 'rymon'}`,
+      `Issued By    : @${currentUser?.username || 'debajoyti'}`,
       `Generated At : ${nowStr}`,
       `Portal URL   : https://greenvest.shop/`,
       '======================================================',
@@ -1287,7 +1316,7 @@ export default function RymonConnect() {
     }
     const msg = [
       `⚡ *RYMON GHOST STREAMER VIP KEYS (${label.toUpperCase()})*`,
-      `👤 Seller: *@${currentUser?.username || 'rymon'}*`,
+      `👤 Seller: *@${currentUser?.username || 'debajoyti'}*`,
       `📦 Total Keys: *${keys.length}*`,
       `⏳ Status: *Starts on 1st APK Login*`,
       '',
@@ -1306,7 +1335,7 @@ export default function RymonConnect() {
     if (telegramConfig.bot_token) {
       const htmlMsg = [
         `⚡ <b>${OFFICIAL_TELEGRAM_BOT_NAME} — VIP KEYS (${label.toUpperCase()})</b>`,
-        `👤 <b>Seller:</b> @${currentUser?.username || 'rymon'}`,
+        `👤 <b>Seller:</b> @${currentUser?.username || 'debajoyti'}`,
         `📦 <b>Total Keys:</b> ${keys.length}`,
         ``,
         ...keys.slice(0, 30).map((k, idx) => `${idx + 1}. <code>${k}</code>`)
@@ -1322,7 +1351,7 @@ export default function RymonConnect() {
     }
     const msg = [
       `⚡ RYMON GHOST STREAMER VIP KEYS (${label.toUpperCase()})`,
-      `👤 Seller: @${currentUser?.username || 'rymon'}`,
+      `👤 Seller: @${currentUser?.username || 'debajoyti'}`,
       `📦 Total Keys: ${keys.length}`,
       '',
       ...keys.map((k, idx) => `${idx + 1}. ${k}`)
@@ -1433,7 +1462,7 @@ export default function RymonConnect() {
   }
 
   const handleToggleUserBan = async (targetUser: string, currentlyBanned: boolean) => {
-    if (targetUser.toLowerCase() === 'debajoyti' || targetUser.toLowerCase() === 'rymon') {
+    if (targetUser.toLowerCase() === 'debajoyti') {
       alert('Action forbidden: Root Owner account cannot be banned.')
       return
     }

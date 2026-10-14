@@ -297,7 +297,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-94A2-9981',
     game: 'PUBG',
     plan_duration: '1 Day',
-    creator_username: 'rymon',
+    creator_username: 'debajoyti',
     devices_used: 2,
     devices_max: 300,
     device_hwid: 'HWID-ALPHA-77',
@@ -309,7 +309,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-4482-1092',
     game: 'PUBG',
     plan_duration: '30 Days',
-    creator_username: 'rymon',
+    creator_username: 'debajoyti',
     devices_used: 0,
     devices_max: 1,
     device_hwid: '',
@@ -321,7 +321,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-7719-2041',
     game: 'BGMI',
     plan_duration: '30 Days',
-    creator_username: 'rymon',
+    creator_username: 'debajoyti',
     devices_used: 0,
     devices_max: 1,
     device_hwid: '',
@@ -333,7 +333,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-3108-8842',
     game: 'Free Fire MAX',
     plan_duration: '1 Day',
-    creator_username: 'rymon',
+    creator_username: 'debajoyti',
     devices_used: 1,
     devices_max: 1,
     device_hwid: 'HWID-SK-DEVICE',
@@ -345,7 +345,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-8491-3004',
     game: 'Free Fire MAX',
     plan_duration: '30 Days',
-    creator_username: 'rymon',
+    creator_username: 'debajoyti',
     devices_used: 1,
     devices_max: 1,
     device_hwid: 'HWID-RYMON-MAIN',
@@ -357,7 +357,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-1190-7734',
     game: 'PUBG',
     plan_duration: '7 Days',
-    creator_username: 'rymon',
+    creator_username: 'debajoyti',
     devices_used: 0,
     devices_max: 1,
     device_hwid: '',
@@ -369,7 +369,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-PB-9920-4100',
     game: 'BGMI',
     plan_duration: '1 Day',
-    creator_username: 'rymon',
+    creator_username: 'debajoyti',
     devices_used: 1,
     devices_max: 1,
     device_hwid: 'HWID-REV-01',
@@ -381,7 +381,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     license_key: 'RYMON-FF-94A2-9981',
     game: 'Free Fire MAX',
     plan_duration: '30 Days',
-    creator_username: 'rymon',
+    creator_username: 'debajoyti',
     devices_used: 1,
     devices_max: 1,
     device_hwid: 'HWID-VIP-STREAMER',
@@ -397,7 +397,7 @@ export const SOVEREIGN_FALLBACK_ACTIVITIES: RymonActivity[] = [
     event_type: 'KEY_GENERATED',
     game: 'PUBG',
     details: '1 Day • 300 Device(s)',
-    actor_username: 'rymon',
+    actor_username: 'debajoyti',
     status: 'SUCCESS',
     created_at: new Date(Date.now() - 31 * 60000).toISOString()
   },
@@ -407,7 +407,7 @@ export const SOVEREIGN_FALLBACK_ACTIVITIES: RymonActivity[] = [
     event_type: 'KEY_GENERATED',
     game: 'Free Fire MAX',
     details: '30 Days • 1 Device(s)',
-    actor_username: 'rymon',
+    actor_username: 'debajoyti',
     status: 'SUCCESS',
     created_at: new Date(Date.now() - 10 * 3600000).toISOString()
   },
@@ -417,7 +417,7 @@ export const SOVEREIGN_FALLBACK_ACTIVITIES: RymonActivity[] = [
     event_type: 'KEY_GENERATED',
     game: 'BGMI',
     details: '30 Days • 1 Device(s)',
-    actor_username: 'rymon',
+    actor_username: 'debajoyti',
     status: 'SUCCESS',
     created_at: new Date(Date.now() - 11 * 3600000).toISOString()
   },
@@ -427,7 +427,7 @@ export const SOVEREIGN_FALLBACK_ACTIVITIES: RymonActivity[] = [
     event_type: 'KEY_GENERATED',
     game: 'PUBG',
     details: '7 Days • 1 Device(s)',
-    actor_username: 'ROGER',
+    actor_username: 'debajoyti',
     status: 'SUCCESS',
     created_at: new Date(Date.now() - 13 * 3600000).toISOString()
   }
@@ -1474,10 +1474,9 @@ export async function topUpUserBalanceBackend(
 ): Promise<{ success: boolean; newBalance?: number; actorRemainingBalance?: number; error?: string }> {
   const cleanTarget = targetUsername.trim()
   const cleanActor = (actorUsername || 'debajoyti').trim()
-  const isRootOwner =
-    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
 
-  if (cleanTarget.toLowerCase() === 'debajoyti' || cleanTarget.toLowerCase() === 'rymon') {
+  if (cleanTarget.toLowerCase() === 'debajoyti') {
     return { success: false, error: 'Root Owner has infinite balance and does not need top-up.' }
   }
 
@@ -1762,13 +1761,12 @@ export async function resetUserPasswordBackend(
   const cleanTarget = targetUsername.trim()
   const cleanPass = newPassword.trim()
   const cleanActor = (actorUsername || 'debajoyti').trim()
-  const isRootOwner =
-    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
 
   if (cleanPass.length < 4) {
     return { success: false, message: 'Password must be at least 4 characters long.' }
   }
-  if (!isRootOwner && (cleanTarget.toLowerCase() === 'debajoyti' || cleanTarget.toLowerCase() === 'rymon')) {
+  if (!isRootOwner && cleanTarget.toLowerCase() === 'debajoyti') {
     return { success: false, message: 'Forbidden: Only the Root Owner can modify the Root Owner account.' }
   }
 
@@ -1834,10 +1832,9 @@ export async function renewUserSubscriptionBackend(
   const cleanTarget = targetUsername.trim()
   const cleanActor = (actorUsername || 'debajoyti').trim()
   const safeDays: 30 | 60 = days === 60 ? 60 : 30
-  const isRootOwner =
-    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
 
-  if (cleanTarget.toLowerCase() === 'debajoyti' || cleanTarget.toLowerCase() === 'rymon') {
+  if (cleanTarget.toLowerCase() === 'debajoyti') {
     return { success: false, message: 'Root Owner account does not use a reseller subscription.' }
   }
 
@@ -1964,7 +1961,7 @@ export function calculateExtensionCost(
 ): number {
   if (!username) return 0
   const clean = username.trim().toLowerCase()
-  if (clean === 'debajoyti' || clean === 'rymon') return 0
+  if (clean === 'debajoyti') return 0
 
   const map = getEffectivePriceMap(username)
   const devMult = Math.max(1, Number(devicesMax) || 1)
@@ -1988,8 +1985,7 @@ export async function resetHwidBackend(
 ): Promise<{ success: boolean; message: string; remainingResets?: number }> {
   const cleanKey = licenseKey.trim().toUpperCase()
   const cleanActor = (actorUsername || 'debajoyti').trim()
-  const isRootOwner =
-    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
   const effectiveRole = isRootOwner ? 'owner' : (actorRole || 'reseller').toLowerCase()
 
   const policy = getSovereignSecurityPolicy()
@@ -2096,8 +2092,7 @@ export async function bulkDeleteKeysBackend(
   const cleanActor = (actorUsername || 'debajoyti').trim()
   const cleanTarget = (creatorUsername || '__ALL__').trim()
   const isAllScope = cleanTarget === '__ALL__' || cleanTarget === ''
-  const isRootOwner =
-    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
 
   if (supabase) {
     try {
@@ -2178,12 +2173,11 @@ export async function toggleBanStatusBackend(
   const status = isBan ? 'BANNED' : 'ACTIVE'
   const cleanTarget = target.trim()
   const cleanActor = (actorUsername || 'debajoyti').trim()
-  const isRootOwner =
-    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
 
   if (
     type === 'user' &&
-    (cleanTarget.toLowerCase() === 'debajoyti' || cleanTarget.toLowerCase() === 'rymon')
+    cleanTarget.toLowerCase() === 'debajoyti'
   ) {
     return { success: false, message: 'Forbidden: Root Owner account cannot be banned.' }
   }
@@ -2276,8 +2270,7 @@ export async function extendLicenseBackend(
   const cleanActor = (actorUsername || 'debajoyti').trim()
   const days = Math.min(30, Math.max(1, Math.floor(Number(rawDays) || 1)))
   const max30DaysMs = Date.now() + 30 * 86400000
-  const isRootOwner =
-    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
 
   if (supabase) {
     try {
@@ -2375,7 +2368,7 @@ export async function extendLicenseBackend(
 
 export async function togglePauseLicenseBackend(
   licenseKey: string,
-  requesterUsername: string = 'rymon'
+  requesterUsername: string = 'debajoyti'
 ): Promise<{
   success: boolean
   is_paused: boolean
@@ -2511,7 +2504,7 @@ export async function togglePauseLicenseBackend(
 
 export async function bulkTogglePauseAllKeysBackend(
   pauseState: boolean,
-  actorUsername: string = 'rymon',
+  actorUsername: string = 'debajoyti',
   creatorFilter?: string
 ): Promise<{ success: boolean; count: number; message: string }> {
   let affected = 0
@@ -2615,7 +2608,7 @@ export async function bulkTogglePauseAllKeysBackend(
 }
 
 export async function bulkResetAllHwidBackend(
-  actorUsername: string = 'rymon',
+  actorUsername: string = 'debajoyti',
   creatorFilter?: string
 ): Promise<{ success: boolean; message: string }> {
   const nowIso = new Date().toISOString()
@@ -2670,7 +2663,7 @@ export async function bulkResetAllHwidBackend(
 
 export async function bulkExtendAllKeysBackend(
   rawDays: number,
-  actorUsername: string = 'rymon',
+  actorUsername: string = 'debajoyti',
   creatorFilter?: string
 ): Promise<{ success: boolean; count: number; remainingBalance?: number; message: string }> {
   let count = 0
@@ -2678,8 +2671,7 @@ export async function bulkExtendAllKeysBackend(
   const msToAdd = days * 86400000
   const max30DaysMs = Date.now() + 30 * 86400000
   const cleanActor = (actorUsername || 'debajoyti').trim()
-  const isRootOwner =
-    cleanActor.toLowerCase() === 'debajoyti' || cleanActor.toLowerCase() === 'rymon'
+  const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
   let remainingBalance: number | undefined = undefined
 
   if (supabase) {
@@ -2815,9 +2807,9 @@ export function saveStoredActivities(activities: RymonActivity[]): void {
 export const SOVEREIGN_FALLBACK_NOTIFICATIONS: RymonNotification[] = [
   {
     id: 1,
-    sender: 'rymon',
+    sender: 'debajoyti',
     recipient: 'ALL',
-    title: '🚨 SYSTEM ACTIVE: Welcome to Rymon Sovereign Network',
+    title: '🚨 SYSTEM ACTIVE: Welcome to Sovereign Network',
     message: 'The sovereign portal is online on greenvest.shop with zero external latency. All reseller balances, key generators, and streamer telemetry are linked directly to database.',
     type: 'UPDATE',
     is_pinned: true,
@@ -2825,7 +2817,7 @@ export const SOVEREIGN_FALLBACK_NOTIFICATIONS: RymonNotification[] = [
   },
   {
     id: 2,
-    sender: 'rymon',
+    sender: 'debajoyti',
     recipient: 'ALL',
     title: '⚡ PUBG 3.7 & FreeFire Bypass Live',
     message: 'All memory injection modules and safe telemetry controls are updated. Ensure your streamers bind HWID before joining live matches.',
@@ -2835,10 +2827,10 @@ export const SOVEREIGN_FALLBACK_NOTIFICATIONS: RymonNotification[] = [
   },
   {
     id: 3,
-    sender: 'rymon',
-    recipient: 'ROGER',
-    title: '💼 Reseller Tier Verified',
-    message: 'Your reseller account has been credited. You can generate PUBG and FreeFire keys directly from the Generate Key panel.',
+    sender: 'debajoyti',
+    recipient: 'ALL',
+    title: '💼 Reseller & Streamer System Online',
+    message: 'The sovereign licensing engine is operational. Generate keys directly from the Generate Key panel or bind active keys for remote control.',
     type: 'INFO',
     is_pinned: false,
     created_at: new Date(Date.now() - 3600000).toISOString()
@@ -2864,7 +2856,6 @@ export async function fetchNotifications(
 ): Promise<RymonNotification[]> {
   const isOwnerFilter =
     !userFilter ||
-    userFilter.toLowerCase() === 'rymon' ||
     userFilter.toLowerCase() === 'debajoyti'
 
   if (supabase) {
@@ -4993,11 +4984,10 @@ export async function createReferralCode(
   subscriptionDays: 30 | 60 = 30
 ): Promise<{ success: boolean; code?: string; remainingBalance?: number; message: string }> {
   const cleanOwner = (owner || 'debajoyti').trim()
-  const isRootOwner =
-    cleanOwner.toLowerCase() === 'debajoyti' || cleanOwner.toLowerCase() === 'rymon'
+  const isRootOwner = cleanOwner.toLowerCase() === 'debajoyti'
   const safeSubDays: 30 | 60 = subscriptionDays === 60 ? 60 : 30
 
-  // Strict hierarchy: Only Root Owner (debajoyti / rymon) can issue Admin referrals
+  // Strict hierarchy: Only Root Owner (debajoyti) can issue Admin referrals
   if (!isRootOwner && targetRole === 'admin') {
     return {
       success: false,
