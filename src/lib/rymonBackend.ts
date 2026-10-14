@@ -141,7 +141,7 @@ export interface RymonReferral {
   created_at: string
 }
 
-export const STREAMER_HEARTBEAT_TIMEOUT_MS = 35000
+export const STREAMER_HEARTBEAT_TIMEOUT_MS = 90000 // 90 seconds (generous grace period to prevent mobile network dropouts)
 
 export function isStreamerKeyActivelyPlaying(
   ctrl?: Partial<StreamerControlRecord> | null
@@ -155,7 +155,11 @@ export function isStreamerKeyActivelyPlaying(
   }
   const hbMs = new Date(ctrl.last_heartbeat).getTime()
   if (Number.isNaN(hbMs)) return false
-  return Date.now() - hbMs <= STREAMER_HEARTBEAT_TIMEOUT_MS
+  const now = Date.now()
+  const diff = now - hbMs
+  // If phone clock is slightly ahead of server/browser clock (diff < 0), it is clearly fresh/online
+  if (diff < 0) return true
+  return diff <= STREAMER_HEARTBEAT_TIMEOUT_MS
 }
 
 export function buildDefaultStreamerControlPayload(
