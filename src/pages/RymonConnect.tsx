@@ -4760,13 +4760,14 @@ export default function RymonConnect() {
                                     >
                                       {u.status === 'BANNED' ? '🚫' : '🛡️'}
                                     </button>
-                                    {isOwner && (
+                                    {canDeleteThisUser && (
                                       <button
-                                        onClick={() => handleDeleteUser(u.username, u.role, u.uplink)}
+                                        onClick={() => handleDeleteUser(u.username, u.role, u.uplink || '')}
                                         style={{
                                           ...styles.actionIconBtn,
                                           color: '#ef4444',
-                                          borderColor: 'rgba(239, 68, 68, 0.4)'
+                                          borderColor: 'rgba(239, 68, 68, 0.4)',
+                                          background: 'rgba(239, 68, 68, 0.12)'
                                         }}
                                         title={`Permanently Delete User @${u.username}`}
                                       >
