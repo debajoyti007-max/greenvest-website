@@ -23,6 +23,8 @@ export interface RymonAccount {
     telegram_bot?: boolean
     account_settings?: boolean
     security?: boolean
+    allow_custom_apps?: boolean
+    allow_multi_device?: boolean
   }
 }
 
@@ -298,8 +300,8 @@ export const SOVEREIGN_FALLBACK_REFERRALS: RymonReferral[] = [
 export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
   {
     id: 38505,
-    license_key: 'RYMON-PB-94A2-9981',
-    game: 'PUBG',
+    license_key: 'RYMON-FF-94A2-9981',
+    game: 'Free Fire MAX',
     plan_duration: '1 Day',
     creator_username: 'debajoyti',
     devices_used: 2,
@@ -310,8 +312,8 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
   },
   {
     id: 38504,
-    license_key: 'RYMON-PB-4482-1092',
-    game: 'PUBG',
+    license_key: 'RYMON-FF-4482-1092',
+    game: 'Free Fire MAX',
     plan_duration: '30 Days',
     creator_username: 'debajoyti',
     devices_used: 0,
@@ -1289,10 +1291,53 @@ export async function generateLicenseKeyBackend(params: {
   const singleKeyCost = unitPrice * safeDevices
   const totalCost = singleKeyCost * safeQuantity
 
+  const isFf = !game || game.toLowerCase().includes('free fire')
+  const policy = getSovereignSecurityPolicy()
+
+  // 1. Role Permission Enforcement: Custom App Generation
+  if (!isFf && creator.role !== 'owner') {
+    const isReseller = creator.role === 'reseller'
+    const isAdmin = creator.role === 'admin'
+    const userPerm = creator.permissions?.allow_custom_apps
+
+    const customAllowed =
+      userPerm !== undefined
+        ? userPerm
+        : isReseller
+        ? Boolean(policy.allow_reseller_custom_apps)
+        : isAdmin
+        ? Boolean(policy.allow_admin_custom_apps ?? true)
+        : false
+
+    if (!customAllowed) {
+      return {
+        success: false,
+        error: `Permission Denied: Your ${creator.role.toUpperCase()} account is restricted to Free Fire MAX keys only. Custom App generation requires Owner authorization.`
+      }
+    }
+  }
+
+  // 2. Role Policy Enforcement: Reseller Max Devices & Bulk Limit
+  if (creator.role === 'reseller') {
+    const maxDevAllowed = policy.reseller_max_devices_limit ?? 1
+    if (safeDevices > maxDevAllowed) {
+      return {
+        success: false,
+        error: `Policy Restriction: Reseller keys are restricted to a maximum of ${maxDevAllowed} device(s) per key.`
+      }
+    }
+    const maxBulkAllowed = policy.reseller_max_bulk_limit ?? 10
+    if (safeQuantity > maxBulkAllowed) {
+      return {
+        success: false,
+        error: `Policy Restriction: Resellers are limited to generating a maximum of ${maxBulkAllowed} keys per batch.`
+      }
+    }
+  }
+
   const prefix = (customPrefix?.trim() || 'RYMON').toUpperCase()
   let gameTag = 'VIP'
   if (game.includes('Free Fire')) gameTag = 'FF'
-  else if (game.includes('Universal') || game.includes('All')) gameTag = 'UV'
   else {
     const clean = game.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
     gameTag = clean.length >= 2 ? clean.substring(0, 2) : 'VIP'
@@ -1374,14 +1419,14 @@ export async function generateLicenseKeyBackend(params: {
 
       if (!licErr && insertedLics && insertedLics.length > 0) {
         // ONLY Free Fire MAX keys have Streamer Remote Controls (ESP / Aimbot / Telemetry).
-        // Custom apps and other games are pure KeyAuth only!
-        const isFfOrUniversal = !game || game.toLowerCase().includes('free fire') || game.toLowerCase() === 'universal'
-        if (isFfOrUniversal) {
+        // Custom apps and any other games are PURE KEYAUTH ONLY!
+        const isFfOnly = !game || game.toLowerCase().includes('free fire')
+        if (isFfOnly) {
           const ctrlPayloads = generatedKeys.map((k) =>
             buildDefaultStreamerControlPayload({
               license_key: k,
               streamer_name: effectiveStreamerName,
-              game_name: game,
+              game_name: 'Free Fire MAX',
               plan_duration: effectivePlanDuration,
               creator: creatorName,
               devices_max: safeDevices,
@@ -1624,6 +1669,11 @@ export interface SovereignSecurityPolicy {
   apk_min_version: string // default '2.4'
   apk_force_update: boolean // default false
   apk_release_notes: string
+  // Owner Multi-App & Reseller Generation Restrictions
+  allow_reseller_custom_apps: boolean // default false (Resellers restricted to Free Fire MAX only)
+  allow_admin_custom_apps: boolean    // default true (Admins can generate custom app keys)
+  reseller_max_devices_limit: number  // default 1 (Max devices allowed per key for resellers)
+  reseller_max_bulk_limit: number     // default 10 (Max keys generated in one batch by reseller)
 }
 
 const SECURITY_POLICY_STORAGE_KEY = 'rymon_sovereign_security_policy_v1'
@@ -1638,7 +1688,11 @@ export const DEFAULT_SECURITY_POLICY: SovereignSecurityPolicy = {
   apk_latest_version: '2.4',
   apk_min_version: '2.4',
   apk_force_update: false,
-  apk_release_notes: 'v2.4 RYMON Sync: Instant Website Remote Hack Toggles + Live Heartbeat Engine'
+  apk_release_notes: 'v2.4 RYMON Sync: Instant Website Remote Hack Toggles + Live Heartbeat Engine',
+  allow_reseller_custom_apps: false,
+  allow_admin_custom_apps: true,
+  reseller_max_devices_limit: 1,
+  reseller_max_bulk_limit: 10
 }
 
 export function getSovereignSecurityPolicy(): SovereignSecurityPolicy {

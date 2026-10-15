@@ -69,7 +69,8 @@ import {
   DEFAULT_REGISTERED_APPS,
   fetchRegisteredApps,
   addRegisteredApp,
-  deleteRegisteredApp
+  deleteRegisteredApp,
+  saveStoredAccounts
 } from '../lib/rymonBackend'
 
 type TabType =
@@ -968,6 +969,26 @@ export default function RymonConnect() {
     if (isCustomAppMode && !customAppNameInput.trim()) {
       setGenError('Please enter a custom app name')
       return
+    }
+
+    // Role Permission Check: Custom Apps
+    if (isCustomAppMode && !canGenerateCustomApps) {
+      setGenError('Permission Denied: Your account is restricted by Owner to Free Fire MAX keys only. Custom App generation requires Owner authorization.')
+      return
+    }
+
+    // Reseller Policy Limits:
+    if (isReseller) {
+      const maxDev = securityPolicy.reseller_max_devices_limit ?? 1
+      if (genDevicesMax > maxDev) {
+        setGenError(`Policy Restriction: Reseller accounts are limited to a maximum of ${maxDev} device(s) per key.`)
+        return
+      }
+      const maxBulk = securityPolicy.reseller_max_bulk_limit ?? 10
+      if (genQuantity > maxBulk) {
+        setGenError(`Policy Restriction: Reseller accounts are limited to generating a maximum of ${maxBulk} keys per batch.`)
+        return
+      }
     }
 
     // If custom name was entered and is not yet in registered apps, save it automatically
@@ -2122,6 +2143,54 @@ export default function RymonConnect() {
   const isReseller = currentUser?.role === 'reseller'
   const isStreamer = currentUser?.role === 'streamer'
   const isStaff = isOwner || isAdmin || isReseller
+
+  // Cross-App & Reseller Generation Permission Engine
+  const isUserCustomAppAllowed = (user?: RymonAccount | null) => {
+    if (!user) return false
+    if (user.role === 'owner') return true
+    const perm = user.permissions?.allow_custom_apps
+    if (perm !== undefined) return Boolean(perm)
+    if (user.role === 'reseller') return Boolean(securityPolicy.allow_reseller_custom_apps)
+    if (user.role === 'admin') return Boolean(securityPolicy.allow_admin_custom_apps ?? true)
+    return false
+  }
+
+  const canGenerateCustomApps = isUserCustomAppAllowed(currentUser)
+
+  const handleToggleUserCustomApps = async (targetUsername: string, allow: boolean) => {
+    try {
+      const updated = usersList.map((u) => {
+        if (u.username.toLowerCase() === targetUsername.toLowerCase()) {
+          return {
+            ...u,
+            permissions: {
+              ...(u.permissions || {}),
+              allow_custom_apps: allow
+            }
+          }
+        }
+        return u
+      })
+      setUsersList(updated)
+      saveStoredAccounts(updated)
+
+      if (supabase) {
+        const targetObj = updated.find((u) => u.username.toLowerCase() === targetUsername.toLowerCase())
+        if (targetObj) {
+          await supabase
+            .from('rymon_accounts')
+            .update({
+              permissions: targetObj.permissions,
+              updated_at: new Date().toISOString()
+            })
+            .ilike('username', targetUsername)
+        }
+      }
+      showToast(`Updated @${targetUsername}: ${allow ? '✨ Custom Allowed' : '🔒 FF MAX Only'}`)
+    } catch {
+      showToast('Failed to update user app permissions')
+    }
+  }
 
   // Sovereign RBAC tab isolation guard
   useEffect(() => {
@@ -3427,19 +3496,27 @@ export default function RymonConnect() {
                         <div style={styles.formGroup}>
                           <label style={styles.formLabel}>SELECT TARGET GAME / APP</label>
                           <select
-                            value={isCustomAppMode ? '__CUSTOM__' : genGame}
+                            value={isCustomAppMode ? '__CUSTOM__' : 'Free Fire MAX'}
                             onChange={(e) => {
                               if (e.target.value === '__CUSTOM__') {
+                                if (!canGenerateCustomApps) {
+                                  showToast('🔒 Custom App key generation is restricted by Owner for your role.')
+                                  return
+                                }
                                 setIsCustomAppMode(true)
                               } else {
                                 setIsCustomAppMode(false)
-                                setGenGame(e.target.value)
+                                setGenGame('Free Fire MAX')
                               }
                             }}
                             style={styles.selectInput}
                           >
                             <option value="Free Fire MAX">🔥 Free Fire MAX (Streamer &amp; Remote)</option>
-                            <option value="__CUSTOM__">✨ Custom (Type Any Name...)</option>
+                            {canGenerateCustomApps ? (
+                              <option value="__CUSTOM__">✨ Custom</option>
+                            ) : (
+                              <option value="__CUSTOM__" disabled>🔒 Custom (Restricted by Owner)</option>
+                            )}
                           </select>
 
                           {/* Custom App Name Input on Click */}
@@ -3453,7 +3530,7 @@ export default function RymonConnect() {
                                   type="text"
                                   value={customAppNameInput}
                                   onChange={(e) => setCustomAppNameInput(e.target.value)}
-                                  placeholder="e.g. My Custom Tool, Private Mod, External App..."
+                                  placeholder="Type any custom app or mod name (e.g. Tool X, Private Mod)..."
                                   style={{ ...styles.keyInput, flex: 1, borderColor: '#05df72', padding: '8px 12px', fontSize: '13px' }}
                                   autoFocus
                                 />
@@ -3474,11 +3551,11 @@ export default function RymonConnect() {
                           <div style={{ marginTop: '6px', fontSize: '11.5px', lineHeight: '1.4' }}>
                             {!isCustomAppMode ? (
                               <span style={{ color: '#05df72' }}>
-                                🔥 <strong>Free Fire MAX:</strong> Full Streamer Remote, ESP, Aimbot, and live cloud telemetry enabled.
+                                🔥 <strong>Free Fire MAX Exclusive:</strong> Full Streamer Remote controls (ESP, Aimbot, Telemetry HUD) enabled.
                               </span>
                             ) : (
                               <span style={{ color: '#00d9ff' }}>
-                                ✨ <strong>Custom App KeyAuth:</strong> Generates key for <strong>{customAppNameInput.trim() || 'Custom App'}</strong> (Device HWID lock &amp; login verification).
+                                🔑 <strong>Pure KeyAuth Isolation:</strong> Key will <u>ONLY</u> work on <strong>{customAppNameInput.trim() || 'Custom App'}</strong>. Zero streamer controls (authentication &amp; HWID only).
                               </span>
                             )}
                           </div>
@@ -4531,6 +4608,25 @@ export default function RymonConnect() {
                                     >
                                       💰
                                     </button>
+                                    {isOwner && (u.role === 'reseller' || u.role === 'admin') && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleUserCustomApps(u.username, !isUserCustomAppAllowed(u))}
+                                        style={{
+                                          padding: '4px 8px',
+                                          borderRadius: '6px',
+                                          fontSize: '10px',
+                                          fontWeight: 800,
+                                          cursor: 'pointer',
+                                          background: isUserCustomAppAllowed(u) ? 'rgba(5, 223, 114, 0.16)' : 'rgba(239, 68, 68, 0.16)',
+                                          border: isUserCustomAppAllowed(u) ? '1px solid rgba(5, 223, 114, 0.45)' : '1px solid rgba(239, 68, 68, 0.45)',
+                                          color: isUserCustomAppAllowed(u) ? '#05df72' : '#f87171'
+                                        }}
+                                        title={isUserCustomAppAllowed(u) ? 'Click to Restrict to Free Fire MAX Only' : 'Click to Allow Custom App Key Generation'}
+                                      >
+                                        {isUserCustomAppAllowed(u) ? '✨ Custom Allowed' : '🔒 FF MAX Only'}
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => {
                                         setPwdModalUser(u.username)
@@ -5697,6 +5793,150 @@ export default function RymonConnect() {
                             }}
                           />
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Multi-App Generation & Role Key Restrictions */}
+                    <div style={{ ...styles.cardBox, marginTop: '20px' }}>
+                      <div style={styles.cardHeader}>
+                        <h4>🎮 Multi-App Generation &amp; Role Key Restrictions</h4>
+                        <span
+                          style={{
+                            ...styles.cyanMiniBadge,
+                            background: 'rgba(0, 217, 255, 0.16)',
+                            color: '#00d9ff'
+                          }}
+                        >
+                          APP ACCESS POLICY
+                        </span>
+                      </div>
+                      <p style={styles.settingDesc}>
+                        Owner controls for key generation privileges across administrative tiers. Keep Resellers locked strictly to <strong>Free Fire MAX</strong> (streamer controls) or allow them to mint keys for custom third-party apps (pure KeyAuth).
+                      </p>
+
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Allow Resellers to Generate Custom App Keys</div>
+                          <div style={styles.settingSub}>
+                            When OFF (Default / Recommended), Resellers are restricted to Free Fire MAX only. When ON, Resellers can generate keys for custom app names.
+                          </div>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              allow_reseller_custom_apps: !securityPolicy.allow_reseller_custom_apps
+                            })
+                          }
+                          style={{
+                            ...styles.switchPill,
+                            background: securityPolicy.allow_reseller_custom_apps
+                              ? '#05df72'
+                              : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: securityPolicy.allow_reseller_custom_apps
+                                ? 'translateX(20px)'
+                                : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Allow Level 2 Admins to Generate Custom App Keys</div>
+                          <div style={styles.settingSub}>
+                            Grants Admins permission to generate custom Pure KeyAuth keys for any third-party app
+                          </div>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              allow_admin_custom_apps: !(securityPolicy.allow_admin_custom_apps ?? true)
+                            })
+                          }
+                          style={{
+                            ...styles.switchPill,
+                            background: (securityPolicy.allow_admin_custom_apps ?? true)
+                              ? '#00d9ff'
+                              : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: (securityPolicy.allow_admin_custom_apps ?? true)
+                                ? 'translateX(20px)'
+                                : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Reseller Max Devices Cap (Anti-Sharing)</div>
+                          <div style={styles.settingSub}>
+                            Limits how many device HWIDs a Reseller key can bind (forces single device per license)
+                          </div>
+                        </div>
+                        <select
+                          value={securityPolicy.reseller_max_devices_limit ?? 1}
+                          onChange={(e) =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              reseller_max_devices_limit: parseInt(e.target.value) || 1
+                            })
+                          }
+                          style={{
+                            ...styles.selectInput,
+                            width: 'auto',
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: 800
+                          }}
+                        >
+                          <option value={1}>🔒 1 Device Only (Anti-Sharing Strict)</option>
+                          <option value={2}>2 Devices Max</option>
+                          <option value={5}>5 Devices Max</option>
+                          <option value={300}>300 Devices (Unlimited Multi-Device)</option>
+                        </select>
+                      </div>
+
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Reseller Max Bulk Minting Limit</div>
+                          <div style={styles.settingSub}>
+                            Maximum quantity of keys a Reseller can generate in a single batch
+                          </div>
+                        </div>
+                        <select
+                          value={securityPolicy.reseller_max_bulk_limit ?? 10}
+                          onChange={(e) =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              reseller_max_bulk_limit: parseInt(e.target.value) || 10
+                            })
+                          }
+                          style={{
+                            ...styles.selectInput,
+                            width: 'auto',
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: 800
+                          }}
+                        >
+                          <option value={1}>1 Key (Single Mint Only)</option>
+                          <option value={5}>5 Keys (Mini Pack)</option>
+                          <option value={10}>10 Keys (Standard Pack)</option>
+                          <option value={20}>20 Keys (Reseller Stock)</option>
+                          <option value={50}>50 Keys (Mega Stock)</option>
+                        </select>
                       </div>
                     </div>
 
@@ -7170,7 +7410,7 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                           • <strong>Pure KeyAuth Architecture:</strong> Custom apps only perform license authentication, HWID lock, and expiration checks. Zero ESP, aimbot, or streamer remote overhead.
                         </p>
                         <p style={{ margin: '0' }}>
-                          • <strong>Universal Key Bypass:</strong> Generating a key as <em>Universal</em> allows that key to work across all apps simultaneously.
+                          • <strong>Owner Role Restrictions:</strong> Owners can restrict whether Admins or Resellers are allowed to mint custom app keys, restrict maximum device bindings (anti-sharing), and control bulk batch limits.
                         </p>
                       </div>
                     </div>
@@ -7183,7 +7423,7 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '12px' }}>
                       <div>
                         <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
-                          Universal Connect Gateway SDK &amp; Code Snippets
+                          Connect Gateway SDK &amp; Code Snippets
                         </h3>
                         <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
                           Plug-and-play code snippets for <strong>{selectedSnippetApp?.name || 'Free Fire MAX'}</strong>. Drop into your project to authenticate keys in seconds.
@@ -7657,8 +7897,7 @@ else:
                           .filter(
                             (k) =>
                               !k.game ||
-                              k.game.toLowerCase().includes('free fire') ||
-                              k.game.toLowerCase() === 'universal'
+                              k.game.toLowerCase().includes('free fire')
                           )
                           .map((k) => {
                             const isKeyPlaying = onlineKeySet.has(k.license_key.toUpperCase())
