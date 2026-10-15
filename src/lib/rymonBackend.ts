@@ -322,8 +322,8 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
   },
   {
     id: 38503,
-    license_key: 'RYMON-PB-7719-2041',
-    game: 'BGMI',
+    license_key: 'RYMON-FF-7719-2041',
+    game: 'Free Fire MAX',
     plan_duration: '30 Days',
     creator_username: 'debajoyti',
     devices_used: 0,
@@ -334,7 +334,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
   },
   {
     id: 38502,
-    license_key: 'RYMON-PB-3108-8842',
+    license_key: 'RYMON-FF-3108-8842',
     game: 'Free Fire MAX',
     plan_duration: '1 Day',
     creator_username: 'debajoyti',
@@ -346,7 +346,7 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
   },
   {
     id: 38501,
-    license_key: 'RYMON-PB-8491-3004',
+    license_key: 'RYMON-FF-8491-3004',
     game: 'Free Fire MAX',
     plan_duration: '30 Days',
     creator_username: 'debajoyti',
@@ -358,8 +358,8 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
   },
   {
     id: 38500,
-    license_key: 'RYMON-PB-1190-7734',
-    game: 'PUBG',
+    license_key: 'RYMON-FF-1190-7734',
+    game: 'Free Fire MAX',
     plan_duration: '7 Days',
     creator_username: 'debajoyti',
     devices_used: 0,
@@ -370,8 +370,8 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
   },
   {
     id: 38499,
-    license_key: 'RYMON-PB-9920-4100',
-    game: 'BGMI',
+    license_key: 'RYMON-FF-9920-4100',
+    game: 'Free Fire MAX',
     plan_duration: '1 Day',
     creator_username: 'debajoyti',
     devices_used: 1,
@@ -399,7 +399,7 @@ export const SOVEREIGN_FALLBACK_ACTIVITIES: RymonActivity[] = [
     id: 1,
     title: 'Ticket #387',
     event_type: 'KEY_GENERATED',
-    game: 'PUBG',
+    game: 'Free Fire MAX',
     details: '1 Day • 300 Device(s)',
     actor_username: 'debajoyti',
     status: 'SUCCESS',
@@ -419,7 +419,7 @@ export const SOVEREIGN_FALLBACK_ACTIVITIES: RymonActivity[] = [
     id: 3,
     title: 'Ticket #385',
     event_type: 'KEY_GENERATED',
-    game: 'BGMI',
+    game: 'Free Fire MAX',
     details: '30 Days • 1 Device(s)',
     actor_username: 'debajoyti',
     status: 'SUCCESS',
@@ -429,7 +429,7 @@ export const SOVEREIGN_FALLBACK_ACTIVITIES: RymonActivity[] = [
     id: 4,
     title: 'Ticket #384',
     event_type: 'KEY_GENERATED',
-    game: 'PUBG',
+    game: 'Free Fire MAX',
     details: '7 Days • 1 Device(s)',
     actor_username: 'debajoyti',
     status: 'SUCCESS',
@@ -1290,14 +1290,12 @@ export async function generateLicenseKeyBackend(params: {
   const totalCost = singleKeyCost * safeQuantity
 
   const prefix = (customPrefix?.trim() || 'RYMON').toUpperCase()
-  let gameTag = 'PB'
+  let gameTag = 'VIP'
   if (game.includes('Free Fire')) gameTag = 'FF'
-  else if (game.includes('BGMI')) gameTag = 'BG'
   else if (game.includes('Universal') || game.includes('All')) gameTag = 'UV'
-  else if (game.includes('Call of Duty') || game.includes('CODM')) gameTag = 'CD'
   else {
     const clean = game.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
-    gameTag = clean.length >= 2 ? clean.substring(0, 2) : 'PB'
+    gameTag = clean.length >= 2 ? clean.substring(0, 2) : 'VIP'
   }
 
   const generatedKeys: string[] = []
@@ -5415,26 +5413,6 @@ export const DEFAULT_REGISTERED_APPS: RegisteredApp[] = [
     status: 'ACTIVE',
     description: 'RYMON Streamer Mod & ESP Suite',
     created_at: '2026-10-11T00:00:00Z'
-  },
-  {
-    id: 'bgmi',
-    name: 'BGMI',
-    package_name: 'com.pubg.imobile',
-    platform: 'Android Mobile',
-    icon: '🎯',
-    status: 'ACTIVE',
-    description: 'Battlegrounds Mobile India',
-    created_at: '2026-10-15T00:00:00Z'
-  },
-  {
-    id: 'codm',
-    name: 'Call of Duty Mobile',
-    package_name: 'com.activision.callofduty.shooter',
-    platform: 'Android Mobile',
-    icon: '🎖️',
-    status: 'ACTIVE',
-    description: 'CODM Battle Royale / Multiplayer',
-    created_at: '2026-10-15T00:00:00Z'
   }
 ]
 
@@ -5446,7 +5424,10 @@ export function getLocalRegisteredApps(): RegisteredApp[] {
     const raw = localStorage.getItem(REGISTERED_APPS_LOCAL_STORAGE)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const cleaned = parsed.filter((a: any) => a.id !== 'bgmi' && a.id !== 'codm' && !a.name?.toLowerCase().includes('bgmi') && !a.name?.toLowerCase().includes('duty'))
+        if (cleaned.length > 0) return cleaned
+      }
     }
   } catch {}
   return [...DEFAULT_REGISTERED_APPS]
@@ -5463,7 +5444,10 @@ export async function fetchRegisteredApps(): Promise<RegisteredApp[]> {
         .maybeSingle()
 
       if (cfgRow?.value && Array.isArray(cfgRow.value) && cfgRow.value.length > 0) {
-        apps = cfgRow.value as RegisteredApp[]
+        const cleaned = (cfgRow.value as RegisteredApp[]).filter(
+          (a) => a.id !== 'bgmi' && a.id !== 'codm' && !a.name?.toLowerCase().includes('bgmi') && !a.name?.toLowerCase().includes('duty')
+        )
+        apps = cleaned.length > 0 ? cleaned : [...DEFAULT_REGISTERED_APPS]
         try {
           localStorage.setItem(REGISTERED_APPS_LOCAL_STORAGE, JSON.stringify(apps))
         } catch {}

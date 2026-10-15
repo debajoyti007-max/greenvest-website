@@ -3488,7 +3488,7 @@ export default function RymonConnect() {
                                   type="text"
                                   value={customAppNameInput}
                                   onChange={(e) => setCustomAppNameInput(e.target.value)}
-                                  placeholder="e.g. Tool X, Private Mod, BGMI, Call of Duty..."
+                                  placeholder="e.g. My Custom Tool, Private Mod, External App..."
                                   style={{ ...styles.keyInput, flex: 1, borderColor: '#05df72', padding: '8px 12px', fontSize: '13px' }}
                                   autoFocus
                                 />
@@ -5996,7 +5996,7 @@ export default function RymonConnect() {
                   </div>
                   <div style={styles.badgeCluster}>
                     <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER CONSOLE' : 'ADMIN CONSOLE'}</span>
-                    <span style={styles.greenPulseBadge}>● SOVEREIGN PROTOCOL</span>
+                    <span style={styles.greenPulseBadge}>● RYMON PROTOCOL</span>
                   </div>
                 </div>
 
@@ -6160,7 +6160,7 @@ export default function RymonConnect() {
                         disabled={refCreating}
                         style={{ ...styles.submitBtn, marginTop: '16px' }}
                       >
-                        {refCreating ? 'CREATING CODE IN SUPABASE...' : `🎟️ GENERATE ${refSubDays}D INVITE CODE`}
+                        {refCreating ? 'CREATING INVITE CODE...' : `🎟️ GENERATE ${refSubDays}D INVITE CODE`}
                       </button>
                     </form>
                   </div>
@@ -6172,7 +6172,7 @@ export default function RymonConnect() {
                         <div>
                           <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Active Referral Codes ({referralList.length})</h3>
                           <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            Real codes stored in Supabase <code>public.rymon_referrals</code>
+                            Encrypted vouchers stored on RYMON Cloud Core
                           </div>
                         </div>
                         <button
@@ -6289,9 +6289,9 @@ export default function RymonConnect() {
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Sovereign Connect Engine &amp; Integration Suite</h2>
+                    <h2 style={styles.pageTitle}>RYMON Connect Engine &amp; Integration Suite</h2>
                     <p style={styles.pageSubtitle}>
-                      Direct sovereign key verification and hardware binding endpoints for any Safe Streamer APK, custom native daemon, or external mod. 100% self-hosted on Supabase and greenvest.shop.
+                      Direct RYMON key verification and hardware binding endpoints for any Safe Streamer APK, custom native daemon, or external mod. 100% cloud-synced on greenvest.shop.
                     </p>
                   </div>
                   <div style={styles.badgeCluster}>
@@ -6367,7 +6367,7 @@ export default function RymonConnect() {
                         {/* Anon API Key */}
                         <div>
                           <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
-                            SUPABASE ANON PUBLISHABLE KEY (HEADER <code>apikey</code>):
+                            RYMON REST API KEY (HEADER <code>apikey</code>):
                           </div>
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.85)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255, 183, 0, 0.25)' }}>
                             <span style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#ffb700', flex: 1, wordBreak: 'break-all' }}>
@@ -6376,7 +6376,7 @@ export default function RymonConnect() {
                             <button
                               onClick={() => {
                                 navigator.clipboard.writeText(SOVEREIGN_CONNECT_CONFIG.anon_key)
-                                showToast('Copied Supabase Anon Key')
+                                showToast('Copied RYMON API Key')
                               }}
                               style={styles.miniCopyBtn}
                               title="Copy API Key"
@@ -6711,7 +6711,7 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                           <div>
                             <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Live Verification Test Sandbox</h3>
                             <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                              Simulate Android APK key verification against live Supabase RPC
+                              Simulate Android APK key verification against live RYMON Gateway
                             </div>
                           </div>
                         </div>
@@ -6821,7 +6821,7 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                   <div>
                     <h2 style={styles.pageTitle}>App Manager &amp; Cross-App Isolation Hub</h2>
                     <p style={styles.pageSubtitle}>
-                      Manage applications in your KeyAuth ecosystem. Enforce strict cross-app license isolation (keys for Free Fire MAX cannot be used in custom apps like Tool X, Private Mod, BGMI, etc.). Only Free Fire MAX connects to the Streamer Remote; all other apps are <strong>pure KeyAuth only</strong>.
+                      Manage applications in your KeyAuth ecosystem. Enforce strict cross-app license isolation (keys for Free Fire MAX cannot be used in custom apps like Tool X, Private Mod, Custom App, etc.). Only Free Fire MAX connects to the Streamer Remote; all other apps are <strong>pure KeyAuth only</strong>.
                     </p>
                   </div>
                   <div style={styles.badgeCluster}>
@@ -7087,7 +7087,7 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                               Register New App / Game
                             </h3>
                             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
-                              Add any custom app name (Tool X, Private Mod, BGMI, CODM, etc.)
+                              Add any custom app name (Tool X, Private Mod, Custom App, etc.)
                             </div>
                           </div>
                         </div>
@@ -7100,7 +7100,7 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                             type="text"
                             value={newAppName}
                             onChange={(e) => setNewAppName(e.target.value)}
-                            placeholder="e.g. Tool X, Private Mod, BGMI, CODM..."
+                            placeholder="e.g. Tool X, Private Mod, Custom App..."
                             style={styles.keyInput}
                             required
                           />
@@ -7112,7 +7112,7 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                             type="text"
                             value={newAppPackage}
                             onChange={(e) => setNewAppPackage(e.target.value)}
-                            placeholder="e.g. com.pubg.imobile or custom.tool.mod"
+                            placeholder="e.g. com.custom.mod or custom.tool.app"
                             style={styles.keyInput}
                           />
                         </div>
@@ -8341,7 +8341,7 @@ else:
                     Reset Password for @{pwdModalUser}
                   </h3>
                   <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                    Instantly updates user credentials on Supabase
+                    Instantly updates user credentials across RYMON Cloud
                   </div>
                 </div>
               </div>
@@ -8469,11 +8469,11 @@ else:
   )
 }
 
-// ── Obsidian Cyber Glassmorphism Scoped Design System ────────────────────────
+// ── Phantom Amethyst Glassmorphism Scoped Design System ────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   appShell: {
     minHeight: '100vh',
-    backgroundColor: '#07090e',
+    backgroundColor: '#08070e',
     color: '#f8fafc',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     position: 'relative',
@@ -8485,9 +8485,9 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundImage: `radial-gradient(rgba(0, 217, 255, 0.05) 1px, transparent 0), radial-gradient(rgba(147, 51, 234, 0.03) 1px, transparent 0)`,
-    backgroundSize: '40px 40px, 80px 80px',
-    backgroundPosition: '0 0, 20px 20px',
+    backgroundImage: `radial-gradient(rgba(168, 85, 247, 0.08) 1px, transparent 0), radial-gradient(rgba(244, 63, 94, 0.04) 1px, transparent 0)`,
+    backgroundSize: '36px 36px, 72px 72px',
+    backgroundPosition: '0 0, 18px 18px',
     pointerEvents: 'none',
     zIndex: 0
   },
@@ -8496,9 +8496,10 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '14px 24px',
-    backgroundColor: 'rgba(10, 13, 20, 0.85)',
-    backdropFilter: 'blur(16px)',
-    borderBottom: '1px solid rgba(30, 41, 59, 0.6)',
+    backgroundColor: 'rgba(11, 9, 20, 0.88)',
+    backdropFilter: 'blur(20px)',
+    borderBottom: '1px solid rgba(168, 85, 247, 0.2)',
+    boxShadow: '0 4px 30px rgba(0, 0, 0, 0.55)',
     position: 'sticky',
     top: 0,
     zIndex: 50
@@ -8526,8 +8527,8 @@ const styles: Record<string, React.CSSProperties> = {
     height: '38px',
     borderRadius: '10px',
     overflow: 'hidden',
-    border: '1px solid rgba(0, 217, 255, 0.4)',
-    boxShadow: '0 0 12px rgba(0, 217, 255, 0.25)',
+    border: '1px solid rgba(168, 85, 247, 0.55)',
+    boxShadow: '0 0 14px rgba(168, 85, 247, 0.35)',
     flexShrink: 0
   },
   logoImage: {
@@ -8541,15 +8542,25 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.04em',
     color: '#f8fafc'
   },
+  brandVioletPill: {
+    background: 'linear-gradient(135deg, #c084fc 0%, #a855f7 50%, #f43f5e 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    fontWeight: 900,
+    letterSpacing: '0.06em',
+    filter: 'drop-shadow(0 0 12px rgba(168, 85, 247, 0.5))'
+  },
   brandCyanPill: {
-    color: '#00d9ff',
-    textShadow: '0 0 10px rgba(0, 217, 255, 0.5)'
+    background: 'linear-gradient(135deg, #c084fc 0%, #a855f7 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    textShadow: '0 0 12px rgba(168, 85, 247, 0.6)'
   },
   brandSubText: {
     fontSize: '10px',
-    color: '#64748b',
-    letterSpacing: '0.06em',
-    fontWeight: 600
+    color: '#a78bfa',
+    letterSpacing: '0.07em',
+    fontWeight: 700
   },
   headerRight: {
     display: 'flex',
@@ -8561,23 +8572,24 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '8px',
     padding: '6px 14px',
-    backgroundColor: 'rgba(13, 17, 26, 0.9)',
-    border: '1px solid rgba(0, 217, 255, 0.3)',
+    backgroundColor: 'rgba(18, 14, 29, 0.9)',
+    border: '1px solid rgba(168, 85, 247, 0.32)',
     borderRadius: '20px',
     fontSize: '13px',
     fontWeight: 700,
-    cursor: 'pointer'
+    cursor: 'pointer',
+    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)'
   },
   balanceAmount: {
-    color: '#00d9ff'
+    color: '#c084fc'
   },
   telemetryPill: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: '6px 12px',
-    backgroundColor: 'rgba(13, 17, 26, 0.8)',
-    border: '1px solid rgba(30, 41, 59, 0.6)',
+    backgroundColor: 'rgba(18, 14, 29, 0.85)',
+    border: '1px solid rgba(168, 85, 247, 0.22)',
     borderRadius: '20px',
     fontSize: '11px',
     fontWeight: 600
@@ -8592,7 +8604,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#cbd5e1'
   },
   pingText: {
-    color: '#00d9ff',
+    color: '#38bdf8',
     fontWeight: 700
   },
   userProfilePill: {
@@ -8600,21 +8612,22 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '10px',
     padding: '4px 8px 4px 12px',
-    backgroundColor: 'rgba(13, 17, 26, 0.9)',
-    border: '1px solid rgba(30, 41, 59, 0.6)',
+    backgroundColor: 'rgba(18, 14, 29, 0.9)',
+    border: '1px solid rgba(168, 85, 247, 0.25)',
     borderRadius: '20px'
   },
   userAvatarSquare: {
     width: '24px',
     height: '24px',
     borderRadius: '6px',
-    backgroundColor: '#00d9ff',
-    color: '#07090e',
+    backgroundColor: '#a855f7',
+    color: '#ffffff',
     fontWeight: 800,
     fontSize: '12px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    boxShadow: '0 0 10px rgba(168, 85, 247, 0.45)'
   },
   userNameBlock: {
     display: 'flex',
@@ -8627,7 +8640,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   userRoleTag: {
     fontSize: '9px',
-    color: '#00d9ff',
+    color: '#c084fc',
     fontWeight: 700,
     letterSpacing: '0.04em'
   },
@@ -8642,13 +8655,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   quickLoginBtn: {
     padding: '7px 16px',
-    backgroundColor: '#00d9ff',
-    color: '#07090e',
+    background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+    color: '#ffffff',
     border: 'none',
     borderRadius: '8px',
     fontWeight: 700,
     fontSize: '12px',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    boxShadow: '0 2px 12px rgba(168, 85, 247, 0.4)'
   },
   toastBanner: {
     backgroundColor: 'rgba(5, 223, 114, 0.15)',
@@ -8664,10 +8678,10 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '520px',
     margin: '60px auto',
     padding: '36px',
-    backgroundColor: 'rgba(13, 17, 26, 0.85)',
-    border: '1px solid rgba(0, 217, 255, 0.25)',
+    backgroundColor: 'rgba(18, 14, 29, 0.88)',
+    border: '1px solid rgba(168, 85, 247, 0.28)',
     borderRadius: '20px',
-    boxShadow: '0 20px 50px rgba(0,0,0,0.6), 0 0 30px rgba(0, 217, 255, 0.1)',
+    boxShadow: '0 20px 50px rgba(0,0,0,0.7), 0 0 35px rgba(168, 85, 247, 0.16)',
     backdropFilter: 'blur(20px)',
     position: 'relative',
     zIndex: 1
@@ -8677,21 +8691,22 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     padding: '4px 12px',
     borderRadius: '12px',
-    backgroundColor: 'rgba(0, 217, 255, 0.1)',
-    color: '#00d9ff',
+    backgroundColor: 'rgba(168, 85, 247, 0.14)',
+    color: '#c084fc',
     fontSize: '11px',
     fontWeight: 700,
     letterSpacing: '0.06em',
-    marginBottom: '16px'
+    marginBottom: '16px',
+    border: '1px solid rgba(168, 85, 247, 0.3)'
   },
   authTabSelector: {
     display: 'flex',
     gap: '8px',
-    backgroundColor: 'rgba(7, 9, 14, 0.6)',
+    backgroundColor: 'rgba(11, 9, 20, 0.75)',
     padding: '4px',
     borderRadius: '12px',
     marginBottom: '24px',
-    border: '1px solid rgba(30, 41, 59, 0.5)'
+    border: '1px solid rgba(168, 85, 247, 0.18)'
   },
   authTabBtn: {
     flex: 1,
@@ -8706,10 +8721,10 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s ease'
   },
   authTabBtnActive: {
-    backgroundColor: 'rgba(0, 217, 255, 0.15)',
-    color: '#00d9ff',
+    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+    color: '#c084fc',
     fontWeight: 700,
-    boxShadow: '0 0 10px rgba(0, 217, 255, 0.15)'
+    boxShadow: '0 0 12px rgba(168, 85, 247, 0.25)'
   },
   authHead: {
     fontSize: '22px',
@@ -8741,8 +8756,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   keyInput: {
     padding: '12px 16px',
-    backgroundColor: 'rgba(7, 9, 14, 0.8)',
-    border: '1px solid rgba(30, 41, 59, 0.8)',
+    backgroundColor: 'rgba(11, 9, 20, 0.85)',
+    border: '1px solid rgba(168, 85, 247, 0.25)',
     borderRadius: '10px',
     color: '#f8fafc',
     fontSize: '14px',
@@ -8752,8 +8767,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   selectInput: {
     padding: '12px 16px',
-    backgroundColor: 'rgba(7, 9, 14, 0.8)',
-    border: '1px solid rgba(30, 41, 59, 0.8)',
+    backgroundColor: 'rgba(11, 9, 20, 0.85)',
+    border: '1px solid rgba(168, 85, 247, 0.25)',
     borderRadius: '10px',
     color: '#f8fafc',
     fontSize: '14px',
@@ -8774,25 +8789,25 @@ const styles: Record<string, React.CSSProperties> = {
   },
   chipBtn: {
     padding: '4px 10px',
-    backgroundColor: 'rgba(30, 41, 59, 0.4)',
-    border: '1px solid rgba(0, 217, 255, 0.2)',
+    backgroundColor: 'rgba(28, 20, 44, 0.6)',
+    border: '1px solid rgba(168, 85, 247, 0.3)',
     borderRadius: '6px',
-    color: '#00d9ff',
+    color: '#c084fc',
     fontSize: '11px',
     fontWeight: 600,
     cursor: 'pointer'
   },
   submitBtn: {
     padding: '14px 20px',
-    backgroundColor: '#00d9ff',
-    color: '#07090e',
+    background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+    color: '#ffffff',
     border: 'none',
     borderRadius: '12px',
     fontWeight: 800,
     fontSize: '13px',
     letterSpacing: '0.04em',
     cursor: 'pointer',
-    boxShadow: '0 4px 16px rgba(0, 217, 255, 0.35)'
+    boxShadow: '0 4px 20px rgba(168, 85, 247, 0.45)'
   },
   primaryActionBtn: {
     padding: '12px 24px',
@@ -8803,10 +8818,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   errorBox: {
     padding: '10px 14px',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    border: '1px solid rgba(239, 68, 68, 0.4)',
+    backgroundColor: 'rgba(244, 63, 94, 0.15)',
+    border: '1px solid rgba(244, 63, 94, 0.45)',
     borderRadius: '8px',
-    color: '#ef4444',
+    color: '#f43f5e',
     fontSize: '12px',
     lineHeight: 1.4
   },
@@ -8818,8 +8833,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sidebar: {
     width: '260px',
-    backgroundColor: 'rgba(10, 13, 20, 0.75)',
-    borderRight: '1px solid rgba(30, 41, 59, 0.5)',
+    backgroundColor: 'rgba(11, 9, 20, 0.82)',
+    borderRight: '1px solid rgba(168, 85, 247, 0.18)',
     padding: '20px 14px',
     display: 'flex',
     flexDirection: 'column',
@@ -8833,12 +8848,12 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     bottom: 0,
     zIndex: 100,
-    backgroundColor: '#0a0d14'
+    backgroundColor: '#0b0914'
   },
   sidebarUserCard: {
     padding: '12px',
-    backgroundColor: 'rgba(13, 17, 26, 0.8)',
-    border: '1px solid rgba(30, 41, 59, 0.5)',
+    backgroundColor: 'rgba(18, 14, 29, 0.85)',
+    border: '1px solid rgba(168, 85, 247, 0.22)',
     borderRadius: '12px',
     marginBottom: '10px'
   },
@@ -8851,13 +8866,14 @@ const styles: Record<string, React.CSSProperties> = {
     width: '32px',
     height: '32px',
     borderRadius: '8px',
-    backgroundColor: '#00d9ff',
-    color: '#07090e',
+    background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+    color: '#ffffff',
     fontWeight: 800,
     fontSize: '14px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    boxShadow: '0 0 10px rgba(168, 85, 247, 0.4)'
   },
   sidebarUserName: {
     fontSize: '13px',
@@ -8887,7 +8903,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '10px',
     fontWeight: 800,
     letterSpacing: '0.08em',
-    color: '#475569',
+    color: '#6b7280',
     padding: '14px 10px 4px 10px'
   },
   navItem: {
@@ -8906,10 +8922,11 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.15s ease'
   },
   navItemActive: {
-    backgroundColor: 'rgba(0, 217, 255, 0.12)',
-    color: '#00d9ff',
+    backgroundColor: 'rgba(168, 85, 247, 0.16)',
+    color: '#c084fc',
     fontWeight: 700,
-    borderLeft: '3px solid #00d9ff'
+    borderLeft: '3px solid #a855f7',
+    boxShadow: 'inset 0 0 16px rgba(168, 85, 247, 0.08)'
   },
   navIcon: {
     fontSize: '14px'
@@ -8919,8 +8936,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '9px',
     padding: '2px 6px',
     borderRadius: '6px',
-    backgroundColor: 'rgba(0, 217, 255, 0.15)',
-    color: '#00d9ff',
+    backgroundColor: 'rgba(168, 85, 247, 0.18)',
+    color: '#c084fc',
     fontWeight: 700
   },
   contentPane: {
@@ -8979,17 +8996,19 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '16px',
     padding: '20px',
-    backgroundColor: 'rgba(13, 17, 26, 0.7)',
-    border: '1px solid rgba(30, 41, 59, 0.5)',
+    backgroundColor: 'rgba(18, 14, 29, 0.78)',
+    border: '1px solid rgba(168, 85, 247, 0.2)',
     borderRadius: '16px',
-    backdropFilter: 'blur(10px)'
+    backdropFilter: 'blur(16px)',
+    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
   },
   statIconFrame: {
     width: '44px',
     height: '44px',
     borderRadius: '12px',
-    backgroundColor: 'rgba(0, 217, 255, 0.1)',
-    color: '#00d9ff',
+    backgroundColor: 'rgba(168, 85, 247, 0.14)',
+    color: '#c084fc',
+    border: '1px solid rgba(168, 85, 247, 0.28)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -9012,10 +9031,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardBox: {
     padding: '24px',
-    backgroundColor: 'rgba(13, 17, 26, 0.75)',
-    border: '1px solid rgba(30, 41, 59, 0.5)',
+    backgroundColor: 'rgba(18, 14, 29, 0.82)',
+    border: '1px solid rgba(168, 85, 247, 0.22)',
     borderRadius: '16px',
-    backdropFilter: 'blur(10px)'
+    backdropFilter: 'blur(16px)',
+    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
   },
   cardHeader: {
     display: 'flex',
@@ -9030,13 +9050,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   quickActionCard: {
     padding: '16px',
-    backgroundColor: 'rgba(7, 9, 14, 0.6)',
-    border: '1px solid rgba(30, 41, 59, 0.6)',
+    backgroundColor: 'rgba(11, 9, 20, 0.65)',
+    border: '1px solid rgba(168, 85, 247, 0.22)',
     borderRadius: '12px',
     textAlign: 'left',
     cursor: 'pointer',
     color: '#f8fafc',
-    transition: 'all 0.15s ease'
+    transition: 'all 0.2s ease'
   },
   quickActionIcon: {
     fontSize: '20px',
@@ -9061,7 +9081,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '12px',
     padding: '10px 12px',
-    backgroundColor: 'rgba(7, 9, 14, 0.5)',
+    backgroundColor: 'rgba(11, 9, 20, 0.55)',
     borderRadius: '10px'
   },
   activityIcon: {
@@ -9095,10 +9115,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   managementCard: {
     padding: '30px',
-    backgroundColor: 'rgba(13, 17, 26, 0.85)',
-    border: '1px solid rgba(30, 41, 59, 0.6)',
+    backgroundColor: 'rgba(18, 14, 29, 0.88)',
+    border: '1px solid rgba(168, 85, 247, 0.24)',
     borderRadius: '16px',
-    boxShadow: '0 12px 36px rgba(0,0,0,0.4)',
+    boxShadow: '0 16px 44px rgba(0,0,0,0.5)',
     backdropFilter: 'blur(16px)'
   },
   formGrid2Col: {
@@ -9109,8 +9129,8 @@ const styles: Record<string, React.CSSProperties> = {
   invoiceSummaryBox: {
     marginTop: '20px',
     padding: '16px',
-    backgroundColor: 'rgba(7, 9, 14, 0.6)',
-    border: '1px solid rgba(0, 217, 255, 0.2)',
+    backgroundColor: 'rgba(11, 9, 20, 0.7)',
+    border: '1px solid rgba(168, 85, 247, 0.25)',
     borderRadius: '12px',
     display: 'flex',
     justifyContent: 'space-between',
@@ -9133,18 +9153,19 @@ const styles: Record<string, React.CSSProperties> = {
   keyCodeText: {
     fontSize: '16px',
     fontWeight: 800,
-    color: '#00d9ff',
+    color: '#c084fc',
     letterSpacing: '0.04em'
   },
   copyKeyBtn: {
     padding: '8px 14px',
-    backgroundColor: '#00d9ff',
-    color: '#07090e',
+    background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+    color: '#ffffff',
     fontWeight: 700,
     fontSize: '11px',
     border: 'none',
     borderRadius: '8px',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    boxShadow: '0 2px 10px rgba(168, 85, 247, 0.35)'
   },
   searchBox: {
     minWidth: '280px'
@@ -9152,8 +9173,8 @@ const styles: Record<string, React.CSSProperties> = {
   searchInput: {
     width: '100%',
     padding: '10px 14px',
-    backgroundColor: 'rgba(13, 17, 26, 0.8)',
-    border: '1px solid rgba(30, 41, 59, 0.6)',
+    backgroundColor: 'rgba(11, 9, 20, 0.85)',
+    border: '1px solid rgba(168, 85, 247, 0.25)',
     borderRadius: '10px',
     color: '#f8fafc',
     fontSize: '13px',
@@ -9161,10 +9182,11 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box'
   },
   tableCard: {
-    backgroundColor: 'rgba(13, 17, 26, 0.75)',
-    border: '1px solid rgba(30, 41, 59, 0.5)',
+    backgroundColor: 'rgba(18, 14, 29, 0.8)',
+    border: '1px solid rgba(168, 85, 247, 0.22)',
     borderRadius: '16px',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.4)'
   },
   dataTable: {
     width: '100%',
@@ -9174,15 +9196,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   th: {
     padding: '14px 18px',
-    backgroundColor: 'rgba(7, 9, 14, 0.7)',
-    color: '#64748b',
+    backgroundColor: 'rgba(11, 9, 20, 0.8)',
+    color: '#a78bfa',
     fontSize: '11px',
     fontWeight: 700,
     letterSpacing: '0.06em',
-    borderBottom: '1px solid rgba(30, 41, 59, 0.5)'
+    borderBottom: '1px solid rgba(168, 85, 247, 0.2)'
   },
   tr: {
-    borderBottom: '1px solid rgba(30, 41, 59, 0.3)'
+    borderBottom: '1px solid rgba(168, 85, 247, 0.12)'
   },
   td: {
     padding: '14px 18px',
@@ -9205,22 +9227,23 @@ const styles: Record<string, React.CSSProperties> = {
   },
   deviceBarFill: {
     height: '100%',
-    backgroundColor: '#00d9ff'
+    background: 'linear-gradient(90deg, #a855f7, #f43f5e)'
   },
   planBadge: {
     padding: '3px 8px',
-    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    backgroundColor: 'rgba(28, 20, 44, 0.6)',
+    border: '1px solid rgba(168, 85, 247, 0.25)',
     borderRadius: '6px',
     fontSize: '11px',
     fontWeight: 600,
-    color: '#cbd5e1'
+    color: '#e2e8f0'
   },
   avatarTiny: {
     width: '18px',
     height: '18px',
     borderRadius: '50%',
-    backgroundColor: '#00d9ff',
-    color: '#07090e',
+    backgroundColor: '#a855f7',
+    color: '#ffffff',
     fontSize: '10px',
     fontWeight: 800,
     display: 'flex',
@@ -9231,8 +9254,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: '32px',
     height: '32px',
     borderRadius: '50%',
-    backgroundColor: 'rgba(0, 217, 255, 0.15)',
-    color: '#00d9ff',
+    backgroundColor: 'rgba(168, 85, 247, 0.18)',
+    color: '#c084fc',
     fontSize: '13px',
     fontWeight: 800,
     display: 'flex',
@@ -9249,8 +9272,8 @@ const styles: Record<string, React.CSSProperties> = {
   roleBadge: {
     padding: '2px 6px',
     borderRadius: '4px',
-    backgroundColor: 'rgba(0, 217, 255, 0.15)',
-    color: '#00d9ff',
+    backgroundColor: 'rgba(168, 85, 247, 0.18)',
+    color: '#c084fc',
     fontSize: '10px',
     fontWeight: 700
   },
@@ -9260,8 +9283,8 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#05df72'
   },
   actionIconBtn: {
-    background: 'rgba(30, 41, 59, 0.4)',
-    border: '1px solid rgba(30, 41, 59, 0.6)',
+    background: 'rgba(28, 20, 44, 0.5)',
+    border: '1px solid rgba(168, 85, 247, 0.3)',
     borderRadius: '6px',
     cursor: 'pointer',
     padding: '6px 8px',
@@ -9288,7 +9311,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '14px 0',
-    borderTop: '1px solid rgba(30, 41, 59, 0.4)'
+    borderTop: '1px solid rgba(168, 85, 247, 0.18)'
   },
   settingTitle: {
     fontSize: '13px',
@@ -9306,7 +9329,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     padding: '2px',
     cursor: 'pointer',
-    transition: 'background 0.2s ease',
+    transition: 'background 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s ease',
     boxSizing: 'border-box'
   },
   switchKnob: {
@@ -9314,25 +9337,26 @@ const styles: Record<string, React.CSSProperties> = {
     height: '20px',
     borderRadius: '50%',
     backgroundColor: '#ffffff',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-    transition: 'transform 0.2s ease'
+    boxShadow: '0 2px 5px rgba(0,0,0,0.4)',
+    transition: 'transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1)'
   },
   emergencyPurgeBtn: {
     padding: '8px 14px',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    border: '1px solid rgba(239, 68, 68, 0.4)',
-    color: '#ef4444',
+    background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.2), rgba(190, 18, 60, 0.25))',
+    border: '1px solid rgba(244, 63, 94, 0.55)',
+    color: '#f43f5e',
     fontSize: '11px',
-    fontWeight: 700,
+    fontWeight: 800,
     borderRadius: '8px',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    boxShadow: '0 0 10px rgba(244, 63, 94, 0.25)'
   },
   telemetryBar: {
     display: 'flex',
     gap: '24px',
     padding: '12px 18px',
-    backgroundColor: 'rgba(13, 17, 26, 0.8)',
-    border: '1px solid rgba(30, 41, 59, 0.6)',
+    backgroundColor: 'rgba(18, 14, 29, 0.85)',
+    border: '1px solid rgba(168, 85, 247, 0.25)',
     borderRadius: '12px',
     marginBottom: '20px',
     flexWrap: 'wrap'
@@ -9344,7 +9368,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '12px'
   },
   telemetryBarLabel: {
-    color: '#64748b',
+    color: '#a78bfa',
     fontWeight: 700
   },
   telemetryBarVal: {
@@ -9358,10 +9382,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   columnCard: {
     padding: '16px 18px',
-    backgroundColor: 'rgba(13, 17, 26, 0.85)',
-    border: '1px solid rgba(30, 41, 59, 0.6)',
+    backgroundColor: 'rgba(18, 14, 29, 0.85)',
+    border: '1px solid rgba(168, 85, 247, 0.22)',
     borderRadius: '14px',
-    backdropFilter: 'blur(10px)'
+    backdropFilter: 'blur(12px)',
+    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)'
   },
   columnHead: {
     display: 'flex',
@@ -9369,7 +9394,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     marginBottom: '10px',
     paddingBottom: '10px',
-    borderBottom: '1px solid rgba(30, 41, 59, 0.5)'
+    borderBottom: '1px solid rgba(168, 85, 247, 0.2)'
   },
   columnIcon: {
     fontSize: '16px'
@@ -9379,7 +9404,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '9px 0',
-    borderBottom: '1px solid rgba(30, 41, 59, 0.28)'
+    borderBottom: '1px solid rgba(168, 85, 247, 0.14)'
   },
   toggleTitle: {
     fontSize: '13px',
@@ -9391,7 +9416,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sliderBlock: {
     padding: '10px 0',
-    borderBottom: '1px solid rgba(30, 41, 59, 0.28)'
+    borderBottom: '1px solid rgba(168, 85, 247, 0.14)'
   },
   sliderLabelRow: {
     display: 'flex',
@@ -9402,12 +9427,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600
   },
   sliderValText: {
-    color: '#00d9ff',
+    color: '#c084fc',
     fontWeight: 700
   },
   sliderInput: {
     width: '100%',
-    accentColor: '#00d9ff',
+    accentColor: '#a855f7',
     cursor: 'pointer'
   },
   themePaletteGrid: {
@@ -9418,18 +9443,19 @@ const styles: Record<string, React.CSSProperties> = {
   themePillBtn: {
     padding: '8px 10px',
     borderRadius: '8px',
-    backgroundColor: 'rgba(7, 9, 14, 0.6)',
-    border: '1px solid rgba(30, 41, 59, 0.6)',
+    backgroundColor: 'rgba(11, 9, 20, 0.65)',
+    border: '1px solid rgba(168, 85, 247, 0.25)',
     color: '#94a3b8',
     fontSize: '11px',
     fontWeight: 600,
     cursor: 'pointer'
   },
   themePillBtnActive: {
-    backgroundColor: 'rgba(0, 217, 255, 0.15)',
-    borderColor: '#00d9ff',
-    color: '#00d9ff',
-    fontWeight: 700
+    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+    borderColor: '#a855f7',
+    color: '#c084fc',
+    fontWeight: 700,
+    boxShadow: '0 0 10px rgba(168, 85, 247, 0.3)'
   },
   modalOverlay: {
     position: 'fixed',
@@ -9437,7 +9463,7 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     backdropFilter: 'blur(8px)',
     display: 'flex',
     alignItems: 'center',
@@ -9448,11 +9474,11 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '460px',
     width: '90%',
     padding: '30px',
-    backgroundColor: '#0a0d14',
-    border: '1px solid rgba(239, 68, 68, 0.4)',
+    backgroundColor: '#0e0b17',
+    border: '1px solid rgba(244, 63, 94, 0.5)',
     borderRadius: '16px',
     textAlign: 'center',
-    boxShadow: '0 20px 50px rgba(0,0,0,0.8), 0 0 30px rgba(239, 68, 68, 0.2)'
+    boxShadow: '0 20px 60px rgba(0,0,0,0.85), 0 0 35px rgba(244, 63, 94, 0.25)'
   },
   modalIcon: {
     fontSize: '40px',
@@ -9478,8 +9504,8 @@ const styles: Record<string, React.CSSProperties> = {
   modalCancelBtn: {
     padding: '10px 18px',
     borderRadius: '8px',
-    backgroundColor: 'rgba(30, 41, 59, 0.6)',
-    border: 'none',
+    backgroundColor: 'rgba(28, 20, 44, 0.7)',
+    border: '1px solid rgba(168, 85, 247, 0.25)',
     color: '#cbd5e1',
     fontWeight: 600,
     fontSize: '13px',
@@ -9488,11 +9514,12 @@ const styles: Record<string, React.CSSProperties> = {
   modalConfirmPurgeBtn: {
     padding: '10px 18px',
     borderRadius: '8px',
-    backgroundColor: '#ef4444',
+    background: 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)',
     border: 'none',
     color: '#ffffff',
     fontWeight: 700,
     fontSize: '13px',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    boxShadow: '0 4px 16px rgba(244, 63, 94, 0.4)'
   }
 }
