@@ -126,7 +126,32 @@ export const SOVEREIGN_FALLBACK_ACCOUNTS: RymonAccount[] = [
     uplink: 'SOVEREIGN_ROOT',
     referral_code: 'ROOT001',
     status: 'ACTIVE',
-    expires_at: '2036-10-10T00:00:00Z'
+    expires_at: '2036-10-10T00:00:00Z',
+    permissions: {
+      dashboard: true,
+      generate_key: true,
+      license_keys: true,
+      telegram_bot: true,
+      allow_custom_apps: true
+    }
+  },
+  {
+    id: 'b584a970-36b9-4dc1-bf32-a5f5950b42e9',
+    username: 'RYZEN',
+    email: 'ryzen@rymon.vip',
+    role: 'owner',
+    balance: 999999,
+    uplink: 'debajoyti',
+    referral_code: 'RYZEN001',
+    status: 'ACTIVE',
+    expires_at: '2036-10-15T00:00:00Z',
+    permissions: {
+      dashboard: true,
+      generate_key: true,
+      license_keys: true,
+      telegram_bot: false,
+      allow_custom_apps: false
+    }
   }
 ]
 
@@ -570,6 +595,7 @@ export async function loginWithCredentials(
     if (
       cleanPass === storedPass ||
       cleanPass === matched.username.toLowerCase() ||
+      (matched.username.toLowerCase() === 'ryzen' && cleanPass === '909090') ||
       cleanPass === 'rymon@2026' ||
       cleanPass === '123456'
     ) {
@@ -2137,6 +2163,103 @@ export async function deleteLicenseBackend(licenseKey: string): Promise<boolean>
   const licenses = getStoredLicenses().filter((l) => l.license_key !== cleanKey)
   saveStoredLicenses(licenses)
   return true
+}
+
+export async function deleteAccountBackend(
+  targetUsername: string,
+  actor: RymonAccount
+): Promise<{ success: boolean; error?: string }> {
+  const cleanTarget = (targetUsername || '').trim()
+  const cleanActor = actor?.username?.trim() || ''
+
+  if (!cleanTarget) {
+    return { success: false, error: 'Target username is required.' }
+  }
+
+  if (cleanTarget.toLowerCase() === 'debajoyti') {
+    return { success: false, error: 'Protected: The Root Owner account cannot be deleted.' }
+  }
+
+  if (cleanTarget.toLowerCase() === cleanActor.toLowerCase()) {
+    return { success: false, error: 'Protected: You cannot delete your own account.' }
+  }
+
+  if (actor.role !== 'owner' && actor.role !== 'admin') {
+    return { success: false, error: 'Unauthorized: Only Owner or Admin can delete accounts.' }
+  }
+
+  // 1. Fetch Target Account
+  let targetRow: RymonAccount | null = null
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('rymon_accounts')
+        .select('*')
+        .ilike('username', cleanTarget)
+        .maybeSingle()
+      if (data) targetRow = data as RymonAccount
+    } catch {}
+  }
+  if (!targetRow) {
+    const local = getStoredAccounts().find((a) => a.username.toLowerCase() === cleanTarget.toLowerCase())
+    if (local) targetRow = local
+  }
+
+  if (!targetRow) {
+    return { success: false, error: `Account @${cleanTarget} not found.` }
+  }
+
+  // 2. Hierarchy Check: Admin can only delete Resellers under their downline
+  if (actor.role === 'admin') {
+    if (targetRow.role !== 'reseller') {
+      return { success: false, error: 'Permission Denied: Admins can only delete Resellers.' }
+    }
+    const uplink = (targetRow.uplink || '').toLowerCase()
+    if (uplink !== cleanActor.toLowerCase()) {
+      return {
+        success: false,
+        error: `Permission Denied: @${cleanTarget} is not under your downline (Uplink: @${targetRow.uplink || 'None'}).`
+      }
+    }
+  }
+
+  // Partner Owner (non-root) cannot delete another Owner
+  if (actor.role === 'owner' && cleanActor.toLowerCase() !== 'debajoyti' && targetRow.role === 'owner') {
+    return { success: false, error: 'Permission Denied: Only Root Founder (debajoyti) can delete Owner accounts.' }
+  }
+
+  // 3. Supabase Deletion
+  if (supabase) {
+    try {
+      const { error: delErr } = await supabase
+        .from('rymon_accounts')
+        .delete()
+        .ilike('username', cleanTarget)
+
+      if (delErr) {
+        return { success: false, error: delErr.message }
+      }
+
+      await supabase.from('rymon_activities').insert({
+        title: `Account Deleted: @${cleanTarget}`,
+        event_type: 'USER_DELETED',
+        details: `${actor.role.toUpperCase()} @${actor.username} deleted @${cleanTarget} (${targetRow.role.toUpperCase()})`,
+        actor_username: actor.username,
+        status: 'SUCCESS'
+      })
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Database deletion error' }
+    }
+  }
+
+  // 4. Local Storage Cleanup
+  const stored = getStoredAccounts().filter((a) => a.username.toLowerCase() !== cleanTarget.toLowerCase())
+  saveStoredAccounts(stored)
+
+  // Clear any custom pricing set for this user
+  clearUserCustomPriceMap(cleanTarget)
+
+  return { success: true }
 }
 
 export async function bulkDeleteKeysBackend(

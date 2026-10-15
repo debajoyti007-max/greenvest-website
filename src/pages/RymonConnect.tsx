@@ -15,6 +15,7 @@ import {
   topUpUserBalanceBackend,
   resetHwidBackend,
   deleteLicenseBackend,
+  deleteAccountBackend,
   bulkDeleteKeysBackend,
   toggleBanStatusBackend,
   extendLicenseBackend,
@@ -994,6 +995,12 @@ export default function RymonConnect() {
       return
     }
 
+    // Lifetime Key Absolute Ban
+    if (genDuration.toLowerCase().includes('lifetime')) {
+      setGenError('Policy Violation: Lifetime keys are prohibited on this platform (Max validity cap: 30 Days).')
+      return
+    }
+
     // Reseller Policy Limits:
     if (isReseller) {
       const maxDev = securityPolicy.reseller_max_devices_limit ?? 1
@@ -1547,8 +1554,8 @@ export default function RymonConnect() {
   }
 
   const handleQuickBulkDelete = async (keyType: 'expired' | 'unused' | 'all') => {
-    if (keyType === 'all' && !isOwner) {
-      alert('Power restriction: Only the Root Owner can wipe ALL active keys.')
+    if (keyType === 'all' && !isRootOwner) {
+      alert('Power restriction: Only the Root Founder (debajoyti) can wipe ALL active keys.')
       return
     }
     const targetCount =
@@ -1601,6 +1608,48 @@ export default function RymonConnect() {
       fetchAllAccounts(currentUser).then(setUsersList)
     } else {
       alert(res.message)
+    }
+  }
+
+  const handleDeleteUser = async (targetUser: string, targetRole: string, targetUplink: string) => {
+    if (!currentUser) return
+    const cleanTarget = (targetUser || '').trim()
+
+    if (cleanTarget.toLowerCase() === 'debajoyti') {
+      alert('Action forbidden: Root Owner account cannot be deleted.')
+      return
+    }
+
+    if (cleanTarget.toLowerCase() === currentUser.username.toLowerCase()) {
+      alert('Action forbidden: You cannot delete your own active account.')
+      return
+    }
+
+    if (isOwner) {
+      if (!isRootOwner && targetRole === 'owner') {
+        alert('Permission Denied: Only the Root Founder can delete Owner accounts.')
+        return
+      }
+    } else if (isAdmin) {
+      if (targetRole !== 'reseller' || (targetUplink || '').toLowerCase() !== currentUser.username.toLowerCase()) {
+        alert('Permission Denied: Admins can only delete Resellers registered under their own downline.')
+        return
+      }
+    } else {
+      alert('Permission Denied: You do not have permission to delete accounts.')
+      return
+    }
+
+    const confirmMsg = `⚠️ PERMANENT DELETE WARNING:\n\nAre you sure you want to permanently delete user @${cleanTarget} (${targetRole.toUpperCase()})?\n\nThis will remove their account credentials, login access, and wallet. This action CANNOT be undone.`
+    if (!window.confirm(confirmMsg)) return
+
+    const res = await deleteAccountBackend(cleanTarget, currentUser)
+    if (res.success) {
+      showToast(`🗑️ User @${cleanTarget} permanently deleted.`)
+      fetchAllAccounts(currentUser).then(setUsersList)
+      fetchAllActivities(currentUser).then(setActivities)
+    } else {
+      alert(`Failed to delete user: ${res.error || 'Unknown error'}`)
     }
   }
 
@@ -2181,6 +2230,7 @@ export default function RymonConnect() {
   }, [keysList, onlineKeySet])
 
   const isOwner = currentUser?.role === 'owner'
+  const isRootOwner = currentUser?.username?.toLowerCase() === 'debajoyti'
   const isAdmin = currentUser?.role === 'admin'
   const isReseller = currentUser?.role === 'reseller'
   const isStreamer = currentUser?.role === 'streamer'
@@ -2189,11 +2239,10 @@ export default function RymonConnect() {
   // Cross-App & Reseller Generation Permission Engine
   const isUserCustomAppAllowed = (user?: RymonAccount | null) => {
     if (!user) return false
-    if (user.role === 'owner') return true
+    // Only Root Founder (debajoyti) is unconditionally allowed custom apps
+    if (user.username.toLowerCase() === 'debajoyti') return true
     const perm = user.permissions?.allow_custom_apps
     if (perm !== undefined) return Boolean(perm)
-    if (user.role === 'reseller') return Boolean(securityPolicy.allow_reseller_custom_apps)
-    if (user.role === 'admin') return Boolean(securityPolicy.allow_admin_custom_apps ?? true)
     return false
   }
 
@@ -2259,7 +2308,7 @@ export default function RymonConnect() {
       ].includes(activeTab)
     ) {
       setActiveTab('overview')
-    } else if (!isOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
+    } else if (!isRootOwner && (activeTab === 'telegram' || activeTab === 'connect-api' || activeTab === 'apps')) {
       setActiveTab('overview')
     }
   }, [isStreamer, isReseller, isAdmin, isOwner, activeTab])
@@ -2932,7 +2981,7 @@ export default function RymonConnect() {
                         <span style={styles.navIcon}>🔑</span>
                         <span>License Keys</span>
                       </button>
-                      {isOwner && (
+                      {isRootOwner && (
                         <button
                           onClick={() => {
                             setActiveTab('telegram')
@@ -2945,10 +2994,10 @@ export default function RymonConnect() {
                         >
                           <span style={styles.navIcon}>✈️</span>
                           <span>Telegram Bot</span>
-                          <span style={styles.cyanMiniBadge}>OWNER</span>
+                          <span style={styles.cyanMiniBadge}>ROOT</span>
                         </button>
                       )}
-                      {isOwner && (
+                      {isRootOwner && (
                         <button
                           onClick={() => {
                             setActiveTab('connect-api')
@@ -2961,7 +3010,7 @@ export default function RymonConnect() {
                         >
                           <span style={styles.navIcon}>🔌</span>
                           <span>Connect & API</span>
-                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>OWNER</span>
+                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>ROOT</span>
                         </button>
                       )}
                     </>
@@ -4191,7 +4240,7 @@ export default function RymonConnect() {
                     >
                       <span>🗑️</span> DELETE UNUSED ({stats.unused})
                     </button>
-                    {isOwner && (
+                    {isRootOwner && (
                       <button
                         onClick={() => handleQuickBulkDelete('all')}
                         style={{
@@ -4513,7 +4562,21 @@ export default function RymonConnect() {
                       <tbody>
                         {filteredUsers.map((u) => {
                           const isSelfRow = u.username.toLowerCase() === currentUser?.username.toLowerCase()
-                          const canManageRow = isOwner ? u.role !== 'owner' : !isSelfRow && u.role === 'reseller'
+                          const isTargetRootOwner = u.username.toLowerCase() === 'debajoyti'
+                          const canManageRow = isRootOwner 
+                            ? !isSelfRow 
+                            : isOwner
+                            ? (!isSelfRow && u.role !== 'owner' && !isTargetRootOwner)
+                            : isAdmin
+                            ? (!isSelfRow && u.role === 'reseller' && (u.uplink || '').toLowerCase() === currentUser?.username.toLowerCase())
+                            : false
+                          const canDeleteThisUser = isRootOwner
+                            ? !isSelfRow
+                            : isOwner
+                            ? (!isSelfRow && u.role !== 'owner' && !isTargetRootOwner)
+                            : isAdmin
+                            ? (!isSelfRow && u.role === 'reseller' && (u.uplink || '').toLowerCase() === currentUser?.username.toLowerCase())
+                            : false
                           const expMs = u.expires_at ? new Date(u.expires_at).getTime() : Date.now() + 30 * 86400000
                           const diffMs = expMs - Date.now()
                           const daysLeft = Math.max(0, Math.ceil(diffMs / 86400000))
@@ -4697,9 +4760,32 @@ export default function RymonConnect() {
                                     >
                                       {u.status === 'BANNED' ? '🚫' : '🛡️'}
                                     </button>
+                                    {isOwner && (
+                                      <button
+                                        onClick={() => handleDeleteUser(u.username, u.role, u.uplink)}
+                                        style={{
+                                          ...styles.actionIconBtn,
+                                          color: '#ef4444',
+                                          borderColor: 'rgba(239, 68, 68, 0.4)'
+                                        }}
+                                        title={`Permanently Delete User @${u.username}`}
+                                      >
+                                        🗑️
+                                      </button>
+                                    )}
                                   </div>
                                 ) : (
-                                  <span style={{ fontSize: '11px', color: '#64748b' }}>Protected</span>
+                                  <span style={{
+                                    fontSize: '11px',
+                                    color: isTargetRootOwner ? '#05df72' : '#64748b',
+                                    fontWeight: isTargetRootOwner ? 800 : 400,
+                                    background: isTargetRootOwner ? 'rgba(5, 223, 114, 0.12)' : 'transparent',
+                                    padding: isTargetRootOwner ? '3px 8px' : 0,
+                                    borderRadius: '4px',
+                                    border: isTargetRootOwner ? '1px solid rgba(5, 223, 114, 0.3)' : 'none'
+                                  }}>
+                                    {isTargetRootOwner ? '👑 Root Founder (Immune)' : (isSelfRow ? 'Current Account' : 'Protected')}
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -4768,7 +4854,7 @@ export default function RymonConnect() {
                       </div>
                     </div>
                   </div>
-                  {isOwner && (
+                  {isRootOwner && (
                     <div
                       onClick={() => handleQuickBulkDelete('all')}
                       style={{
@@ -4974,7 +5060,7 @@ export default function RymonConnect() {
 
 
             {/* 8C. TELEGRAM BOT DISPATCH GATEWAY */}
-            {activeTab === 'telegram' && (
+            {activeTab === 'telegram' && isRootOwner && (
               <div style={styles.viewContainer}>
                 <div style={styles.bannerRow}>
                   <div>
