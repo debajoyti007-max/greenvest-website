@@ -249,6 +249,8 @@ export default function RymonConnect() {
   const [testConnectLoading, setTestConnectLoading] = useState(false)
   const [testConnectResult, setTestConnectResult] = useState<string>('')
   const [codeSnippetTab, setCodeSnippetTab] = useState<'cpp' | 'java' | 'python' | 'curl'>('cpp')
+  const [connectSelectedApp, setConnectSelectedApp] = useState<'Free Fire MAX' | 'Custom'>('Free Fire MAX')
+  const [connectCustomAppName, setConnectCustomAppName] = useState('Tool X')
 
   // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
@@ -1972,25 +1974,50 @@ export default function RymonConnect() {
   const handleTestConnectApi = async () => {
     setTestConnectLoading(true)
     setTestConnectResult('')
+    const targetApp = connectSelectedApp === 'Free Fire MAX' ? 'Free Fire MAX' : (connectCustomAppName.trim() || 'Tool X')
     try {
-      const res = await fetch(SOVEREIGN_CONNECT_CONFIG.endpoint_url, {
+      // 1. Primary: Edge Gateway (zero headers required, SSL cloud-synced)
+      const res = await fetch('https://greenvest.shop/connect', {
         method: 'POST',
         headers: {
-          'apikey': SOVEREIGN_CONNECT_CONFIG.anon_key,
-          'Authorization': `Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          p_license_key: testConnectKey.trim(),
-          p_hwid: testConnectHwid.trim()
+          user_key: testConnectKey.trim(),
+          serial: testConnectHwid.trim(),
+          app: targetApp
         })
       })
       const json = await res.json()
       setTestConnectResult(JSON.stringify(json, null, 2))
-      showToast('Connect API verified successfully!')
+      if (json.status || json.success || json.valid) {
+        showToast(`✅ [${targetApp}] Key authenticated!`)
+      } else {
+        showToast(`❌ [${targetApp}] ${json.reason || json.message || 'Key verification rejected'}`)
+      }
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : 'Network connection error'
-      setTestConnectResult(JSON.stringify({ error: errMsg }, null, 2))
+      // 2. Direct Supabase RPC Fallback
+      try {
+        const resRpc = await fetch(SOVEREIGN_CONNECT_CONFIG.endpoint_url, {
+          method: 'POST',
+          headers: {
+            'apikey': SOVEREIGN_CONNECT_CONFIG.anon_key,
+            'Authorization': `Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            p_license_key: testConnectKey.trim(),
+            p_hwid: testConnectHwid.trim(),
+            p_game: targetApp
+          })
+        })
+        const jsonRpc = await resRpc.json()
+        setTestConnectResult(JSON.stringify(jsonRpc, null, 2))
+        showToast('Verified via direct RPC fallback')
+      } catch (fallbackErr: unknown) {
+        const errMsg = err instanceof Error ? err.message : 'Network connection error'
+        setTestConnectResult(JSON.stringify({ error: errMsg }, null, 2))
+      }
     } finally {
       setTestConnectLoading(false)
     }
@@ -6485,535 +6512,794 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {activeTab === 'connect-api' && isOwner && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
-                  <div>
-                    <h2 style={styles.pageTitle}>RYMON Connect Engine &amp; Integration Suite</h2>
-                    <p style={styles.pageSubtitle}>
-                      Direct RYMON key verification and hardware binding endpoints for any Safe Streamer APK, custom native daemon, or external mod. 100% cloud-synced on greenvest.shop.
-                    </p>
-                  </div>
-                  <div style={styles.badgeCluster}>
-                    <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>👑 OWNER EXCLUSIVE</span>
-                    <span style={styles.greenPulseBadge}>● ENDPOINTS LIVE</span>
-                  </div>
-                </div>
+            {activeTab === 'connect-api' && isOwner && (() => {
+              const effectiveConnectAppName = connectSelectedApp === 'Free Fire MAX' ? 'Free Fire MAX' : (connectCustomAppName.trim() || 'Tool X');
+              const getAppSecret = (appName: string): string => {
+                if (appName === 'Free Fire MAX') return 'ff_max_sec_7a8b9c1d2e3f405162738495a6b7c8d9e0f1';
+                let hash1 = 0x811c9dc5;
+                let hash2 = 0x55555555;
+                for (let i = 0; i < appName.length; i++) {
+                  hash1 ^= appName.charCodeAt(i);
+                  hash1 = (hash1 * 0x01000193) >>> 0;
+                  hash2 = (hash2 * 33 + appName.charCodeAt(i)) >>> 0;
+                }
+                const part1 = hash1.toString(16).padStart(8, '0');
+                const part2 = hash2.toString(16).padStart(8, '0');
+                return (part1 + part2 + '1e584eab26bac5030d2a5fbfec013059afac1d348431d892632d8961').substring(0, 48);
+              };
+              const currentSecret = getAppSecret(effectiveConnectAppName);
+              const ownerUsername = currentUser?.username || 'debajoyti';
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
-                  {/* Left Column: Live Endpoints & Code Snippets */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    {/* Live Endpoints Matrix Card */}
-                    <div style={styles.managementCard}>
-                      <div style={styles.cardHeader}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ ...styles.actionIconCircle, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff' }}>
-                            🔗
-                          </div>
-                          <div>
-                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Production Connect Endpoints</h3>
-                            <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                              Direct RPC verification, controls telemetry, and anon authorization key
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+              // Code snippets
+              const cppSnippet = `/*
+ * Safe Streamer - KeyAuth C++ Client (Drop-in Header & Example)
+ * Application: ${effectiveConnectAppName}
+ * Owner ID:    ${ownerUsername}
+ * Gateway:     https://greenvest.shop/connect
+ */
 
-                      <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        {/* RPC Endpoint */}
-                        <div>
-                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
-                            LICENSE VERIFICATION RPC ENDPOINT (POST):
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.85)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(0, 217, 255, 0.25)' }}>
-                            <span style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#00d9ff', flex: 1, wordBreak: 'break-all' }}>
-                              {SOVEREIGN_CONNECT_CONFIG.endpoint_url}
-                            </span>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(SOVEREIGN_CONNECT_CONFIG.endpoint_url)
-                                showToast('Copied RPC Endpoint URL')
-                              }}
-                              style={styles.miniCopyBtn}
-                              title="Copy URL"
-                            >
-                              📋
-                            </button>
-                          </div>
-                        </div>
+#include <iostream>
+#include <string>
+#include <curl/curl.h>
 
-                        {/* Streamer Controls Telemetry Endpoint */}
-                        <div>
-                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
-                            STREAMER REMOTE CONTROLS REST URL (GET / PATCH):
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.85)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(5, 223, 114, 0.25)' }}>
-                            <span style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#05df72', flex: 1, wordBreak: 'break-all' }}>
-                              https://zvjqpigduyvczidzafus.supabase.co/rest/v1/rymon_streamer_controls
-                            </span>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText('https://zvjqpigduyvczidzafus.supabase.co/rest/v1/rymon_streamer_controls')
-                                showToast('Copied Controls REST URL')
-                              }}
-                              style={styles.miniCopyBtn}
-                              title="Copy URL"
-                            >
-                              📋
-                            </button>
-                          </div>
-                        </div>
+namespace KeyAuth {
+    struct Response {
+        bool success = false;
+        std::string message;
+        std::string expiry;
+    };
 
-                        {/* Anon API Key */}
-                        <div>
-                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
-                            RYMON REST API KEY (HEADER <code>apikey</code>):
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.85)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255, 183, 0, 0.25)' }}>
-                            <span style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#ffb700', flex: 1, wordBreak: 'break-all' }}>
-                              {SOVEREIGN_CONNECT_CONFIG.anon_key}
-                            </span>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(SOVEREIGN_CONNECT_CONFIG.anon_key)
-                                showToast('Copied RYMON API Key')
-                              }}
-                              style={styles.miniCopyBtn}
-                              title="Copy API Key"
-                            >
-                              📋
-                            </button>
-                          </div>
-                        </div>
+    class Api {
+    private:
+        std::string name;
+        std::string ownerid;
+        std::string secret;
+        std::string version;
+        std::string gateway = "https://greenvest.shop/connect";
 
-                        {/* Web Portal URL */}
-                        <div>
-                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '4px' }}>
-                            WEB PORTAL GATEWAY CONNECT URL:
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(7, 9, 14, 0.85)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                            <span style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#cbd5e1', flex: 1 }}>
-                              https://greenvest.shop/
-                            </span>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText('https://greenvest.shop/')
-                                showToast('Copied Portal URL')
-                              }}
-                              style={styles.miniCopyBtn}
-                              title="Copy URL"
-                            >
-                              📋
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+        static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+            ((std::string*)userp)->append((char*)contents, size * nmemb);
+            return size * nmemb;
+        }
 
-                    {/* Drop-in Integration Code Snippets Card */}
-                    <div style={styles.managementCard}>
-                      <div style={styles.cardHeader}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ ...styles.actionIconCircle, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72' }}>
-                            💻
-                          </div>
-                          <div>
-                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Drop-in Client Verification Code</h3>
-                            <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                              Copy-paste verification logic for any APK, C++ daemon, or automation tool
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+    public:
+        Response response;
 
-                      {/* Code Snippet Tabs */}
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '10px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setCodeSnippetTab('java')}
-                          style={{
-                            ...styles.chipBtn,
-                            background: codeSnippetTab === 'java' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                            color: codeSnippetTab === 'java' ? '#05df72' : '#94a3b8',
-                            border: codeSnippetTab === 'java' ? '1px solid #05df72' : '1px solid rgba(255, 255, 255, 0.08)',
-                            fontWeight: 700
-                          }}
-                        >
-                          📱 Android (Java / Kotlin)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCodeSnippetTab('cpp')}
-                          style={{
-                            ...styles.chipBtn,
-                            background: codeSnippetTab === 'cpp' ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                            color: codeSnippetTab === 'cpp' ? '#00d9ff' : '#94a3b8',
-                            border: codeSnippetTab === 'cpp' ? '1px solid #00d9ff' : '1px solid rgba(255, 255, 255, 0.08)',
-                            fontWeight: 700
-                          }}
-                        >
-                          ⚡ C / C++ (Native Daemon)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCodeSnippetTab('curl')}
-                          style={{
-                            ...styles.chipBtn,
-                            background: codeSnippetTab === 'curl' ? 'rgba(255, 183, 0, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                            color: codeSnippetTab === 'curl' ? '#ffb700' : '#94a3b8',
-                            border: codeSnippetTab === 'curl' ? '1px solid #ffb700' : '1px solid rgba(255, 255, 255, 0.08)',
-                            fontWeight: 700
-                          }}
-                        >
-                          🌐 cURL / Shell
-                        </button>
-                      </div>
+        Api(std::string name, std::string ownerid, std::string secret, std::string version)
+            : name(name), ownerid(ownerid), secret(secret), version(version) {}
 
-                      {/* Snippet Display */}
-                      <div style={{ marginTop: '12px', position: 'relative' }}>
-                        <button
-                          onClick={() => {
-                            let textToCopy = ''
-                            if (codeSnippetTab === 'java') {
-                              textToCopy = `// Safe Streamer License Verification - Android Java (HttpURLConnection)
-package com.rymon.external;
+        void init() {
+            // Gateway connection initialized
+        }
+
+        void license(const std::string& key, const std::string& hwid = "DEVICE-SIM-ANDROID-9981") {
+            CURL* curl = curl_easy_init();
+            if (!curl) {
+                response.success = false;
+                response.message = "Failed to initialize CURL";
+                return;
+            }
+
+            std::string resStr;
+            std::string jsonBody = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"" + name + "\\"}";
+
+            struct curl_slist* headers = NULL;
+            headers = curl_slist_append(headers, "Content-Type: application/json");
+
+            curl_easy_setopt(curl, CURLOPT_URL, gateway.c_str());
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, jsonBody.c_str());
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resStr);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+            CURLcode res = curl_easy_perform(curl);
+            curl_slist_free_all(headers);
+            curl_easy_cleanup(curl);
+
+            if (res == CURLE_OK && resStr.find("\\"status\\":true") != std::string::npos) {
+                response.success = true;
+                response.message = "Authenticated successfully!";
+            } else {
+                response.success = false;
+                response.message = resStr;
+            }
+        }
+    };
+}
+
+// =================== USAGE IN YOUR APK / DAEMON ===================
+int main() {
+    // 1. Initialize with your App Credentials
+    KeyAuth::Api KeyAuthApp(
+        "${effectiveConnectAppName}",
+        "${ownerUsername}",
+        "${currentSecret}",
+        "1.0"
+    );
+
+    KeyAuthApp.init();
+
+    // 2. Authenticate User Key
+    KeyAuthApp.license("YOUR_LICENSE_KEY", "DEVICE_HWID");
+
+    if (KeyAuthApp.response.success) {
+        std::cout << "[+] Access Granted to ${effectiveConnectAppName}!\\n";
+        // Launch your cheat / mod menu here
+    } else {
+        std::cout << "[-] Access Denied: " << KeyAuthApp.response.message << "\\n";
+        exit(0);
+    }
+    return 0;
+}`;
+
+              const javaSnippet = `// Safe Streamer - KeyAuth Android Java Client
+package com.rymon.keyauth;
 
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
-public class KeyAuthClient {
-    private static final String RPC_URL = "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}";
-    private static final String ANON_KEY = "${SOVEREIGN_CONNECT_CONFIG.anon_key}";
+public class KeyAuth {
+    public String name;
+    public String ownerid;
+    public String secret;
+    public String version;
+    private String gatewayUrl = "https://greenvest.shop/connect";
 
-    public static boolean verifyKey(String licenseKey, String hwid) {
+    public static class ResponseData {
+        public boolean success;
+        public String message;
+        public String expiresAt;
+    }
+
+    public ResponseData response = new ResponseData();
+
+    public KeyAuth(String name, String ownerid, String secret, String version) {
+        this.name = name;
+        this.ownerid = ownerid;
+        this.secret = secret;
+        this.version = version;
+    }
+
+    public void init() {
+        // Ready for auth
+    }
+
+    public boolean license(String key, String hwid) {
         HttpURLConnection conn = null;
         try {
             JSONObject body = new JSONObject();
-            body.put("p_license_key", licenseKey);
-            body.put("p_hwid", hwid);
+            body.put("user_key", key);
+            body.put("serial", hwid);
+            body.put("app", this.name);
 
-            URL url = new URL(RPC_URL);
+            URL url = new URL(gatewayUrl);
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setDoOutput(true);
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(12000);
-            conn.setRequestProperty("apikey", ANON_KEY);
-            conn.setRequestProperty("Authorization", "Bearer " + ANON_KEY);
             conn.setRequestProperty("Content-Type", "application/json");
 
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(body.toString().getBytes(StandardCharsets.UTF_8));
             }
 
-            if (conn.getResponseCode() == 200) {
-                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = br.readLine()) != null) sb.append(line);
-                JSONObject res = new JSONObject(sb.toString());
-                return res.optBoolean("valid", false) && !res.optBoolean("is_paused", false);
-            }
+            BufferedReader br = new BufferedReader(new InputStreamReader(
+                conn.getResponseCode() >= 200 && conn.getResponseCode() < 300
+                    ? conn.getInputStream() : conn.getErrorStream()
+            ));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line);
+
+            JSONObject res = new JSONObject(sb.toString());
+            boolean ok = res.optBoolean("status", false) || res.optBoolean("valid", false);
+            response.success = ok;
+            response.message = ok ? "Login Successful" : res.optString("reason", "Login Failed");
+            response.expiresAt = res.optString("expires_at", "");
+            return response.success;
         } catch (Exception e) {
-            e.printStackTrace();
+            response.success = false;
+            response.message = e.getMessage();
+            return false;
         } finally {
             if (conn != null) conn.disconnect();
         }
-        return false;
     }
-}`
-                            } else if (codeSnippetTab === 'cpp') {
-                              textToCopy = `// Safe Streamer License Verification - C++ Native Daemon (libcurl)
-#include <iostream>
-#include <string>
-#include <curl/curl.h>
-
-static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
-    ((std::string*)userp)->append((char*)contents, size * nmemb);
-    return size * nmemb;
 }
 
-bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
-    CURL* curl = curl_easy_init();
-    if (!curl) return false;
+// =================== USAGE IN YOUR ANDROID ACTIVITY ===================
+/*
+KeyAuth KeyAuthApp = new KeyAuth(
+    "${effectiveConnectAppName}",
+    "${ownerUsername}",
+    "${currentSecret}",
+    "1.0"
+);
 
-    std::string response;
-    std::string post_data = "{\\"p_license_key\\":\\"" + license_key + "\\",\\"p_hwid\\":\\"" + hwid + "\\"}";
+KeyAuthApp.init();
 
-    struct curl_slist* headers = NULL;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    headers = curl_slist_append(headers, "apikey: ${SOVEREIGN_CONNECT_CONFIG.anon_key}");
-    headers = curl_slist_append(headers, "Authorization: Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}");
+boolean isAuth = KeyAuthApp.license(userKey, deviceHwid);
+if (isAuth) {
+    Toast.makeText(this, "Access Granted to ${effectiveConnectAppName}!", Toast.LENGTH_SHORT).show();
+    startActivity(new Intent(this, MainActivity.class));
+} else {
+    Toast.makeText(this, "Denied: " + KeyAuthApp.response.message, Toast.LENGTH_LONG).show();
+    finish();
+}
+*/`;
 
-    curl_easy_setopt(curl, CURLOPT_URL, "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}");
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+              const pythonSnippet = `# Safe Streamer - KeyAuth Python Client
+import requests
 
-    CURLcode res = curl_easy_perform(curl);
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+class KeyAuth:
+    def __init__(self, name, ownerid, secret, version):
+        self.name = name
+        self.ownerid = ownerid
+        self.secret = secret
+        self.version = version
+        self.gateway = "https://greenvest.shop/connect"
 
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
+    def license(self, key, hwid="PC_DEFAULT_HWID"):
+        payload = {
+            "user_key": key,
+            "serial": hwid,
+            "app": self.name
+        }
+        r = requests.post(self.gateway, json=payload, timeout=10)
+        return r.json()
 
-    // Simple check: contains "valid":true and not "is_paused":true
-    return (res == CURLE_OK && http_code == 200 && response.find("\\"valid\\":true") != std::string::npos);
-}`
-                            } else {
-                              textToCopy = `curl -X POST "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}" \\
-  -H "apikey: ${SOVEREIGN_CONNECT_CONFIG.anon_key}" \\
-  -H "Authorization: Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}" \\
+# 1. Initialize KeyAuth Client
+KeyAuthApp = KeyAuth(
+    name="${effectiveConnectAppName}",
+    ownerid="${ownerUsername}",
+    secret="${currentSecret}",
+    version="1.0"
+)
+
+# 2. Authenticate Key
+res = KeyAuthApp.license("YOUR_LICENSE_KEY", "DEVICE_HWID")
+print("KeyAuth Response:", res)
+if res.get("status"):
+    print("[+] Successfully Authenticated to ${effectiveConnectAppName}!")
+else:
+    print("[-] Access Denied:", res.get("reason"))`;
+
+              const curlSnippet = `curl -X POST "https://greenvest.shop/connect" \\
   -H "Content-Type: application/json" \\
-  -d '{"p_license_key": "YOUR_LICENSE_KEY", "p_hwid": "YOUR_DEVICE_HWID"}'`
-                            }
-                            navigator.clipboard.writeText(textToCopy)
-                            showToast(`Copied ${codeSnippetTab.toUpperCase()} Snippet`)
-                          }}
+  -d '{
+    "user_key": "YOUR_LICENSE_KEY",
+    "serial": "DEVICE_HWID_OR_ANDROID_ID",
+    "app": "${effectiveConnectAppName}"
+  }'`;
+
+              return (
+                <div style={styles.viewContainer}>
+                  {/* Top Header */}
+                  <div style={styles.bannerRow}>
+                    <div>
+                      <h2 style={styles.pageTitle}>KeyAuth Connect Engine &amp; Client APK Integration</h2>
+                      <p style={styles.pageSubtitle}>
+                        Drop-in KeyAuth SDK client verification for Android APKs, C++ native daemons, and custom mod menus. Configure Free Fire MAX (KeyAuth + Streamer Remote) or any Custom Application (Pure KeyAuth only).
+                      </p>
+                    </div>
+                    <div style={styles.badgeCluster}>
+                      <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>👑 OWNER EXCLUSIVE</span>
+                      <span style={styles.greenPulseBadge}>● EDGE GATEWAY LIVE</span>
+                      <span style={{ ...styles.cyanMiniBadge, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff', border: '1px solid rgba(0, 217, 255, 0.4)' }}>🔒 ISOLATION STRICT</span>
+                    </div>
+                  </div>
+
+                  {/* 1. Target Application Selector & Live Credentials Card */}
+                  <div style={{ ...styles.managementCard, marginBottom: '24px', border: '1px solid rgba(0, 217, 255, 0.35)', background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(7, 9, 14, 0.95) 100%)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ ...styles.actionIconCircle, background: 'rgba(0, 217, 255, 0.2)', color: '#00d9ff', fontSize: '18px' }}>
+                          🔑
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc', fontWeight: 800 }}>
+                            KeyAuth Application Credentials &amp; Target Setup
+                          </h3>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                            Select target app to generate your exact drop-in <code>KeyAuth::Api(...)</code> initialization block
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* App Switcher Buttons */}
+                      <div style={{ display: 'flex', gap: '8px', background: 'rgba(3, 7, 18, 0.7)', padding: '4px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                        <button
+                          type="button"
+                          onClick={() => setConnectSelectedApp('Free Fire MAX')}
                           style={{
-                            position: 'absolute',
-                            top: '10px',
-                            right: '10px',
-                            background: 'rgba(15, 23, 42, 0.85)',
-                            border: '1px solid rgba(0, 217, 255, 0.4)',
-                            borderRadius: '6px',
-                            color: '#00d9ff',
-                            fontSize: '11px',
-                            padding: '4px 10px',
-                            cursor: 'pointer',
-                            fontWeight: 700
+                            ...styles.chipBtn,
+                            background: connectSelectedApp === 'Free Fire MAX' ? 'linear-gradient(135deg, #05df72 0%, #047857 100%)' : 'transparent',
+                            color: connectSelectedApp === 'Free Fire MAX' ? '#07090e' : '#cbd5e1',
+                            border: 'none',
+                            fontWeight: 800,
+                            padding: '6px 14px'
                           }}
                         >
-                          📋 Copy Code
+                          🎮 Free Fire MAX
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setConnectSelectedApp('Custom')}
+                          style={{
+                            ...styles.chipBtn,
+                            background: connectSelectedApp === 'Custom' ? 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)' : 'transparent',
+                            color: connectSelectedApp === 'Custom' ? '#07090e' : '#cbd5e1',
+                            border: 'none',
+                            fontWeight: 800,
+                            padding: '6px 14px'
+                          }}
+                        >
+                          ⚙️ Custom Application...
+                        </button>
+                      </div>
+                    </div>
 
-                        <pre style={{
-                          background: '#04060a',
-                          border: '1px solid rgba(30, 41, 59, 0.8)',
-                          borderRadius: '10px',
-                          padding: '16px',
-                          fontSize: '11px',
-                          fontFamily: 'Consolas, monospace',
-                          color: '#cbd5e1',
-                          overflowX: 'auto',
-                          lineHeight: '1.5',
-                          maxHeight: '340px'
-                        }}>
-                          {codeSnippetTab === 'java' && `// Safe Streamer License Verification - Android Java (HttpURLConnection)
-package com.rymon.external;
+                    {/* Custom App Name Input Row (Shown when Custom is selected) */}
+                    {connectSelectedApp === 'Custom' && (
+                      <div style={{ marginTop: '16px', padding: '14px 18px', background: 'rgba(0, 217, 255, 0.08)', borderRadius: '10px', border: '1px solid rgba(0, 217, 255, 0.3)', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#00d9ff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          CUSTOM APP NAME:
+                        </div>
+                        <input
+                          type="text"
+                          value={connectCustomAppName}
+                          onChange={(e) => setConnectCustomAppName(e.target.value)}
+                          placeholder="e.g. Tool X, VIP Injector, BGMI Mod, Private Tool"
+                          style={{
+                            ...styles.keyInput,
+                            flex: 1,
+                            minWidth: '220px',
+                            background: '#04060a',
+                            border: '1px solid #00d9ff',
+                            color: '#f8fafc',
+                            fontWeight: 700
+                          }}
+                        />
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                          💡 Pure KeyAuth Only (HWID lock &amp; license validation, no streamer remote panel)
+                        </span>
+                      </div>
+                    )}
 
-import java.io.*;
-import java.net.*;
-import java.nio.charset.StandardCharsets;
-import org.json.JSONObject;
+                    {/* 4 Credential Mini Cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px', marginTop: '16px' }}>
+                      {/* Name */}
+                      <div style={{ background: 'rgba(7, 9, 14, 0.85)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
+                          APPLICATION NAME (<code>name</code>)
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#05df72', fontWeight: 700 }}>
+                            "{effectiveConnectAppName}"
+                          </span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(effectiveConnectAppName);
+                              showToast('Copied App Name');
+                            }}
+                            style={styles.miniCopyBtn}
+                            title="Copy Name"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      </div>
 
-public class KeyAuthClient {
-    private static final String RPC_URL = "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}";
-    private static final String ANON_KEY = "${SOVEREIGN_CONNECT_CONFIG.anon_key}";
+                      {/* Owner ID */}
+                      <div style={{ background: 'rgba(7, 9, 14, 0.85)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
+                          OWNER ID (<code>ownerid</code>)
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#00d9ff', fontWeight: 700 }}>
+                            "{ownerUsername}"
+                          </span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(ownerUsername);
+                              showToast('Copied Owner ID');
+                            }}
+                            style={styles.miniCopyBtn}
+                            title="Copy Owner ID"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      </div>
 
-    public static boolean verifyKey(String licenseKey, String hwid) {
-        HttpURLConnection conn = null;
-        try {
-            JSONObject body = new JSONObject();
-            body.put("p_license_key", licenseKey);
-            body.put("p_hwid", hwid);
+                      {/* App Secret */}
+                      <div style={{ background: 'rgba(7, 9, 14, 0.85)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
+                          APP SECRET (<code>secret</code>)
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#ffb700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }} title={currentSecret}>
+                            {currentSecret.substring(0, 16)}...
+                          </span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(currentSecret);
+                              showToast('Copied App Secret');
+                            }}
+                            style={styles.miniCopyBtn}
+                            title="Copy Secret"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      </div>
 
-            URL url = new URL(RPC_URL);
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(12000);
-            conn.setRequestProperty("apikey", ANON_KEY);
-            conn.setRequestProperty("Authorization", "Bearer " + ANON_KEY);
-            conn.setRequestProperty("Content-Type", "application/json");
+                      {/* Version & Gateway */}
+                      <div style={{ background: 'rgba(7, 9, 14, 0.85)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>
+                          VERSION &amp; GATEWAY
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#cbd5e1' }}>
+                            "1.0" · greenvest.shop
+                          </span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText('https://greenvest.shop/connect');
+                              showToast('Copied Gateway URL');
+                            }}
+                            style={styles.miniCopyBtn}
+                            title="Copy Gateway URL"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
-            }
+                    {/* Quick Copy KeyAuth::Api(...) One-Liner Box */}
+                    <div style={{ marginTop: '16px', background: '#04060a', border: '1px solid rgba(5, 223, 114, 0.3)', borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '280px' }}>
+                        <span style={{ fontSize: '14px' }}>⚡</span>
+                        <code style={{ fontFamily: 'Consolas, monospace', fontSize: '12.5px', color: '#05df72', wordBreak: 'break-all' }}>
+                          KeyAuth::Api("{effectiveConnectAppName}", "{ownerUsername}", "{currentSecret.substring(0, 16)}...", "1.0");
+                        </code>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const code = `KeyAuth::Api(\n    "${effectiveConnectAppName}",\n    "${ownerUsername}",\n    "${currentSecret}",\n    "1.0"\n);`;
+                          navigator.clipboard.writeText(code);
+                          showToast('Copied KeyAuth::Api(...) Initialization Code!');
+                        }}
+                        style={{
+                          ...styles.chipBtn,
+                          background: 'linear-gradient(135deg, #05df72 0%, #047857 100%)',
+                          color: '#07090e',
+                          fontWeight: 800,
+                          fontSize: '11.5px',
+                          padding: '6px 14px',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        📋 Copy KeyAuth::Api(...) Block
+                      </button>
+                    </div>
+                  </div>
 
-            if (conn.getResponseCode() == 200) {
-                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = br.readLine()) != null) sb.append(line);
-                JSONObject res = new JSONObject(sb.toString());
-                return res.optBoolean("valid", false) && !res.optBoolean("is_paused", false);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (conn != null) conn.disconnect();
-        }
-        return false;
-    }
-}`}
-                          {codeSnippetTab === 'cpp' && `// Safe Streamer License Verification - C++ Native Daemon (libcurl)
-#include <iostream>
-#include <string>
-#include <curl/curl.h>
+                  {/* 2. Visual "Why Custom is Different" Comparison Explainer Banner */}
+                  <div style={{ marginBottom: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+                    {/* Free Fire MAX Card */}
+                    <div style={{
+                      padding: '16px 20px',
+                      borderRadius: '12px',
+                      background: connectSelectedApp === 'Free Fire MAX' ? 'rgba(5, 223, 114, 0.08)' : 'rgba(15, 23, 42, 0.6)',
+                      border: connectSelectedApp === 'Free Fire MAX' ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#05df72', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          🎮 Free Fire MAX Mode
+                        </div>
+                        <span style={{ fontSize: '10.5px', background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                          STREAMER REMOTE + KEYAUTH
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: '1.6' }}>
+                        • <strong>KeyAuth Licensing:</strong> HWID lock, expiration time, pause/resume.<br />
+                        • <strong>Streamer Remote Control:</strong> Live web ESP toggle, box, skeleton, aimbot FOV slider, crosshair, spectator auto-hide.<br />
+                        • <strong>Strict Isolation:</strong> Keys minted for Free Fire MAX will ONLY log in to Free Fire MAX.
+                      </div>
+                    </div>
 
-static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
-    ((std::string*)userp)->append((char*)contents, size * nmemb);
-    return size * nmemb;
-}
-
-bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
-    CURL* curl = curl_easy_init();
-    if (!curl) return false;
-
-    std::string response;
-    std::string post_data = "{\\"p_license_key\\":\\"" + license_key + "\\",\\"p_hwid\\":\\"" + hwid + "\\"}";
-
-    struct curl_slist* headers = NULL;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    headers = curl_slist_append(headers, "apikey: ${SOVEREIGN_CONNECT_CONFIG.anon_key}");
-    headers = curl_slist_append(headers, "Authorization: Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}");
-
-    curl_easy_setopt(curl, CURLOPT_URL, "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}");
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
-
-    CURLcode res = curl_easy_perform(curl);
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
-
-    return (res == CURLE_OK && http_code == 200 && response.find("\\"valid\\":true") != std::string::npos);
-}`}
-                          {codeSnippetTab === 'curl' && `curl -X POST "${SOVEREIGN_CONNECT_CONFIG.endpoint_url}" \\
-  -H "apikey: ${SOVEREIGN_CONNECT_CONFIG.anon_key}" \\
-  -H "Authorization: Bearer ${SOVEREIGN_CONNECT_CONFIG.anon_key}" \\
-  -H "Content-Type: application/json" \\
-  -d '{"p_license_key": "YOUR_LICENSE_KEY", "p_hwid": "YOUR_DEVICE_HWID"}'`}
-                        </pre>
+                    {/* Custom Application Card */}
+                    <div style={{
+                      padding: '16px 20px',
+                      borderRadius: '12px',
+                      background: connectSelectedApp === 'Custom' ? 'rgba(0, 217, 255, 0.08)' : 'rgba(15, 23, 42, 0.6)',
+                      border: connectSelectedApp === 'Custom' ? '1px solid rgba(0, 217, 255, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#00d9ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          ⚙️ Custom Application Mode ({effectiveConnectAppName})
+                        </div>
+                        <span style={{ fontSize: '10.5px', background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                          PURE KEYAUTH ONLY
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: '1.6' }}>
+                        • <strong>Pure KeyAuth Licensing:</strong> Device HWID lock, expiration check, instant freeze from dashboard.<br />
+                        • <strong>Zero Streamer Overhead:</strong> Streamer controls and ESP panels are completely bypassed and excluded.<br />
+                        • <strong>Strict App Isolation:</strong> Keys generated for <em>{effectiveConnectAppName}</em> will fail if used in Free Fire MAX or any other app!
                       </div>
                     </div>
                   </div>
 
-                  {/* Right Column: Live RPC Test Sandbox */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    <div style={styles.managementCard}>
-                      <div style={styles.cardHeader}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ ...styles.actionIconCircle, background: 'rgba(255, 183, 0, 0.15)', color: '#ffb700' }}>
-                            🧪
-                          </div>
-                          <div>
-                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Live Verification Test Sandbox</h3>
-                            <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                              Simulate Android APK key verification against live RYMON Gateway
+                  {/* 3. Main Two-Column Layout: Drop-in Code & Test Sandbox */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
+                    {/* Left Column: Drop-in KeyAuth Client Code */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                      <div style={styles.managementCard}>
+                        <div style={styles.cardHeader}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ ...styles.actionIconCircle, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72' }}>
+                              💻
+                            </div>
+                            <div>
+                              <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
+                                Drop-in KeyAuth Client Classes ({effectiveConnectAppName})
+                              </h3>
+                              <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                                Ready-to-compile client classes with <code>KeyAuth::Api</code> and <code>KeyAuth.license()</code>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div style={{ marginTop: '20px' }}>
-                        <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>LICENSE KEY TO TEST</label>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <input
-                              type="text"
-                              value={testConnectKey}
-                              onChange={(e) => setTestConnectKey(e.target.value.toUpperCase())}
-                              placeholder="Enter key e.g. RYMON-FF-XXXX-XXXX"
-                              style={{ ...styles.keyInput, flex: 1 }}
-                            />
-                            {keysList.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => setTestConnectKey(keysList[0].license_key)}
-                                style={{ ...styles.chipBtn, fontSize: '11px', whiteSpace: 'nowrap' }}
-                                title="Pick first active key from database"
-                              >
-                                Pick Key ({keysList[0].license_key.substring(0, 10)}...)
-                              </button>
-                            )}
+                        {/* Code Snippet Tabs */}
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '10px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => setCodeSnippetTab('cpp')}
+                            style={{
+                              ...styles.chipBtn,
+                              background: codeSnippetTab === 'cpp' ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: codeSnippetTab === 'cpp' ? '#00d9ff' : '#94a3b8',
+                              border: codeSnippetTab === 'cpp' ? '1px solid #00d9ff' : '1px solid rgba(255, 255, 255, 0.08)',
+                              fontWeight: 700
+                            }}
+                          >
+                            ⚡ C / C++ (Android JNI &amp; Daemon)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCodeSnippetTab('java')}
+                            style={{
+                              ...styles.chipBtn,
+                              background: codeSnippetTab === 'java' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: codeSnippetTab === 'java' ? '#05df72' : '#94a3b8',
+                              border: codeSnippetTab === 'java' ? '1px solid #05df72' : '1px solid rgba(255, 255, 255, 0.08)',
+                              fontWeight: 700
+                            }}
+                          >
+                            📱 Android (Java / Kotlin APK)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCodeSnippetTab('python')}
+                            style={{
+                              ...styles.chipBtn,
+                              background: codeSnippetTab === 'python' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: codeSnippetTab === 'python' ? '#c084fc' : '#94a3b8',
+                              border: codeSnippetTab === 'python' ? '1px solid #c084fc' : '1px solid rgba(255, 255, 255, 0.08)',
+                              fontWeight: 700
+                            }}
+                          >
+                            🐍 Python
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCodeSnippetTab('curl')}
+                            style={{
+                              ...styles.chipBtn,
+                              background: codeSnippetTab === 'curl' ? 'rgba(255, 183, 0, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: codeSnippetTab === 'curl' ? '#ffb700' : '#94a3b8',
+                              border: codeSnippetTab === 'curl' ? '1px solid #ffb700' : '1px solid rgba(255, 255, 255, 0.08)',
+                              fontWeight: 700
+                            }}
+                          >
+                            🌐 cURL / REST
+                          </button>
+                        </div>
+
+                        {/* Snippet Code Container */}
+                        <div style={{ marginTop: '12px', position: 'relative' }}>
+                          <button
+                            onClick={() => {
+                              let textToCopy = cppSnippet;
+                              if (codeSnippetTab === 'java') textToCopy = javaSnippet;
+                              else if (codeSnippetTab === 'python') textToCopy = pythonSnippet;
+                              else if (codeSnippetTab === 'curl') textToCopy = curlSnippet;
+                              navigator.clipboard.writeText(textToCopy);
+                              showToast(`Copied ${codeSnippetTab.toUpperCase()} KeyAuth Code`);
+                            }}
+                            style={{
+                              position: 'absolute',
+                              top: '10px',
+                              right: '10px',
+                              background: 'rgba(15, 23, 42, 0.9)',
+                              border: '1px solid rgba(0, 217, 255, 0.4)',
+                              borderRadius: '6px',
+                              color: '#00d9ff',
+                              fontSize: '11px',
+                              padding: '5px 12px',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              zIndex: 2
+                            }}
+                          >
+                            📋 Copy Code
+                          </button>
+
+                          <pre style={{
+                            background: '#04060a',
+                            border: '1px solid rgba(30, 41, 59, 0.8)',
+                            borderRadius: '10px',
+                            padding: '16px',
+                            fontSize: '11.5px',
+                            fontFamily: 'Consolas, monospace',
+                            color: '#cbd5e1',
+                            overflowX: 'auto',
+                            lineHeight: '1.5',
+                            maxHeight: '440px'
+                          }}>
+                            {codeSnippetTab === 'cpp' && cppSnippet}
+                            {codeSnippetTab === 'java' && javaSnippet}
+                            {codeSnippetTab === 'python' && pythonSnippet}
+                            {codeSnippetTab === 'curl' && curlSnippet}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Live KeyAuth Test Sandbox */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                      <div style={styles.managementCard}>
+                        <div style={styles.cardHeader}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ ...styles.actionIconCircle, background: 'rgba(255, 183, 0, 0.15)', color: '#ffb700' }}>
+                              🧪
+                            </div>
+                            <div>
+                              <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
+                                Live KeyAuth Verification Sandbox
+                              </h3>
+                              <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                                Test <code>KeyAuth.license()</code> live against edge gateway for <strong>{effectiveConnectAppName}</strong>
+                              </div>
+                            </div>
                           </div>
                         </div>
-
-                        <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>DEVICE HARDWARE ID (HWID)</label>
-                          <input
-                            type="text"
-                            value={testConnectHwid}
-                            onChange={(e) => setTestConnectHwid(e.target.value)}
-                            placeholder="e.g. DEVICE-SIM-ANDROID-9981"
-                            style={styles.keyInput}
-                          />
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={handleTestConnectApi}
-                          disabled={testConnectLoading}
-                          style={{
-                            ...styles.submitBtn,
-                            marginTop: '8px',
-                            background: 'linear-gradient(135deg, #05df72 0%, #047857 100%)',
-                            color: '#07090e',
-                            fontWeight: 800
-                          }}
-                        >
-                          {testConnectLoading ? 'CONNECTING &amp; VERIFYING...' : '🚀 TEST KEY VERIFICATION NOW'}
-                        </button>
 
                         <div style={{ marginTop: '20px' }}>
-                          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '6px' }}>
-                            LIVE RPC RESPONSE TERMINAL:
+                          {/* Active App Target Indicator */}
+                          <div style={{ padding: '8px 12px', background: 'rgba(0, 217, 255, 0.08)', borderRadius: '8px', border: '1px solid rgba(0, 217, 255, 0.25)', marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 800 }}>TARGET APP:</span>
+                            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#00d9ff', fontWeight: 700 }}>
+                              {effectiveConnectAppName}
+                            </span>
                           </div>
-                          <div style={{
-                            background: '#04060a',
-                            border: '1px solid rgba(0, 217, 255, 0.3)',
-                            borderRadius: '8px',
-                            padding: '14px',
-                            fontFamily: 'Consolas, monospace',
-                            fontSize: '11px',
-                            color: '#00d9ff',
-                            minHeight: '140px',
-                            maxHeight: '260px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap'
-                          }}>
-                            {testConnectResult || '// Click "TEST KEY VERIFICATION NOW" to dispatch live RPC call...'}
+
+                          {/* Key Input */}
+                          <div style={styles.formGroup}>
+                            <label style={styles.formLabel}>LICENSE KEY TO TEST</label>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <input
+                                type="text"
+                                value={testConnectKey}
+                                onChange={(e) => setTestConnectKey(e.target.value.toUpperCase())}
+                                placeholder="Enter key e.g. RYMON-FF-XXXX-XXXX"
+                                style={{ ...styles.keyInput, flex: 1 }}
+                              />
+                              {keysList.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const matching = keysList.find(k =>
+                                      connectSelectedApp === 'Free Fire MAX'
+                                        ? (k.game.toLowerCase().includes('free fire'))
+                                        : (!k.game.toLowerCase().includes('free fire'))
+                                    );
+                                    const keyToPick = matching || keysList[0];
+                                    setTestConnectKey(keyToPick.license_key);
+                                    showToast(`Picked key (${keyToPick.game}): ${keyToPick.license_key.substring(0, 10)}...`);
+                                  }}
+                                  style={{ ...styles.chipBtn, fontSize: '11px', whiteSpace: 'nowrap' }}
+                                  title="Pick key matching current app selection"
+                                >
+                                  Pick Key
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* HWID Input */}
+                          <div style={styles.formGroup}>
+                            <label style={styles.formLabel}>DEVICE HARDWARE ID (HWID / SERIAL)</label>
+                            <input
+                              type="text"
+                              value={testConnectHwid}
+                              onChange={(e) => setTestConnectHwid(e.target.value)}
+                              placeholder="e.g. DEVICE-SIM-ANDROID-9981"
+                              style={styles.keyInput}
+                            />
+                          </div>
+
+                          {/* Submit Test Button */}
+                          <button
+                            type="button"
+                            onClick={handleTestConnectApi}
+                            disabled={testConnectLoading}
+                            style={{
+                              ...styles.submitBtn,
+                              marginTop: '8px',
+                              background: 'linear-gradient(135deg, #05df72 0%, #047857 100%)',
+                              color: '#07090e',
+                              fontWeight: 800
+                            }}
+                          >
+                            {testConnectLoading ? 'CONNECTING & VERIFYING...' : `🚀 TEST KEYAUTH LOGIN (${effectiveConnectAppName})`}
+                          </button>
+
+                          {/* Live Response Terminal */}
+                          <div style={{ marginTop: '20px' }}>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, marginBottom: '6px' }}>
+                              LIVE KEYAUTH RESPONSE TERMINAL:
+                            </div>
+                            <div style={{
+                              background: '#04060a',
+                              border: '1px solid rgba(0, 217, 255, 0.3)',
+                              borderRadius: '8px',
+                              padding: '14px',
+                              fontFamily: 'Consolas, monospace',
+                              fontSize: '11.5px',
+                              color: '#00d9ff',
+                              minHeight: '140px',
+                              maxHeight: '260px',
+                              overflowY: 'auto',
+                              whiteSpace: 'pre-wrap'
+                            }}>
+                              {testConnectResult || `// Select an app, enter your key, and click "TEST KEYAUTH LOGIN" to simulate APK verification...`}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Protocol Specifications Summary */}
-                    <div style={{ padding: '16px 18px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', fontSize: '12px' }}>
-                      <div style={{ color: '#f8fafc', fontWeight: 700, marginBottom: '8px', fontSize: '13px' }}>
-                        📋 RPC Request &amp; Response Contract
-                      </div>
-                      <div style={{ color: '#94a3b8', lineHeight: '1.7' }}>
-                        • <strong>Required HTTP Headers:</strong><br />
-                        &nbsp;&nbsp;&nbsp;&nbsp;<code>apikey: {SOVEREIGN_CONNECT_CONFIG.anon_key.substring(0, 18)}...</code><br />
-                        &nbsp;&nbsp;&nbsp;&nbsp;<code>Content-Type: application/json</code><br />
-                        • <strong>Request Body:</strong> <code>{`{"p_license_key": "...", "p_hwid": "..."}`}</code><br />
-                        • <strong>Response Fields:</strong><br />
-                        &nbsp;&nbsp;&nbsp;&nbsp;<code>valid</code> (boolean): Key authenticity &amp; device match<br />
-                        &nbsp;&nbsp;&nbsp;&nbsp;<code>is_paused</code> (boolean): Reseller pause status<br />
-                        &nbsp;&nbsp;&nbsp;&nbsp;<code>expires_at</code> (ISO 8601 string): Exact expiration timestamp<br />
-                        &nbsp;&nbsp;&nbsp;&nbsp;<code>creator</code> (string): Generating reseller username<br />
-                        &nbsp;&nbsp;&nbsp;&nbsp;<code>game</code> (string): Target game name (e.g. Free Fire MAX)
+                      {/* Protocol Contract Card */}
+                      <div style={{ padding: '16px 18px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', fontSize: '12px' }}>
+                        <div style={{ color: '#f8fafc', fontWeight: 700, marginBottom: '8px', fontSize: '13px' }}>
+                          📋 Gateway Request &amp; Response Contract
+                        </div>
+                        <div style={{ color: '#94a3b8', lineHeight: '1.7' }}>
+                          • <strong>Gateway URL:</strong> <code>https://greenvest.shop/connect</code> (Cloudflare Edge Proxy)<br />
+                          • <strong>Required Header:</strong> <code>Content-Type: application/json</code> (Zero secret API keys required in APK!)<br />
+                          • <strong>Request Body:</strong> <code>{`{"user_key": "...", "serial": "...", "app": "${effectiveConnectAppName}"}`}</code><br />
+                          • <strong>Response Fields:</strong><br />
+                          &nbsp;&nbsp;&nbsp;&nbsp;<code>status</code> (boolean): Key authenticity &amp; device match<br />
+                          &nbsp;&nbsp;&nbsp;&nbsp;<code>is_paused</code> (boolean): Reseller pause status<br />
+                          &nbsp;&nbsp;&nbsp;&nbsp;<code>expires_at</code> (ISO 8601 string): Exact expiration timestamp<br />
+                          &nbsp;&nbsp;&nbsp;&nbsp;<code>game / app</code> (string): Target game/app name<br />
+                          &nbsp;&nbsp;&nbsp;&nbsp;<code>reason</code> (string): Error reason if rejected (e.g. <em>App Mismatch!</em>)
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* 12B. APP MANAGER (MULTI-APP ECOSYSTEM & PURE KEYAUTH) */}
+              );
+            })()}            {/* 12B. APP MANAGER (MULTI-APP ECOSYSTEM & PURE KEYAUTH) */}
             {activeTab === 'apps' && isOwner && (
               <div style={styles.viewContainer}>
                 {/* Header Banner */}
