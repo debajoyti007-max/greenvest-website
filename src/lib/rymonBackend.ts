@@ -838,6 +838,100 @@ export async function verifyLicenseKey(
   return { valid: false, error: 'Invalid license key. Check key string or generate a new key.' }
 }
 
+/**
+ * Recursively resolves all usernames belonging to actor's downline tree.
+ * Traverses parent (uplink) -> child relationship in full breadth/depth.
+ */
+export async function getDownlineUsernames(
+  actorUsername: string,
+  includeSelf: boolean = true
+): Promise<Set<string>> {
+  const cleanActor = (actorUsername || '').trim().toLowerCase()
+  const result = new Set<string>()
+  if (!cleanActor) return result
+  if (includeSelf) result.add(cleanActor)
+
+  let accounts: { username: string; uplink?: string }[] = []
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('rymon_accounts')
+        .select('username, uplink')
+      if (!error && Array.isArray(data)) {
+        accounts = data
+      }
+    } catch {}
+  }
+
+  if (accounts.length === 0) {
+    accounts = getStoredAccounts()
+  }
+
+  const childMap = new Map<string, string[]>()
+  for (const acc of accounts) {
+    const parent = (acc.uplink || '').trim().toLowerCase()
+    const child = (acc.username || '').trim().toLowerCase()
+    if (parent && child) {
+      if (!childMap.has(parent)) childMap.set(parent, [])
+      childMap.get(parent)!.push(child)
+    }
+  }
+
+  const queue: string[] = [cleanActor]
+  while (queue.length > 0) {
+    const curr = queue.shift()!
+    const children = childMap.get(curr)
+    if (children) {
+      for (const ch of children) {
+        if (!result.has(ch)) {
+          result.add(ch)
+          queue.push(ch)
+        }
+      }
+    }
+  }
+
+  return result
+}
+
+export function getDownlineUsernamesSync(
+  actorUsername: string,
+  accounts: { username: string; uplink?: string }[],
+  includeSelf: boolean = true
+): Set<string> {
+  const cleanActor = (actorUsername || '').trim().toLowerCase()
+  const result = new Set<string>()
+  if (!cleanActor) return result
+  if (includeSelf) result.add(cleanActor)
+
+  const childMap = new Map<string, string[]>()
+  for (const acc of accounts) {
+    const parent = (acc.uplink || '').trim().toLowerCase()
+    const child = (acc.username || '').trim().toLowerCase()
+    if (parent && child) {
+      if (!childMap.has(parent)) childMap.set(parent, [])
+      childMap.get(parent)!.push(child)
+    }
+  }
+
+  const queue: string[] = [cleanActor]
+  while (queue.length > 0) {
+    const curr = queue.shift()!
+    const children = childMap.get(curr)
+    if (children) {
+      for (const ch of children) {
+        if (!result.has(ch)) {
+          result.add(ch)
+          queue.push(ch)
+        }
+      }
+    }
+  }
+
+  return result
+}
+
 // ============================================================================
 // 4. FETCH LICENSES & USERS (WITH HIERARCHICAL ROLE RESTRICTIONS)
 // ============================================================================
@@ -905,7 +999,8 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
 
       if (!error && Array.isArray(allRows)) {
         const cleanRows = normalizeExpiry(allRows as RymonLicense[])
-        if (!user || user.role === 'owner') {
+        const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+        if (isRootUser) {
           return cleanRows
         }
         if (user.role === 'reseller') {
@@ -913,35 +1008,29 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
             (l) => (l.creator_username || '').toLowerCase() === user.username.toLowerCase()
           )
         }
-        if (user.role === 'admin') {
-          const { data: downlines } = await supabase
-            .from('rymon_accounts')
-            .select('username')
-            .ilike('uplink', user.username)
-          const allowedSet = new Set<string>([
-            user.username.toLowerCase(),
-            ...(downlines?.map((d) => (d.username || '').toLowerCase()) || [])
-          ])
-          return cleanRows.filter((l) =>
-            allowedSet.has((l.creator_username || '').toLowerCase())
-          )
-        }
+        // Partner Owner (RYZEN) or Admin: only see their downline keys (Debajoyti's keys strictly hidden)
+        const allowedSet = await getDownlineUsernames(user.username, true)
+        return cleanRows.filter((l) => {
+          const creator = (l.creator_username || '').toLowerCase()
+          return creator !== 'debajoyti' && allowedSet.has(creator)
+        })
       }
     } catch {}
   }
 
   const stored = normalizeExpiry(getStoredLicenses())
-  if (user && user.role === 'reseller') {
+  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+  if (isRootUser) {
+    return stored
+  }
+  if (user.role === 'reseller') {
     return stored.filter((l) => l.creator_username.toLowerCase() === user.username.toLowerCase())
   }
-  if (user && user.role === 'admin') {
-    const downlines = getStoredAccounts()
-      .filter((a) => (a.uplink || '').toLowerCase() === user.username.toLowerCase())
-      .map((a) => a.username.toLowerCase())
-    const allowedSet = new Set([user.username.toLowerCase(), ...downlines])
-    return stored.filter((l) => allowedSet.has(l.creator_username.toLowerCase()))
-  }
-  return stored
+  const allowedSet = getDownlineUsernamesSync(user.username, getStoredAccounts(), true)
+  return stored.filter((l) => {
+    const creator = l.creator_username.toLowerCase()
+    return creator !== 'debajoyti' && allowedSet.has(creator)
+  })
 }
 
 export async function fetchAllAccounts(user?: RymonAccount | null): Promise<RymonAccount[]> {
@@ -1018,30 +1107,54 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
 
       if (!error && Array.isArray(data)) {
         const rows = normalizeAccountSubscriptions(data as RymonAccount[])
-        if (!user || user.role === 'owner') {
+        const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+        if (isRootUser) {
           return rows
+        }
+        if (user.role === 'owner') {
+          // Partner Owner sees only self + their own downline tree (never Debajoyti or Debajoyti's downline)
+          const allowedDownlines = await getDownlineUsernames(user.username, true)
+          return rows.filter((u) => {
+            const uName = u.username.toLowerCase()
+            return uName !== 'debajoyti' && allowedDownlines.has(uName)
+          })
         }
         if (user.role === 'admin') {
           // Admin sees only self + their own downline Resellers (never other Admins or Owner)
-          const myName = user.username.toLowerCase()
-          return rows.filter(
-            (u) =>
-              u.username.toLowerCase() === myName ||
-              (u.role === 'reseller' && (u.uplink || '').toLowerCase() === myName)
-          )
+          const allowedDownlines = await getDownlineUsernames(user.username, false)
+          return rows.filter((u) => {
+            const uName = u.username.toLowerCase()
+            return (
+              uName === user.username.toLowerCase() ||
+              (u.role === 'reseller' && allowedDownlines.has(uName))
+            )
+          })
         }
       }
     } catch {}
   }
 
   const stored = normalizeAccountSubscriptions(getStoredAccounts())
-  if (user && user.role === 'admin') {
-    const myName = user.username.toLowerCase()
-    return stored.filter(
-      (u) =>
-        u.username.toLowerCase() === myName ||
-        (u.role === 'reseller' && (u.uplink || '').toLowerCase() === myName)
-    )
+  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+  if (isRootUser) {
+    return stored
+  }
+  if (user.role === 'owner') {
+    const allowedDownlines = getDownlineUsernamesSync(user.username, stored, true)
+    return stored.filter((u) => {
+      const uName = u.username.toLowerCase()
+      return uName !== 'debajoyti' && allowedDownlines.has(uName)
+    })
+  }
+  if (user.role === 'admin') {
+    const allowedDownlines = getDownlineUsernamesSync(user.username, stored, false)
+    return stored.filter((u) => {
+      const uName = u.username.toLowerCase()
+      return (
+        uName === user.username.toLowerCase() ||
+        (u.role === 'reseller' && allowedDownlines.has(uName))
+      )
+    })
   }
   return stored
 }
@@ -1053,35 +1166,47 @@ export async function fetchAllActivities(user?: RymonAccount | null): Promise<Ry
         .from('rymon_activities')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(40)
+        .limit(100)
 
       if (!error && Array.isArray(data)) {
         const acts = data as RymonActivity[]
-        if (!user || user.role === 'owner') {
-          return acts.slice(0, 20)
+        const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+        if (isRootUser) {
+          return acts.slice(0, 30)
         }
         if (user.role === 'reseller') {
           return acts
             .filter((a) => (a.actor_username || '').toLowerCase() === user.username.toLowerCase())
             .slice(0, 20)
         }
-        if (user.role === 'admin') {
-          const { data: downlines } = await supabase
-            .from('rymon_accounts')
-            .select('username')
-            .ilike('uplink', user.username)
-          const allowedSet = new Set<string>([
-            user.username.toLowerCase(),
-            ...(downlines?.map((d) => (d.username || '').toLowerCase()) || [])
-          ])
-          return acts
-            .filter((a) => allowedSet.has((a.actor_username || '').toLowerCase()))
-            .slice(0, 20)
-        }
+        // Partner Owner (RYZEN) or Admin: only see activities from self + downline tree
+        const allowedDownlines = await getDownlineUsernames(user.username, true)
+        return acts
+          .filter((a) => {
+            const actor = (a.actor_username || '').toLowerCase()
+            return actor !== 'debajoyti' && allowedDownlines.has(actor)
+          })
+          .slice(0, 30)
       }
     } catch {}
   }
-  return getStoredActivities()
+  const storedActs = getStoredActivities()
+  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+  if (isRootUser) {
+    return storedActs.slice(0, 30)
+  }
+  if (user.role === 'reseller') {
+    return storedActs
+      .filter((a) => (a.actor_username || '').toLowerCase() === user.username.toLowerCase())
+      .slice(0, 20)
+  }
+  const allowedDownlines = getDownlineUsernamesSync(user.username, getStoredAccounts(), true)
+  return storedActs
+    .filter((a) => {
+      const actor = (a.actor_username || '').toLowerCase()
+      return actor !== 'debajoyti' && allowedDownlines.has(actor)
+    })
+    .slice(0, 30)
 }
 
 export async function fetchAllStreamerControls(user?: RymonAccount | null): Promise<StreamerControlRecord[]> {
@@ -1108,7 +1233,8 @@ export async function fetchAllStreamerControls(user?: RymonAccount | null): Prom
             .then(() => {}, () => {})
         }
 
-        if (!user || user.role === 'owner') {
+        const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+        if (isRootUser) {
           return rows
         }
         if (user.role === 'reseller') {
@@ -1116,17 +1242,12 @@ export async function fetchAllStreamerControls(user?: RymonAccount | null): Prom
             (r) => (r.creator || '').toLowerCase() === user.username.toLowerCase()
           )
         }
-        if (user.role === 'admin') {
-          const { data: downlines } = await supabase
-            .from('rymon_accounts')
-            .select('username')
-            .ilike('uplink', user.username)
-          const allowedSet = new Set<string>([
-            user.username.toLowerCase(),
-            ...(downlines?.map((d) => (d.username || '').toLowerCase()) || [])
-          ])
-          return rows.filter((r) => allowedSet.has((r.creator || '').toLowerCase()))
-        }
+        // Partner Owner (RYZEN) or Admin: only see streamers from self + downline tree
+        const allowedDownlines = await getDownlineUsernames(user.username, true)
+        return rows.filter((r) => {
+          const creator = (r.creator || '').toLowerCase()
+          return creator !== 'debajoyti' && allowedDownlines.has(creator)
+        })
       }
     } catch {}
   }
@@ -1567,7 +1688,7 @@ export async function topUpUserBalanceBackend(
       let actorRemainingBalance: number | undefined = undefined
 
       if (!isRootOwner) {
-        // Admin Wallet-to-Reseller Transfer Mode
+        // Partner Owner / Admin Wallet-to-Downline Transfer Mode
         if (amount <= 0) {
           return { success: false, error: 'Transfer amount must be greater than ₹0.' }
         }
@@ -1577,36 +1698,34 @@ export async function topUpUserBalanceBackend(
           .ilike('username', cleanActor)
           .maybeSingle()
 
-        if (!actorAcc || actorAcc.role !== 'admin') {
+        if (!actorAcc || (actorAcc.role !== 'admin' && actorAcc.role !== 'owner')) {
           return { success: false, error: 'Power restriction: Only Owner or Admin can fund accounts.' }
         }
 
-        if (
-          targetUser.role !== 'reseller' ||
-          (targetUser.uplink || '').toLowerCase() !== cleanActor.toLowerCase()
-        ) {
+        const allowedDownlines = await getDownlineUsernames(cleanActor, false)
+        if (!allowedDownlines.has(targetUser.username.toLowerCase())) {
           return {
             success: false,
-            error: 'Power restriction: Admins can only transfer balance to their own invited Resellers.'
+            error: `Power restriction: @${targetUser.username} is outside your downline.`
           }
         }
 
-        const adminBal = Number(actorAcc.balance || 0)
-        if (adminBal < amount) {
+        const actorBal = Number(actorAcc.balance || 0)
+        if (actorBal < amount) {
           return {
             success: false,
-            error: `Insufficient wallet balance! You need ₹${amount.toLocaleString('en-IN')} to fund @${targetUser.username}, but your wallet has ₹${adminBal.toLocaleString('en-IN')}.`
+            error: `Insufficient wallet balance! You need ₹${amount.toLocaleString('en-IN')} to fund @${targetUser.username}, but your wallet has ₹${actorBal.toLocaleString('en-IN')}.`
           }
         }
 
-        actorRemainingBalance = Math.max(0, adminBal - amount)
+        actorRemainingBalance = Math.max(0, actorBal - amount)
         const { error: decErr } = await supabase
           .from('rymon_accounts')
           .update({ balance: actorRemainingBalance, updated_at: new Date().toISOString() })
           .eq('id', actorAcc.id)
 
         if (decErr) {
-          return { success: false, error: 'Failed to deduct balance from Admin wallet.' }
+          return { success: false, error: 'Failed to deduct balance from wallet.' }
         }
       }
 
@@ -1618,7 +1737,7 @@ export async function topUpUserBalanceBackend(
 
       if (!updErr) {
         await supabase.from('rymon_activities').insert({
-          title: isRootOwner ? 'Owner Balance Credit' : 'Admin Wallet Transfer',
+          title: isRootOwner ? 'Owner Balance Credit' : 'Downline Wallet Transfer',
           event_type: 'BALANCE_CREDIT',
           details: isRootOwner
             ? `Updated balance for @${targetUser.username} to ₹${nextBal.toLocaleString('en-IN')} (FREE Owner Mint)`
@@ -1639,11 +1758,12 @@ export async function topUpUserBalanceBackend(
   let actorRemainingBalance: number | undefined = undefined
   if (!isRootOwner) {
     const actorAcc = accounts.find((a) => a.username.toLowerCase() === cleanActor.toLowerCase())
-    if (!actorAcc || actorAcc.role !== 'admin') {
+    if (!actorAcc || (actorAcc.role !== 'admin' && actorAcc.role !== 'owner')) {
       return { success: false, error: 'Power restriction: Only Owner or Admin can fund accounts.' }
     }
-    if (matched.role !== 'reseller' || matched.uplink.toLowerCase() !== cleanActor.toLowerCase()) {
-      return { success: false, error: 'Admins can only transfer balance to their own Resellers.' }
+    const allowedDownlines = getDownlineUsernamesSync(cleanActor, accounts, false)
+    if (!allowedDownlines.has(matched.username.toLowerCase())) {
+      return { success: false, error: `Power restriction: @${matched.username} is outside your downline.` }
     }
     if (actorAcc.balance < amount) {
       return { success: false, error: `Insufficient wallet balance (Available: ₹${actorAcc.balance}).` }
@@ -1864,13 +1984,11 @@ export async function resetUserPasswordBackend(
       }
 
       if (!isRootOwner) {
-        if (
-          targetAcc.role !== 'reseller' ||
-          (targetAcc.uplink || '').toLowerCase() !== cleanActor.toLowerCase()
-        ) {
+        const allowedDownlines = await getDownlineUsernames(cleanActor, false)
+        if (!allowedDownlines.has(targetAcc.username.toLowerCase())) {
           return {
             success: false,
-            message: 'Power restriction: Admins can only reset passwords for their own invited Resellers.'
+            message: 'Power restriction: You can only reset passwords for accounts in your downline.'
           }
         }
       }
@@ -1898,6 +2016,20 @@ export async function resetUserPasswordBackend(
       }
     } catch {}
   }
+
+  const accounts = getStoredAccounts()
+  const u = accounts.find((a) => a.username.toLowerCase() === cleanTarget.toLowerCase())
+  if (!u) return { success: false, message: `User @${cleanTarget} not found.` }
+  if (!isRootOwner) {
+    const allowedDownlines = getDownlineUsernamesSync(cleanActor, accounts, false)
+    if (!allowedDownlines.has(u.username.toLowerCase())) {
+      return { success: false, message: 'Power restriction: You can only reset passwords for accounts in your downline.' }
+    }
+  }
+  try {
+    localStorage.setItem(`rymon_pw_${u.username}`, cleanPass)
+  } catch {}
+  saveStoredAccounts(accounts)
 
   return {
     success: true,
@@ -1944,13 +2076,11 @@ export async function renewUserSubscriptionBackend(
       }
 
       if (!isRootOwner) {
-        if (
-          targetAcc.role !== 'reseller' ||
-          (targetAcc.uplink || '').toLowerCase() !== cleanActor.toLowerCase()
-        ) {
+        const allowedDownlines = await getDownlineUsernames(cleanActor, false)
+        if (!allowedDownlines.has(targetAcc.username.toLowerCase())) {
           return {
             success: false,
-            message: 'Power restriction: Admins can only renew subscriptions for their own invited Resellers.'
+            message: 'Power restriction: You can only renew subscriptions for accounts in your downline.'
           }
         }
 
@@ -2019,8 +2149,11 @@ export async function renewUserSubscriptionBackend(
   if (!matched) {
     return { success: false, message: `User @${cleanTarget} not found.` }
   }
-  if (!isRootOwner && (matched.role !== 'reseller' || matched.uplink.toLowerCase() !== cleanActor.toLowerCase())) {
-    return { success: false, message: 'Admins can only renew their own invited Resellers.' }
+  if (!isRootOwner) {
+    const allowedDownlines = getDownlineUsernamesSync(cleanActor, accounts, false)
+    if (!allowedDownlines.has(matched.username.toLowerCase())) {
+      return { success: false, message: 'Power restriction: You can only renew subscriptions for accounts in your downline.' }
+    }
   }
   matched.expires_at = newExpIso
   saveStoredAccounts(accounts)
@@ -2103,9 +2236,20 @@ export async function resetHwidBackend(
     try {
       const { data: existing } = await supabase
         .from('rymon_licenses')
-        .select('expires_at, status, is_paused')
+        .select('expires_at, status, is_paused, creator_username')
         .eq('license_key', cleanKey)
         .maybeSingle()
+
+      if (!isRootOwner && existing) {
+        const creator = (existing.creator_username || '').toLowerCase()
+        const allowedDownlines = await getDownlineUsernames(cleanActor, true)
+        if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+          return {
+            success: false,
+            message: 'Permission Denied: Cannot reset HWID on keys outside your downline.'
+          }
+        }
+      }
 
       const nextStatus = existing?.is_paused
         ? 'PAUSED'
@@ -2133,6 +2277,16 @@ export async function resetHwidBackend(
 
   const licenses = getStoredLicenses()
   const item = licenses.find((l) => l.license_key === cleanKey)
+  if (!isRootOwner && item) {
+    const creator = (item.creator_username || '').toLowerCase()
+    const allowedDownlines = getDownlineUsernamesSync(cleanActor, getStoredAccounts(), true)
+    if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+      return {
+        success: false,
+        message: 'Permission Denied: Cannot reset HWID on keys outside your downline.'
+      }
+    }
+  }
   if (item) {
     item.device_hwid = ''
     item.devices_used = 0
@@ -2150,18 +2304,47 @@ export async function resetHwidBackend(
   }
 }
 
-export async function deleteLicenseBackend(licenseKey: string): Promise<boolean> {
+export async function deleteLicenseBackend(
+  licenseKey: string,
+  actorUsername: string = 'debajoyti'
+): Promise<boolean> {
   const cleanKey = licenseKey.trim().toUpperCase()
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+  const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
 
   if (supabase) {
     try {
+      if (!isRootOwner) {
+        const { data: lic } = await supabase
+          .from('rymon_licenses')
+          .select('creator_username')
+          .eq('license_key', cleanKey)
+          .maybeSingle()
+
+        const creator = (lic?.creator_username || '').toLowerCase()
+        const allowedDownlines = await getDownlineUsernames(cleanActor, true)
+        if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+          return false
+        }
+      }
+
       await supabase.from('rymon_licenses').delete().eq('license_key', cleanKey)
       await supabase.from('rymon_streamer_controls').delete().eq('license_key', cleanKey)
     } catch {}
   }
 
-  const licenses = getStoredLicenses().filter((l) => l.license_key !== cleanKey)
-  saveStoredLicenses(licenses)
+  const licenses = getStoredLicenses()
+  if (!isRootOwner) {
+    const lic = licenses.find((l) => l.license_key === cleanKey)
+    const creator = (lic?.creator_username || '').toLowerCase()
+    const allowedDownlines = getDownlineUsernamesSync(cleanActor, getStoredAccounts(), true)
+    if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+      return false
+    }
+  }
+
+  const remaining = licenses.filter((l) => l.license_key !== cleanKey)
+  saveStoredLicenses(remaining)
   return true
 }
 
@@ -2209,23 +2392,19 @@ export async function deleteAccountBackend(
     return { success: false, error: `Account @${cleanTarget} not found.` }
   }
 
-  // 2. Hierarchy Check: Admin can only delete Resellers under their downline
-  if (actor.role === 'admin') {
-    if (targetRow.role !== 'reseller') {
-      return { success: false, error: 'Permission Denied: Admins can only delete Resellers.' }
+  // 2. Hierarchy Check: Actor can only delete accounts under their own downline
+  const isRootActor = cleanActor.toLowerCase() === 'debajoyti'
+  if (!isRootActor) {
+    if (targetRow.role === 'owner') {
+      return { success: false, error: 'Permission Denied: Only Root Founder (debajoyti) can delete Owner accounts.' }
     }
-    const uplink = (targetRow.uplink || '').toLowerCase()
-    if (uplink !== cleanActor.toLowerCase()) {
+    const allowedDownlines = await getDownlineUsernames(cleanActor, false)
+    if (!allowedDownlines.has(cleanTarget.toLowerCase())) {
       return {
         success: false,
-        error: `Permission Denied: @${cleanTarget} is not under your downline (Uplink: @${targetRow.uplink || 'None'}).`
+        error: `Permission Denied: @${cleanTarget} is not under your downline.`
       }
     }
-  }
-
-  // Partner Owner (non-root) cannot delete another Owner
-  if (actor.role === 'owner' && cleanActor.toLowerCase() !== 'debajoyti' && targetRow.role === 'owner') {
-    return { success: false, error: 'Permission Denied: Only Root Founder (debajoyti) can delete Owner accounts.' }
   }
 
   // 3. Supabase Deletion
@@ -2281,14 +2460,8 @@ export async function bulkDeleteKeysBackend(
       if (allRows && allRows.length > 0) {
         let allowedCreators: Set<string> | null = null
         if (!isRootOwner) {
-          const { data: downlines } = await supabase
-            .from('rymon_accounts')
-            .select('username')
-            .ilike('uplink', cleanActor)
-          allowedCreators = new Set<string>([
-            cleanActor.toLowerCase(),
-            ...(downlines?.map((d) => (d.username || '').toLowerCase()) || [])
-          ])
+          allowedCreators = await getDownlineUsernames(cleanActor, true)
+          allowedCreators.delete('debajoyti')
         }
 
         const nowMs = Date.now()
@@ -2327,9 +2500,14 @@ export async function bulkDeleteKeysBackend(
 
   const licenses = getStoredLicenses()
   const nowMs = Date.now()
+  let allowedCreators: Set<string> | null = null
+  if (!isRootOwner) {
+    allowedCreators = getDownlineUsernamesSync(cleanActor, getStoredAccounts(), true)
+    allowedCreators.delete('debajoyti')
+  }
   const remaining = licenses.filter((l) => {
     const cName = l.creator_username.toLowerCase()
-    if (!isRootOwner && cName !== cleanActor.toLowerCase()) return true
+    if (!isRootOwner && (!allowedCreators || !allowedCreators.has(cName))) return true
     if (!isAllScope && cName !== cleanTarget.toLowerCase()) return true
 
     const isExp = l.status === 'EXPIRED' || Boolean(l.expires_at && new Date(l.expires_at).getTime() < nowMs)
@@ -2374,14 +2552,11 @@ export async function toggleBanStatusBackend(
         }
 
         if (!isRootOwner) {
-          // Admin can ONLY ban/unban their own downline Resellers
-          if (
-            targetAcc.role !== 'reseller' ||
-            (targetAcc.uplink || '').toLowerCase() !== cleanActor.toLowerCase()
-          ) {
+          const allowedDownlines = await getDownlineUsernames(cleanActor, false)
+          if (!allowedDownlines.has(targetAcc.username.toLowerCase())) {
             return {
               success: false,
-              message: 'Power restriction: Admins can only Ban/Unban Resellers that they invited.'
+              message: 'Power restriction: You can only Ban/Unban accounts in your downline.'
             }
           }
         }
@@ -2392,6 +2567,21 @@ export async function toggleBanStatusBackend(
           .eq('id', targetAcc.id)
       } else {
         const cleanKey = cleanTarget.toUpperCase()
+        if (!isRootOwner) {
+          const { data: lic } = await supabase
+            .from('rymon_licenses')
+            .select('creator_username')
+            .eq('license_key', cleanKey)
+            .maybeSingle()
+          const creator = (lic?.creator_username || '').toLowerCase()
+          const allowedDownlines = await getDownlineUsernames(cleanActor, true)
+          if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+            return {
+              success: false,
+              message: 'Permission Denied: You can only ban keys generated in your downline.'
+            }
+          }
+        }
         await supabase
           .from('rymon_licenses')
           .update({ status, updated_at: new Date().toISOString() })
@@ -2416,8 +2606,11 @@ export async function toggleBanStatusBackend(
     const users = getStoredAccounts()
     const u = users.find((x) => x.username.toLowerCase() === cleanTarget.toLowerCase())
     if (u) {
-      if (!isRootOwner && (u.role !== 'reseller' || u.uplink.toLowerCase() !== cleanActor.toLowerCase())) {
-        return { success: false, message: 'Admins can only Ban/Unban their own downline Resellers.' }
+      if (!isRootOwner) {
+        const allowedDownlines = getDownlineUsernamesSync(cleanActor, users, false)
+        if (!allowedDownlines.has(u.username.toLowerCase())) {
+          return { success: false, message: 'Power restriction: You can only Ban/Unban accounts in your downline.' }
+        }
       }
       u.status = status
       saveStoredAccounts(users)
@@ -2426,6 +2619,13 @@ export async function toggleBanStatusBackend(
     const lics = getStoredLicenses()
     const l = lics.find((x) => x.license_key === cleanTarget.toUpperCase())
     if (l) {
+      if (!isRootOwner) {
+        const creator = (l.creator_username || '').toLowerCase()
+        const allowedDownlines = getDownlineUsernamesSync(cleanActor, getStoredAccounts(), true)
+        if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+          return { success: false, message: 'Permission Denied: You can only ban keys generated in your downline.' }
+        }
+      }
       l.status = status
       saveStoredLicenses(lics)
     }
@@ -2459,6 +2659,17 @@ export async function extendLicenseBackend(
         .maybeSingle()
 
       if (licRow) {
+        if (!isRootOwner) {
+          const creator = (licRow.creator_username || '').toLowerCase()
+          const allowedDownlines = await getDownlineUsernames(cleanActor, true)
+          if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+            return {
+              success: false,
+              error: 'Permission Denied: Cannot extend keys outside your downline.'
+            }
+          }
+        }
+
         const cost = isRootOwner
           ? 0
           : calculateExtensionCost(days, cleanActor, Number(licRow.devices_max || 1))
@@ -2514,6 +2725,16 @@ export async function extendLicenseBackend(
 
   const lics = getStoredLicenses()
   const l = lics.find((x) => x.license_key === cleanKey)
+  if (!isRootOwner && l) {
+    const creator = (l.creator_username || '').toLowerCase()
+    const allowedDownlines = getDownlineUsernamesSync(cleanActor, getStoredAccounts(), true)
+    if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+      return {
+        success: false,
+        error: 'Permission Denied: Cannot extend keys outside your downline.'
+      }
+    }
+  }
   const cost = isRootOwner ? 0 : calculateExtensionCost(days, cleanActor, l?.devices_max || 1)
   let remainingBalance: number | undefined = undefined
 
@@ -2570,10 +2791,24 @@ export async function togglePauseLicenseBackend(
           .maybeSingle(),
         supabase
           .from('rymon_licenses')
-          .select('is_paused, expires_at, updated_at, status')
+          .select('is_paused, expires_at, updated_at, status, creator_username')
           .eq('license_key', cleanKey)
           .maybeSingle()
       ])
+
+      const isRootOwner = (requesterUsername || 'debajoyti').trim().toLowerCase() === 'debajoyti'
+      if (!isRootOwner && licRow) {
+        const creator = (licRow.creator_username || '').toLowerCase()
+        const allowedDownlines = await getDownlineUsernames(requesterUsername, true)
+        if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+          return {
+            success: false,
+            is_paused: Boolean(licRow.is_paused),
+            status: licRow.status || 'ACTIVE',
+            message: 'Permission Denied: Root Founder and external downline keys cannot be modified.'
+          }
+        }
+      }
 
       const wasPaused = Boolean(licRow?.is_paused ?? currentCtrl?.is_paused)
       const newPaused = !wasPaused
@@ -2647,6 +2882,19 @@ export async function togglePauseLicenseBackend(
   const stored = getStoredLicenses()
   const idx = stored.findIndex((l) => l.license_key === cleanKey)
   if (idx >= 0) {
+    const isRootOwner = (requesterUsername || 'debajoyti').trim().toLowerCase() === 'debajoyti'
+    if (!isRootOwner) {
+      const creator = (stored[idx].creator_username || '').toLowerCase()
+      const allowedDownlines = getDownlineUsernamesSync(requesterUsername, getStoredAccounts(), true)
+      if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
+        return {
+          success: false,
+          is_paused: Boolean(stored[idx].is_paused),
+          status: stored[idx].status || 'ACTIVE',
+          message: 'Permission Denied: Root Founder and external downline keys cannot be modified.'
+        }
+      }
+    }
     const newPaused = !stored[idx].is_paused
     stored[idx].is_paused = newPaused
     stored[idx].status = newPaused ? 'PAUSED' : stored[idx].expires_at ? 'ACTIVE' : 'WAITING'
@@ -2690,20 +2938,31 @@ export async function bulkTogglePauseAllKeysBackend(
   const nowIso = new Date(nowMs).toISOString()
   const max30DaysMs = nowMs + 30 * 86400000
   const pauseMap = getPausedKeyTimestamps()
+  const isRootOwner = (actorUsername || 'debajoyti').trim().toLowerCase() === 'debajoyti'
 
   if (supabase) {
     try {
+      let allowedCreators: Set<string> | null = null
+      if (!isRootOwner) {
+        allowedCreators = await getDownlineUsernames(actorUsername, true)
+        allowedCreators.delete('debajoyti')
+      }
+
       let fetchQuery = supabase
         .from('rymon_licenses')
-        .select('license_key, expires_at, updated_at, is_paused, status')
+        .select('license_key, expires_at, updated_at, is_paused, status, creator_username')
         .neq('status', 'BANNED')
         .neq('status', 'EXPIRED')
       if (creatorFilter) {
         fetchQuery = fetchQuery.ilike('creator_username', creatorFilter)
+      } else if (allowedCreators) {
+        fetchQuery = fetchQuery.in('creator_username', Array.from(allowedCreators))
       }
       const { data: rows } = await fetchQuery
       if (rows && rows.length > 0) {
         for (const r of rows) {
+          const creator = (r.creator_username || '').toLowerCase()
+          if (allowedCreators && !allowedCreators.has(creator)) continue
           const k = r.license_key.toUpperCase()
           let nextExp = r.expires_at
           if (pauseState) {
@@ -2746,6 +3005,8 @@ export async function bulkTogglePauseAllKeysBackend(
         })
       if (creatorFilter) {
         ctrlQuery = ctrlQuery.ilike('creator', creatorFilter)
+      } else if (allowedCreators) {
+        ctrlQuery = ctrlQuery.in('creator', Array.from(allowedCreators))
       } else {
         ctrlQuery = ctrlQuery.neq('license_key', '')
       }
@@ -2754,9 +3015,16 @@ export async function bulkTogglePauseAllKeysBackend(
   }
 
   const stored = getStoredLicenses()
+  let syncAllowed: Set<string> | null = null
+  if (!isRootOwner) {
+    syncAllowed = getDownlineUsernamesSync(actorUsername, getStoredAccounts(), true)
+    syncAllowed.delete('debajoyti')
+  }
   stored.forEach((l) => {
     if (l.status !== 'BANNED' && l.status !== 'EXPIRED') {
-      if (!creatorFilter || l.creator_username.toLowerCase() === creatorFilter.toLowerCase()) {
+      const creator = l.creator_username.toLowerCase()
+      if (syncAllowed && !syncAllowed.has(creator)) return
+      if (!creatorFilter || creator === creatorFilter.toLowerCase()) {
         l.is_paused = pauseState
         l.status = pauseState ? 'PAUSED' : l.expires_at ? 'ACTIVE' : 'WAITING'
         affected++
@@ -2790,6 +3058,13 @@ export async function bulkResetAllHwidBackend(
   creatorFilter?: string
 ): Promise<{ success: boolean; message: string }> {
   const nowIso = new Date().toISOString()
+  const isRootOwner = (actorUsername || 'debajoyti').trim().toLowerCase() === 'debajoyti'
+  let allowedCreators: Set<string> | null = null
+  if (!isRootOwner) {
+    allowedCreators = await getDownlineUsernames(actorUsername, true)
+    allowedCreators.delete('debajoyti')
+  }
+
   if (supabase) {
     try {
       let licQuery = supabase
@@ -2798,6 +3073,8 @@ export async function bulkResetAllHwidBackend(
         .neq('status', 'BANNED')
       if (creatorFilter) {
         licQuery = licQuery.ilike('creator_username', creatorFilter)
+      } else if (allowedCreators) {
+        licQuery = licQuery.in('creator_username', Array.from(allowedCreators))
       }
       await licQuery
 
@@ -2806,6 +3083,8 @@ export async function bulkResetAllHwidBackend(
         .update({ device_hwid: '', devices_used: 0, is_online: false, updated_at: nowIso })
       if (creatorFilter) {
         ctrlQuery = ctrlQuery.ilike('creator', creatorFilter)
+      } else if (allowedCreators) {
+        ctrlQuery = ctrlQuery.in('creator', Array.from(allowedCreators))
       } else {
         ctrlQuery = ctrlQuery.neq('license_key', '')
       }
@@ -2814,8 +3093,15 @@ export async function bulkResetAllHwidBackend(
   }
 
   const stored = getStoredLicenses()
+  let syncAllowed: Set<string> | null = null
+  if (!isRootOwner) {
+    syncAllowed = getDownlineUsernamesSync(actorUsername, getStoredAccounts(), true)
+    syncAllowed.delete('debajoyti')
+  }
   stored.forEach((l) => {
-    if (!creatorFilter || l.creator_username.toLowerCase() === creatorFilter.toLowerCase()) {
+    const creator = l.creator_username.toLowerCase()
+    if (syncAllowed && !syncAllowed.has(creator)) return
+    if (!creatorFilter || creator === creatorFilter.toLowerCase()) {
       l.device_hwid = ''
       l.devices_used = 0
     }
@@ -2858,8 +3144,22 @@ export async function bulkExtendAllKeysBackend(
       if (creatorFilter) {
         fetchQuery = fetchQuery.ilike('creator_username', creatorFilter)
       }
-      const { data: rows } = await fetchQuery
-      if (rows && rows.length > 0) {
+      const { data: rawRows } = await fetchQuery
+      if (rawRows && rawRows.length > 0) {
+        let allowedCreators: Set<string> | null = null
+        if (!isRootOwner) {
+          allowedCreators = await getDownlineUsernames(cleanActor, true)
+          allowedCreators.delete('debajoyti')
+        }
+        const rows = rawRows.filter((r) => {
+          const creator = (r.creator_username || '').toLowerCase()
+          return !allowedCreators || allowedCreators.has(creator)
+        })
+
+        if (rows.length === 0) {
+          return { success: true, count: 0, message: 'No active keys in your downline to extend.' }
+        }
+
         if (!isRootOwner) {
           let totalCost = 0
           for (const r of rows) {
@@ -2903,7 +3203,17 @@ export async function bulkExtendAllKeysBackend(
     } catch {}
   }
 
-  const stored = getStoredLicenses()
+  const rawLicenses = getStoredLicenses()
+  let syncAllowed: Set<string> | null = null
+  if (!isRootOwner) {
+    syncAllowed = getDownlineUsernamesSync(cleanActor, getStoredAccounts(), true)
+    syncAllowed.delete('debajoyti')
+  }
+  const stored = rawLicenses.filter((l) => {
+    const creator = l.creator_username.toLowerCase()
+    return !syncAllowed || syncAllowed.has(creator)
+  })
+
   stored.forEach((l) => {
     if (l.status !== 'BANNED') {
       if (!creatorFilter || l.creator_username.toLowerCase() === creatorFilter.toLowerCase()) {
@@ -2916,7 +3226,7 @@ export async function bulkExtendAllKeysBackend(
       }
     }
   })
-  saveStoredLicenses(stored)
+  saveStoredLicenses(rawLicenses)
 
   const newAct: RymonActivity = {
     id: Date.now(),
@@ -5119,11 +5429,7 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (user && user.role === 'admin') {
-        // Admin only sees referral codes they created
-        query = query.ilike('created_by', user.username)
-      }
-
+      const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
       const { data, error } = await query
 
       if (!error && Array.isArray(data)) {
@@ -5135,10 +5441,16 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
             remoteSubMap
           )
         }))
-        if (!user || user.role === 'owner') {
+        if (isRootUser) {
           saveStoredReferrals(enriched)
+          return enriched
         }
-        return enriched
+        // Non-root (Partner Owner RYZEN or Admin): only see referral codes created in their downline tree
+        const allowedDownlines = await getDownlineUsernames(user?.username || '', true)
+        return enriched.filter((r) => {
+          const creator = (r.created_by || '').toLowerCase()
+          return creator !== 'debajoyti' && allowedDownlines.has(creator)
+        })
       }
     } catch {}
   }
@@ -5147,10 +5459,15 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
     ...r,
     subscription_days: resolveReferralSubscriptionDays(r.code, r.subscription_days, remoteSubMap)
   }))
-  if (user && user.role === 'admin') {
-    return stored.filter((r) => r.created_by.toLowerCase() === user.username.toLowerCase())
+  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+  if (isRootUser) {
+    return stored
   }
-  return stored
+  const allowedDownlines = getDownlineUsernamesSync(user?.username || '', getStoredAccounts(), true)
+  return stored.filter((r) => {
+    const creator = (r.created_by || '').toLowerCase()
+    return creator !== 'debajoyti' && allowedDownlines.has(creator)
+  })
 }
 
 export async function createReferralCode(

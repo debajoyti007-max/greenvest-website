@@ -107,6 +107,12 @@ export default function RymonConnect() {
 
   // Authenticated Session State
   const [currentUser, setCurrentUser] = useState<RymonAccount | null>(null)
+  const isRootOwner = currentUser?.username?.toLowerCase() === 'debajoyti'
+  const isOwner = currentUser?.role === 'owner'
+  const isAdmin = currentUser?.role === 'admin'
+  const isReseller = currentUser?.role === 'reseller'
+  const isStreamer = currentUser?.role === 'streamer'
+  const isStaff = isOwner || isAdmin || isReseller
   const [currentKey, setCurrentKey] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
@@ -508,12 +514,20 @@ export default function RymonConnect() {
             .maybeSingle(),
           supabase
             .from('rymon_licenses')
-            .select('device_hwid, devices_used, devices_max, last_heartbeat, status, is_paused, expires_at, game')
+            .select('device_hwid, devices_used, devices_max, last_heartbeat, status, is_paused, expires_at, game, creator_username')
             .eq('license_key', currentKey)
             .maybeSingle()
         ])
 
         if (isMounted) {
+          const isRootFounder = currentUser?.username?.toLowerCase() === 'debajoyti'
+          const keyCreator = (licData?.creator_username || ctrlData?.creator || '').toLowerCase()
+          if (!isRootFounder && (keyCreator === 'debajoyti' || (keysList.length > 0 && !keysList.some((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())))) {
+            setCurrentKey(keysList[0]?.license_key || '')
+            setRecord(null)
+            return
+          }
+
           lastDbSyncTime = Date.now()
           if (ctrlData) cachedCtrl = ctrlData
           if (licData) cachedLic = licData
@@ -1136,11 +1150,21 @@ export default function RymonConnect() {
   }
 
   // 9. TELEMETRY MUTATIONS
-  const toggleFeature = async (field: keyof StreamerControlRecord) => {
+  const canControlCurrentKey = (): boolean => {
     if (!currentKey) {
       showToast('⚠️ Please select a Target License Key above to control.')
-      return
+      return false
     }
+    if (isRootOwner) return true
+    if (keysList.length > 0 && !keysList.some((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())) {
+      showToast('❌ Access Denied: Key is outside your downline.')
+      return false
+    }
+    return true
+  }
+
+  const toggleFeature = async (field: keyof StreamerControlRecord) => {
+    if (!canControlCurrentKey()) return
     const baseRecord =
       record ||
       buildDefaultStreamerControlPayload({
@@ -1200,7 +1224,7 @@ export default function RymonConnect() {
   }
 
   const handleSliderChange = (field: keyof StreamerControlRecord, val: number) => {
-    if (!currentKey) return
+    if (!canControlCurrentKey()) return
     const baseRecord =
       record ||
       buildDefaultStreamerControlPayload({
@@ -1239,7 +1263,7 @@ export default function RymonConnect() {
   }
 
   const setThemePreset = async (idx: number) => {
-    if (!currentKey) return
+    if (!canControlCurrentKey()) return
     const baseRecord =
       record ||
       buildDefaultStreamerControlPayload({
@@ -1273,6 +1297,7 @@ export default function RymonConnect() {
 
   const handleEmergencyPurge = async () => {
     setShowPurgeModal(false)
+    if (!canControlCurrentKey()) return
     if (currentKey) {
       sendRenderVipPatch(currentKey, { emergency_purge: true, is_online: false })
     }
@@ -1291,7 +1316,7 @@ export default function RymonConnect() {
   }
 
   const handleToggleRemotePanelMode = async () => {
-    if (!currentKey) return
+    if (!canControlCurrentKey()) return
     const curName = record?.streamer_name || 'VIP|P:1|E:0|B:0'
     const isOverlayOn = !curName.includes('P:0')
     const nextOverlayOn = !isOverlayOn
@@ -1321,7 +1346,7 @@ export default function RymonConnect() {
   }
 
   const handleToggleStealthFreeze = async () => {
-    if (!currentKey) return
+    if (!canControlCurrentKey()) return
     const nextPaused = !record?.is_paused
     const nowIso = new Date().toISOString()
     setRecord((prev) => (prev ? { ...prev, is_paused: nextPaused, updated_at: nowIso } : null))
@@ -1527,10 +1552,14 @@ export default function RymonConnect() {
       return
     }
     if (confirm(`Permanently delete license key ${keyString}?`)) {
-      await deleteLicenseBackend(keyString)
-      showToast(`🗑️ Key ${keyString} deleted.`)
-      fetchAllLicenses(currentUser).then(setKeysList)
-      fetchAllActivities(currentUser).then(setActivities)
+      const ok = await deleteLicenseBackend(keyString, currentUser?.username || 'debajoyti')
+      if (ok) {
+        showToast(`🗑️ Key ${keyString} deleted.`)
+        fetchAllLicenses(currentUser).then(setKeysList)
+        fetchAllActivities(currentUser).then(setActivities)
+      } else {
+        alert('Permission Denied: You cannot delete keys outside your downline.')
+      }
     }
   }
 
@@ -2228,13 +2257,6 @@ export default function RymonConnect() {
     const notPlaying = Math.max(0, total - playingNow)
     return { total, active, paused, unused, expired, banned, reset, playingNow, notPlaying }
   }, [keysList, onlineKeySet])
-
-  const isOwner = currentUser?.role === 'owner'
-  const isRootOwner = currentUser?.username?.toLowerCase() === 'debajoyti'
-  const isAdmin = currentUser?.role === 'admin'
-  const isReseller = currentUser?.role === 'reseller'
-  const isStreamer = currentUser?.role === 'streamer'
-  const isStaff = isOwner || isAdmin || isReseller
 
   // Cross-App & Reseller Generation Permission Engine
   const isUserCustomAppAllowed = (user?: RymonAccount | null) => {
