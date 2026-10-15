@@ -78,7 +78,7 @@ export default function Privacy() {
         </h2>
         <p style={{ fontSize: '0.88rem', lineHeight: '1.6', color: '#334155' }}>
           {lang === 'bn'
-            ? 'আপনার ডেটা একটি এনক্রিপ্টেড ক্লাউড ডাটাবেস (Supabase Enterprise Infrastructure) ও রো-লেভেল সিকিউরিটি (RLS) প্রোটোকলের মাধ্যমে সুরক্ষিত রাখা হয়। গ্রাহকদের পিন ক্রিপ্টোগ্রাফিকভাবে সুরক্ষিত থাকে।'
+            ? 'আপনার ডেটা একটি এনক্রিপ্টেড ক্লাউড ডাটাবেস (RYMON Enterprise Cloud Infrastructure) ও রো-লেভেল সিকিউরিটি (RLS) প্রোটোকলের মাধ্যমে সুরক্ষিত রাখা হয়। গ্রাহকদের পিন ক্রিপ্টোগ্রাফিকভাবে সুরক্ষিত থাকে।'
             : 'Your data is secured in cloud database infrastructure with Row-Level Security (RLS) policies and HTTPS / SSL encryption. Access to customer records is restricted strictly to authorized store personnel.'}
         </p>
       </section>

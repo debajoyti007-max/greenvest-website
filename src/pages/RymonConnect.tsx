@@ -1637,7 +1637,7 @@ export default function RymonConnect() {
     const ok = await saveTelegramConfigBackend(telegramConfig)
     setTelegramSaving(false)
     if (ok) {
-      setTelegramStatusMsg(`✅ ${OFFICIAL_TELEGRAM_BOT_NAME} (${OFFICIAL_TELEGRAM_BOT_USERNAME}) configuration saved to Supabase!`)
+      setTelegramStatusMsg(`✅ ${OFFICIAL_TELEGRAM_BOT_NAME} (${OFFICIAL_TELEGRAM_BOT_USERNAME}) configuration saved to RYMON Cloud!`)
       showToast('Telegram settings updated!')
     } else {
       setTelegramStatusMsg('Failed to save Telegram settings.')
@@ -2853,22 +2853,6 @@ export default function RymonConnect() {
                           <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>OWNER</span>
                         </button>
                       )}
-                      {isOwner && (
-                        <button
-                          onClick={() => {
-                            setActiveTab('apps')
-                            setMobileMenuOpen(false)
-                          }}
-                          style={{
-                            ...styles.navItem,
-                            ...(activeTab === 'apps' ? styles.navItemActive : {})
-                          }}
-                        >
-                          <span style={styles.navIcon}>📱</span>
-                          <span>App Manager</span>
-                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff', border: '1px solid rgba(0, 217, 255, 0.4)' }}>ECOSYSTEM</span>
-                        </button>
-                      )}
                     </>
                   )}
 
@@ -3441,18 +3425,7 @@ export default function RymonConnect() {
                     <form onSubmit={handleGenerateKey}>
                       <div style={styles.formGrid2Col}>
                         <div style={styles.formGroup}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <label style={styles.formLabel}>SELECT TARGET GAME / APP</label>
-                            {isOwner && (
-                              <button
-                                type="button"
-                                onClick={() => setActiveTab('apps')}
-                                style={{ background: 'none', border: 'none', color: '#00d9ff', fontSize: '11px', cursor: 'pointer', padding: 0, fontWeight: 700 }}
-                              >
-                                ⚙️ Manage Apps
-                              </button>
-                            )}
-                          </div>
+                          <label style={styles.formLabel}>SELECT TARGET GAME / APP</label>
                           <select
                             value={isCustomAppMode ? '__CUSTOM__' : genGame}
                             onChange={(e) => {
@@ -3465,16 +3438,8 @@ export default function RymonConnect() {
                             }}
                             style={styles.selectInput}
                           >
-                            <option value="Free Fire MAX">🔥 Free Fire MAX (Dedicated Streamer &amp; Remote)</option>
-                            <option value="Universal">🌍 Universal (Works on Any App / Game)</option>
-                            {registeredApps
-                              .filter((a) => a.name !== 'Free Fire MAX')
-                              .map((app) => (
-                                <option key={app.id} value={app.name}>
-                                  {app.icon || '🔑'} {app.name} {app.package_name ? `(${app.package_name})` : ''} (Pure KeyAuth)
-                                </option>
-                              ))}
-                            <option value="__CUSTOM__">✨ + Custom App / Game Name...</option>
+                            <option value="Free Fire MAX">🔥 Free Fire MAX (Streamer &amp; Remote)</option>
+                            <option value="__CUSTOM__">✨ Custom (Type Any Name...)</option>
                           </select>
 
                           {/* Custom App Name Input on Click */}
@@ -3507,17 +3472,13 @@ export default function RymonConnect() {
                           )}
 
                           <div style={{ marginTop: '6px', fontSize: '11.5px', lineHeight: '1.4' }}>
-                            {(!isCustomAppMode && genGame === 'Free Fire MAX') ? (
+                            {!isCustomAppMode ? (
                               <span style={{ color: '#05df72' }}>
-                                🔥 <strong>Streamer Remote Enabled:</strong> Full ESP, Aimbot, and live telemetry controls active for Free Fire MAX.
-                              </span>
-                            ) : (!isCustomAppMode && genGame === 'Universal') ? (
-                              <span style={{ color: '#05df72' }}>
-                                🌐 <strong>Universal Key:</strong> Can authenticate on any game or mod across your ecosystem.
+                                🔥 <strong>Free Fire MAX:</strong> Full Streamer Remote, ESP, Aimbot, and live cloud telemetry enabled.
                               </span>
                             ) : (
                               <span style={{ color: '#00d9ff' }}>
-                                🔑 <strong>Pure KeyAuth Isolation:</strong> This key will <u>ONLY</u> work on <strong>{isCustomAppMode ? (customAppNameInput.trim() || 'Custom App') : genGame}</strong>. Zero streamer controls (authentication &amp; HWID only).
+                                ✨ <strong>Custom App KeyAuth:</strong> Generates key for <strong>{customAppNameInput.trim() || 'Custom App'}</strong> (Device HWID lock &amp; login verification).
                               </span>
                             )}
                           </div>
@@ -3823,13 +3784,15 @@ export default function RymonConnect() {
                         borderColor: keyGameFilter === 'ALL' ? 'rgba(51, 65, 85, 0.6)' : '#00d9ff'
                       }}
                     >
-                      <option value="ALL">🎮 All Games / Apps</option>
-                      <option value="Universal">🌍 Universal Keys</option>
-                      {Array.from(new Set(keysList.map((k) => k.game || 'Free Fire MAX'))).map((g) => (
-                        <option key={g} value={g}>
-                          {g}
-                        </option>
-                      ))}
+                      <option value="ALL">🎮 All Keys</option>
+                      <option value="Free Fire MAX">🔥 Free Fire MAX</option>
+                      {Array.from(new Set(keysList.map((k) => k.game || 'Free Fire MAX')))
+                        .filter((g) => g !== 'Free Fire MAX')
+                        .map((g) => (
+                          <option key={g} value={g}>
+                            ✨ {g} (Custom)
+                          </option>
+                        ))}
                     </select>
                     <div style={styles.searchBox}>
                       <input
@@ -4402,7 +4365,7 @@ export default function RymonConnect() {
                     </h2>
                     <p style={styles.pageSubtitle}>
                       {isOwner
-                        ? 'Manage all administrative roles, uplinks, and global wallet authorizations in Supabase.'
+                        ? 'Manage all administrative roles, uplinks, and global wallet authorizations in RYMON Cloud.'
                         : 'Manage your invited downline Resellers, transfer wallet balance, and set custom Reseller key prices.'}
                     </p>
                   </div>
@@ -5967,7 +5930,7 @@ export default function RymonConnect() {
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(
-                          `-- View supabase/sql/MASTER_RYMON_SOVEREIGN_BACKEND.sql in repo`
+                          `-- View MASTER_RYMON_BACKEND.sql in database console`
                         )
                         setCopiedSql(true)
                         setTimeout(() => setCopiedSql(false), 2500)
@@ -7189,7 +7152,7 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                             cursor: 'pointer'
                           }}
                         >
-                          {appsLoading ? 'REGISTERING IN SUPABASE...' : '➕ Register Application to Ecosystem'}
+                          {appsLoading ? 'REGISTERING IN RYMON CLOUD...' : '➕ Register Application to Ecosystem'}
                         </button>
                       </form>
                     </div>
@@ -7470,7 +7433,7 @@ else:
                         alignItems: 'center',
                         gap: '6px'
                       }}
-                      title="Realtime latency between Web Controller and Render VIP Bridge"
+                      title="Realtime latency between Web Controller and Direct RYMON Mesh"
                     >
                       <span
                         style={{
@@ -7481,7 +7444,7 @@ else:
                           boxShadow: isLiveConnected ? '0 0 8px #05df72' : '0 0 8px #facc15'
                         }}
                       />
-                      {vipPingMs !== null ? `${vipPingMs}ms VIP BRIDGE` : isLiveConnected ? `${ping}ms VIP BRIDGE` : '🟡 CONNECTING...'}
+                      {vipPingMs !== null ? `${vipPingMs}ms DIRECT MESH` : isLiveConnected ? `${ping}ms DIRECT MESH` : '🟡 CONNECTING...'}
                     </span>
                   </div>
 

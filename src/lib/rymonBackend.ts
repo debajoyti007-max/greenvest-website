@@ -462,7 +462,7 @@ export async function checkSupabaseSchemaStatus(): Promise<{
       return {
         isOnline: true,
         tablesCreated: false,
-        errorMsg: "Database schema not yet applied. Please run MASTER_RYMON_SOVEREIGN_BACKEND.sql in your Supabase SQL Editor."
+        errorMsg: "Database schema not yet applied. Please run MASTER_RYMON_BACKEND.sql in your SQL Editor."
       }
     }
 
@@ -1638,7 +1638,7 @@ export const DEFAULT_SECURITY_POLICY: SovereignSecurityPolicy = {
   apk_latest_version: '2.4',
   apk_min_version: '2.4',
   apk_force_update: false,
-  apk_release_notes: 'v2.4 Sovereign Sync: Instant Website Remote Hack Toggles + Live Heartbeat Engine'
+  apk_release_notes: 'v2.4 RYMON Sync: Instant Website Remote Hack Toggles + Live Heartbeat Engine'
 }
 
 export function getSovereignSecurityPolicy(): SovereignSecurityPolicy {
@@ -4818,7 +4818,7 @@ export async function pollAndReplyTelegramBotCommands(
               `ℹ️ Usage: <code>/broadcast Your announcement message here</code>`
             )
           } else {
-            await sendBroadcastBackend('debajoyti', 'ALL', 'Sovereign Broadcast', bMsg, 'INFO', true)
+            await sendBroadcastBackend('debajoyti', 'ALL', 'RYMON Broadcast', bMsg, 'INFO', true)
             const bindings = await fetchTelegramResellerBindings()
             const recipientIds = new Set<string>([
               OFFICIAL_OWNER_CHAT_ID,
@@ -5297,7 +5297,7 @@ export async function registerWithReferral(
     } catch (err: any) {
       return {
         success: false,
-        message: err?.message || 'Network error while connecting to Supabase'
+        message: err?.message || 'Network error while connecting to RYMON Cloud'
       }
     }
   }

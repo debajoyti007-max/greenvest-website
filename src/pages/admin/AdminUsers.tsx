@@ -318,7 +318,7 @@ export default function AdminUsers() {
             </div>
             <div className="stat">
               <span>{lang === 'bn' ? 'স্টোরেজ' : 'Storage'}</span>
-              <strong>{dataMode === 'cloud' ? 'Supabase' : 'Local'}</strong>
+              <strong>{dataMode === 'cloud' ? 'Live Cloud' : 'Local'}</strong>
             </div>
           </div>
 
