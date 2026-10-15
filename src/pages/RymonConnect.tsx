@@ -521,8 +521,9 @@ export default function RymonConnect() {
 
         if (isMounted) {
           const isRootFounder = currentUser?.username?.toLowerCase() === 'debajoyti'
+          const isStreamerUser = currentUser?.role === 'streamer'
           const keyCreator = (licData?.creator_username || ctrlData?.creator || '').toLowerCase()
-          if (!isRootFounder && (keyCreator === 'debajoyti' || (keysList.length > 0 && !keysList.some((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())))) {
+          if (!isRootFounder && !isStreamerUser && (keyCreator === 'debajoyti' || (keysList.length > 0 && !keysList.some((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())))) {
             setCurrentKey(keysList[0]?.license_key || '')
             setRecord(null)
             return
@@ -1155,7 +1156,7 @@ export default function RymonConnect() {
       showToast('⚠️ Please select a Target License Key above to control.')
       return false
     }
-    if (isRootOwner) return true
+    if (isRootOwner || isStreamer) return true
     if (keysList.length > 0 && !keysList.some((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())) {
       showToast('❌ Access Denied: Key is outside your downline.')
       return false
