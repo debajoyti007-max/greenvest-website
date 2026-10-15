@@ -159,7 +159,7 @@ const healthServer = http.createServer(async (req, res) => {
 
         res.writeHead(200, CORS_HEADERS)
         return res.end(JSON.stringify({ ok: true, state }))
-      } catch (e) {
+      } catch {
         res.writeHead(400, CORS_HEADERS)
         return res.end(JSON.stringify({ ok: false, error: 'Malformed JSON payload' }))
       }
@@ -195,7 +195,7 @@ const healthServer = http.createServer(async (req, res) => {
 
         res.writeHead(200, CORS_HEADERS)
         return res.end(JSON.stringify({ ok: true, state }))
-      } catch (e) {
+      } catch {
         res.writeHead(400, CORS_HEADERS)
         return res.end(JSON.stringify({ ok: false, error: 'Malformed JSON payload' }))
       }
@@ -259,8 +259,9 @@ healthServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 [Render Web Service] Health & VIP Realtime Bridge listening on 0.0.0.0:${PORT}`)
 })
 
-// Gentle 60s background flush to Supabase for active VIP players (low DB load)
+// Gentle 60s background flush to Supabase for active VIP players (low DB load) + RAM Hygiene
 setInterval(async () => {
+  const now = Date.now()
   for (const [key, state] of vipStates.entries()) {
     if (state.is_online || state._dirty) {
       try {
@@ -295,6 +296,14 @@ setInterval(async () => {
           .eq('license_key', key)
         state._dirty = false
       } catch {}
+    }
+
+    // RAM Hygiene: Prune inactive keys older than 24h with zero unsaved changes to keep RAM < 40MB
+    if (!state._dirty && !state.is_online) {
+      const lastActive = state.updated_at ? new Date(state.updated_at).getTime() : 0
+      if (lastActive > 0 && now - lastActive > 24 * 60 * 60 * 1000) {
+        vipStates.delete(key)
+      }
     }
   }
 }, 60000)
@@ -1760,7 +1769,7 @@ async function startDaemon() {
         }
         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?timeout=0&offset=${offset}`)
       }
-    } catch (err) {
+    } catch {
       await new Promise((r) => setTimeout(r, 2500))
     }
   }

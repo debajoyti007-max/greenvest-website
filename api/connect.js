@@ -21,9 +21,9 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     return res.status(200).json({
       status: true,
-      service: 'Rymon Sovereign Connect Gateway',
+      service: 'RYMON Connect Gateway',
       gateway: 'https://greenvest.shop/connect',
-      engine: 'Supabase Sovereign RPC',
+      engine: 'RYMON Core RPC',
       uptime: '100%',
       instructions: 'Send POST request with user_key and serial parameters'
     })

@@ -490,9 +490,14 @@ export default function RymonConnect() {
     if (!isAuthenticated || !currentKey || !supabase) return
 
     let isMounted = true
+    let cachedCtrl: Partial<StreamerControlRecord> | null = null
+    let cachedLic: Partial<RymonLicense> | null = null
+    let lastDbSyncTime = 0
+    let isDbSyncing = false
 
-    async function loadTelemetry() {
-      if (!supabase) return
+    async function syncFromSupabase() {
+      if (!supabase || isDbSyncing) return
+      isDbSyncing = true
       try {
         const [{ data: ctrlData }, { data: licData }] = await Promise.all([
           supabase
@@ -507,134 +512,143 @@ export default function RymonConnect() {
             .maybeSingle()
         ])
 
-        if (licData?.expires_at && isMounted) {
-          setExpiryDate(new Date(licData.expires_at))
-        } else if (isMounted && licData?.status === 'WAITING') {
-          setExpiryDate(null)
-          setCountdown('Starts on 1st Login')
-        }
+        if (isMounted) {
+          lastDbSyncTime = Date.now()
+          if (ctrlData) cachedCtrl = ctrlData
+          if (licData) cachedLic = licData
 
-        const defaults = buildDefaultStreamerControlPayload({
-          license_key: currentKey,
-          streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer',
-          game_name: licData?.game || 'Free Fire MAX',
-          is_online: false,
-          is_active: licData?.status !== 'BANNED' && licData?.status !== 'EXPIRED',
-          is_paused: licData?.is_paused ?? false,
-          device_hwid: licData?.device_hwid || '',
-          devices_used: licData?.devices_used ?? 0,
-          devices_max: licData?.devices_max ?? 1
-        })
-
-        if (ctrlData && isMounted) {
-          const rawMerged: StreamerControlRecord = {
-            ...defaults,
-            ...(ctrlData as StreamerControlRecord),
-            aim_silent: Boolean(ctrlData.aim_silent ?? defaults.aim_silent),
-            hit_rate: Number(ctrlData.hit_rate ?? defaults.hit_rate),
-            ignore_knocked: Boolean(ctrlData.ignore_knocked ?? defaults.ignore_knocked),
-            show_aim_line: Boolean(ctrlData.show_aim_line ?? defaults.show_aim_line),
-            show_aim_fov: Boolean(ctrlData.show_aim_fov ?? defaults.show_aim_fov),
-            aim_fov: Number(ctrlData.aim_fov ?? defaults.aim_fov),
-            esp_box: Boolean(ctrlData.esp_box ?? defaults.esp_box),
-            esp_line: Boolean(ctrlData.esp_line ?? defaults.esp_line),
-            esp_skeleton: Boolean(ctrlData.esp_skeleton ?? defaults.esp_skeleton),
-            esp_name: Boolean(ctrlData.esp_name ?? defaults.esp_name),
-            esp_distance: Boolean(ctrlData.esp_distance ?? defaults.esp_distance),
-            esp_health: Boolean(ctrlData.esp_health ?? defaults.esp_health),
-            esp_count: Boolean(ctrlData.esp_count ?? defaults.esp_count),
-            esp_radar: Boolean(ctrlData.esp_radar ?? defaults.esp_radar),
-            speed_hack: Boolean(ctrlData.speed_hack ?? defaults.speed_hack),
-            speed_multiplier: Number(ctrlData.speed_multiplier ?? defaults.speed_multiplier),
-            ghost_hack: Boolean(ctrlData.ghost_hack ?? defaults.ghost_hack),
-            no_reload: Boolean(ctrlData.no_reload ?? defaults.no_reload),
-            no_recoil: Boolean(ctrlData.no_recoil ?? defaults.no_recoil),
-            theme_color_index: Number(ctrlData.theme_color_index ?? defaults.theme_color_index),
-            emergency_purge: Boolean(ctrlData.emergency_purge ?? defaults.emergency_purge),
-            device_hwid: licData?.device_hwid || ctrlData.device_hwid || '',
-            devices_used: licData?.devices_used ?? ctrlData.devices_used ?? 0,
-            devices_max: licData?.devices_max ?? ctrlData.devices_max ?? 1,
-            last_heartbeat: ctrlData.last_heartbeat || licData?.last_heartbeat,
-            is_paused: Boolean(ctrlData.is_paused || licData?.is_paused)
+          if (licData?.expires_at) {
+            setExpiryDate(new Date(licData.expires_at))
+          } else if (licData?.status === 'WAITING') {
+            setExpiryDate(null)
+            setCountdown('Starts on 1st Login')
           }
-          try {
-            const t0 = performance.now()
-            const vipState = await fetchRenderVipState(currentKey)
-            if (vipState && isMounted) {
-              const pingCalc = Math.max(1, Math.round(performance.now() - t0))
-              setPing(pingCalc)
-              setVipPingMs(pingCalc)
-              const mergedVip: StreamerControlRecord = {
-                ...rawMerged,
-                aim_silent: vipState.aim_silent ?? rawMerged.aim_silent,
-                hit_rate: vipState.hit_rate ?? rawMerged.hit_rate,
-                aim_fov: vipState.aim_fov ?? rawMerged.aim_fov,
-                esp_box: vipState.esp_box ?? rawMerged.esp_box,
-                esp_line: vipState.esp_line ?? rawMerged.esp_line,
-                esp_skeleton: vipState.esp_skeleton ?? rawMerged.esp_skeleton,
-                esp_name: vipState.esp_name ?? rawMerged.esp_name,
-                esp_distance: vipState.esp_distance ?? rawMerged.esp_distance,
-                esp_health: vipState.esp_health ?? rawMerged.esp_health,
-                esp_count: vipState.esp_count ?? rawMerged.esp_count,
-                esp_radar: vipState.esp_radar ?? rawMerged.esp_radar,
-                speed_hack: vipState.speed_hack ?? rawMerged.speed_hack,
-                speed_multiplier: vipState.speed_multiplier ?? rawMerged.speed_multiplier,
-                ghost_hack: vipState.ghost_hack ?? rawMerged.ghost_hack,
-                no_reload: vipState.no_reload ?? rawMerged.no_reload,
-                no_recoil: vipState.no_recoil ?? rawMerged.no_recoil,
-                theme_color_index: vipState.theme_color_index ?? rawMerged.theme_color_index,
-                streamer_name: vipState.streamer_name || rawMerged.streamer_name,
-                is_online: vipState.is_online ?? rawMerged.is_online,
-                is_paused: Boolean(vipState.is_paused ?? (ctrlData.is_paused || licData?.is_paused)),
-                last_heartbeat: vipState.last_heartbeat || rawMerged.last_heartbeat
-              }
-              const activelyPlaying = isStreamerKeyActivelyPlaying(mergedVip)
-              setRecord({ ...mergedVip, is_online: activelyPlaying })
-              setIsLiveConnected(true)
-              return
+
+          // If DB had stale is_online=true when activelyPlaying is false, reset in background
+          if (ctrlData) {
+            const tempMerged = { ...ctrlData, last_heartbeat: ctrlData.last_heartbeat || licData?.last_heartbeat } as StreamerControlRecord
+            if (ctrlData.is_online && !isStreamerKeyActivelyPlaying(tempMerged)) {
+              supabase
+                .from('rymon_streamer_controls')
+                .update({ is_online: false, updated_at: new Date().toISOString() })
+                .eq('license_key', currentKey)
+                .then(() => {})
             }
-          } catch {}
-
-          const activelyPlaying = isStreamerKeyActivelyPlaying(rawMerged)
-          setRecord({ ...rawMerged, is_online: activelyPlaying })
-          setIsLiveConnected(true)
-
-          // If DB had stale is_online=true, reset is_online to false in background
-          if (ctrlData.is_online && !activelyPlaying) {
-            supabase
-              .from('rymon_streamer_controls')
-              .update({
-                is_online: false,
-                updated_at: new Date().toISOString()
-              })
-              .eq('license_key', currentKey)
-              .then(() => {})
           }
-        } else if (isMounted) {
-          setRecord(defaults)
-          setIsLiveConnected(true)
-          try {
-            await supabase
-              .from('rymon_streamer_controls')
-              .upsert(
-                { ...defaults, updated_at: new Date().toISOString() },
-                { onConflict: 'license_key' }
-              )
-          } catch {}
         }
       } catch {
-        // Fallback
+      } finally {
+        isDbSyncing = false
       }
     }
 
-    const pollInterval = 750
+    async function fastPulseTelemetry() {
+      if (!isMounted || sliderTimerRef.current) return
 
-    loadTelemetry()
-    const fastSyncTimer = setInterval(() => {
-      if (isMounted && !sliderTimerRef.current) {
-        loadTelemetry()
+      // Gentle 15-second background refresh for license status / expiry without spamming DB
+      if (Date.now() - lastDbSyncTime > 15000) {
+        syncFromSupabase()
       }
-    }, pollInterval)
+
+      const defaults = buildDefaultStreamerControlPayload({
+        license_key: currentKey,
+        streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer',
+        game_name: cachedLic?.game || 'Free Fire MAX',
+        is_online: false,
+        is_active: cachedLic?.status !== 'BANNED' && cachedLic?.status !== 'EXPIRED',
+        is_paused: cachedLic?.is_paused ?? false,
+        device_hwid: cachedLic?.device_hwid || '',
+        devices_used: cachedLic?.devices_used ?? 0,
+        devices_max: cachedLic?.devices_max ?? 1
+      })
+
+      const baseRecord: StreamerControlRecord = {
+        ...defaults,
+        ...(cachedCtrl as StreamerControlRecord),
+        aim_silent: Boolean(cachedCtrl?.aim_silent ?? defaults.aim_silent),
+        hit_rate: Number(cachedCtrl?.hit_rate ?? defaults.hit_rate),
+        ignore_knocked: Boolean(cachedCtrl?.ignore_knocked ?? defaults.ignore_knocked),
+        show_aim_line: Boolean(cachedCtrl?.show_aim_line ?? defaults.show_aim_line),
+        show_aim_fov: Boolean(cachedCtrl?.show_aim_fov ?? defaults.show_aim_fov),
+        aim_fov: Number(cachedCtrl?.aim_fov ?? defaults.aim_fov),
+        esp_box: Boolean(cachedCtrl?.esp_box ?? defaults.esp_box),
+        esp_line: Boolean(cachedCtrl?.esp_line ?? defaults.esp_line),
+        esp_skeleton: Boolean(cachedCtrl?.esp_skeleton ?? defaults.esp_skeleton),
+        esp_name: Boolean(cachedCtrl?.esp_name ?? defaults.esp_name),
+        esp_distance: Boolean(cachedCtrl?.esp_distance ?? defaults.esp_distance),
+        esp_health: Boolean(cachedCtrl?.esp_health ?? defaults.esp_health),
+        esp_count: Boolean(cachedCtrl?.esp_count ?? defaults.esp_count),
+        esp_radar: Boolean(cachedCtrl?.esp_radar ?? defaults.esp_radar),
+        speed_hack: Boolean(cachedCtrl?.speed_hack ?? defaults.speed_hack),
+        speed_multiplier: Number(cachedCtrl?.speed_multiplier ?? defaults.speed_multiplier),
+        ghost_hack: Boolean(cachedCtrl?.ghost_hack ?? defaults.ghost_hack),
+        no_reload: Boolean(cachedCtrl?.no_reload ?? defaults.no_reload),
+        no_recoil: Boolean(cachedCtrl?.no_recoil ?? defaults.no_recoil),
+        theme_color_index: Number(cachedCtrl?.theme_color_index ?? defaults.theme_color_index),
+        emergency_purge: Boolean(cachedCtrl?.emergency_purge ?? defaults.emergency_purge),
+        device_hwid: cachedLic?.device_hwid || cachedCtrl?.device_hwid || '',
+        devices_used: cachedLic?.devices_used ?? cachedCtrl?.devices_used ?? 0,
+        devices_max: cachedLic?.devices_max ?? cachedCtrl?.devices_max ?? 1,
+        last_heartbeat: cachedCtrl?.last_heartbeat || cachedLic?.last_heartbeat,
+        is_paused: Boolean(cachedCtrl?.is_paused || cachedLic?.is_paused)
+      }
+
+      // 1. Ultra-fast direct Render RAM query (<30ms, zero Supabase database queries)
+      try {
+        const t0 = performance.now()
+        const vipState = await fetchRenderVipState(currentKey)
+        if (vipState && isMounted) {
+          const pingCalc = Math.max(1, Math.round(performance.now() - t0))
+          setPing(pingCalc)
+          setVipPingMs(pingCalc)
+          const mergedVip: StreamerControlRecord = {
+            ...baseRecord,
+            aim_silent: vipState.aim_silent ?? baseRecord.aim_silent,
+            hit_rate: vipState.hit_rate ?? baseRecord.hit_rate,
+            aim_fov: vipState.aim_fov ?? baseRecord.aim_fov,
+            esp_box: vipState.esp_box ?? baseRecord.esp_box,
+            esp_line: vipState.esp_line ?? baseRecord.esp_line,
+            esp_skeleton: vipState.esp_skeleton ?? baseRecord.esp_skeleton,
+            esp_name: vipState.esp_name ?? baseRecord.esp_name,
+            esp_distance: vipState.esp_distance ?? baseRecord.esp_distance,
+            esp_health: vipState.esp_health ?? baseRecord.esp_health,
+            esp_count: vipState.esp_count ?? baseRecord.esp_count,
+            esp_radar: vipState.esp_radar ?? baseRecord.esp_radar,
+            speed_hack: vipState.speed_hack ?? baseRecord.speed_hack,
+            speed_multiplier: vipState.speed_multiplier ?? baseRecord.speed_multiplier,
+            ghost_hack: vipState.ghost_hack ?? baseRecord.ghost_hack,
+            no_reload: vipState.no_reload ?? baseRecord.no_reload,
+            no_recoil: vipState.no_recoil ?? baseRecord.no_recoil,
+            theme_color_index: vipState.theme_color_index ?? baseRecord.theme_color_index,
+            streamer_name: vipState.streamer_name || baseRecord.streamer_name,
+            is_online: vipState.is_online ?? baseRecord.is_online,
+            is_paused: Boolean(vipState.is_paused ?? baseRecord.is_paused),
+            last_heartbeat: vipState.last_heartbeat || baseRecord.last_heartbeat
+          }
+          const activelyPlaying = isStreamerKeyActivelyPlaying(mergedVip)
+          setRecord({ ...mergedVip, is_online: activelyPlaying })
+          setIsLiveConnected(true)
+          return
+        }
+      } catch {}
+
+      // 2. Render Fallback: If Render bridge is cold or network jitter, fallback to cached DB data
+      if (Date.now() - lastDbSyncTime > 3000) {
+        await syncFromSupabase()
+      }
+      if (isMounted) {
+        const activelyPlaying = isStreamerKeyActivelyPlaying(baseRecord)
+        setRecord({ ...baseRecord, is_online: activelyPlaying })
+        setIsLiveConnected(true)
+      }
+    }
+
+    // Initial load: fetch DB baseline, then start high-speed Render RAM pulse
+    syncFromSupabase().then(() => {
+      if (isMounted) fastPulseTelemetry()
+    })
+
+    const fastSyncTimer = setInterval(fastPulseTelemetry, 750)
 
     const channel = supabase
       .channel(`streamer-remote-${currentKey}`)
@@ -648,6 +662,7 @@ export default function RymonConnect() {
         },
         (payload) => {
           if (payload.new && isMounted) {
+            cachedCtrl = { ...(cachedCtrl || {}), ...(payload.new as StreamerControlRecord) }
             setRecord((prev) => {
               const nextRec = {
                 ...(prev || ({} as StreamerControlRecord)),
@@ -673,6 +688,7 @@ export default function RymonConnect() {
         (payload) => {
           if (payload.new && isMounted) {
             const lic = payload.new as RymonLicense
+            cachedLic = { ...(cachedLic || {}), ...lic }
             if (lic.expires_at) {
               setExpiryDate(new Date(lic.expires_at))
             }
@@ -1128,7 +1144,7 @@ export default function RymonConnect() {
       showToast('⏸️ License key is PAUSED. Toggles and features are frozen until unpaused by staff.')
       return
     }
-    const newVal = !Boolean(baseRecord[field])
+    const newVal = !baseRecord[field]
     const nowIso = new Date().toISOString()
     const nextRecord: StreamerControlRecord = {
       ...baseRecord,
@@ -1299,7 +1315,7 @@ export default function RymonConnect() {
 
   const handleToggleStealthFreeze = async () => {
     if (!currentKey) return
-    const nextPaused = !Boolean(record?.is_paused)
+    const nextPaused = !record?.is_paused
     const nowIso = new Date().toISOString()
     setRecord((prev) => (prev ? { ...prev, is_paused: nextPaused, updated_at: nowIso } : null))
 
@@ -1995,8 +2011,8 @@ export default function RymonConnect() {
       } else {
         showToast(`❌ [${targetApp}] ${json.reason || json.message || 'Key verification rejected'}`)
       }
-    } catch (err: unknown) {
-      // 2. Direct Supabase RPC Fallback
+    } catch {
+      // 2. Direct RYMON RPC Fallback
       try {
         const resRpc = await fetch(SOVEREIGN_CONNECT_CONFIG.endpoint_url, {
           method: 'POST',
@@ -2015,7 +2031,7 @@ export default function RymonConnect() {
         setTestConnectResult(JSON.stringify(jsonRpc, null, 2))
         showToast('Verified via direct RPC fallback')
       } catch (fallbackErr: unknown) {
-        const errMsg = err instanceof Error ? err.message : 'Network connection error'
+        const errMsg = fallbackErr instanceof Error ? fallbackErr.message : 'Network connection error'
         setTestConnectResult(JSON.stringify({ error: errMsg }, null, 2))
       }
     } finally {
