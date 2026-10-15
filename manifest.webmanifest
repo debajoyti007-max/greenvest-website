@@ -3,7 +3,9 @@
   "short_name": "Ghost Connect",
   "description": "Hardware Telemetry Remote & KeyAuth License Dashboard for Rymon Corporation",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#07090e",
   "theme_color": "#07090e",
   "icons": [

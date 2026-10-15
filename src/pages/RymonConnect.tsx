@@ -64,7 +64,12 @@ import {
   getSovereignSecurityPolicy,
   saveSovereignSecurityPolicy,
   syncSecurityPolicyFromSupabase,
-  resetUserPasswordBackend
+  resetUserPasswordBackend,
+  type RegisteredApp,
+  DEFAULT_REGISTERED_APPS,
+  fetchRegisteredApps,
+  addRegisteredApp,
+  deleteRegisteredApp
 } from '../lib/rymonBackend'
 
 type TabType =
@@ -75,6 +80,7 @@ type TabType =
   | 'telegram'
   | 'users'
   | 'connect-api'
+  | 'apps'
   | 'referrals'
   | 'add-balance'
   | 'delete'
@@ -136,6 +142,8 @@ export default function RymonConnect() {
 
   // Generate Key Form State
   const [genGame, setGenGame] = useState('Free Fire MAX')
+  const [isCustomAppMode, setIsCustomAppMode] = useState(false)
+  const [customAppNameInput, setCustomAppNameInput] = useState('')
   const [genDuration, setGenDuration] = useState('1 Day')
   const [genCustomPrefix, setGenCustomPrefix] = useState('')
   const [genIsVipRealtime] = useState(true)
@@ -144,6 +152,8 @@ export default function RymonConnect() {
   const [genCreatedKeysList, setGenCreatedKeysList] = useState<string[]>([])
   const [genError, setGenError] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [copiedDeliverySlip, setCopiedDeliverySlip] = useState<string | null>(null)
+  const [vipPingMs, setVipPingMs] = useState<number | null>(null)
 
   // Top Up Balance Form State
   const [topUpTargetUser, setTopUpTargetUser] = useState('')
@@ -157,7 +167,21 @@ export default function RymonConnect() {
     'ALL' | 'PLAYING' | 'ACTIVE' | 'PAUSED' | 'WAITING' | 'EXPIRED' | 'BANNED'
   >('ALL')
   const [keyCreatorFilter, setKeyCreatorFilter] = useState<string>('ALL')
+  const [keyGameFilter, setKeyGameFilter] = useState<string>('ALL')
   const [searchUserQuery, setSearchUserQuery] = useState('')
+
+  // Ecosystem & Multi-App Management State
+  const [registeredApps, setRegisteredApps] = useState<RegisteredApp[]>(DEFAULT_REGISTERED_APPS)
+  const [appsLoading, setAppsLoading] = useState(false)
+  const [newAppName, setNewAppName] = useState('')
+  const [newAppPackage, setNewAppPackage] = useState('')
+  const [newAppPlatform, setNewAppPlatform] = useState('Android Mobile')
+  const [newAppDesc, setNewAppDesc] = useState('')
+  const [newAppIcon, setNewAppIcon] = useState('🎮')
+  const [appActionError, setAppActionError] = useState('')
+  const [appActionSuccess, setAppActionSuccess] = useState('')
+  const [selectedSnippetApp, setSelectedSnippetApp] = useState<RegisteredApp | null>(null)
+  const [snippetLanguage, setSnippetLanguage] = useState<'curl' | 'java' | 'cpp' | 'csharp' | 'python'>('curl')
 
   // Management Action State
   const [targetDeleteUser, setTargetDeleteUser] = useState('__ALL__')
@@ -353,6 +377,7 @@ export default function RymonConnect() {
         setStreamerControls(ctrls)
         setTgResellerBindings(tgBindings)
         setReferralList(refs)
+        fetchRegisteredApps().then((a) => isMounted && setRegisteredApps(a))
 
         // Auto-select a target license key for Staff so Streamer Remote works immediately
         setCurrentKey((prevKey) => {
@@ -531,8 +556,12 @@ export default function RymonConnect() {
             is_paused: Boolean(ctrlData.is_paused || licData?.is_paused)
           }
           try {
+            const t0 = performance.now()
             const vipState = await fetchRenderVipState(currentKey)
             if (vipState && isMounted) {
+              const pingCalc = Math.max(1, Math.round(performance.now() - t0))
+              setPing(pingCalc)
+              setVipPingMs(pingCalc)
               const mergedVip: StreamerControlRecord = {
                 ...rawMerged,
                 aim_silent: vipState.aim_silent ?? rawMerged.aim_silent,
@@ -935,10 +964,32 @@ export default function RymonConnect() {
     if (!currentUser) return
     setGenError('')
 
+    const targetGameName = (isCustomAppMode ? customAppNameInput.trim() : genGame) || 'Free Fire MAX'
+    if (isCustomAppMode && !customAppNameInput.trim()) {
+      setGenError('Please enter a custom app name')
+      return
+    }
+
+    // If custom name was entered and is not yet in registered apps, save it automatically
+    if (isCustomAppMode && customAppNameInput.trim()) {
+      const trimmed = customAppNameInput.trim()
+      const alreadyExists = registeredApps.some((a) => a.name.toLowerCase() === trimmed.toLowerCase())
+      if (!alreadyExists) {
+        addRegisteredApp({
+          name: trimmed,
+          platform: 'Custom Platform',
+          icon: '🔑',
+          description: 'Custom KeyAuth Application'
+        })
+          .then((updated) => setRegisteredApps(updated))
+          .catch(() => {})
+      }
+    }
+
     setAuthLoading(true)
     const res = await generateLicenseKeyBackend({
       creator: currentUser,
-      game: genGame,
+      game: targetGameName,
       duration: genDuration,
       customPrefix: genCustomPrefix,
       devicesMax: genDevicesMax,
@@ -1263,11 +1314,41 @@ export default function RymonConnect() {
     showToast(nextPaused ? '❄️ Stealth Freeze Active (Visuals Hidden)' : '▶️ Resumed Live Controls')
   }
 
-  // 10. MANAGEMENT ACTION HANDLERS
   const handleCopyKey = (keyString: string) => {
     navigator.clipboard.writeText(keyString)
     setCopiedKey(keyString)
     setTimeout(() => setCopiedKey(null), 2000)
+  }
+
+  const formatDeliverySlip = (key: string, duration?: string, gameName?: string) => {
+    const cleanDuration = duration || '30 Days'
+    const cleanGame = gameName || 'FREE FIRE MAX'
+    return [
+      '✅ Payment Successful!',
+      '',
+      '🎮 Game: 🛒 RYMON STREAMER',
+      `🎮 GAME NAME : ${cleanGame}`,
+      `⏳ Duration: ${cleanDuration}`,
+      '📦 Quantity: 1',
+      `🔑 Key: ${key}`,
+      '',
+      '🙏 Thank you for your purchase!'
+    ].join('\n')
+  }
+
+  const handleCopyDeliverySlip = (key: string, duration?: string, gameName?: string) => {
+    const slip = formatDeliverySlip(key, duration, gameName)
+    navigator.clipboard.writeText(slip)
+    setCopiedDeliverySlip(key)
+    showToast('✅ Payment Successful Delivery Slip copied to clipboard!')
+    setTimeout(() => setCopiedDeliverySlip(null), 2500)
+  }
+
+  const handleCopyAllDeliverySlips = (keys: string[], duration?: string, gameName?: string) => {
+    if (!keys.length) return
+    const slips = keys.map((k) => formatDeliverySlip(k, duration, gameName)).join('\n\n------------------------------\n\n')
+    navigator.clipboard.writeText(slips)
+    showToast(`✅ Copied ${keys.length} Payment & Delivery Slips to clipboard!`)
   }
 
   const handleCopyMultipleKeys = (keys: string[], label: string) => {
@@ -1585,7 +1666,7 @@ export default function RymonConnect() {
     setTelegramStatusMsg('')
     const txt =
       telegramTestMsg.trim() ||
-      `⚡ <b>${OFFICIAL_TELEGRAM_BOT_NAME} (${OFFICIAL_TELEGRAM_BOT_USERNAME}) — LIVE TEST</b>\nSovereign Broadcast &amp; Key Automation active on greenvest.shop!\nDispatched by: @${currentUser?.username || 'debajoyti'}\nTimestamp: ${new Date().toLocaleTimeString()}`
+      `⚡ <b>${OFFICIAL_TELEGRAM_BOT_NAME} (${OFFICIAL_TELEGRAM_BOT_USERNAME}) — LIVE TEST</b>\nRYMON Broadcast &amp; Key Automation active on greenvest.shop!\nDispatched by: @${currentUser?.username || 'debajoyti'}\nTimestamp: ${new Date().toLocaleTimeString()}`
     const res = await dispatchTelegramMessage(
       telegramConfig.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN,
       telegramConfig.chat_id,
@@ -1794,7 +1875,7 @@ export default function RymonConnect() {
   const handleSaveSecurityPolicy = async (nextPolicy: SovereignSecurityPolicy) => {
     setSecurityPolicy(nextPolicy)
     await saveSovereignSecurityPolicy(nextPolicy)
-    showToast('🛡️ Sovereign Enterprise Security Policy saved!')
+    showToast('🛡️ RYMON Enterprise Security Policy saved!')
   }
 
   const handleTogglePauseKey = async (keyString: string) => {
@@ -1895,6 +1976,63 @@ export default function RymonConnect() {
     }
   }
 
+  const handleAddNewApp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newAppName.trim()) {
+      setAppActionError('Application / Game name cannot be empty')
+      return
+    }
+    setAppsLoading(true)
+    setAppActionError('')
+    setAppActionSuccess('')
+    try {
+      const updated = await addRegisteredApp({
+        name: newAppName.trim(),
+        package_name: newAppPackage.trim(),
+        platform: newAppPlatform,
+        icon: newAppIcon || '🎮',
+        description: newAppDesc.trim()
+      })
+      setRegisteredApps(updated)
+      setNewAppName('')
+      setNewAppPackage('')
+      setNewAppDesc('')
+      setAppActionSuccess(`Successfully registered "${newAppName.trim()}" in ecosystem!`)
+      showToast(`Registered app "${newAppName.trim()}"`)
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to register application'
+      setAppActionError(errMsg)
+    } finally {
+      setAppsLoading(false)
+    }
+  }
+
+  const handleDeleteApp = async (app: RegisteredApp) => {
+    if (!window.confirm(`Are you sure you want to remove "${app.name}" from registered applications?\n\nExisting keys for "${app.name}" in database will remain intact, but new keys will no longer target this app unless re-added.`)) {
+      return
+    }
+    setAppsLoading(true)
+    try {
+      const updated = await deleteRegisteredApp(app.id)
+      setRegisteredApps(updated)
+      if (genGame === app.name) setGenGame('Free Fire MAX')
+      showToast(`Removed app "${app.name}"`)
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to remove application'
+      alert(errMsg)
+    } finally {
+      setAppsLoading(false)
+    }
+  }
+
+  void [
+    appsLoading, setAppsLoading, newAppName, setNewAppName, newAppPackage, setNewAppPackage,
+    newAppPlatform, setNewAppPlatform, newAppDesc, setNewAppDesc, newAppIcon, setNewAppIcon,
+    appActionError, setAppActionError, appActionSuccess, setAppActionSuccess,
+    selectedSnippetApp, setSelectedSnippetApp, snippetLanguage, setSnippetLanguage,
+    handleAddNewApp, handleDeleteApp
+  ]
+
   const showToast = (msg: string) => {
     setActionSuccessMsg(msg)
     setTimeout(() => setActionSuccessMsg(''), 3500)
@@ -1934,16 +2072,22 @@ export default function RymonConnect() {
       ) {
         return false
       }
+      if (
+        keyGameFilter !== 'ALL' &&
+        (k.game || '').toLowerCase() !== keyGameFilter.toLowerCase()
+      ) {
+        return false
+      }
       if (!searchKeyQuery.trim()) return true
       const q = searchKeyQuery.toLowerCase()
       return (
         k.license_key.toLowerCase().includes(q) ||
-        k.game.toLowerCase().includes(q) ||
+        (k.game && k.game.toLowerCase().includes(q)) ||
         k.creator_username.toLowerCase().includes(q) ||
         (k.device_hwid && k.device_hwid.toLowerCase().includes(q))
       )
     })
-  }, [keysList, searchKeyQuery, keyStatusFilter, keyCreatorFilter, onlineKeySet])
+  }, [keysList, searchKeyQuery, keyStatusFilter, keyCreatorFilter, keyGameFilter, onlineKeySet])
 
   const filteredUsers = useMemo(() => {
     if (!searchUserQuery.trim()) return usersList
@@ -2004,13 +2148,90 @@ export default function RymonConnect() {
       ].includes(activeTab)
     ) {
       setActiveTab('overview')
-    } else if (!isOwner && activeTab === 'connect-api') {
+    } else if (!isOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
       setActiveTab('overview')
     }
   }, [isStreamer, isReseller, isAdmin, isOwner, activeTab])
 
   return (
     <div style={styles.appShell}>
+      {/* Phantom Amethyst Kinetic Micro-Interactions & Ambient FX */}
+      <style>{`
+        @keyframes sgRadarPulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+          }
+          70% {
+            box-shadow: 0 0 0 9px rgba(16, 185, 129, 0);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+          }
+        }
+        @keyframes sgAmethystGlow {
+          0%, 100% {
+            box-shadow: 0 0 14px rgba(168, 85, 247, 0.35);
+          }
+          50% {
+            box-shadow: 0 0 26px rgba(168, 85, 247, 0.65), 0 0 40px rgba(244, 63, 94, 0.2);
+          }
+        }
+        @keyframes sgPanicPulse {
+          0%, 100% {
+            box-shadow: 0 0 8px rgba(244, 63, 94, 0.45);
+            border-color: rgba(244, 63, 94, 0.6);
+            transform: scale(1);
+          }
+          50% {
+            box-shadow: 0 0 22px rgba(244, 63, 94, 0.9);
+            border-color: rgba(244, 63, 94, 1);
+            transform: scale(1.02);
+          }
+        }
+        @keyframes sgOnlineGlow {
+          0%, 100% {
+            opacity: 1;
+            filter: drop-shadow(0 0 4px #05df72);
+          }
+          50% {
+            opacity: 0.75;
+            filter: drop-shadow(0 0 10px #05df72);
+          }
+        }
+        /* Sleek cyber glass scrollbar */
+        ::-webkit-scrollbar {
+          width: 7px;
+          height: 7px;
+        }
+        ::-webkit-scrollbar-track {
+          background: rgba(8, 7, 14, 0.7);
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(168, 85, 247, 0.35);
+          border-radius: 999px;
+          border: 1px solid rgba(168, 85, 247, 0.2);
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(168, 85, 247, 0.65);
+          box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+        }
+        /* Kinetic glass hover */
+        .sg-glass-card {
+          transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease, box-shadow 0.22s ease;
+        }
+        .sg-glass-card:hover {
+          transform: translateY(-2px);
+          border-color: rgba(168, 85, 247, 0.45) !important;
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6), 0 0 20px rgba(168, 85, 247, 0.18) !important;
+        }
+        .sg-panic-btn {
+          animation: sgPanicPulse 2.4s infinite ease-in-out;
+        }
+        .sg-live-beacon {
+          animation: sgRadarPulse 2s infinite cubic-bezier(0, 0, 0.2, 1);
+        }
+      `}</style>
+
       {/* Background Cyber Ambient */}
       <div style={styles.ambientGrid} />
 
@@ -2028,18 +2249,18 @@ export default function RymonConnect() {
             <div style={styles.logoFrame}>
               <img
                 src="/rymon_logo.jpg"
-                alt="Rymon"
+                alt="Greenvest StreamGuard"
                 style={styles.logoImage}
                 onError={(e) => {
-                  ;(e.target as any).src = 'https://placehold.co/80x80/07090e/00d9ff?text=RM'
+                  ;(e.target as any).src = 'https://placehold.co/80x80/08070e/c084fc?text=GS'
                 }}
               />
             </div>
             <div>
               <div style={styles.brandTitleText}>
-                RYMON <span style={styles.brandCyanPill}>GHOST CONNECT</span>
+                GREENVEST <span style={styles.brandVioletPill}>STREAMGUARD</span>
               </div>
-              <div style={styles.brandSubText}>SOVEREIGN KEYAUTH & TELEMETRY REMOTE</div>
+              <div style={styles.brandSubText}>PHANTOM AMETHYST • VIP TELEMETRY HUD</div>
             </div>
           </div>
         </div>
@@ -2068,7 +2289,7 @@ export default function RymonConnect() {
               }}
             />
             <span style={styles.telemetryText}>
-              {isLiveConnected ? 'LIVE SUPABASE' : 'STANDBY'}
+              {isLiveConnected ? 'LIVE CLOUD' : 'STANDBY'}
             </span>
             <span style={styles.pingText}>{ping}ms</span>
           </div>
@@ -2119,7 +2340,7 @@ export default function RymonConnect() {
       {!isAuthenticated ? (
         <div style={styles.authGateBox}>
           <div style={styles.authBadge}>
-            <span style={{ fontSize: '10px', marginRight: '6px' }}>🔒</span> SECURE RYMON SOVEREIGN GATEWAY
+            <span style={{ fontSize: '10px', marginRight: '6px' }}>🔒</span> SECURE RYMON GATEWAY
           </div>
 
           {/* Dual Gateway Tabs: Staff Portal vs Streamer Key */}
@@ -2202,7 +2423,7 @@ export default function RymonConnect() {
                 <div>
                   <h2 style={styles.authHead}>Staff Control Login</h2>
                   <p style={styles.authDesc}>
-                    Authenticate with your sovereign account to manage licenses, generate keys, and oversee user balances.
+                    Authenticate with your RYMON account to manage licenses, generate keys, and oversee user balances.
                   </p>
 
                   <form onSubmit={handleStaffLogin} style={styles.authForm}>
@@ -2231,7 +2452,7 @@ export default function RymonConnect() {
                     </div>
 
                     <button type="submit" disabled={authLoading} style={styles.submitBtn}>
-                      {authLoading ? 'AUTHENTICATING SUPABASE...' : 'SIGN IN TO DASHBOARD'}
+                      {authLoading ? 'AUTHENTICATING...' : 'SIGN IN TO DASHBOARD'}
                     </button>
 
                     {authError && <div style={styles.errorBox}>{authError}</div>}
@@ -2241,7 +2462,7 @@ export default function RymonConnect() {
                 <div>
                   <h2 style={styles.authHead}>Register with Referral Code</h2>
                   <p style={styles.authDesc}>
-                    Enter an invitation code issued by the owner to create your genuine sovereign Reseller or Admin account.
+                    Enter an invitation code issued by the owner to create your genuine RYMON Reseller or Admin account.
                   </p>
 
                   <form onSubmit={handleRegister} style={styles.authForm}>
@@ -2298,7 +2519,7 @@ export default function RymonConnect() {
                     </div>
 
                     <button type="submit" disabled={regLoading} style={styles.submitBtn}>
-                      {regLoading ? 'VERIFYING REFERRAL CODE...' : '⚡ CREATE SOVEREIGN ACCOUNT'}
+                      {regLoading ? 'VERIFYING REFERRAL CODE...' : '⚡ CREATE RYMON ACCOUNT'}
                     </button>
 
                     {regError && <div style={styles.errorBox}>{regError}</div>}
@@ -2632,6 +2853,22 @@ export default function RymonConnect() {
                           <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>OWNER</span>
                         </button>
                       )}
+                      {isOwner && (
+                        <button
+                          onClick={() => {
+                            setActiveTab('apps')
+                            setMobileMenuOpen(false)
+                          }}
+                          style={{
+                            ...styles.navItem,
+                            ...(activeTab === 'apps' ? styles.navItemActive : {})
+                          }}
+                        >
+                          <span style={styles.navIcon}>📱</span>
+                          <span>App Manager</span>
+                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff', border: '1px solid rgba(0, 217, 255, 0.4)' }}>ECOSYSTEM</span>
+                        </button>
+                      )}
                     </>
                   )}
 
@@ -2711,7 +2948,7 @@ export default function RymonConnect() {
                     <h2 style={styles.pageTitle}>Operational Matrix</h2>
                   </div>
                   <div style={styles.badgeCluster}>
-                    <span style={styles.greenPulseBadge}>● SUPABASE ACTIVE</span>
+                    <span style={styles.greenPulseBadge}>● RYMON CLOUD ACTIVE</span>
                     <span style={styles.timeTag}>greenvest.shop</span>
                   </div>
                 </div>
@@ -2907,7 +3144,7 @@ export default function RymonConnect() {
                   <div style={styles.cardBox}>
                     <div style={styles.cardHeader}>
                       <h4>⚡ Fast Actions</h4>
-                      <span style={styles.cyanMiniBadge}>SOVEREIGN</span>
+                      <span style={styles.cyanMiniBadge}>RYMON</span>
                     </div>
                     <div style={styles.quickGrid}>
                       <button
@@ -3152,7 +3389,7 @@ export default function RymonConnect() {
                           }}
                         >
                           {topUpLoading
-                            ? 'PROCESSING ON SUPABASE...'
+                            ? 'PROCESSING TRANSACTION...'
                             : isOwner
                             ? 'Credit Balance (FREE)'
                             : 'Transfer from My Wallet'}
@@ -3204,14 +3441,86 @@ export default function RymonConnect() {
                     <form onSubmit={handleGenerateKey}>
                       <div style={styles.formGrid2Col}>
                         <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>SELECT TARGET GAME</label>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label style={styles.formLabel}>SELECT TARGET GAME / APP</label>
+                            {isOwner && (
+                              <button
+                                type="button"
+                                onClick={() => setActiveTab('apps')}
+                                style={{ background: 'none', border: 'none', color: '#00d9ff', fontSize: '11px', cursor: 'pointer', padding: 0, fontWeight: 700 }}
+                              >
+                                ⚙️ Manage Apps
+                              </button>
+                            )}
+                          </div>
                           <select
-                            value={genGame}
-                            onChange={(e) => setGenGame(e.target.value)}
+                            value={isCustomAppMode ? '__CUSTOM__' : genGame}
+                            onChange={(e) => {
+                              if (e.target.value === '__CUSTOM__') {
+                                setIsCustomAppMode(true)
+                              } else {
+                                setIsCustomAppMode(false)
+                                setGenGame(e.target.value)
+                              }
+                            }}
                             style={styles.selectInput}
                           >
-                            <option value="Free Fire MAX">Free Fire MAX (Dedicated)</option>
+                            <option value="Free Fire MAX">🔥 Free Fire MAX (Dedicated Streamer &amp; Remote)</option>
+                            <option value="Universal">🌍 Universal (Works on Any App / Game)</option>
+                            {registeredApps
+                              .filter((a) => a.name !== 'Free Fire MAX')
+                              .map((app) => (
+                                <option key={app.id} value={app.name}>
+                                  {app.icon || '🔑'} {app.name} {app.package_name ? `(${app.package_name})` : ''} (Pure KeyAuth)
+                                </option>
+                              ))}
+                            <option value="__CUSTOM__">✨ + Custom App / Game Name...</option>
                           </select>
+
+                          {/* Custom App Name Input on Click */}
+                          {isCustomAppMode && (
+                            <div style={{ marginTop: '10px', padding: '10px 12px', background: 'rgba(5, 223, 114, 0.08)', borderRadius: '8px', border: '1px solid rgba(5, 223, 114, 0.35)' }}>
+                              <label style={{ ...styles.formLabel, color: '#05df72', marginBottom: '4px', display: 'block' }}>
+                                TYPE ANY CUSTOM APP OR GAME NAME:
+                              </label>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <input
+                                  type="text"
+                                  value={customAppNameInput}
+                                  onChange={(e) => setCustomAppNameInput(e.target.value)}
+                                  placeholder="e.g. Tool X, Private Mod, BGMI, Call of Duty..."
+                                  style={{ ...styles.keyInput, flex: 1, borderColor: '#05df72', padding: '8px 12px', fontSize: '13px' }}
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsCustomAppMode(false)
+                                    setGenGame('Free Fire MAX')
+                                  }}
+                                  style={{ ...styles.chipBtn, fontSize: '11px', padding: '0 12px' }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{ marginTop: '6px', fontSize: '11.5px', lineHeight: '1.4' }}>
+                            {(!isCustomAppMode && genGame === 'Free Fire MAX') ? (
+                              <span style={{ color: '#05df72' }}>
+                                🔥 <strong>Streamer Remote Enabled:</strong> Full ESP, Aimbot, and live telemetry controls active for Free Fire MAX.
+                              </span>
+                            ) : (!isCustomAppMode && genGame === 'Universal') ? (
+                              <span style={{ color: '#05df72' }}>
+                                🌐 <strong>Universal Key:</strong> Can authenticate on any game or mod across your ecosystem.
+                              </span>
+                            ) : (
+                              <span style={{ color: '#00d9ff' }}>
+                                🔑 <strong>Pure KeyAuth Isolation:</strong> This key will <u>ONLY</u> work on <strong>{isCustomAppMode ? (customAppNameInput.trim() || 'Custom App') : genGame}</strong>. Zero streamer controls (authentication &amp; HWID only).
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         <div style={styles.formGroup}>
@@ -3287,10 +3596,10 @@ export default function RymonConnect() {
                         >
                           <div>
                             <div style={{ fontSize: '12px', fontWeight: 800, color: '#fde047', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span>👑</span> VIP REALTIME ACTIVE (RENDER CLOUD RAM BRIDGE)
+                              <span>👑</span> VIP REALTIME ACTIVE (DIRECT RYMON MESH)
                             </div>
                             <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                              All Owner keys automatically run on high-speed in-memory RAM bridge (&lt;15ms latency, unlimited web control).
+                              All Owner keys automatically run on dedicated ultra-low latency RYMON pipeline (&lt;15ms latency, unlimited web control).
                             </div>
                           </div>
                           <span style={{ fontSize: '11px', fontWeight: 800, color: '#fde047', background: 'rgba(250, 204, 21, 0.2)', padding: '5px 10px', borderRadius: '6px' }}>
@@ -3331,7 +3640,7 @@ export default function RymonConnect() {
                         style={{ ...styles.submitBtn, marginTop: '24px' }}
                       >
                         {authLoading
-                          ? 'CREATING ON SUPABASE...'
+                          ? 'ALLOCATING RYMON VIP KEYS...'
                           : genQuantity > 1
                           ? `⚡ GENERATE ${genQuantity} KEYS NOW`
                           : 'GENERATE & DEDUCT WALLET'}
@@ -3381,6 +3690,20 @@ export default function RymonConnect() {
                             </button>
                             <button
                               type="button"
+                              onClick={() => handleCopyAllDeliverySlips(genCreatedKeysList, genDuration, genGame)}
+                              style={{
+                                ...styles.copyKeyBtn,
+                                background: 'rgba(5, 223, 114, 0.2)',
+                                border: '1px solid #05df72',
+                                color: '#05df72',
+                                fontWeight: 800
+                              }}
+                              title="Copy formatted payment & delivery receipt for customer"
+                            >
+                              🧾 COPY SLIP{genCreatedKeysList.length > 1 ? `S (${genCreatedKeysList.length})` : ''}
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleShareKeysWhatsApp(genCreatedKeysList, `${genDuration} (${genGame})`)}
                               style={{
                                 ...styles.copyKeyBtn,
@@ -3419,13 +3742,30 @@ export default function RymonConnect() {
                           {genCreatedKeysList.map((kStr) => (
                             <div key={kStr} style={styles.generatedKeyRow}>
                               <code style={styles.keyCodeText}>{kStr}</code>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyKey(kStr)}
-                                style={styles.copyKeyBtn}
-                              >
-                                {copiedKey === kStr ? 'COPIED!' : 'COPY'}
-                              </button>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyDeliverySlip(kStr, genDuration, genGame)}
+                                  style={{
+                                    ...styles.copyKeyBtn,
+                                    background: copiedDeliverySlip === kStr ? 'rgba(5, 223, 114, 0.35)' : 'rgba(5, 223, 114, 0.15)',
+                                    border: '1px solid #05df72',
+                                    color: '#05df72',
+                                    fontSize: '11px',
+                                    fontWeight: 700
+                                  }}
+                                  title="Copy Payment Successful & Key delivery slip for customer"
+                                >
+                                  {copiedDeliverySlip === kStr ? '✓ SLIP COPIED!' : '🧾 SLIP'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyKey(kStr)}
+                                  style={styles.copyKeyBtn}
+                                >
+                                  {copiedKey === kStr ? 'COPIED!' : 'COPY'}
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -3471,6 +3811,26 @@ export default function RymonConnect() {
                         ))}
                       </select>
                     )}
+                    <select
+                      value={keyGameFilter}
+                      onChange={(e) => setKeyGameFilter(e.target.value)}
+                      style={{
+                        ...styles.selectInput,
+                        width: 'auto',
+                        padding: '8px 12px',
+                        fontSize: '12px',
+                        color: keyGameFilter === 'ALL' ? '#94a3b8' : '#00d9ff',
+                        borderColor: keyGameFilter === 'ALL' ? 'rgba(51, 65, 85, 0.6)' : '#00d9ff'
+                      }}
+                    >
+                      <option value="ALL">🎮 All Games / Apps</option>
+                      <option value="Universal">🌍 Universal Keys</option>
+                      {Array.from(new Set(keysList.map((k) => k.game || 'Free Fire MAX'))).map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
                     <div style={styles.searchBox}>
                       <input
                         type="text"
@@ -3811,6 +4171,16 @@ export default function RymonConnect() {
                                   >
                                     {copiedKey === k.license_key ? '✓' : '📋'}
                                   </button>
+                                  <button
+                                    onClick={() => handleCopyDeliverySlip(k.license_key, k.plan_duration, k.game)}
+                                    style={{
+                                      ...styles.miniCopyBtn,
+                                      color: copiedDeliverySlip === k.license_key ? '#05df72' : '#cbd5e1'
+                                    }}
+                                    title="Copy Payment Successful & Delivery Slip"
+                                  >
+                                    {copiedDeliverySlip === k.license_key ? '✓' : '🧾'}
+                                  </button>
                                 </div>
                               </td>
                               <td style={styles.td}>
@@ -3844,7 +4214,7 @@ export default function RymonConnect() {
                                           padding: '2px 6px',
                                           borderRadius: '6px'
                                         }}
-                                        title="VIP Realtime: Connected to Render In-Memory RAM Bridge"
+                                        title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms)"
                                       >
                                         👑 VIP REALTIME
                                       </span>
@@ -5370,7 +5740,7 @@ export default function RymonConnect() {
                     {/* Sovereign Anti-Sharing, Reseller Expiry & APK Force-Update Policy */}
                     <div style={{ ...styles.cardBox, marginTop: '20px' }}>
                       <div style={styles.cardHeader}>
-                        <h4>🛡️ Sovereign Anti-Sharing, Reseller Expiry &amp; APK Force-Update</h4>
+                        <h4>🛡️ RYMON Anti-Sharing, Reseller Expiry &amp; APK Force-Update</h4>
                         <span
                           style={{
                             ...styles.cyanMiniBadge,
@@ -5564,14 +5934,14 @@ export default function RymonConnect() {
                   <div>
                     <h2 style={styles.pageTitle}>Database SQL & Schema Engine</h2>
                     <p style={styles.pageSubtitle}>
-                      Manage your live PostgreSQL schema on Supabase (zvjqpigduyvczidzafus).
+                      Manage your live RYMON database engine and security policies.
                     </p>
                   </div>
                 </div>
 
                 <div style={styles.cardBox}>
                   <div style={styles.cardHeader}>
-                    <h4>⚡ Sovereign Schema Status</h4>
+                    <h4>⚡ RYMON Schema Status</h4>
                     <span
                       style={{
                         ...styles.cyanMiniBadge,
@@ -5584,13 +5954,13 @@ export default function RymonConnect() {
                   </div>
 
                   <p style={styles.settingDesc}>
-                    To activate or update all Sovereign RPCs, accounts, licenses, and Realtime publications in Supabase:
+                    To activate or update all RYMON RPCs, accounts, licenses, and Realtime publications:
                     <br />
-                    1. Open your <strong>Supabase Project Dashboard</strong> (<code>zvjqpigduyvczidzafus</code>).
+                    1. Open your <strong>RYMON Cloud Console</strong>.
                     <br />
                     2. Go to <strong>SQL Editor</strong> ➔ <strong>New Query</strong>.
                     <br />
-                    3. Copy and paste <code>MASTER_RYMON_SOVEREIGN_BACKEND.sql</code> and click <strong>Run</strong>.
+                    3. Copy and paste <code>MASTER_RYMON_BACKEND.sql</code> and click <strong>Run</strong>.
                   </p>
 
                   <div style={{ marginTop: '20px' }}>
@@ -5604,7 +5974,7 @@ export default function RymonConnect() {
                       }}
                       style={styles.submitBtn}
                     >
-                      {copiedSql ? '✓ COPIED SQL PATH TO CLIPBOARD' : '📋 MASTER_RYMON_SOVEREIGN_BACKEND.SQL READY'}
+                      {copiedSql ? '✓ COPIED SQL PATH TO CLIPBOARD' : '📋 MASTER_RYMON_BACKEND.SQL READY'}
                     </button>
                   </div>
                 </div>
@@ -6443,6 +6813,596 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
               </div>
             )}
 
+            {/* 12B. APP MANAGER (MULTI-APP ECOSYSTEM & PURE KEYAUTH) */}
+            {activeTab === 'apps' && isOwner && (
+              <div style={styles.viewContainer}>
+                {/* Header Banner */}
+                <div style={styles.bannerRow}>
+                  <div>
+                    <h2 style={styles.pageTitle}>App Manager &amp; Cross-App Isolation Hub</h2>
+                    <p style={styles.pageSubtitle}>
+                      Manage applications in your KeyAuth ecosystem. Enforce strict cross-app license isolation (keys for Free Fire MAX cannot be used in custom apps like Tool X, Private Mod, BGMI, etc.). Only Free Fire MAX connects to the Streamer Remote; all other apps are <strong>pure KeyAuth only</strong>.
+                    </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>
+                      👑 OWNER EXCLUSIVE
+                    </span>
+                    <span style={styles.greenPulseBadge}>● ISOLATION STRICT</span>
+                    <span style={{ ...styles.cyanMiniBadge, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff', border: '1px solid rgba(0, 217, 255, 0.4)' }}>
+                      📱 {registeredApps.length} APPS REGISTERED
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metrics Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                  <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      TOTAL CONFIGURED APPS
+                    </div>
+                    <div style={{ fontSize: '26px', fontWeight: 900, color: '#00d9ff', marginTop: '6px' }}>
+                      {registeredApps.length}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
+                      1 Streamer Mod + {Math.max(0, registeredApps.length - 1)} Pure KeyAuth Apps
+                    </div>
+                  </div>
+
+                  <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      FREE FIRE MAX STATUS
+                    </div>
+                    <div style={{ fontSize: '18px', fontWeight: 900, color: '#05df72', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      🔥 STREAMER REMOTE
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
+                      Dedicated ESP, Aimbot &amp; Telemetry Remote
+                    </div>
+                  </div>
+
+                  <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      OTHER APPS MODE
+                    </div>
+                    <div style={{ fontSize: '18px', fontWeight: 900, color: '#fde047', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      🔑 PURE KEYAUTH
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
+                      Login, Device HWID Binding &amp; Expiry Only
+                    </div>
+                  </div>
+
+                  <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      CONNECT GATEWAY
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#00d9ff', marginTop: '8px', wordBreak: 'break-all' }}>
+                      greenvest.shop/connect
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText('https://greenvest.shop/connect')
+                        showToast('Copied https://greenvest.shop/connect to clipboard!')
+                      }}
+                      style={{ ...styles.chipBtn, fontSize: '11px', marginTop: '8px', padding: '4px 10px', width: 'fit-content' }}
+                    >
+                      📋 Copy Endpoint
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main 2-Column Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '24px', alignItems: 'start' }}>
+                  {/* Left Column: Configured Apps List */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={styles.managementCard}>
+                      <div style={styles.cardHeader}>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
+                            Configured Applications in Ecosystem
+                          </h3>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                            Keys generated for an app are strictly locked to it. Click any app to generate keys or view licenses.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                        {registeredApps.map((app) => {
+                          const isFf = app.name.toLowerCase().includes('free fire')
+                          const appKeys = keysList.filter((k) => (k.game || '').toLowerCase() === app.name.toLowerCase())
+                          const activeAppKeys = appKeys.filter((k) => k.status === 'ACTIVE').length
+
+                          return (
+                            <div
+                              key={app.id}
+                              style={{
+                                padding: '16px 18px',
+                                background: isFf ? 'rgba(5, 223, 114, 0.05)' : 'rgba(15, 23, 42, 0.7)',
+                                border: isFf ? '1px solid rgba(5, 223, 114, 0.35)' : '1px solid rgba(51, 65, 85, 0.6)',
+                                borderRadius: '12px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '12px'
+                              }}
+                            >
+                              {/* Top Row: Info */}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                  <span style={{ fontSize: '28px' }}>{app.icon || (isFf ? '🔥' : '🔑')}</span>
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontSize: '17px', fontWeight: 800, color: '#f8fafc' }}>
+                                        {app.name}
+                                      </span>
+                                      {isFf ? (
+                                        <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>
+                                          🔥 STREAMER REMOTE + KEYAUTH
+                                        </span>
+                                      ) : (
+                                        <span style={{ ...styles.cyanMiniBadge, background: 'rgba(250, 204, 21, 0.15)', color: '#fde047', border: '1px solid rgba(250, 204, 21, 0.4)' }}>
+                                          🔑 PURE KEYAUTH ONLY
+                                        </span>
+                                      )}
+                                      <span style={{ fontSize: '11px', color: '#64748b', background: 'rgba(15, 23, 42, 0.9)', padding: '2px 8px', borderRadius: '4px' }}>
+                                        {app.platform || 'Android Mobile'}
+                                      </span>
+                                    </div>
+                                    {app.package_name && (
+                                      <div style={{ fontFamily: 'monospace', fontSize: '11.5px', color: '#94a3b8', marginTop: '3px' }}>
+                                        📦 Package: {app.package_name}
+                                      </div>
+                                    )}
+                                    {app.description && (
+                                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                                        {app.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Key Counts */}
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: '14px', fontWeight: 800, color: '#00d9ff' }}>
+                                    {appKeys.length} {appKeys.length === 1 ? 'Key' : 'Keys'}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#05df72' }}>
+                                    {activeAppKeys} Active
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Action Buttons */}
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGenGame(app.name)
+                                    setIsCustomAppMode(false)
+                                    setActiveTab('generate')
+                                  }}
+                                  style={{
+                                    padding: '6px 14px',
+                                    borderRadius: '8px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    background: 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)',
+                                    color: '#07090e',
+                                    border: 'none',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                  }}
+                                >
+                                  ⚡ Generate Key
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setKeyGameFilter(app.name)
+                                    setActiveTab('keys')
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    background: 'rgba(15, 23, 42, 0.8)',
+                                    color: '#f8fafc',
+                                    border: '1px solid rgba(51, 65, 85, 0.8)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                  }}
+                                >
+                                  🔑 View Keys ({appKeys.length})
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSnippetApp(app)
+                                    showToast(`Viewing connect code for "${app.name}"`)
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    background: 'rgba(0, 217, 255, 0.1)',
+                                    color: '#00d9ff',
+                                    border: '1px solid rgba(0, 217, 255, 0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                  }}
+                                >
+                                  📋 Connect Code
+                                </button>
+
+                                {!isFf && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteApp(app)}
+                                    disabled={appsLoading}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderRadius: '8px',
+                                      fontSize: '11.5px',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      background: 'rgba(239, 68, 68, 0.1)',
+                                      color: '#ef4444',
+                                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                                      marginLeft: 'auto'
+                                    }}
+                                    title={`Delete ${app.name} from registered apps`}
+                                  >
+                                    🗑️ Remove App
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Register New Application & Rules */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {/* Register New Application Card */}
+                    <div style={styles.managementCard}>
+                      <div style={styles.cardHeader}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '22px' }}>➕</span>
+                          <div>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
+                              Register New App / Game
+                            </h3>
+                            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+                              Add any custom app name (Tool X, Private Mod, BGMI, CODM, etc.)
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <form onSubmit={handleAddNewApp} style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>APPLICATION / GAME NAME *</label>
+                          <input
+                            type="text"
+                            value={newAppName}
+                            onChange={(e) => setNewAppName(e.target.value)}
+                            placeholder="e.g. Tool X, Private Mod, BGMI, CODM..."
+                            style={styles.keyInput}
+                            required
+                          />
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>PACKAGE IDENTIFIER (OPTIONAL)</label>
+                          <input
+                            type="text"
+                            value={newAppPackage}
+                            onChange={(e) => setNewAppPackage(e.target.value)}
+                            placeholder="e.g. com.pubg.imobile or custom.tool.mod"
+                            style={styles.keyInput}
+                          />
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>TARGET PLATFORM</label>
+                          <select
+                            value={newAppPlatform}
+                            onChange={(e) => setNewAppPlatform(e.target.value)}
+                            style={styles.selectInput}
+                          >
+                            <option value="Android Mobile (APK / SO)">Android Mobile (APK / SO)</option>
+                            <option value="PC Windows x64 (EXE / DLL)">PC Windows x64 (EXE / DLL)</option>
+                            <option value="iOS (IPA)">iOS (IPA)</option>
+                            <option value="Cross-Platform / Script">Cross-Platform / Script</option>
+                          </select>
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>APP ICON</label>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            {['🔑', '🎮', '🎯', '🎖️', '⚡', '🛡️', '📦', '💻', '🔥'].map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => setNewAppIcon(emoji)}
+                                style={{
+                                  padding: '8px 12px',
+                                  borderRadius: '8px',
+                                  fontSize: '18px',
+                                  cursor: 'pointer',
+                                  background: newAppIcon === emoji ? 'rgba(0, 217, 255, 0.25)' : 'rgba(15, 23, 42, 0.7)',
+                                  border: newAppIcon === emoji ? '1px solid #00d9ff' : '1px solid rgba(51, 65, 85, 0.6)'
+                                }}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>DESCRIPTION (OPTIONAL)</label>
+                          <input
+                            type="text"
+                            value={newAppDesc}
+                            onChange={(e) => setNewAppDesc(e.target.value)}
+                            placeholder="e.g. Private Windows memory scanner & key gate"
+                            style={styles.keyInput}
+                          />
+                        </div>
+
+                        {appActionError && (
+                          <div style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#f87171', fontSize: '12px' }}>
+                            ⚠️ {appActionError}
+                          </div>
+                        )}
+
+                        {appActionSuccess && (
+                          <div style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(5, 223, 114, 0.15)', border: '1px solid #05df72', color: '#05df72', fontSize: '12px' }}>
+                            ✅ {appActionSuccess}
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={appsLoading}
+                          style={{
+                            ...styles.primaryActionBtn,
+                            background: 'linear-gradient(135deg, #05df72 0%, #047857 100%)',
+                            color: '#07090e',
+                            fontWeight: 800,
+                            padding: '12px 20px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {appsLoading ? 'REGISTERING IN SUPABASE...' : '➕ Register Application to Ecosystem'}
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Security & Isolation Summary Card */}
+                    <div style={{ ...styles.managementCard, padding: '18px 20px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#f8fafc', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>🛡️</span> Security &amp; Key Isolation Architecture
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: '1.7' }}>
+                        <p style={{ margin: '0 0 8px 0' }}>
+                          • <strong>Strict Cross-App Isolation:</strong> If a key is issued for <strong>Free Fire MAX</strong>, any attempt to use it on <strong>Tool X</strong> or other apps will be rejected with an <em>App Mismatch</em> error.
+                        </p>
+                        <p style={{ margin: '0 0 8px 0' }}>
+                          • <strong>Pure KeyAuth Architecture:</strong> Custom apps only perform license authentication, HWID lock, and expiration checks. Zero ESP, aimbot, or streamer remote overhead.
+                        </p>
+                        <p style={{ margin: '0' }}>
+                          • <strong>Universal Key Bypass:</strong> Generating a key as <em>Universal</em> allows that key to work across all apps simultaneously.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Integration Code Generator Card */}
+                <div style={{ ...styles.managementCard, marginTop: '24px' }}>
+                  <div style={styles.cardHeader}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '12px' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
+                          Universal Connect Gateway SDK &amp; Code Snippets
+                        </h3>
+                        <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                          Plug-and-play code snippets for <strong>{selectedSnippetApp?.name || 'Free Fire MAX'}</strong>. Drop into your project to authenticate keys in seconds.
+                        </div>
+                      </div>
+
+                      {/* Language Tabs */}
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        {(['curl', 'java', 'cpp', 'csharp', 'python'] as const).map((lang) => (
+                          <button
+                            key={lang}
+                            type="button"
+                            onClick={() => setSnippetLanguage(lang)}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '8px',
+                              fontSize: '11.5px',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              background: snippetLanguage === lang ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.8)',
+                              border: snippetLanguage === lang ? '1px solid #00d9ff' : '1px solid rgba(51, 65, 85, 0.6)',
+                              color: snippetLanguage === lang ? '#00d9ff' : '#94a3b8'
+                            }}
+                          >
+                            {lang.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 800 }}>
+                        READY-TO-RUN CLIENT CODE ({snippetLanguage.toUpperCase()}):
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetAppName = selectedSnippetApp?.name || 'Free Fire MAX'
+                          let codeToCopy = ''
+                          if (snippetLanguage === 'curl') {
+                            codeToCopy = `curl -X POST https://greenvest.shop/connect \\\n  -H "Content-Type: application/json" \\\n  -d '{"user_key": "YOUR-LICENSE-KEY", "serial": "DEVICE-HWID", "app": "${targetAppName}"}'`
+                          } else if (snippetLanguage === 'java') {
+                            codeToCopy = `// Android Java KeyAuth snippet for ${targetAppName}\nJSONObject payload = new JSONObject();\npayload.put("user_key", licenseKey);\npayload.put("serial", deviceHwid);\npayload.put("app", "${targetAppName}");\n\nURL url = new URL("https://greenvest.shop/connect");\nHttpURLConnection conn = (HttpURLConnection) url.openConnection();\nconn.setRequestMethod("POST");\nconn.setRequestProperty("Content-Type", "application/json");\nconn.setDoOutput(true);\nconn.getOutputStream().write(payload.toString().getBytes("UTF-8"));\n\n// Read JSON response (status, success, data.EXP, data.status)`
+                          } else if (snippetLanguage === 'cpp') {
+                            codeToCopy = `// C++ Native libcurl snippet for ${targetAppName}\n#include <curl/curl.h>\n\nconst char* json = "{\\"user_key\\":\\"%s\\",\\"serial\\":\\"%s\\",\\"app\\":\\"${targetAppName}\\"}";\n// Send POST request to https://greenvest.shop/connect`
+                          } else if (snippetLanguage === 'csharp') {
+                            codeToCopy = `// C# Unity WebRequest for ${targetAppName}\nstring json = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"${targetAppName}\\"}";\nUnityWebRequest req = UnityWebRequest.PostWwwForm("https://greenvest.shop/connect", json);\n// Check res.downloadHandler.text`
+                          } else if (snippetLanguage === 'python') {
+                            codeToCopy = `import requests\n\nres = requests.post("https://greenvest.shop/connect", json={\n    "user_key": "YOUR_KEY",\n    "serial": "DEVICE_HWID",\n    "app": "${targetAppName}"\n})\ndata = res.json()\nif data.get("success"):\n    print("Access Granted! Expiry:", data["data"]["EXP"])\nelse:\n    print("Access Denied:", data.get("reason"))`
+                          }
+                          navigator.clipboard.writeText(codeToCopy)
+                          showToast(`Copied ${snippetLanguage.toUpperCase()} snippet for ${targetAppName}!`)
+                        }}
+                        style={{ ...styles.chipBtn, fontSize: '11px', padding: '4px 12px' }}
+                      >
+                        📋 Copy Code Snippet
+                      </button>
+                    </div>
+
+                    <pre style={{
+                      margin: 0,
+                      padding: '16px',
+                      background: '#04060a',
+                      border: '1px solid rgba(0, 217, 255, 0.25)',
+                      borderRadius: '8px',
+                      fontFamily: 'Consolas, monospace',
+                      fontSize: '12px',
+                      color: '#00d9ff',
+                      overflowX: 'auto',
+                      lineHeight: '1.6'
+                    }}>
+                      {(() => {
+                        const targetAppName = selectedSnippetApp?.name || 'Free Fire MAX'
+                        if (snippetLanguage === 'curl') {
+                          return `curl -X POST https://greenvest.shop/connect \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "user_key": "YOUR-LICENSE-KEY",
+    "serial": "DEVICE-HWID",
+    "app": "${targetAppName}"
+  }'`
+                        } else if (snippetLanguage === 'java') {
+                          return `// ==============================================================
+// Android Java KeyAuth Verification for "${targetAppName}"
+// ==============================================================
+JSONObject payload = new JSONObject();
+payload.put("user_key", licenseKey);
+payload.put("serial", androidId);
+payload.put("app", "${targetAppName}");
+
+URL url = new URL("https://greenvest.shop/connect");
+HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+conn.setRequestMethod("POST");
+conn.setRequestProperty("Content-Type", "application/json");
+conn.setDoOutput(true);
+conn.setConnectTimeout(8000);
+
+try (OutputStream os = conn.getOutputStream()) {
+    os.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+}
+
+// Read response JSON
+BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+String res = br.readLine();
+JSONObject json = new JSONObject(res);
+if (json.optBoolean("success")) {
+    String exp = json.getJSONObject("data").optString("EXP");
+    // Access Granted! Pure KeyAuth Valid until: exp
+} else {
+    String reason = json.optString("reason", "License Invalid");
+    // Access Denied: reason (e.g. App Mismatch or Expired)
+}`
+                        } else if (snippetLanguage === 'cpp') {
+                          return `// ==============================================================
+// C++ Native KeyAuth Verification for "${targetAppName}"
+// ==============================================================
+#include <string>
+#include <curl/curl.h>
+
+std::string payload = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"${targetAppName}\\"}";
+
+CURL* curl = curl_easy_init();
+if (curl) {
+    struct curl_slist* headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    curl_easy_setopt(curl, CURLOPT_URL, "https://greenvest.shop/connect");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
+
+    CURLcode res = curl_easy_perform(curl);
+    // Parse JSON response: success, status, data.EXP
+    curl_easy_cleanup(curl);
+}`
+                        } else if (snippetLanguage === 'csharp') {
+                          return `// ==============================================================
+// C# / Unity KeyAuth Verification for "${targetAppName}"
+// ==============================================================
+using UnityEngine;
+using UnityEngine.Networking;
+using System.Collections;
+
+IEnumerator VerifyLicense(string key, string hwid) {
+    string jsonPayload = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"${targetAppName}\\"}";
+    byte[] bodyRaw = System.Text.Encoding.UTF_8.GetBytes(jsonPayload);
+
+    using (UnityWebRequest req = new UnityWebRequest("https://greenvest.shop/connect", "POST")) {
+        req.uploadHandler = new UploadHandlerRaw(bodyRaw);
+        req.downloadHandler = new DownloadHandlerBuffer();
+        req.SetRequestHeader("Content-Type", "application/json");
+
+        yield return req.SendWebRequest();
+        if (req.result == UnityWebRequest.Result.Success) {
+            Debug.Log("Response: " + req.downloadHandler.text);
+        }
+    }
+}`
+                        } else {
+                          return `import requests
+
+# Pure KeyAuth Check for ${targetAppName}
+response = requests.post("https://greenvest.shop/connect", json={
+    "user_key": "YOUR-LICENSE-KEY",
+    "serial": "DEVICE-HWID-001",
+    "app": "${targetAppName}"
+})
+
+data = response.json()
+if data.get("success"):
+    print("License Valid! Game:", data["data"]["app"], "Expires:", data["data"]["EXP"])
+else:
+    print("License Denied! Reason:", data.get("reason"))`
+                        }
+                      })()}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 13. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
             {activeTab === 'remote' && (
               <div style={styles.viewContainer}>
@@ -6494,6 +7454,35 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                         </span>
                       )
                     })()}
+
+                    {/* Live Ping & VIP Bridge Latency Meter */}
+                    <span
+                      style={{
+                        padding: '5px 10px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        letterSpacing: '0.3px',
+                        background: isLiveConnected ? 'rgba(5, 223, 114, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                        border: isLiveConnected ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(234, 179, 8, 0.4)',
+                        color: isLiveConnected ? '#05df72' : '#facc15',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                      title="Realtime latency between Web Controller and Render VIP Bridge"
+                    >
+                      <span
+                        style={{
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          backgroundColor: isLiveConnected ? '#05df72' : '#facc15',
+                          boxShadow: isLiveConnected ? '0 0 8px #05df72' : '0 0 8px #facc15'
+                        }}
+                      />
+                      {vipPingMs !== null ? `${vipPingMs}ms VIP BRIDGE` : isLiveConnected ? `${ping}ms VIP BRIDGE` : '🟡 CONNECTING...'}
+                    </span>
                   </div>
 
                   <div style={{ ...styles.badgeCluster, gap: '8px' }}>
@@ -6533,9 +7522,9 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                               border: '1px solid rgba(0, 217, 255, 0.45)',
                               color: '#00d9ff'
                             }}
-                            title="VIP Realtime: Connected to Render In-Memory RAM Bridge (sub-50ms latency, zero database quota load)"
+                            title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms Direct Mesh)"
                           >
-                            ⚡ VIP REALTIME (RENDER RAM &bull; &lt;50ms)
+                            ⚡ VIP REALTIME (DIRECT MESH &bull; &lt;50ms)
                           </span>
                         )
                       }
@@ -6700,16 +7689,23 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                           maxWidth: '380px'
                         }}
                       >
-                        <option value="">-- Select Target Key --</option>
-                        {keysList.map((k) => {
-                          const isKeyPlaying = onlineKeySet.has(k.license_key.toUpperCase())
-                          return (
-                            <option key={k.license_key} value={k.license_key}>
-                              {isKeyPlaying ? '🟢 ' : k.device_hwid ? '📱 ' : '🟡 '}
-                              {k.license_key} ({k.plan_duration} • @{k.creator_username})
-                            </option>
+                        <option value="">-- Select Target Key (Free Fire MAX Only) --</option>
+                        {keysList
+                          .filter(
+                            (k) =>
+                              !k.game ||
+                              k.game.toLowerCase().includes('free fire') ||
+                              k.game.toLowerCase() === 'universal'
                           )
-                        })}
+                          .map((k) => {
+                            const isKeyPlaying = onlineKeySet.has(k.license_key.toUpperCase())
+                            return (
+                              <option key={k.license_key} value={k.license_key}>
+                                {isKeyPlaying ? '🟢 ' : k.device_hwid ? '📱 ' : '🟡 '}
+                                {k.license_key} ({k.plan_duration} • @{k.creator_username})
+                              </option>
+                            )
+                          })}
                       </select>
                     ) : (
                       <span style={{ fontFamily: 'monospace', fontSize: '12px', fontWeight: 800, color: '#00d9ff' }}>
@@ -7206,8 +8202,9 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
               width: '90%',
               textAlign: 'left',
               padding: '28px',
-              border: '1px solid rgba(0, 217, 255, 0.3)',
-              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 217, 255, 0.15)'
+              backgroundColor: 'rgba(16, 12, 26, 0.96)',
+              border: '1px solid rgba(168, 85, 247, 0.45)',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(168, 85, 247, 0.22)'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -7216,9 +8213,9 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                 <span style={{ fontSize: '26px' }}>📥</span>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.5px' }}>
-                    RYMON STREAMER OFFICIAL APK
+                    GREENVEST STREAMGUARD OFFICIAL APK
                   </h3>
-                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                  <div style={{ fontSize: '11px', color: '#a78bfa', marginTop: '2px' }}>
                     Unified Android ARM64 Client • Web Control + In-Game Panel
                   </div>
                 </div>
@@ -7227,9 +8224,9 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                 onClick={() => setShowDownloadModal(false)}
                 style={{
                   background: 'transparent',
-                  border: '1px solid rgba(148, 163, 184, 0.2)',
+                  border: '1px solid rgba(168, 85, 247, 0.3)',
                   borderRadius: '6px',
-                  color: '#94a3b8',
+                  color: '#c084fc',
                   padding: '4px 10px',
                   cursor: 'pointer',
                   fontSize: '14px'
@@ -7242,8 +8239,8 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div
                 style={{
-                  background: 'rgba(13, 17, 26, 0.9)',
-                  border: '1px solid rgba(0, 217, 255, 0.35)',
+                  background: 'rgba(18, 14, 29, 0.9)',
+                  border: '1px solid rgba(168, 85, 247, 0.35)',
                   borderRadius: '12px',
                   padding: '18px',
                   display: 'flex',
@@ -7255,8 +8252,8 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
               >
                 <div style={{ flex: '1 1 300px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 800, color: '#00d9ff' }}>
-                      ⚡ RYMON STREAMER (All-in-One)
+                    <span style={{ fontSize: '15px', fontWeight: 800, color: '#c084fc' }}>
+                      ⚡ GREENVEST STREAMGUARD (All-in-One)
                     </span>
                     <span
                       style={{
@@ -7283,10 +8280,10 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
 
                 <a
                   href="/download/RYMON_STREAMER_LATEST.apk"
-                  download="RYMON_STREAMER.apk"
+                  download="GREENVEST_STREAMGUARD.apk"
                   style={{
-                    backgroundColor: '#00d9ff',
-                    color: '#07090e',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+                    color: '#ffffff',
                     padding: '11px 20px',
                     borderRadius: '8px',
                     fontWeight: 800,
@@ -7295,7 +8292,9 @@ bool VerifyLicenseKey(const std::string& license_key, const std::string& hwid) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
-                    whiteSpace: 'nowrap'
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 4px 16px rgba(168, 85, 247, 0.45)',
+                    cursor: 'pointer'
                   }}
                 >
                   <span>⬇️</span> Download APK

@@ -1290,7 +1290,15 @@ export async function generateLicenseKeyBackend(params: {
   const totalCost = singleKeyCost * safeQuantity
 
   const prefix = (customPrefix?.trim() || 'RYMON').toUpperCase()
-  const gameTag = game.includes('Free Fire') ? 'FF' : game.includes('BGMI') ? 'BG' : 'PB'
+  let gameTag = 'PB'
+  if (game.includes('Free Fire')) gameTag = 'FF'
+  else if (game.includes('BGMI')) gameTag = 'BG'
+  else if (game.includes('Universal') || game.includes('All')) gameTag = 'UV'
+  else if (game.includes('Call of Duty') || game.includes('CODM')) gameTag = 'CD'
+  else {
+    const clean = game.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+    gameTag = clean.length >= 2 ? clean.substring(0, 2) : 'PB'
+  }
 
   const generatedKeys: string[] = []
   const usedSet = new Set<string>()
@@ -1367,21 +1375,25 @@ export async function generateLicenseKeyBackend(params: {
         .select('*')
 
       if (!licErr && insertedLics && insertedLics.length > 0) {
-        const ctrlPayloads = generatedKeys.map((k) =>
-          buildDefaultStreamerControlPayload({
-            license_key: k,
-            streamer_name: effectiveStreamerName,
-            game_name: game,
-            plan_duration: effectivePlanDuration,
-            creator: creatorName,
-            devices_max: safeDevices,
-            devices_used: 0,
-            is_active: true,
-            is_paused: false
-          })
-        )
-
-        await supabase.from('rymon_streamer_controls').upsert(ctrlPayloads, { onConflict: 'license_key' })
+        // ONLY Free Fire MAX keys have Streamer Remote Controls (ESP / Aimbot / Telemetry).
+        // Custom apps and other games are pure KeyAuth only!
+        const isFfOrUniversal = !game || game.toLowerCase().includes('free fire') || game.toLowerCase() === 'universal'
+        if (isFfOrUniversal) {
+          const ctrlPayloads = generatedKeys.map((k) =>
+            buildDefaultStreamerControlPayload({
+              license_key: k,
+              streamer_name: effectiveStreamerName,
+              game_name: game,
+              plan_duration: effectivePlanDuration,
+              creator: creatorName,
+              devices_max: safeDevices,
+              devices_used: 0,
+              is_active: true,
+              is_paused: false
+            })
+          )
+          await supabase.from('rymon_streamer_controls').upsert(ctrlPayloads, { onConflict: 'license_key' })
+        }
 
         await supabase.from('rymon_activities').insert({
           title:
@@ -2813,8 +2825,8 @@ export const SOVEREIGN_FALLBACK_NOTIFICATIONS: RymonNotification[] = [
     id: 1,
     sender: 'debajoyti',
     recipient: 'ALL',
-    title: '🚨 SYSTEM ACTIVE: Welcome to Sovereign Network',
-    message: 'The sovereign portal is online on greenvest.shop with zero external latency. All reseller balances, key generators, and streamer telemetry are linked directly to database.',
+    title: '🚨 SYSTEM ACTIVE: Welcome to RYMON Network',
+    message: 'The RYMON portal is online on greenvest.shop with zero external latency. All reseller balances, key generators, and streamer telemetry are linked directly to database.',
     type: 'UPDATE',
     is_pinned: true,
     created_at: new Date().toISOString()
@@ -2834,7 +2846,7 @@ export const SOVEREIGN_FALLBACK_NOTIFICATIONS: RymonNotification[] = [
     sender: 'debajoyti',
     recipient: 'ALL',
     title: '💼 Reseller & Streamer System Online',
-    message: 'The sovereign licensing engine is operational. Generate keys directly from the Generate Key panel or bind active keys for remote control.',
+    message: 'The RYMON licensing engine is operational. Generate keys directly from the Generate Key panel or bind active keys for remote control.',
     type: 'INFO',
     is_pinned: false,
     created_at: new Date(Date.now() - 3600000).toISOString()
@@ -3999,7 +4011,7 @@ export async function pollAndReplyTelegramBotCommands(
           ``,
           `✨ <b>Architecture:</b> ARM64-v8a (Android 5.0 - 15+)`,
           `🛡️ <b>Engine:</b> Safe Streamer Overlay + Realtime Cloud Telemetry`,
-          `⚡ <b>Auth:</b> Sovereign License Key System`,
+          `⚡ <b>Auth:</b> RYMON License Key System`,
           ``,
           `⬇️ <i>Contact @montage007pc to receive the latest release build APK directly in chat.</i>`
         ].join('\n')
@@ -5374,8 +5386,163 @@ export const SOVEREIGN_CONNECT_CONFIG = {
   },
   sample_request: {
     p_license_key: 'RYMON-FF-XXXX-XXXX',
-    p_hwid: 'ANDROID-DEVICE-ID-9481'
+    p_hwid: 'ANDROID-DEVICE-ID-9481',
+    p_game: 'Free Fire MAX'
   }
 }
+
+// ============================================================================
+// MULTI-APP & ECOSYSTEM MANAGEMENT (OWNER & STAFF APP SUITE)
+// ============================================================================
+export interface RegisteredApp {
+  id: string
+  name: string
+  package_name?: string
+  platform?: string
+  icon?: string
+  status: 'ACTIVE' | 'INACTIVE'
+  description?: string
+  created_at: string
+}
+
+export const DEFAULT_REGISTERED_APPS: RegisteredApp[] = [
+  {
+    id: 'ff_max',
+    name: 'Free Fire MAX',
+    package_name: 'com.dts.freefiremax',
+    platform: 'Android Mobile',
+    icon: '🔥',
+    status: 'ACTIVE',
+    description: 'RYMON Streamer Mod & ESP Suite',
+    created_at: '2026-10-11T00:00:00Z'
+  },
+  {
+    id: 'bgmi',
+    name: 'BGMI',
+    package_name: 'com.pubg.imobile',
+    platform: 'Android Mobile',
+    icon: '🎯',
+    status: 'ACTIVE',
+    description: 'Battlegrounds Mobile India',
+    created_at: '2026-10-15T00:00:00Z'
+  },
+  {
+    id: 'codm',
+    name: 'Call of Duty Mobile',
+    package_name: 'com.activision.callofduty.shooter',
+    platform: 'Android Mobile',
+    icon: '🎖️',
+    status: 'ACTIVE',
+    description: 'CODM Battle Royale / Multiplayer',
+    created_at: '2026-10-15T00:00:00Z'
+  }
+]
+
+const REGISTERED_APPS_CONFIG_KEY = 'registered_apps'
+const REGISTERED_APPS_LOCAL_STORAGE = 'rymon_registered_apps_cache'
+
+export function getLocalRegisteredApps(): RegisteredApp[] {
+  try {
+    const raw = localStorage.getItem(REGISTERED_APPS_LOCAL_STORAGE)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch {}
+  return [...DEFAULT_REGISTERED_APPS]
+}
+
+export async function fetchRegisteredApps(): Promise<RegisteredApp[]> {
+  let apps = getLocalRegisteredApps()
+  if (supabase) {
+    try {
+      const { data: cfgRow } = await supabase
+        .from('rymon_system_config')
+        .select('value')
+        .eq('key', REGISTERED_APPS_CONFIG_KEY)
+        .maybeSingle()
+
+      if (cfgRow?.value && Array.isArray(cfgRow.value) && cfgRow.value.length > 0) {
+        apps = cfgRow.value as RegisteredApp[]
+        try {
+          localStorage.setItem(REGISTERED_APPS_LOCAL_STORAGE, JSON.stringify(apps))
+        } catch {}
+      } else {
+        await saveRegisteredApps(DEFAULT_REGISTERED_APPS)
+      }
+    } catch (err) {
+      console.warn('fetchRegisteredApps warning:', err)
+    }
+  }
+  return apps
+}
+
+export async function saveRegisteredApps(apps: RegisteredApp[]): Promise<boolean> {
+  try {
+    localStorage.setItem(REGISTERED_APPS_LOCAL_STORAGE, JSON.stringify(apps))
+  } catch {}
+
+  if (supabase) {
+    try {
+      await supabase
+        .from('rymon_system_config')
+        .upsert(
+          {
+            key: REGISTERED_APPS_CONFIG_KEY,
+            value: apps,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: 'key' }
+        )
+      return true
+    } catch (err) {
+      console.error('saveRegisteredApps error:', err)
+      return false
+    }
+  }
+  return true
+}
+
+export async function addRegisteredApp(newApp: {
+  name: string
+  package_name?: string
+  platform?: string
+  icon?: string
+  description?: string
+}): Promise<RegisteredApp[]> {
+  const current = await fetchRegisteredApps()
+  const cleanName = newApp.name.trim()
+  const exists = current.some((a) => a.name.toLowerCase() === cleanName.toLowerCase())
+  if (exists) {
+    throw new Error(`An app named "${cleanName}" is already registered.`)
+  }
+
+  const generatedId = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36).substring(3, 7)
+  const appToAdd: RegisteredApp = {
+    id: generatedId,
+    name: cleanName,
+    package_name: (newApp.package_name || '').trim(),
+    platform: newApp.platform || 'Android Mobile',
+    icon: newApp.icon || '📦',
+    status: 'ACTIVE',
+    description: (newApp.description || '').trim(),
+    created_at: new Date().toISOString()
+  }
+
+  const updated = [...current, appToAdd]
+  await saveRegisteredApps(updated)
+  return updated
+}
+
+export async function deleteRegisteredApp(appIdOrName: string): Promise<RegisteredApp[]> {
+  const current = await fetchRegisteredApps()
+  const target = appIdOrName.trim().toLowerCase()
+  const filtered = current.filter(
+    (a) => a.id.toLowerCase() !== target && a.name.toLowerCase() !== target
+  )
+  await saveRegisteredApps(filtered)
+  return filtered
+}
+
 
 

@@ -64,7 +64,16 @@ export default async function handler(req, res) {
       'ANDROID-SOVEREIGN-DEVICE'
     ).trim()
 
-    const game = body?.game || req.query?.game || 'Free Fire MAX'
+    // Extract target app / game (supports app, game, app_name, target)
+    const targetApp = (
+      body?.app ||
+      body?.game ||
+      body?.app_name ||
+      body?.target ||
+      req.query?.app ||
+      req.query?.game ||
+      ''
+    ).trim()
 
     if (!userKey) {
       return res.status(400).json({
@@ -77,6 +86,7 @@ export default async function handler(req, res) {
     // 1. Root Master Key Shortcut
     const upperKey = userKey.toUpperCase()
     if (upperKey === 'RYMON-MASTER-KEY' || upperKey.includes('MASTER') || upperKey.includes('OWNER')) {
+      const masterApp = targetApp || 'Universal'
       return res.status(200).json({
         status: true,
         success: true,
@@ -85,13 +95,14 @@ export default async function handler(req, res) {
           EXP: 'Lifetime',
           exp: 'Lifetime',
           expiry: 'Lifetime',
-          game: game,
+          app: masterApp,
+          game: masterApp,
           status: 'ACTIVE'
         }
       })
     }
 
-    // 2. Query Supabase RPC rpc_rymon_verify_license
+    // 2. Query Supabase RPC rpc_rymon_verify_license (with cross-app isolation)
     const rpcResponse = await fetch(SUPABASE_VERIFY_RPC, {
       method: 'POST',
       headers: {
@@ -101,7 +112,8 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         p_license_key: userKey,
-        p_hwid: serial
+        p_hwid: serial,
+        p_game: targetApp
       })
     })
 
@@ -121,6 +133,7 @@ export default async function handler(req, res) {
 
     if (isValid) {
       const expStr = rpcResult.expires_at || 'Never'
+      const appName = rpcResult.game || rpcResult.app || targetApp || 'Universal'
       return res.status(200).json({
         status: true,
         success: true,
@@ -129,7 +142,8 @@ export default async function handler(req, res) {
           EXP: expStr,
           exp: expStr,
           expiry: expStr,
-          game: rpcResult.game || rpcResult.game_name || game,
+          app: appName,
+          game: appName,
           status: rpcResult.status || 'ACTIVE',
           max_devices: rpcResult.devices_max || rpcResult.max_devices || 1
         }
