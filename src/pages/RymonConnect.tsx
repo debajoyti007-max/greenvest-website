@@ -147,7 +147,6 @@ export default function RymonConnect() {
   const [customAppNameInput, setCustomAppNameInput] = useState('')
   const [genDuration, setGenDuration] = useState('1 Day')
   const [genCustomPrefix, setGenCustomPrefix] = useState('')
-  const [genIsVipRealtime] = useState(true)
   const [genDevicesMax, setGenDevicesMax] = useState(1)
   const [genQuantity, setGenQuantity] = useState(1)
   const [genCreatedKeysList, setGenCreatedKeysList] = useState<string[]>([])
@@ -249,7 +248,7 @@ export default function RymonConnect() {
   const [testConnectHwid, setTestConnectHwid] = useState('DEVICE-SIM-ANDROID-9981')
   const [testConnectLoading, setTestConnectLoading] = useState(false)
   const [testConnectResult, setTestConnectResult] = useState<string>('')
-  const [codeSnippetTab, setCodeSnippetTab] = useState<'java' | 'cpp' | 'curl'>('java')
+  const [codeSnippetTab, setCodeSnippetTab] = useState<'cpp' | 'java' | 'python' | 'curl'>('cpp')
 
   // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
@@ -824,8 +823,8 @@ export default function RymonConnect() {
     }
     const clean = targetKey.trim().toUpperCase()
 
-    // 1. Owner has zero limits
-    if (isOwner) {
+    // 1. Owner, Admin, and Resellers run on automatic VIP Realtime Render RAM bridge (<50ms) with zero limits
+    if (isOwner || currentUser?.role === 'admin' || currentUser?.role === 'reseller') {
       setCurrentKey(clean)
       return true
     }
@@ -874,7 +873,7 @@ export default function RymonConnect() {
   }
 
   const handleToggleVipKey = async (licenseKey: string, makeVip: boolean) => {
-    if (!isOwner || !supabase) return
+    if ((!isOwner && currentUser?.role !== 'admin') || !supabase) return
     const keyRecord = keysList.find((k) => k.license_key === licenseKey)
     if (!keyRecord) return
     const curPlan = keyRecord.plan_duration || '30 Days'
@@ -1015,7 +1014,7 @@ export default function RymonConnect() {
       customPrefix: genCustomPrefix,
       devicesMax: genDevicesMax,
       quantity: genQuantity,
-      isVipRealtime: isOwner ? true : genIsVipRealtime
+      isVipRealtime: true
     })
     setAuthLoading(false)
 
@@ -1342,7 +1341,7 @@ export default function RymonConnect() {
   }
 
   const formatDeliverySlip = (key: string, duration?: string, gameName?: string) => {
-    const cleanDuration = duration || '30 Days'
+    const cleanDuration = (duration || '30 Days').replace(' [VIP]', '').replace('[VIP]', '').trim()
     const cleanGame = gameName || 'FREE FIRE MAX'
     return [
       '✅ Payment Successful!',
@@ -3618,33 +3617,31 @@ export default function RymonConnect() {
                         />
                       </div>
 
-                      {isOwner && (
-                        <div
-                          style={{
-                            marginTop: '16px',
-                            padding: '12px 14px',
-                            background: 'rgba(250, 204, 21, 0.12)',
-                            border: '1px solid rgba(250, 204, 21, 0.5)',
-                            borderRadius: '10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '12px'
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 800, color: '#fde047', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span>👑</span> VIP REALTIME ACTIVE (DIRECT RYMON MESH)
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                              All Owner keys automatically run on dedicated ultra-low latency RYMON pipeline (&lt;15ms latency, unlimited web control).
-                            </div>
+                      <div
+                        style={{
+                          marginTop: '16px',
+                          padding: '12px 14px',
+                          background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(16, 185, 129, 0.1))',
+                          border: '1px solid rgba(250, 204, 21, 0.45)',
+                          borderRadius: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px'
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: '12px', fontWeight: 800, color: '#fde047', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>⚡</span> VIP REALTIME ACTIVE (RENDER RAM &bull; &lt;50ms)
                           </div>
-                          <span style={{ fontSize: '11px', fontWeight: 800, color: '#fde047', background: 'rgba(250, 204, 21, 0.2)', padding: '5px 10px', borderRadius: '6px' }}>
-                            👑 100% VIP REALTIME
-                          </span>
+                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                            All keys (Owner, Admin &amp; Reseller) automatically route through the dedicated Render RAM bridge (&lt;50ms latency, zero database load, instant live remote).
+                          </div>
                         </div>
-                      )}
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#fde047', background: 'rgba(250, 204, 21, 0.2)', padding: '5px 10px', borderRadius: '6px', whiteSpace: 'nowrap' }}>
+                          ⚡ 100% VIP REALTIME
+                        </span>
+                      </div>
 
                       {/* Cost Summary Box */}
                       <div style={styles.invoiceSummaryBox}>
@@ -4242,23 +4239,23 @@ export default function RymonConnect() {
                               <td style={styles.td}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <span style={styles.planBadge}>{k.plan_duration?.replace(' [VIP]', '')}</span>
-                                  {isOwner && (
-                                    k.plan_duration?.includes('[VIP]') ? (
-                                      <span
-                                        style={{
-                                          border: '1px solid rgba(250, 204, 21, 0.55)',
-                                          background: 'rgba(250, 204, 21, 0.18)',
-                                          color: '#fde047',
-                                          fontSize: '9.5px',
-                                          fontWeight: 800,
-                                          padding: '2px 6px',
-                                          borderRadius: '6px'
-                                        }}
-                                        title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms)"
-                                      >
-                                        👑 VIP REALTIME
-                                      </span>
-                                    ) : (
+                                  {k.plan_duration?.includes('[VIP]') ? (
+                                    <span
+                                      style={{
+                                        border: '1px solid rgba(250, 204, 21, 0.55)',
+                                        background: 'rgba(250, 204, 21, 0.18)',
+                                        color: '#fde047',
+                                        fontSize: '9.5px',
+                                        fontWeight: 800,
+                                        padding: '2px 6px',
+                                        borderRadius: '6px'
+                                      }}
+                                      title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms Render RAM Bridge)"
+                                    >
+                                      ⚡ VIP REALTIME
+                                    </span>
+                                  ) : (
+                                    (isOwner || isAdmin) && (
                                       <button
                                         type="button"
                                         onClick={() => handleToggleVipKey(k.license_key, true)}
@@ -7684,7 +7681,7 @@ else:
                           boxShadow: isLiveConnected ? '0 0 8px #05df72' : '0 0 8px #facc15'
                         }}
                       />
-                      {vipPingMs !== null ? `${vipPingMs}ms DIRECT MESH` : isLiveConnected ? `${ping}ms DIRECT MESH` : '🟡 CONNECTING...'}
+                      {vipPingMs !== null ? `${vipPingMs}ms VIP BRIDGE` : isLiveConnected ? `${ping}ms VIP BRIDGE` : '🟡 VIP BRIDGE (CONNECTING...)'}
                     </span>
                   </div>
 
@@ -7703,8 +7700,27 @@ else:
                               border: '1px solid rgba(250, 204, 21, 0.45)',
                               color: '#fde047'
                             }}
+                            title="Owner: Automatic VIP Realtime (<50ms Render RAM Bridge) • Unlimited Keys"
                           >
-                            👑 OWNER (UNLIMITED KEYS)
+                            👑 OWNER (VIP REALTIME &bull; &lt;50ms)
+                          </span>
+                        )
+                      }
+                      if (currentUser?.role === 'admin' || currentUser?.role === 'reseller') {
+                        return (
+                          <span
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              background: 'rgba(0, 217, 255, 0.15)',
+                              border: '1px solid rgba(0, 217, 255, 0.45)',
+                              color: '#00d9ff'
+                            }}
+                            title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms Render RAM Bridge)"
+                          >
+                            ⚡ VIP REALTIME ({currentUser?.role === 'admin' ? 'ADMIN' : 'RESELLER'} &bull; &lt;50ms)
                           </span>
                         )
                       }
@@ -7725,9 +7741,9 @@ else:
                               border: '1px solid rgba(0, 217, 255, 0.45)',
                               color: '#00d9ff'
                             }}
-                            title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms Direct Mesh)"
+                            title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms Render RAM Bridge)"
                           >
-                            ⚡ VIP REALTIME (DIRECT MESH &bull; &lt;50ms)
+                            ⚡ VIP REALTIME (RENDER RAM &bull; &lt;50ms)
                           </span>
                         )
                       }

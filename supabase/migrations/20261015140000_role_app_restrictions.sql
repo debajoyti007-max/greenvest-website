@@ -36,6 +36,7 @@ DECLARE
     v_allow_custom BOOLEAN := FALSE;
     v_allow_multi_dev BOOLEAN := FALSE;
     v_clean_game TEXT;
+    v_effective_plan TEXT;
 BEGIN
     v_clean_game := TRIM(COALESCE(p_game, 'Free Fire MAX'));
     IF v_clean_game = '' THEN v_clean_game := 'Free Fire MAX'; END IF;
@@ -60,17 +61,6 @@ BEGIN
             RETURN jsonb_build_object(
                 'success', false,
                 'error', 'Permission Denied: Reseller accounts are restricted to Free Fire MAX keys only. Custom App generation requires Owner authorization.'
-            );
-        END IF;
-    END IF;
-
-    -- 2. Role Policy: Reseller Max Devices Limit
-    IF v_creator.role = 'reseller' AND p_devices_max > 1 THEN
-        v_allow_multi_dev := COALESCE((v_creator.permissions->>'allow_multi_device')::boolean, FALSE);
-        IF NOT v_allow_multi_dev THEN
-            RETURN jsonb_build_object(
-                'success', false,
-                'error', 'Policy Restriction: Reseller keys are restricted to 1 device per key max to prevent account sharing.'
             );
         END IF;
     END IF;
@@ -112,12 +102,14 @@ BEGIN
     v_b2 := UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 5 FOR 4));
     v_new_key := UPPER(TRIM(COALESCE(NULLIF(p_custom_prefix, ''), 'RYMON'))) || '-' || v_game_tag || '-' || v_b1 || '-' || v_b2;
 
+    v_effective_plan := CASE WHEN p_plan ILIKE '%[VIP]%' THEN p_plan ELSE p_plan || ' [VIP]' END;
+
     -- 6. Insert License Record
     INSERT INTO public.rymon_licenses (
         license_key, game, plan_duration, creator_username,
         devices_used, devices_max, status, expires_at
     ) VALUES (
-        v_new_key, v_clean_game, p_plan, v_creator.username,
+        v_new_key, v_clean_game, v_effective_plan, v_creator.username,
         0, GREATEST(p_devices_max, 1), 'WAITING', NULL
     ) RETURNING * INTO v_inserted_lic;
 
@@ -129,8 +121,8 @@ BEGIN
             plan_duration, creator, devices_max, devices_used,
             aim_silent, hit_rate, esp_box, esp_skeleton, theme_color_index
         ) VALUES (
-            v_new_key, 'VIP Streamer', 'Free Fire MAX', true, false,
-            p_plan, v_creator.username, GREATEST(p_devices_max, 1), 0,
+            v_new_key, 'VIP_REALTIME', 'Free Fire MAX', true, false,
+            v_effective_plan, v_creator.username, GREATEST(p_devices_max, 1), 0,
             false, 80, true, true, 0
         ) ON CONFLICT (license_key) DO NOTHING;
     END IF;
@@ -142,7 +134,7 @@ BEGIN
         'Key Generated: ' || v_new_key,
         'KEY_GENERATED',
         v_clean_game,
-        p_plan || ' • ' || p_devices_max || ' Device(s) for ' || v_clean_game,
+        v_effective_plan || ' • ' || p_devices_max || ' Device(s) for ' || v_clean_game,
         v_creator.username,
         'SUCCESS'
     );

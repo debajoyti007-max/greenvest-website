@@ -1317,23 +1317,6 @@ export async function generateLicenseKeyBackend(params: {
     }
   }
 
-  // 2. Role Policy Enforcement: Reseller Max Devices & Bulk Limit
-  if (creator.role === 'reseller') {
-    const maxDevAllowed = policy.reseller_max_devices_limit ?? 1
-    if (safeDevices > maxDevAllowed) {
-      return {
-        success: false,
-        error: `Policy Restriction: Reseller keys are restricted to a maximum of ${maxDevAllowed} device(s) per key.`
-      }
-    }
-    const maxBulkAllowed = policy.reseller_max_bulk_limit ?? 10
-    if (safeQuantity > maxBulkAllowed) {
-      return {
-        success: false,
-        error: `Policy Restriction: Resellers are limited to generating a maximum of ${maxBulkAllowed} keys per batch.`
-      }
-    }
-  }
 
   const prefix = (customPrefix?.trim() || 'RYMON').toUpperCase()
   let gameTag = 'VIP'
@@ -1396,8 +1379,9 @@ export async function generateLicenseKeyBackend(params: {
       }
 
       const creatorName = accRow?.username || creator.username
-      const effectivePlanDuration = params.isVipRealtime ? `${duration} [VIP]` : duration
-      const effectiveStreamerName = params.isVipRealtime ? 'VIP_REALTIME' : 'VIP Streamer'
+      const isRealtime = params.isVipRealtime !== false
+      const effectivePlanDuration = isRealtime ? `${duration} [VIP]` : duration
+      const effectiveStreamerName = isRealtime ? 'VIP_REALTIME' : 'VIP Streamer'
 
       const licPayloads = generatedKeys.map((k) => ({
         license_key: k,
@@ -1475,11 +1459,14 @@ export async function generateLicenseKeyBackend(params: {
     }
   }
 
+  const isRealtimeFallback = params.isVipRealtime !== false
+  const effectivePlanDurationFallback = isRealtimeFallback ? `${duration} [VIP]` : duration
+
   const newLics: RymonLicense[] = generatedKeys.map((k, idx) => ({
     id: Math.floor(38508 + Math.random() * 1000) + idx,
     license_key: k,
     game,
-    plan_duration: duration,
+    plan_duration: effectivePlanDurationFallback,
     creator_username: creator.username,
     devices_used: 0,
     devices_max: safeDevices,
@@ -1506,7 +1493,7 @@ export async function generateLicenseKeyBackend(params: {
     title: safeQuantity > 1 ? `Bulk Generated ${safeQuantity} Keys` : `Key Generated #${newLics[0].id}`,
     event_type: 'KEY_GENERATED',
     game,
-    details: `${safeQuantity}x ${duration} • ${safeDevices} Device(s) • Cost: ${creator.role === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
+    details: `${safeQuantity}x ${effectivePlanDurationFallback} • ${safeDevices} Device(s) • Cost: ${creator.role === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
     actor_username: creator.username,
     status: 'SUCCESS',
     created_at: new Date().toISOString()
