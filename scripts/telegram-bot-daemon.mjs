@@ -33,9 +33,10 @@ if (!BOT_TOKEN) {
 }
 const OWNER_CHAT_ID = resolveSecret('OWNER_CHAT_ID', '5831800759') // @montage007pc (Montage)
 const SUPABASE_URL = resolveSecret('VITE_SUPABASE_URL', 'https://zvjqpigduyvczidzafus.supabase.co')
-const SUPABASE_ANON_KEY = resolveSecret('VITE_SUPABASE_ANON_KEY', 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR')
+const SUPABASE_SERVICE_KEY = resolveSecret('SUPABASE_SERVICE_ROLE_KEY') || resolveSecret('SUPABASE_SECRET_KEY')
+const SUPABASE_KEY = SUPABASE_SERVICE_KEY || resolveSecret('VITE_SUPABASE_ANON_KEY', 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR')
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false },
   realtime: { transport: ws }
 })
