@@ -25,6 +25,7 @@ export interface RymonAccount {
     security?: boolean
     allow_custom_apps?: boolean
     allow_multi_device?: boolean
+    allow_web_remote?: boolean
   }
 }
 
@@ -1496,16 +1497,20 @@ export async function generateLicenseKeyBackend(params: {
   if (isRealtime && creator.role !== 'owner') {
     const isReseller = creator.role === 'reseller'
     const isAdmin = creator.role === 'admin'
-    const vipAllowed = isReseller
-      ? Boolean(policy.allow_reseller_web_remote ?? false)
-      : isAdmin
-      ? Boolean(policy.allow_admin_web_remote ?? true)
-      : false
+    const userPerm = creator.permissions?.allow_web_remote
+    const vipAllowed =
+      userPerm !== undefined
+        ? Boolean(userPerm)
+        : isReseller
+        ? Boolean(policy.allow_reseller_web_remote ?? false)
+        : isAdmin
+        ? Boolean(policy.allow_admin_web_remote ?? true)
+        : false
 
     if (!vipAllowed) {
       return {
         success: false,
-        error: `Permission Denied (Strict Policy): Reseller accounts are locked to Standard APK keys only. VIP Web Remote key generation is restricted by Owner.`
+        error: `Permission Denied: Your account is locked to Standard APK keys only. Owner permission is required to generate VIP Web Remote keys.`
       }
     }
   }

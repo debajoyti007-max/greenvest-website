@@ -423,7 +423,8 @@ export default function RymonConnect() {
                 prev.expires_at !== freshMe.expires_at ||
                 prev.uplink !== freshMe.uplink ||
                 prev.permissions?.allow_custom_apps !== freshMe.permissions?.allow_custom_apps ||
-                prev.permissions?.allow_multi_device !== freshMe.permissions?.allow_multi_device
+                prev.permissions?.allow_multi_device !== freshMe.permissions?.allow_multi_device ||
+                prev.permissions?.allow_web_remote !== freshMe.permissions?.allow_web_remote
               ) {
                 localStorage.setItem('rymon_session_user', JSON.stringify(freshMe))
                 return freshMe
@@ -1048,10 +1049,12 @@ export default function RymonConnect() {
 
   const canGenerateVipRemote = useMemo(() => {
     if (isOwner) return true
+    const userPerm = currentUser?.permissions?.allow_web_remote
+    if (userPerm !== undefined) return Boolean(userPerm)
     if (isAdmin) return securityPolicy.allow_admin_web_remote ?? true
     if (isReseller) return securityPolicy.allow_reseller_web_remote ?? false
     return false
-  }, [isOwner, isAdmin, isReseller, securityPolicy.allow_admin_web_remote, securityPolicy.allow_reseller_web_remote])
+  }, [isOwner, isAdmin, isReseller, currentUser?.permissions?.allow_web_remote, securityPolicy.allow_admin_web_remote, securityPolicy.allow_reseller_web_remote])
 
   const basePlanPrice = effectiveUserPrices[genDuration] ?? 35
   const vipSurchargePercent = Math.max(0, Number(securityPolicy.vip_price_surcharge_percent ?? 50))
@@ -1147,7 +1150,7 @@ export default function RymonConnect() {
 
     // Strict Reseller & Role Permission Check: VIP Web Remote
     if (isVipSelected && !canGenerateVipRemote) {
-      setGenError('Permission Denied (Strict Policy): Reseller accounts are locked to Standard APK keys only. VIP Web Remote key generation is restricted by Owner.')
+      setGenError('Permission Denied: Your account is locked to Standard APK keys by default. Owner permission is required to generate VIP Web Remote keys.')
       return
     }
 
@@ -2457,6 +2460,51 @@ export default function RymonConnect() {
       showToast(`Updated @${targetUsername}: ${allow ? '✨ Custom Allowed' : '🔒 FF MAX Only'}`)
     } catch {
       showToast('Failed to update user app permissions')
+    }
+  }
+
+  const isUserVipRemoteAllowed = (user?: RymonAccount | null) => {
+    if (!user) return false
+    if (user.role === 'owner') return true
+    const perm = user.permissions?.allow_web_remote
+    if (perm !== undefined) return Boolean(perm)
+    if (user.role === 'admin') return securityPolicy.allow_admin_web_remote ?? true
+    if (user.role === 'reseller') return securityPolicy.allow_reseller_web_remote ?? false
+    return false
+  }
+
+  const handleToggleUserVipRemote = async (targetUsername: string, allow: boolean) => {
+    try {
+      const updated = usersList.map((u) => {
+        if ((u.username || '').toLowerCase() === (targetUsername || '').toLowerCase()) {
+          return {
+            ...u,
+            permissions: {
+              ...(u.permissions || {}),
+              allow_web_remote: allow
+            }
+          }
+        }
+        return u
+      })
+      setUsersList(updated)
+      saveStoredAccounts(updated)
+
+      if (supabase) {
+        const targetObj = updated.find((u) => (u.username || '').toLowerCase() === (targetUsername || '').toLowerCase())
+        if (targetObj) {
+          await supabase
+            .from('rymon_accounts')
+            .update({
+              permissions: targetObj.permissions,
+              updated_at: new Date().toISOString()
+            })
+            .ilike('username', targetUsername)
+        }
+      }
+      showToast(`Updated @${targetUsername}: ${allow ? '👑 VIP Web Remote Permitted' : '🔒 APK Only'}`)
+    } catch {
+      showToast('Failed to update user VIP remote permissions')
     }
   }
 
@@ -4400,7 +4448,7 @@ export default function RymonConnect() {
                             <div
                               onClick={() => {
                                 if (!canGenerateVipRemote) {
-                                  showToast('🔒 Reseller accounts are locked to Standard APK keys only. Contact Owner to unlock VIP Web Remote generation.')
+                                  showToast('🔒 Reseller accounts are locked to Standard APK keys by default. Owner permission is required to unlock VIP Web Remote generation.')
                                   return
                                 }
                                 setGenEdition('vip')
@@ -4453,7 +4501,11 @@ export default function RymonConnect() {
                               </div>
                               {!canGenerateVipRemote ? (
                                 <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#f43f5e' }}>
-                                  🔒 STRICT RESELLER POLICY: Restricted to Standard APK
+                                  🔒 LOCKED BY DEFAULT (Owner Permission Required)
+                                </div>
+                              ) : isReseller ? (
+                                <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#05df72', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span>✓</span> PERMITTED BY OWNER (+{vipSurchargePercent}% SURCHARGE)
                                 </div>
                               ) : genEdition === 'vip' ? (
                                 <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -5531,23 +5583,42 @@ export default function RymonConnect() {
                                       💰
                                     </button>
                                     {isOwner && (u.role === 'reseller' || u.role === 'admin') && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleUserCustomApps(u.username, !isUserCustomAppAllowed(u))}
-                                        style={{
-                                          padding: '4px 8px',
-                                          borderRadius: '6px',
-                                          fontSize: '10px',
-                                          fontWeight: 800,
-                                          cursor: 'pointer',
-                                          background: isUserCustomAppAllowed(u) ? 'rgba(5, 223, 114, 0.16)' : 'rgba(239, 68, 68, 0.16)',
-                                          border: isUserCustomAppAllowed(u) ? '1px solid rgba(5, 223, 114, 0.45)' : '1px solid rgba(239, 68, 68, 0.45)',
-                                          color: isUserCustomAppAllowed(u) ? '#05df72' : '#f87171'
-                                        }}
-                                        title={isUserCustomAppAllowed(u) ? 'Click to Restrict to Free Fire MAX Only' : 'Click to Allow Custom App Key Generation'}
-                                      >
-                                        {isUserCustomAppAllowed(u) ? '✨ Custom Allowed' : '🔒 FF MAX Only'}
-                                      </button>
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleUserCustomApps(u.username, !isUserCustomAppAllowed(u))}
+                                          style={{
+                                            padding: '4px 8px',
+                                            borderRadius: '6px',
+                                            fontSize: '10px',
+                                            fontWeight: 800,
+                                            cursor: 'pointer',
+                                            background: isUserCustomAppAllowed(u) ? 'rgba(5, 223, 114, 0.16)' : 'rgba(239, 68, 68, 0.16)',
+                                            border: isUserCustomAppAllowed(u) ? '1px solid rgba(5, 223, 114, 0.45)' : '1px solid rgba(239, 68, 68, 0.45)',
+                                            color: isUserCustomAppAllowed(u) ? '#05df72' : '#f87171'
+                                          }}
+                                          title={isUserCustomAppAllowed(u) ? 'Click to Restrict to Free Fire MAX Only' : 'Click to Allow Custom App Key Generation'}
+                                        >
+                                          {isUserCustomAppAllowed(u) ? '✨ Custom Allowed' : '🔒 FF MAX Only'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleUserVipRemote(u.username, !isUserVipRemoteAllowed(u))}
+                                          style={{
+                                            padding: '4px 8px',
+                                            borderRadius: '6px',
+                                            fontSize: '10px',
+                                            fontWeight: 800,
+                                            cursor: 'pointer',
+                                            background: isUserVipRemoteAllowed(u) ? 'rgba(245, 158, 11, 0.18)' : 'rgba(148, 163, 184, 0.1)',
+                                            border: isUserVipRemoteAllowed(u) ? '1px solid rgba(245, 158, 11, 0.55)' : '1px solid rgba(148, 163, 184, 0.3)',
+                                            color: isUserVipRemoteAllowed(u) ? '#fbbf24' : '#94a3b8'
+                                          }}
+                                          title={isUserVipRemoteAllowed(u) ? 'Owner Permitted: Click to lock account to Standard APK only' : 'Locked by Default: Click to Permit VIP Web Remote key generation'}
+                                        >
+                                          {isUserVipRemoteAllowed(u) ? '👑 VIP Permitted' : '🔒 APK Only'}
+                                        </button>
+                                      </>
                                     )}
                                     <button
                                       onClick={() => {
