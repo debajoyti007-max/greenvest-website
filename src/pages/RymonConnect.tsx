@@ -151,6 +151,13 @@ export default function RymonConnect() {
   const [activities, setActivities] = useState<RymonActivity[]>([])
   const [streamerControls, setStreamerControls] = useState<StreamerControlRecord[]>([])
 
+  const keysListRef = useRef(keysList)
+  keysListRef.current = keysList
+  const usersListRef = useRef(usersList)
+  usersListRef.current = usersList
+  const streamerControlsRef = useRef(streamerControls)
+  streamerControlsRef.current = streamerControls
+
   // Dynamic Pricing Management State (Owner)
   const [globalPrices, setGlobalPrices] = useState<Record<string, number>>(() => getGlobalPriceMap())
   const [targetPriceUser, setTargetPriceUser] = useState<string>('')
@@ -319,19 +326,19 @@ export default function RymonConnect() {
     }
   }, [])
 
-  // 1B. Global 3-Second @Rymon007bot Responder (Services Customer 2/Day Key Resets & Owner Commands)
+  // 1B. Global 30-Second @Rymon007bot Responder (Services Customer 2/Day Key Resets & Owner Commands)
   useEffect(() => {
     let active = true
     const runTgPoll = () => {
       if (!active) return
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       const playingSet = new Set<string>()
-      streamerControls.forEach((ctrl) => {
+      streamerControlsRef.current.forEach((ctrl) => {
         if (isStreamerKeyActivelyPlaying(ctrl)) {
           playingSet.add(ctrl.license_key.toUpperCase())
         }
       })
-      pollAndReplyTelegramBotCommands(keysList, usersList, playingSet, (discoveredId) => {
+      pollAndReplyTelegramBotCommands(keysListRef.current, usersListRef.current, playingSet, (discoveredId) => {
         if (active) {
           setTelegramConfig((prev) => ({ ...prev, chat_id: discoveredId }))
         }
@@ -343,7 +350,7 @@ export default function RymonConnect() {
       active = false
       clearInterval(tgFastTimer)
     }
-  }, [keysList, usersList, streamerControls])
+  }, [])
 
   // 2. Fetch Live Supabase Data when Authenticated
   useEffect(() => {
@@ -405,8 +412,22 @@ export default function RymonConnect() {
           )
           if (freshMe) {
             setWalletBalance(freshMe.balance)
-            setCurrentUser(freshMe)
-            localStorage.setItem('rymon_session_user', JSON.stringify(freshMe))
+            setCurrentUser((prev) => {
+              if (
+                !prev ||
+                prev.balance !== freshMe.balance ||
+                prev.role !== freshMe.role ||
+                prev.status !== freshMe.status ||
+                prev.expires_at !== freshMe.expires_at ||
+                prev.uplink !== freshMe.uplink ||
+                prev.permissions?.allow_custom_apps !== freshMe.permissions?.allow_custom_apps ||
+                prev.permissions?.allow_multi_device !== freshMe.permissions?.allow_multi_device
+              ) {
+                localStorage.setItem('rymon_session_user', JSON.stringify(freshMe))
+                return freshMe
+              }
+              return prev
+            })
           }
         }
       }
@@ -489,7 +510,19 @@ export default function RymonConnect() {
               )
               if (currentUser?.username && updatedAcc?.username && currentUser.username.toLowerCase() === updatedAcc.username.toLowerCase()) {
                 setWalletBalance(updatedAcc.balance)
-                setCurrentUser((prev) => prev ? { ...prev, ...updatedAcc } : updatedAcc)
+                setCurrentUser((prev) => {
+                  if (
+                    !prev ||
+                    prev.balance !== updatedAcc.balance ||
+                    prev.role !== updatedAcc.role ||
+                    prev.status !== updatedAcc.status ||
+                    prev.expires_at !== updatedAcc.expires_at ||
+                    prev.uplink !== updatedAcc.uplink
+                  ) {
+                    return prev ? { ...prev, ...updatedAcc } : updatedAcc
+                  }
+                  return prev
+                })
               }
             } else if (payload.eventType === 'INSERT' && payload.new) {
               const newAcc = payload.new as RymonAccount
@@ -524,7 +557,8 @@ export default function RymonConnect() {
       isMounted = false
       clearInterval(statusPollTimer)
     }
-  }, [isAuthenticated, currentUser])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, currentUser?.username, currentUser?.role])
 
   // 3. Telemetry Realtime Subscription for Current Key
   useEffect(() => {
@@ -596,8 +630,8 @@ export default function RymonConnect() {
       if (!isMounted || sliderTimerRef.current) return
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
 
-      // Gentle 15-second background refresh for license status / expiry without spamming DB
-      if (Date.now() - lastDbSyncTime > 15000) {
+      // Gentle 60-second background refresh for license status / expiry without spamming DB
+      if (Date.now() - lastDbSyncTime > 60000) {
         syncFromSupabase()
       }
 
@@ -689,7 +723,7 @@ export default function RymonConnect() {
       } catch {}
 
       // 2. Render Fallback: If Render bridge is cold or network jitter, fallback to cached DB data
-      if (Date.now() - lastDbSyncTime > 15000) {
+      if (Date.now() - lastDbSyncTime > 60000) {
         await syncFromSupabase()
       }
       if (isMounted) {
@@ -777,6 +811,7 @@ export default function RymonConnect() {
       clearInterval(fastSyncTimer)
       if (supabase) supabase.removeChannel(channel)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, currentKey, currentUser?.role])
 
   // 4. Live Countdown Clock
@@ -977,11 +1012,13 @@ export default function RymonConnect() {
   // 7. KEY GENERATION ENGINE WITH DYNAMIC DEFAULT + INDIVIDUAL USER PRICING
   const effectiveUserPrices = useMemo(() => {
     return getEffectivePriceMap(currentUser?.username)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.username, globalPrices, allCustomUserMaps])
 
   const hasCustomPricingForCurrentUser = useMemo(() => {
     if (!currentUser?.username) return false
     return Boolean(getUserCustomPriceMap(currentUser.username))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.username, allCustomUserMaps])
 
   const unitPlanPrice = effectiveUserPrices[genDuration] ?? 35
@@ -2383,7 +2420,7 @@ export default function RymonConnect() {
     } else if (!isRootOwner && (activeTab === 'telegram' || activeTab === 'connect-api' || activeTab === 'apps')) {
       setActiveTab('overview')
     }
-  }, [isStreamer, isReseller, isAdmin, isOwner, activeTab])
+  }, [isStreamer, isReseller, isAdmin, isOwner, isRootOwner, activeTab])
 
   return (
     <div style={styles.appShell}>
@@ -9766,12 +9803,6 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.06em',
     filter: 'drop-shadow(0 0 12px rgba(168, 85, 247, 0.5))'
   },
-  brandCyanPill: {
-    background: 'linear-gradient(135deg, #c084fc 0%, #a855f7 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    textShadow: '0 0 12px rgba(168, 85, 247, 0.6)'
-  },
   brandSubText: {
     fontSize: '10px',
     color: '#a78bfa',
@@ -9991,17 +10022,6 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     boxSizing: 'border-box',
     width: '100%'
-  },
-  quickAccountsRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
-    marginTop: '4px'
-  },
-  quickLabel: {
-    fontSize: '11px',
-    color: '#64748b'
   },
   chipBtn: {
     padding: '4px 10px',
@@ -10567,30 +10587,6 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     boxShadow: '0 0 10px rgba(244, 63, 94, 0.25)'
   },
-  telemetryBar: {
-    display: 'flex',
-    gap: '24px',
-    padding: '12px 18px',
-    backgroundColor: 'rgba(18, 14, 29, 0.85)',
-    border: '1px solid rgba(168, 85, 247, 0.25)',
-    borderRadius: '12px',
-    marginBottom: '20px',
-    flexWrap: 'wrap'
-  },
-  telemetryBarItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '12px'
-  },
-  telemetryBarLabel: {
-    color: '#a78bfa',
-    fontWeight: 700
-  },
-  telemetryBarVal: {
-    color: '#f8fafc',
-    fontWeight: 700
-  },
   controlGrid3Col: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
@@ -10626,9 +10622,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '13px',
     fontWeight: 700,
     color: '#f8fafc'
-  },
-  toggleDesc: {
-    display: 'none'
   },
   sliderBlock: {
     padding: '10px 0',

@@ -1754,7 +1754,7 @@ async function startDaemon() {
     saveSystemConfigValue('tg_daemon_heartbeat', { ts: Date.now() })
   }
   publishHeartbeat()
-  setInterval(publishHeartbeat, 12000)
+  setInterval(publishHeartbeat, 45000)
 
   let offset = 0
   while (true) {

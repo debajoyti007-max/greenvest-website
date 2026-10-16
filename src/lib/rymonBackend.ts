@@ -1278,10 +1278,25 @@ export const DEFAULT_KEY_PRICES: Record<string, number> = {
 const GLOBAL_PRICE_STORAGE_KEY = 'rymon_global_key_prices_v1'
 const USER_CUSTOM_PRICE_STORAGE_KEY = 'rymon_user_custom_prices_v1'
 
-export async function syncPricingFromSupabase(): Promise<{
+let lastPricingSyncTime = 0
+let cachedPricingResult: {
+  globalPrices: Record<string, number>
+  customUserMaps: Record<string, Record<string, number>>
+} | null = null
+
+export function invalidatePricingCache(): void {
+  lastPricingSyncTime = 0
+  cachedPricingResult = null
+}
+
+export async function syncPricingFromSupabase(force: boolean = false): Promise<{
   globalPrices: Record<string, number>
   customUserMaps: Record<string, Record<string, number>>
 }> {
+  const now = Date.now()
+  if (!force && cachedPricingResult && now - lastPricingSyncTime < 60000) {
+    return cachedPricingResult
+  }
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -1305,10 +1320,12 @@ export async function syncPricingFromSupabase(): Promise<{
       }
     } catch {}
   }
-  return {
+  lastPricingSyncTime = now
+  cachedPricingResult = {
     globalPrices: getGlobalPriceMap(),
     customUserMaps: getAllUserCustomPriceMaps()
   }
+  return cachedPricingResult
 }
 
 export function getGlobalPriceMap(): Record<string, number> {
@@ -1323,6 +1340,7 @@ export function getGlobalPriceMap(): Record<string, number> {
 }
 
 export function saveGlobalPriceMap(prices: Record<string, number>): Record<string, number> {
+  invalidatePricingCache()
   const clean: Record<string, number> = { ...DEFAULT_KEY_PRICES }
   for (const k of Object.keys(DEFAULT_KEY_PRICES)) {
     const val = Number(prices[k])
@@ -1363,6 +1381,7 @@ export function saveUserCustomPriceMap(
   username: string,
   prices: Record<string, number>
 ): Record<string, number> {
+  invalidatePricingCache()
   const cleanUser = username.trim()
   const all = getAllUserCustomPriceMaps()
   const existingKey = Object.keys(all).find((u) => u.toLowerCase() === cleanUser.toLowerCase()) || cleanUser
@@ -1386,6 +1405,7 @@ export function saveUserCustomPriceMap(
 }
 
 export function clearUserCustomPriceMap(username: string): void {
+  invalidatePricingCache()
   if (!username) return
   const all = getAllUserCustomPriceMaps()
   const existingKey = Object.keys(all).find((u) => u.toLowerCase() === username.trim().toLowerCase())
@@ -1859,9 +1879,18 @@ export function getSovereignSecurityPolicy(): SovereignSecurityPolicy {
   return { ...DEFAULT_SECURITY_POLICY }
 }
 
+let lastSecurityPolicySyncTime = 0
+let cachedSecurityPolicyResult: SovereignSecurityPolicy | null = null
+
+export function invalidateSecurityPolicyCache(): void {
+  lastSecurityPolicySyncTime = 0
+  cachedSecurityPolicyResult = null
+}
+
 export function saveSovereignSecurityPolicy(
   partial: Partial<SovereignSecurityPolicy>
 ): SovereignSecurityPolicy {
+  invalidateSecurityPolicyCache()
   const next: SovereignSecurityPolicy = {
     ...getSovereignSecurityPolicy(),
     ...partial
@@ -1881,7 +1910,11 @@ export function saveSovereignSecurityPolicy(
   return next
 }
 
-export async function syncSecurityPolicyFromSupabase(): Promise<SovereignSecurityPolicy> {
+export async function syncSecurityPolicyFromSupabase(force: boolean = false): Promise<SovereignSecurityPolicy> {
+  const now = Date.now()
+  if (!force && cachedSecurityPolicyResult && now - lastSecurityPolicySyncTime < 60000) {
+    return cachedSecurityPolicyResult
+  }
   if (supabase) {
     try {
       const { data } = await supabase
@@ -1913,7 +1946,9 @@ export async function syncSecurityPolicyFromSupabase(): Promise<SovereignSecurit
       }
     } catch {}
   }
-  return getSovereignSecurityPolicy()
+  lastSecurityPolicySyncTime = now
+  cachedSecurityPolicyResult = getSovereignSecurityPolicy()
+  return cachedSecurityPolicyResult
 }
 
 function getPausedKeyTimestamps(): Record<string, number> {
@@ -4179,6 +4214,8 @@ async function resolveTelegramResellerAccount(
 
 const TG_OFFSET_STORAGE_KEY = 'rymon_tg_bot_last_update_id_v1'
 let isPollingTelegramLock = false
+let lastDaemonCheckTime = 0
+let lastKnownDaemonAlive = false
 
 export async function pollAndReplyTelegramBotCommands(
   keysList: RymonLicense[],
@@ -4189,6 +4226,12 @@ export async function pollAndReplyTelegramBotCommands(
   if (isPollingTelegramLock) return
   isPollingTelegramLock = true
   try {
+    const now = Date.now()
+    if (lastKnownDaemonAlive && now - lastDaemonCheckTime < 45000) {
+      // 24/7 Background Daemon is actively handling Telegram; skip browser poll immediately without DB query
+      return
+    }
+
     // Coordinate with 24/7 Background Daemon so we never trigger 409 Conflict on getUpdates
     if (supabase) {
       try {
@@ -4197,10 +4240,14 @@ export async function pollAndReplyTelegramBotCommands(
           .select('value')
           .eq('key', 'tg_daemon_heartbeat')
           .maybeSingle()
+        lastDaemonCheckTime = Date.now()
         const lastHb = Number((hbRow?.value as { ts?: number })?.ts || 0)
-        if (lastHb > 0 && Date.now() - lastHb < 25000) {
+        if (lastHb > 0 && Date.now() - lastHb < 90000) {
+          lastKnownDaemonAlive = true
           // 24/7 Background Daemon is actively long-polling @Rymon007bot; skip browser getUpdates to avoid 409 Conflict
           return
+        } else {
+          lastKnownDaemonAlive = false
         }
       } catch {}
     }
