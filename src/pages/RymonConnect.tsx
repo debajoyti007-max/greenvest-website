@@ -168,6 +168,7 @@ export default function RymonConnect() {
 
   // Generate Key Form State
   const [genGame, setGenGame] = useState('Free Fire MAX')
+  const [genEdition, setGenEdition] = useState<'normal' | 'vip'>('normal')
   const [isCustomAppMode, setIsCustomAppMode] = useState(false)
   const [customAppNameInput, setCustomAppNameInput] = useState('')
   const [genDuration, setGenDuration] = useState('1 Day')
@@ -191,6 +192,7 @@ export default function RymonConnect() {
   const [keyStatusFilter, setKeyStatusFilter] = useState<
     'ALL' | 'PLAYING' | 'ACTIVE' | 'PAUSED' | 'WAITING' | 'EXPIRED' | 'BANNED'
   >('ALL')
+  const [keyEditionFilter, setKeyEditionFilter] = useState<'ALL' | 'NORMAL' | 'VIP'>('ALL')
   const [keyCreatorFilter, setKeyCreatorFilter] = useState<string>('ALL')
   const [keyGameFilter, setKeyGameFilter] = useState<string>('ALL')
   const [searchUserQuery, setSearchUserQuery] = useState('')
@@ -997,12 +999,35 @@ export default function RymonConnect() {
       .eq('license_key', licenseKey)
 
     if (!error) {
-      await supabase
-        .from('rymon_streamer_controls')
-        .update({ streamer_name: makeVip ? 'VIP_REALTIME' : 'VIP Streamer', plan_duration: newPlan })
-        .eq('license_key', licenseKey)
+      if (makeVip) {
+        const { data: existingCtrl } = await supabase
+          .from('rymon_streamer_controls')
+          .select('id')
+          .eq('license_key', licenseKey)
+          .maybeSingle()
 
-      showToast(`Key ${licenseKey} ${makeVip ? 'upgraded to 👑 VIP Realtime' : 'set to ⚡ Standard'}!`)
+        if (!existingCtrl) {
+          await supabase.from('rymon_streamer_controls').insert(
+            buildDefaultStreamerControlPayload({
+              license_key: licenseKey,
+              streamer_name: 'VIP_REALTIME',
+              plan_duration: newPlan
+            })
+          )
+        } else {
+          await supabase
+            .from('rymon_streamer_controls')
+            .update({ streamer_name: 'VIP_REALTIME', plan_duration: newPlan })
+            .eq('license_key', licenseKey)
+        }
+      } else {
+        await supabase
+          .from('rymon_streamer_controls')
+          .update({ streamer_name: 'VIP Streamer', plan_duration: newPlan })
+          .eq('license_key', licenseKey)
+      }
+
+      showToast(`Key ${licenseKey} ${makeVip ? 'upgraded to 👑 VIP Streamer Remote' : 'set to 📱 Standard APK'}!`)
       fetchAllLicenses(currentUser).then(setKeysList)
     } else {
       showToast(`Failed to update key tier: ${error.message}`)
@@ -1021,7 +1046,19 @@ export default function RymonConnect() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.username, allCustomUserMaps])
 
-  const unitPlanPrice = effectiveUserPrices[genDuration] ?? 35
+  const canGenerateVipRemote = useMemo(() => {
+    if (isOwner) return true
+    if (isAdmin) return securityPolicy.allow_admin_web_remote ?? true
+    if (isReseller) return securityPolicy.allow_reseller_web_remote ?? false
+    return false
+  }, [isOwner, isAdmin, isReseller, securityPolicy.allow_admin_web_remote, securityPolicy.allow_reseller_web_remote])
+
+  const basePlanPrice = effectiveUserPrices[genDuration] ?? 35
+  const vipSurchargePercent = Math.max(0, Number(securityPolicy.vip_price_surcharge_percent ?? 50))
+  const isVipSelected = genEdition === 'vip' && !isCustomAppMode
+  const unitPlanPrice = isVipSelected
+    ? Math.round(basePlanPrice * (1 + vipSurchargePercent / 100))
+    : basePlanPrice
   const singleKeyPrice = unitPlanPrice * Math.max(1, genDevicesMax)
   const projectedInvoice = singleKeyPrice * Math.max(1, genQuantity)
 
@@ -1108,6 +1145,12 @@ export default function RymonConnect() {
       }
     }
 
+    // Strict Reseller & Role Permission Check: VIP Web Remote
+    if (isVipSelected && !canGenerateVipRemote) {
+      setGenError('Permission Denied (Strict Policy): Reseller accounts are locked to Standard APK keys only. VIP Web Remote key generation is restricted by Owner.')
+      return
+    }
+
     // If custom name was entered and is not yet in registered apps, save it automatically
     if (isCustomAppMode && customAppNameInput.trim()) {
       const trimmed = customAppNameInput.trim()
@@ -1132,7 +1175,7 @@ export default function RymonConnect() {
       customPrefix: genCustomPrefix,
       devicesMax: genDevicesMax,
       quantity: genQuantity,
-      isVipRealtime: true
+      isVipRealtime: isVipSelected
     })
     setAuthLoading(false)
 
@@ -1148,14 +1191,14 @@ export default function RymonConnect() {
       const createdCount = mintedKeys.length
       showToast(
         createdCount > 1
-          ? `⚡ Generated ${createdCount} keys (${genDuration})! Wallet updated.`
+          ? `⚡ Generated ${createdCount} keys (${genDuration}${isVipSelected ? ' • VIP Web Remote' : ' • Standard APK'})! Wallet updated.`
           : `Key ${res.key} generated! Wallet balance updated.`
       )
       if (telegramConfig.is_active && telegramConfig.bot_token) {
         const tgKeyMsg = [
           `⚡ <b>RYMON OFFICIAL — NEW KEY${createdCount > 1 ? 'S' : ''} GENERATED</b>`,
           `👤 <b>Seller:</b> @${currentUser?.username || 'admin'} (${String(currentUser?.role || 'user').toUpperCase()})`,
-          `🎮 <b>Game:</b> ${genGame} • <b>Plan:</b> ${genDuration}`,
+          `🎮 <b>Game:</b> ${genGame} • <b>Edition:</b> ${isVipSelected ? '👑 VIP Web Remote (+50%)' : '📱 Standard APK'} • <b>Plan:</b> ${genDuration}`,
           `📱 <b>Max Devices:</b> ${genDevicesMax} • <b>Qty:</b> ${createdCount}`,
           ``,
           ...mintedKeys.slice(0, 25).map((k, idx) => `${idx + 1}. <code>${k}</code>`),
@@ -1470,18 +1513,35 @@ export default function RymonConnect() {
   }
 
   const formatDeliverySlip = (key: string, duration?: string, gameName?: string) => {
+    const isVip = Boolean(duration?.includes('[VIP]'))
     const cleanDuration = (duration || '30 Days').replace(' [VIP]', '').replace('[VIP]', '').trim()
-    const cleanGame = gameName || 'FREE FIRE MAX'
+    const cleanGame = gameName || 'Free Fire MAX'
+
+    if (isVip) {
+      return [
+        '👑 PAYMENT SUCCESSFUL — RYMON VIP STREAMER EDITION',
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        `🎮 GAME : ${cleanGame}`,
+        `⏳ DURATION : ${cleanDuration} [VIP WEB REMOTE]`,
+        `🔑 LICENSE KEY : ${key}`,
+        '📱 APP LOGIN : Enter key in Android APK to authenticate',
+        `💻 WEB REMOTE CONSOLE : https://greenvest.shop/connect?key=${encodeURIComponent(key)}`,
+        '✨ VIP PERKS : 100% Invisible on screen • Live Remote Aimbot & ESP',
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        '❤️ Thank you for choosing RYMON VIP!'
+      ].join('\n')
+    }
+
     return [
-      '✅ Payment Successful!',
-      '',
-      '🎮 Game: 🛒 RYMON STREAMER',
-      `🎮 GAME NAME : ${cleanGame}`,
-      `⏳ Duration: ${cleanDuration}`,
-      '📦 Quantity: 1',
-      `🔑 Key: ${key}`,
-      '',
-      '🙏 Thank you for your purchase!'
+      '📱 PAYMENT SUCCESSFUL — RYMON STANDARD APK LICENSE',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      `🎮 GAME : ${cleanGame}`,
+      `⏳ DURATION : ${cleanDuration} (Standard Mobile)`,
+      `🔑 LICENSE KEY : ${key}`,
+      '📲 HOW TO USE : Login directly inside your APK game menu on your phone',
+      'ℹ️ NOTE : Standard APK license for mobile use (Web Remote disabled)',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '❤️ Thank you for your purchase!'
     ].join('\n')
   }
 
@@ -2304,6 +2364,12 @@ export default function RymonConnect() {
       ) {
         return false
       }
+      if (keyEditionFilter === 'VIP' && !k.plan_duration?.includes('[VIP]')) {
+        return false
+      }
+      if (keyEditionFilter === 'NORMAL' && k.plan_duration?.includes('[VIP]')) {
+        return false
+      }
       if (!searchKeyQuery.trim()) return true
       const q = searchKeyQuery.toLowerCase()
       return (
@@ -2313,7 +2379,7 @@ export default function RymonConnect() {
         hwid.includes(q)
       )
     })
-  }, [keysList, searchKeyQuery, keyStatusFilter, keyCreatorFilter, keyGameFilter, onlineKeySet])
+  }, [keysList, searchKeyQuery, keyStatusFilter, keyEditionFilter, keyCreatorFilter, keyGameFilter, onlineKeySet])
 
   const filteredUsers = useMemo(() => {
     if (!searchUserQuery.trim()) return usersList
@@ -2342,7 +2408,9 @@ export default function RymonConnect() {
       (k) => !k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(String(k.license_key || '').toUpperCase())
     ).length
     const notPlaying = Math.max(0, total - playingNow)
-    return { total, active, paused, unused, expired, banned, reset, playingNow, notPlaying }
+    const vipCount = validKeys.filter((k) => k.plan_duration?.includes('[VIP]')).length
+    const normalCount = Math.max(0, total - vipCount)
+    return { total, active, paused, unused, expired, banned, reset, playingNow, notPlaying, vipCount, normalCount }
   }, [keysList, onlineKeySet])
 
   // Cross-App & Reseller Generation Permission Engine
@@ -4246,39 +4314,169 @@ export default function RymonConnect() {
                         />
                       </div>
 
-                      <div
-                        style={{
-                          marginTop: '16px',
-                          padding: '12px 14px',
-                          background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(16, 185, 129, 0.1))',
-                          border: '1px solid rgba(250, 204, 21, 0.45)',
-                          borderRadius: '10px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '12px'
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: '12px', fontWeight: 800, color: '#fde047', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>⚡</span> VIP REALTIME ACTIVE (RENDER RAM &bull; &lt;50ms)
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                            All keys (Owner, Admin &amp; Reseller) automatically route through the dedicated Render RAM bridge (&lt;50ms latency, zero database load, instant live remote).
+                      {isCustomAppMode ? (
+                        <div
+                          style={{
+                            marginTop: '16px',
+                            padding: '12px 14px',
+                            background: 'rgba(15, 23, 42, 0.7)',
+                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            borderRadius: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px'
+                          }}
+                        >
+                          <span style={{ fontSize: '18px' }}>📦</span>
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: 800, color: '#38bdf8' }}>
+                              CUSTOM APPLICATION MODE (PURE KEYAUTH ONLY)
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                              Keys generated for custom third-party apps use direct KeyAuth API verification. Web remote controls are exclusively designed for Free Fire MAX.
+                            </div>
                           </div>
                         </div>
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#fde047', background: 'rgba(250, 204, 21, 0.2)', padding: '5px 10px', borderRadius: '6px', whiteSpace: 'nowrap' }}>
-                          ⚡ 100% VIP REALTIME
-                        </span>
-                      </div>
+                      ) : (
+                        <div style={{ marginTop: '18px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <label style={{ ...styles.formLabel, margin: 0 }}>SELECT KEY EDITION &bull; ARCHITECTURE</label>
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                              Base: ₹{basePlanPrice} {isVipSelected ? `• +${vipSurchargePercent}% VIP Web Surcharge` : '• Zero Web Egress'}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+                            {/* Card 1: Standard Mobile APK */}
+                            <div
+                              onClick={() => setGenEdition('normal')}
+                              style={{
+                                padding: '14px 16px',
+                                borderRadius: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                background: genEdition === 'normal'
+                                  ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.16), rgba(15, 23, 42, 0.85))'
+                                  : 'rgba(15, 23, 42, 0.55)',
+                                border: genEdition === 'normal'
+                                  ? '1.5px solid #00d9ff'
+                                  : '1px solid rgba(51, 65, 85, 0.5)',
+                                boxShadow: genEdition === 'normal'
+                                  ? '0 0 20px rgba(0, 217, 255, 0.2), inset 0 0 15px rgba(0, 217, 255, 0.08)'
+                                  : 'none',
+                                position: 'relative'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                <span style={{
+                                  fontSize: '10px',
+                                  fontWeight: 800,
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  background: genEdition === 'normal' ? 'rgba(0, 217, 255, 0.2)' : 'rgba(148, 163, 184, 0.1)',
+                                  color: genEdition === 'normal' ? '#00d9ff' : '#94a3b8',
+                                  border: genEdition === 'normal' ? '1px solid rgba(0, 217, 255, 0.5)' : '1px solid rgba(148, 163, 184, 0.2)'
+                                }}>
+                                  📱 STANDARD MOBILE
+                                </span>
+                                <span style={{ fontSize: '14px', fontWeight: 800, color: '#00d9ff' }}>
+                                  ₹{basePlanPrice}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', marginBottom: '4px' }}>
+                                Normal APK In-Game Only
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: '1.4' }}>
+                                Direct in-game mod/injector auth. Standard mobile play with zero web overhead.
+                              </div>
+                              {genEdition === 'normal' && (
+                                <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span>✓</span> ACTIVE SELECTION (BASE PRICE)
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Card 2: VIP Streamer Remote */}
+                            <div
+                              onClick={() => {
+                                if (!canGenerateVipRemote) {
+                                  showToast('🔒 Reseller accounts are locked to Standard APK keys only. Contact Owner to unlock VIP Web Remote generation.')
+                                  return
+                                }
+                                setGenEdition('vip')
+                              }}
+                              style={{
+                                padding: '14px 16px',
+                                borderRadius: '12px',
+                                cursor: canGenerateVipRemote ? 'pointer' : 'not-allowed',
+                                opacity: canGenerateVipRemote ? 1 : 0.65,
+                                transition: 'all 0.2s ease',
+                                background: genEdition === 'vip'
+                                  ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(15, 23, 42, 0.9))'
+                                  : 'rgba(15, 23, 42, 0.55)',
+                                border: genEdition === 'vip'
+                                  ? '1.5px solid #f59e0b'
+                                  : '1px solid rgba(51, 65, 85, 0.5)',
+                                boxShadow: genEdition === 'vip'
+                                  ? '0 0 20px rgba(245, 158, 11, 0.25), inset 0 0 15px rgba(245, 158, 11, 0.1)'
+                                  : 'none',
+                                position: 'relative'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                <span style={{
+                                  fontSize: '10px',
+                                  fontWeight: 800,
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  background: genEdition === 'vip' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(148, 163, 184, 0.1)',
+                                  color: genEdition === 'vip' ? '#fbbf24' : '#94a3b8',
+                                  border: genEdition === 'vip' ? '1px solid rgba(245, 158, 11, 0.6)' : '1px solid rgba(148, 163, 184, 0.2)'
+                                }}>
+                                  👑 VIP STREAMER REMOTE
+                                </span>
+                                <div style={{ textAlign: 'right' }}>
+                                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#fbbf24' }}>
+                                    ₹{Math.round(basePlanPrice * (1 + vipSurchargePercent / 100))}
+                                  </span>
+                                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#fbbf24', marginLeft: '4px', background: 'rgba(245, 158, 11, 0.2)', padding: '2px 4px', borderRadius: '4px' }}>
+                                    +{vipSurchargePercent}%
+                                  </span>
+                                </div>
+                              </div>
+                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>Web Live Controller</span>
+                                {!canGenerateVipRemote && <span style={{ fontSize: '11px', color: '#f43f5e' }}>🔒 LOCKED</span>}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: '1.4' }}>
+                                Browser remote control (ESP radar, live Aimbot toggle, silent patch). 100% clean for screen recording.
+                              </div>
+                              {!canGenerateVipRemote ? (
+                                <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#f43f5e' }}>
+                                  🔒 STRICT RESELLER POLICY: Restricted to Standard APK
+                                </div>
+                              ) : genEdition === 'vip' ? (
+                                <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span>✓</span> ACTIVE SELECTION (+{vipSurchargePercent}% SURCHARGE)
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Cost Summary Box */}
                       <div style={styles.invoiceSummaryBox}>
                         <div>
                           <div style={{ fontSize: '13px', color: '#94a3b8' }}>
                             Invoice Cost ({genQuantity} Key{genQuantity > 1 ? 's' : ''} × {genDevicesMax} Device{genDevicesMax > 1 ? 's' : ''} × ₹{unitPlanPrice}):
+                            {isVipSelected && (
+                              <span style={{ marginLeft: '6px', fontSize: '11px', color: '#fbbf24', fontWeight: 700 }}>
+                                (Base ₹{basePlanPrice} + {vipSurchargePercent}% VIP Remote)
+                              </span>
+                            )}
                           </div>
-                          <div style={{ fontSize: '20px', fontWeight: 700, color: '#00d9ff' }}>
+                          <div style={{ fontSize: '20px', fontWeight: 700, color: isVipSelected ? '#fbbf24' : '#00d9ff' }}>
                             {isOwner ? '₹0 (Owner Free Mint)' : `₹${projectedInvoice.toLocaleString('en-IN')}`}
                           </div>
                         </div>
@@ -4304,10 +4502,10 @@ export default function RymonConnect() {
                         style={{ ...styles.submitBtn, marginTop: '24px' }}
                       >
                         {authLoading
-                          ? 'ALLOCATING RYMON VIP KEYS...'
-                          : genQuantity > 1
-                          ? `⚡ GENERATE ${genQuantity} KEYS NOW`
-                          : 'GENERATE & DEDUCT WALLET'}
+                          ? (isVipSelected ? 'ALLOCATING RYMON VIP KEYS...' : 'GENERATING STANDARD APK KEYS...')
+                          : isVipSelected
+                          ? `👑 GENERATE ${genQuantity > 1 ? `${genQuantity} VIP KEYS` : 'VIP KEY'} (${genDuration})`
+                          : `📱 GENERATE ${genQuantity > 1 ? `${genQuantity} STANDARD KEYS` : 'STANDARD KEY'} (${genDuration})`}
                       </button>
                     </form>
 
@@ -4556,6 +4754,54 @@ export default function RymonConnect() {
                         }}
                       >
                         {st.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Row 1B: Edition Filter Pills (Standard Mobile APK vs VIP Streamer Remote) */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '8px',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      paddingTop: '8px',
+                      borderTop: '1px solid rgba(30, 41, 59, 0.5)'
+                    }}
+                  >
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      TIER / EDITION:
+                    </span>
+                    {(
+                      [
+                        { id: 'ALL', label: `ALL EDITIONS (${stats.total})`, color: '#38bdf8' },
+                        { id: 'NORMAL', label: `📱 STANDARD APK (${stats.normalCount})`, color: '#00d9ff' },
+                        { id: 'VIP', label: `👑 VIP STREAMER (${stats.vipCount})`, color: '#f59e0b' }
+                      ] as const
+                    ).map((ed) => (
+                      <button
+                        key={ed.id}
+                        onClick={() => setKeyEditionFilter(ed.id)}
+                        style={{
+                          padding: '5px 11px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          border:
+                            keyEditionFilter === ed.id
+                              ? `1px solid ${ed.color}`
+                              : '1px solid rgba(51, 65, 85, 0.55)',
+                          backgroundColor:
+                            keyEditionFilter === ed.id
+                              ? ed.id === 'VIP'
+                                ? 'rgba(245, 158, 11, 0.2)'
+                                : 'rgba(0, 217, 255, 0.16)'
+                              : 'rgba(15, 23, 42, 0.6)',
+                          color: keyEditionFilter === ed.id ? ed.color : '#94a3b8'
+                        }}
+                      >
+                        {ed.label}
                       </button>
                     ))}
                   </div>
@@ -4866,43 +5112,79 @@ export default function RymonConnect() {
                                 </div>
                               </td>
                               <td style={styles.td}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                   <span style={styles.planBadge}>{k.plan_duration?.replace(' [VIP]', '')}</span>
                                   {k.plan_duration?.includes('[VIP]') ? (
-                                    <span
-                                      style={{
-                                        border: '1px solid rgba(250, 204, 21, 0.55)',
-                                        background: 'rgba(250, 204, 21, 0.18)',
-                                        color: '#fde047',
-                                        fontSize: '9.5px',
-                                        fontWeight: 800,
-                                        padding: '2px 6px',
-                                        borderRadius: '6px'
-                                      }}
-                                      title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms Render RAM Bridge)"
-                                    >
-                                      ⚡ VIP REALTIME
-                                    </span>
-                                  ) : (
-                                    (isOwner || isAdmin) && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleVipKey(k.license_key, true)}
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      <span
                                         style={{
-                                          border: '1px solid rgba(0, 217, 255, 0.5)',
-                                          background: 'rgba(0, 217, 255, 0.15)',
-                                          color: '#00d9ff',
+                                          border: '1px solid rgba(250, 204, 21, 0.55)',
+                                          background: 'rgba(250, 204, 21, 0.18)',
+                                          color: '#fde047',
                                           fontSize: '9.5px',
                                           fontWeight: 800,
                                           padding: '2px 6px',
-                                          borderRadius: '6px',
-                                          cursor: 'pointer'
+                                          borderRadius: '6px'
                                         }}
-                                        title="Click to upgrade to VIP Realtime"
+                                        title="VIP Streamer Edition: Live Web Remote & Streamer Controls"
                                       >
-                                        ⚡ UPGRADE TO VIP
-                                      </button>
-                                    )
+                                        👑 VIP REMOTE
+                                      </span>
+                                      {isOwner && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleVipKey(k.license_key, false)}
+                                          style={{
+                                            border: '1px solid rgba(148, 163, 184, 0.35)',
+                                            background: 'rgba(15, 23, 42, 0.6)',
+                                            color: '#94a3b8',
+                                            fontSize: '9px',
+                                            padding: '2px 5px',
+                                            borderRadius: '5px',
+                                            cursor: 'pointer'
+                                          }}
+                                          title="Revert to Standard APK key"
+                                        >
+                                          📱 Standard
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      <span
+                                        style={{
+                                          border: '1px solid rgba(0, 217, 255, 0.35)',
+                                          background: 'rgba(0, 217, 255, 0.1)',
+                                          color: '#38bdf8',
+                                          fontSize: '9.5px',
+                                          fontWeight: 800,
+                                          padding: '2px 6px',
+                                          borderRadius: '6px'
+                                        }}
+                                        title="Standard Mobile Edition: In-Game APK Authentication Only (Zero Web Overhead)"
+                                      >
+                                        📱 APK ONLY
+                                      </span>
+                                      {(isOwner || isAdmin) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleVipKey(k.license_key, true)}
+                                          style={{
+                                            border: '1px solid rgba(245, 158, 11, 0.5)',
+                                            background: 'rgba(245, 158, 11, 0.16)',
+                                            color: '#fbbf24',
+                                            fontSize: '9.5px',
+                                            fontWeight: 800,
+                                            padding: '2px 6px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer'
+                                          }}
+                                          title="Click to upgrade key to VIP Streamer Remote (+50%)"
+                                        >
+                                          👑 +VIP
+                                        </button>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </td>
@@ -6603,6 +6885,111 @@ export default function RymonConnect() {
                           <option value={10}>10 Keys (Standard Pack)</option>
                           <option value={20}>20 Keys (Reseller Stock)</option>
                           <option value={50}>50 Keys (Mega Stock)</option>
+                        </select>
+                      </div>
+
+                      {/* VIP Web Remote Permission Controls */}
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>
+                            <span>👑 Allow Resellers to Generate VIP Web Remote Keys</span>
+                            {!(securityPolicy.allow_reseller_web_remote ?? false) && (
+                              <span style={{ marginLeft: '8px', fontSize: '10px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                                STRICT LOCKED
+                              </span>
+                            )}
+                          </div>
+                          <div style={styles.settingSub}>
+                            When OFF (Default / Strict), Resellers are locked to Standard APK keys only (zero web remote egress). When ON, Resellers can generate VIP Streamer Web Remote keys.
+                          </div>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              allow_reseller_web_remote: !(securityPolicy.allow_reseller_web_remote ?? false)
+                            })
+                          }
+                          style={{
+                            ...styles.switchPill,
+                            background: (securityPolicy.allow_reseller_web_remote ?? false)
+                              ? '#05df72'
+                              : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: (securityPolicy.allow_reseller_web_remote ?? false)
+                                ? 'translateX(20px)'
+                                : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Allow Level 2 Admins to Generate VIP Web Remote Keys</div>
+                          <div style={styles.settingSub}>
+                            Grants Admins permission to generate VIP Streamer Web Remote keys with live web control
+                          </div>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              allow_admin_web_remote: !(securityPolicy.allow_admin_web_remote ?? true)
+                            })
+                          }
+                          style={{
+                            ...styles.switchPill,
+                            background: (securityPolicy.allow_admin_web_remote ?? true)
+                              ? '#00d9ff'
+                              : 'rgba(30,36,50,0.8)'
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.switchKnob,
+                              transform: (securityPolicy.allow_admin_web_remote ?? true)
+                                ? 'translateX(20px)'
+                                : 'translateX(0)'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>VIP Web Remote Price Surcharge Markup</div>
+                          <div style={styles.settingSub}>
+                            Automatic percentage surcharge applied to base plan pricing for VIP Streamer Web Remote keys
+                          </div>
+                        </div>
+                        <select
+                          value={securityPolicy.vip_price_surcharge_percent ?? 50}
+                          onChange={(e) =>
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              vip_price_surcharge_percent: parseInt(e.target.value) || 0
+                            })
+                          }
+                          style={{
+                            ...styles.selectInput,
+                            width: 'auto',
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: 800,
+                            color: '#fbbf24',
+                            border: '1px solid rgba(245, 158, 11, 0.4)'
+                          }}
+                        >
+                          <option value={0}>0% (No Surcharge)</option>
+                          <option value={25}>+25% VIP Surcharge</option>
+                          <option value={50}>⭐ +50% VIP Surcharge (Standard Recommended)</option>
+                          <option value={75}>+75% VIP Surcharge</option>
+                          <option value={100}>+100% VIP Surcharge (2x Price)</option>
                         </select>
                       </div>
                     </div>
@@ -8847,10 +9234,12 @@ else:
                           )
                           .map((k) => {
                             const isKeyPlaying = onlineKeySet.has(k.license_key.toUpperCase())
+                            const isVip = Boolean(k.plan_duration?.includes('[VIP]'))
+                            const icon = isKeyPlaying ? '🟢 ' : isVip ? '👑 ' : '📱 '
+                            const editionLabel = isVip ? 'VIP REMOTE' : 'APK ONLY'
                             return (
                               <option key={k.license_key} value={k.license_key}>
-                                {isKeyPlaying ? '🟢 ' : k.device_hwid ? '📱 ' : '🟡 '}
-                                {k.license_key} ({k.plan_duration} • @{k.creator_username})
+                                {icon}{k.license_key} [{editionLabel}] ({k.plan_duration?.replace(' [VIP]', '')} • @{k.creator_username})
                               </option>
                             )
                           })}
@@ -8889,6 +9278,66 @@ else:
                     </div>
                   </div>
                 </div>
+
+                {/* Standard APK Key Notice in Remote Console */}
+                {(() => {
+                  const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
+                  const isCurrentVip = Boolean(
+                    targetLic?.plan_duration?.includes('[VIP]') ||
+                    record?.streamer_name?.includes('VIP_REALTIME') ||
+                    record?.streamer_name?.startsWith('VIP|')
+                  )
+                  if (!currentKey || isCurrentVip) return null
+                  return (
+                    <div
+                      style={{
+                        marginBottom: '14px',
+                        padding: '14px 18px',
+                        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(6, 182, 212, 0.08))',
+                        border: '1px solid rgba(0, 217, 255, 0.45)',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '14px',
+                        flexWrap: 'wrap'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '24px' }}>📱</span>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 800, color: '#00d9ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>STANDARD MOBILE APK KEY</span>
+                            <span style={{ fontSize: '9.5px', background: 'rgba(0, 217, 255, 0.2)', border: '1px solid rgba(0, 217, 255, 0.5)', padding: '2px 6px', borderRadius: '4px' }}>
+                              IN-GAME MOD ONLY
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                            Key <code style={{ color: '#f8fafc', background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>{currentKey}</code> was created for normal in-game APK use only. Live web remote telemetry is inactive to maintain zero server load.
+                          </div>
+                        </div>
+                      </div>
+                      {(isOwner || isAdmin) && (
+                        <button
+                          onClick={() => handleToggleVipKey(currentKey, true)}
+                          style={{
+                            padding: '7px 14px',
+                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: '#000',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            boxShadow: '0 0 12px rgba(245, 158, 11, 0.35)'
+                          }}
+                        >
+                          👑 UPGRADE TO VIP WEB REMOTE (+50%)
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Compact Freeze Indicator (Only when Paused) */}
                 {record?.is_paused && (

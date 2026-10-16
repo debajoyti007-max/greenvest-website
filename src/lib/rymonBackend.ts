@@ -1459,18 +1459,17 @@ export async function generateLicenseKeyBackend(params: {
 
   const effectiveMap = getEffectivePriceMap(creator.username)
   const normalizedDuration = duration.replace(/^(\d+)\s+Day$/, '$1 Days')
-  const unitPrice =
+  const baseUnitPrice =
     effectiveMap[duration] ??
     effectiveMap[normalizedDuration] ??
     DEFAULT_KEY_PRICES[normalizedDuration] ??
     35
-  const singleKeyCost = unitPrice * safeDevices
-  const totalCost = singleKeyCost * safeQuantity
 
   const isFf = !game || game.toLowerCase().includes('free fire')
+  const isRealtime = isFf && params.isVipRealtime !== false
   const policy = getSovereignSecurityPolicy()
 
-  // 1. Role Permission Enforcement: Custom App Generation
+  // 1A. Role Permission Enforcement: Custom App Generation
   if (!isFf && creator.role !== 'owner') {
     const isReseller = creator.role === 'reseller'
     const isAdmin = creator.role === 'admin'
@@ -1492,6 +1491,49 @@ export async function generateLicenseKeyBackend(params: {
       }
     }
   }
+
+  // 1B. Strict Role Permission Enforcement: VIP Web Remote Generation
+  if (isRealtime && creator.role !== 'owner') {
+    const isReseller = creator.role === 'reseller'
+    const isAdmin = creator.role === 'admin'
+    const vipAllowed = isReseller
+      ? Boolean(policy.allow_reseller_web_remote ?? false)
+      : isAdmin
+      ? Boolean(policy.allow_admin_web_remote ?? true)
+      : false
+
+    if (!vipAllowed) {
+      return {
+        success: false,
+        error: `Permission Denied (Strict Policy): Reseller accounts are locked to Standard APK keys only. VIP Web Remote key generation is restricted by Owner.`
+      }
+    }
+  }
+
+  // 1C. Strict Reseller Device Limit Enforcement
+  if (creator.role === 'reseller') {
+    const maxAllowedDev = Math.max(1, Number(policy.reseller_max_devices_limit || 1))
+    if (safeDevices > maxAllowedDev) {
+      return {
+        success: false,
+        error: `Strict Policy Violation: Reseller device limit is capped at ${maxAllowedDev} device(s) per key.`
+      }
+    }
+    const maxBulkAllowed = Math.max(1, Number(policy.reseller_max_bulk_limit || 10))
+    if (safeQuantity > maxBulkAllowed) {
+      return {
+        success: false,
+        error: `Strict Policy Violation: Reseller batch limit is capped at ${maxBulkAllowed} keys per generation.`
+      }
+    }
+  }
+
+  const surchargePercent = Math.max(0, Number(policy.vip_price_surcharge_percent ?? 50))
+  const unitPrice = isRealtime
+    ? Math.round(baseUnitPrice * (1 + surchargePercent / 100))
+    : baseUnitPrice
+  const singleKeyCost = unitPrice * safeDevices
+  const totalCost = singleKeyCost * safeQuantity
 
 
   const prefix = (customPrefix?.trim() || 'RYMON').toUpperCase()
@@ -1582,10 +1624,10 @@ export async function generateLicenseKeyBackend(params: {
         .select('*')
 
       if (!licErr && insertedLics && insertedLics.length > 0) {
-        // ONLY Free Fire MAX keys have Streamer Remote Controls (ESP / Aimbot / Telemetry).
-        // Custom apps and any other games are PURE KEYAUTH ONLY!
+        // ONLY Free Fire MAX keys with VIP Web Remote enabled have Streamer Remote Controls (ESP / Aimbot / Telemetry).
+        // Standard APK keys and custom apps are PURE KEYAUTH ONLY!
         const isFfOnly = !game || game.toLowerCase().includes('free fire')
-        if (isFfOnly) {
+        if (isFfOnly && isRealtime) {
           const ctrlPayloads = generatedKeys.map((k) =>
             buildDefaultStreamerControlPayload({
               license_key: k,
@@ -1609,7 +1651,7 @@ export async function generateLicenseKeyBackend(params: {
               : `Key Generated #${insertedLics[0].id}`,
           event_type: 'KEY_GENERATED',
           game,
-          details: `${safeQuantity}x ${effectivePlanDuration} • ${safeDevices} Device(s) • Cost: ${liveRole === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
+          details: `${safeQuantity}x ${effectivePlanDuration} (${isRealtime ? '👑 VIP Web Remote' : '📱 Standard APK'}) • ${safeDevices} Device(s) • Cost: ${liveRole === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
           actor_username: creatorName,
           status: 'SUCCESS'
         })
@@ -1639,7 +1681,7 @@ export async function generateLicenseKeyBackend(params: {
     }
   }
 
-  const isRealtimeFallback = params.isVipRealtime !== false
+  const isRealtimeFallback = isFf && params.isVipRealtime !== false
   const effectivePlanDurationFallback = isRealtimeFallback ? `${duration} [VIP]` : duration
 
   const newLics: RymonLicense[] = generatedKeys.map((k, idx) => ({
@@ -1845,6 +1887,10 @@ export interface SovereignSecurityPolicy {
   allow_admin_custom_apps: boolean    // default true (Admins can generate custom app keys)
   reseller_max_devices_limit: number  // default 1 (Max devices allowed per key for resellers)
   reseller_max_bulk_limit: number     // default 10 (Max keys generated in one batch by reseller)
+  // Strict Reseller & Admin VIP Web Remote Generation Controls
+  allow_admin_web_remote?: boolean     // default true (Admins can generate VIP Web Remote keys)
+  allow_reseller_web_remote?: boolean  // default false (STRICT: Resellers restricted to Standard APK by default)
+  vip_price_surcharge_percent?: number // default 50 (+50% VIP Web Remote surcharge)
 }
 
 const SECURITY_POLICY_STORAGE_KEY = 'rymon_sovereign_security_policy_v1'
@@ -1863,7 +1909,10 @@ export const DEFAULT_SECURITY_POLICY: SovereignSecurityPolicy = {
   allow_reseller_custom_apps: false,
   allow_admin_custom_apps: true,
   reseller_max_devices_limit: 1,
-  reseller_max_bulk_limit: 10
+  reseller_max_bulk_limit: 10,
+  allow_admin_web_remote: true,
+  allow_reseller_web_remote: false, // STRICT: Resellers locked to Standard APK by default
+  vip_price_surcharge_percent: 50
 }
 
 export function getSovereignSecurityPolicy(): SovereignSecurityPolicy {
