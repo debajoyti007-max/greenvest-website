@@ -1,5 +1,5 @@
 // RYMON GHOST CONNECT Service Worker (v3.0.0 - Auto Cache Busting Edition)
-const CACHE_NAME = 'rymon-ghost-v1792129264672'
+const CACHE_NAME = 'rymon-ghost-v1792131018002'
 const FONT_CACHE_NAME = 'rymon-fonts-v3.0'
 
 const STATIC_ASSETS = [
@@ -44,11 +44,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url)
 
-  // 1. Never intercept or cache Supabase database queries, auth, or realtime APIs
+  // 1. Never intercept or cache Supabase database queries, auth, realtime, or connect API endpoints
   if (
     url.hostname.includes('supabase.co') ||
     url.pathname.startsWith('/rest/') ||
-    url.pathname.startsWith('/auth/')
+    url.pathname.startsWith('/auth/') ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname === '/connect'
   ) {
     return
   }

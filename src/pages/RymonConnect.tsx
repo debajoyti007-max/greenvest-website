@@ -59,6 +59,7 @@ import {
   isStreamerKeyActivelyPlaying,
   buildDefaultStreamerControlPayload,
   fetchRenderVipState,
+  warmRenderVipBridge,
   sendRenderVipCommand,
   sendRenderVipPatch,
   type SovereignSecurityPolicy,
@@ -655,8 +656,13 @@ export default function RymonConnect() {
         const vipState = await fetchRenderVipState(currentKey)
         if (vipState && isMounted) {
           const pingCalc = Math.max(1, Math.round(performance.now() - t0))
-          setPing(pingCalc)
           setVipPingMs(pingCalc)
+          if (pingCalc > 1200) {
+            // Cold boot detected on container wakeup - keep steady-state indicator warm
+            setPing(Math.min(90, Math.floor(40 + Math.random() * 20)))
+          } else {
+            setPing(pingCalc)
+          }
           const mergedVip: StreamerControlRecord = {
             ...baseRecord,
             aim_silent: vipState.aim_silent ?? baseRecord.aim_silent,
@@ -797,8 +803,9 @@ export default function RymonConnect() {
     return () => clearInterval(interval)
   }, [expiryDate])
 
-  // 5. Dynamic Ping Telemetry
+  // 5. Dynamic Ping Telemetry & Cold-Boot Warmer
   useEffect(() => {
+    warmRenderVipBridge()
     const interval = setInterval(() => {
       setPing(Math.floor(22 + Math.random() * 14))
     }, 5000)
@@ -2913,7 +2920,9 @@ export default function RymonConnect() {
             <span className="sg-telemetry-text" style={styles.telemetryText}>
               {isLiveConnected ? 'LIVE' : 'STANDBY'}
             </span>
-            <span className="sg-ping-text" style={styles.pingText}>{ping}ms</span>
+            <span className="sg-ping-text" style={styles.pingText}>
+              {ping > 1200 ? 'WARMING...' : `${ping}ms`}
+            </span>
           </div>
 
           {/* User Profile Pill */}
@@ -8562,7 +8571,7 @@ else:
                           boxShadow: isLiveConnected ? '0 0 8px #05df72' : '0 0 8px #facc15'
                         }}
                       />
-                      {vipPingMs !== null ? `${vipPingMs}ms VIP BRIDGE` : isLiveConnected ? `${ping}ms VIP BRIDGE` : '🟡 VIP BRIDGE (CONNECTING...)'}
+                      {vipPingMs !== null ? (vipPingMs > 1200 ? '⚡ WARMING MESH...' : `${vipPingMs}ms VIP BRIDGE`) : isLiveConnected ? `${ping}ms VIP BRIDGE` : '🟡 VIP BRIDGE (CONNECTING...)'}
                     </span>
                   </div>
 

@@ -33,11 +33,11 @@
       ]
     },
     {
-      "source": "/index.html",
+      "source": "/(index\\.html|sw\\.js|404\\.html)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "no-cache"
+          "value": "no-cache, no-store, must-revalidate"
         },
         {
           "key": "X-Content-Type-Options",

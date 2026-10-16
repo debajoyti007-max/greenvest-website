@@ -58,8 +58,8 @@ if (fs.existsSync(path.join(DIST, 'download'))) {
   fs.cpSync(path.join(DIST, 'download'), DOWNLOAD_ROOT, { recursive: true })
 }
 
-// Ensure search crawlers and PWA files are present in root
-const publicFiles = ['robots.txt', 'sitemap.xml', 'manifest.webmanifest', 'sw.js', 'favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.png', 'logo-transparent.png', 'logo.jpg', 'rymon_logo.jpg']
+// Ensure search crawlers, PWA files, and edge headers are present in root
+const publicFiles = ['robots.txt', 'sitemap.xml', 'manifest.webmanifest', 'sw.js', 'favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.png', 'logo-transparent.png', 'logo.jpg', 'rymon_logo.jpg', '_headers']
 for (const file of publicFiles) {
   const distFile = path.join(DIST, file)
   if (fs.existsSync(distFile)) {

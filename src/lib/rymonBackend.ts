@@ -237,6 +237,15 @@ export function buildDefaultStreamerControlPayload(
 // ============================================================================
 export const RENDER_VIP_BRIDGE_URL = 'https://rymon-telegram-bot.onrender.com'
 
+let warmingStarted = false
+export function warmRenderVipBridge(): void {
+  if (warmingStarted) return
+  warmingStarted = true
+  try {
+    fetch(`${RENDER_VIP_BRIDGE_URL}/`, { method: 'GET', mode: 'no-cors' }).catch(() => {})
+  } catch {}
+}
+
 export function isVipTierKey(ctrl?: { plan_duration?: string; streamer_name?: string } | null): boolean {
   if (!ctrl) return false
   const p = ctrl.plan_duration || ''
@@ -249,7 +258,7 @@ export async function fetchRenderVipState(key: string): Promise<StreamerControlR
   if (!normKey) return null
   try {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 3500)
+    const timer = setTimeout(() => controller.abort(), 5000)
     const res = await fetch(`${RENDER_VIP_BRIDGE_URL}/api/vip/state?key=${encodeURIComponent(normKey)}`, {
       signal: controller.signal
     })

@@ -44,11 +44,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url)
 
-  // 1. Never intercept or cache Supabase database queries, auth, or realtime APIs
+  // 1. Never intercept or cache Supabase database queries, auth, realtime, or connect API endpoints
   if (
     url.hostname.includes('supabase.co') ||
     url.pathname.startsWith('/rest/') ||
-    url.pathname.startsWith('/auth/')
+    url.pathname.startsWith('/auth/') ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname === '/connect'
   ) {
     return
   }
