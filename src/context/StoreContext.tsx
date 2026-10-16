@@ -496,12 +496,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // 30-second silent pulse (Free-Tier safe: stops completely when tab is hidden / phone screen is off)
+      // 2-minute gentle silent pulse (Stops completely when tab is hidden / phone screen is off)
       const pulseInterval = setInterval(() => {
         if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-          void silentSyncCatalog()
+          if (Date.now() - lastCheckedTime > 60000) {
+            void silentSyncCatalog()
+          }
         }
-      }, 30000)
+      }, 120000)
 
       // Cross-tab broadcast: if seller or mandi tool changes price in another tab on the same device
       const onCatalogVersionChanged = () => {

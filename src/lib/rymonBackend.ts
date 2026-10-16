@@ -1164,9 +1164,9 @@ export async function fetchAllActivities(user?: RymonAccount | null): Promise<Ry
     try {
       const { data, error } = await supabase
         .from('rymon_activities')
-        .select('*')
+        .select('id, title, event_type, game, details, actor_username, status, created_at')
         .order('created_at', { ascending: false })
-        .limit(100)
+        .limit(30)
 
       if (!error && Array.isArray(data)) {
         const acts = data as RymonActivity[]

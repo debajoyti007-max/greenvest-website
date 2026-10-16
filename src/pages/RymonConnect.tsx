@@ -329,6 +329,7 @@ export default function RymonConnect() {
     let active = true
     const runTgPoll = () => {
       if (!active) return
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       const playingSet = new Set<string>()
       streamerControls.forEach((ctrl) => {
         if (isStreamerKeyActivelyPlaying(ctrl)) {
@@ -342,7 +343,7 @@ export default function RymonConnect() {
       })
     }
     runTgPoll()
-    const tgFastTimer = setInterval(runTgPoll, 3000)
+    const tgFastTimer = setInterval(runTgPoll, 30000)
     return () => {
       active = false
       clearInterval(tgFastTimer)
@@ -418,9 +419,10 @@ export default function RymonConnect() {
 
     loadLiveData()
 
-    // Periodic 10-second heartbeat & playing-status sweep
+    // Periodic 60-second gentle fallback sweep (only when tab is visible)
     const statusPollTimer = setInterval(async () => {
       if (!isMounted) return
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       const [c, l, u] = await Promise.all([
         fetchAllStreamerControls(currentUser),
         fetchAllLicenses(currentUser),
@@ -430,51 +432,88 @@ export default function RymonConnect() {
       setStreamerControls(c)
       setKeysList(l)
       setUsersList(u)
-    }, 10000)
+    }, 60000)
 
-    // Setup Realtime Phoenix Subscriptions
+    // Setup Realtime Phoenix Subscriptions (Senior Dev In-Memory State Merging - ZERO HTTP egress)
     if (supabase) {
       const channel = supabase
         .channel('rymon-global-sync')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'rymon_licenses' },
-          () => {
-            fetchAllLicenses(currentUser).then((l) => isMounted && setKeysList(l))
+          (payload) => {
+            if (!isMounted) return
+            if (payload.eventType === 'UPDATE' && payload.new) {
+              const updatedLic = payload.new as RymonLicense
+              setKeysList((prev) =>
+                prev.map((k) => (k.id === updatedLic.id || k.license_key === updatedLic.license_key ? { ...k, ...updatedLic } : k))
+              )
+            } else if (payload.eventType === 'INSERT' && payload.new) {
+              const newLic = payload.new as RymonLicense
+              setKeysList((prev) => {
+                const exists = prev.some((k) => k.license_key === newLic.license_key)
+                return exists ? prev.map((k) => (k.license_key === newLic.license_key ? { ...k, ...newLic } : k)) : [newLic, ...prev]
+              })
+            } else if (payload.eventType === 'DELETE' && payload.old) {
+              const oldLic = payload.old as Partial<RymonLicense>
+              setKeysList((prev) => prev.filter((k) => k.id !== oldLic.id && k.license_key !== oldLic.license_key))
+            }
           }
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'rymon_streamer_controls' },
-          () => {
-            fetchAllStreamerControls(currentUser).then((c) => isMounted && setStreamerControls(c))
+          (payload) => {
+            if (!isMounted) return
+            if (payload.eventType === 'UPDATE' && payload.new) {
+              const updatedCtrl = payload.new as StreamerControlRecord
+              setStreamerControls((prev) =>
+                prev.map((c) => (c.license_key === updatedCtrl.license_key ? { ...c, ...updatedCtrl } : c))
+              )
+            } else if (payload.eventType === 'INSERT' && payload.new) {
+              const newCtrl = payload.new as StreamerControlRecord
+              setStreamerControls((prev) => {
+                const exists = prev.some((c) => c.license_key === newCtrl.license_key)
+                return exists ? prev.map((c) => (c.license_key === newCtrl.license_key ? { ...c, ...newCtrl } : c)) : [newCtrl, ...prev]
+              })
+            } else if (payload.eventType === 'DELETE' && payload.old) {
+              const oldCtrl = payload.old as Partial<StreamerControlRecord>
+              setStreamerControls((prev) => prev.filter((c) => c.license_key !== oldCtrl.license_key))
+            }
           }
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'rymon_accounts' },
-          () => {
-            fetchAllAccounts(currentUser).then((u) => {
-              if (isMounted) {
-                setUsersList(u)
-                if (currentUser) {
-                  const me = u.find(
-                    (x) => x.username.toLowerCase() === currentUser.username.toLowerCase()
-                  )
-                  if (me) {
-                    setWalletBalance(me.balance)
-                    setCurrentUser(me)
-                  }
-                }
+          (payload) => {
+            if (!isMounted) return
+            if (payload.eventType === 'UPDATE' && payload.new) {
+              const updatedAcc = payload.new as RymonAccount
+              setUsersList((prev) =>
+                prev.map((u) => (u.id === updatedAcc.id || u.username.toLowerCase() === updatedAcc.username.toLowerCase() ? { ...u, ...updatedAcc } : u))
+              )
+              if (currentUser && currentUser.username.toLowerCase() === updatedAcc.username.toLowerCase()) {
+                setWalletBalance(updatedAcc.balance)
+                setCurrentUser((prev) => prev ? { ...prev, ...updatedAcc } : updatedAcc)
               }
-            })
+            } else if (payload.eventType === 'INSERT' && payload.new) {
+              const newAcc = payload.new as RymonAccount
+              setUsersList((prev) => [newAcc, ...prev])
+            } else if (payload.eventType === 'DELETE' && payload.old) {
+              const oldAcc = payload.old as Partial<RymonAccount>
+              setUsersList((prev) => prev.filter((u) => u.id !== oldAcc.id && u.username !== oldAcc.username))
+            }
           }
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'rymon_activities' },
-          () => {
-            fetchAllActivities().then((a) => isMounted && setActivities(a))
+          (payload) => {
+            if (!isMounted) return
+            if (payload.eventType === 'INSERT' && payload.new) {
+              const newAct = payload.new as RymonActivity
+              setActivities((prev) => [newAct, ...prev.slice(0, 29)])
+            }
           }
         )
         .subscribe()
@@ -560,6 +599,7 @@ export default function RymonConnect() {
 
     async function fastPulseTelemetry() {
       if (!isMounted || sliderTimerRef.current) return
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
 
       // Gentle 15-second background refresh for license status / expiry without spamming DB
       if (Date.now() - lastDbSyncTime > 15000) {
@@ -649,7 +689,7 @@ export default function RymonConnect() {
       } catch {}
 
       // 2. Render Fallback: If Render bridge is cold or network jitter, fallback to cached DB data
-      if (Date.now() - lastDbSyncTime > 3000) {
+      if (Date.now() - lastDbSyncTime > 15000) {
         await syncFromSupabase()
       }
       if (isMounted) {
@@ -664,7 +704,7 @@ export default function RymonConnect() {
       if (isMounted) fastPulseTelemetry()
     })
 
-    const fastSyncTimer = setInterval(fastPulseTelemetry, 750)
+    const fastSyncTimer = setInterval(fastPulseTelemetry, 1000)
 
     const channel = supabase
       .channel(`streamer-remote-${currentKey}`)
@@ -2413,23 +2453,421 @@ export default function RymonConnect() {
         .sg-live-beacon {
           animation: sgRadarPulse 2s infinite cubic-bezier(0, 0, 0.2, 1);
         }
+
+        /* Desktop defaults for mobile-only elements */
+        .sg-mobile-bottom-bar { display: none; }
+        .sg-mobile-drawer-header { display: none; }
+        .sg-mobile-backdrop { display: none; }
+
+        /* ══════════════════════════════════════════════════════════════════════════
+           PHANTOM AMETHYST MOBILE-FIRST RESPONSIVE ENGINE (GREENVEST STREAMGUARD)
+           ══════════════════════════════════════════════════════════════════════════ */
+        @media (max-width: 900px) {
+          /* Prevent horizontal screen wobbling/overflow */
+          html, body, #root {
+            overflow-x: hidden !important;
+            max-width: 100vw !important;
+          }
+          .sg-app-shell {
+            overflow-x: hidden !important;
+            width: 100vw !important;
+            max-width: 100vw !important;
+          }
+
+          /* 1. Header Optimization */
+          .sg-top-header {
+            padding: 8px 10px !important;
+            gap: 6px !important;
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 100 !important;
+          }
+          .sg-header-left {
+            gap: 8px !important;
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+          }
+          .sg-mobile-menu-toggle {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 36px !important;
+            height: 36px !important;
+            min-width: 36px !important;
+            border-radius: 9px !important;
+            background: rgba(168, 85, 247, 0.16) !important;
+            border: 1px solid rgba(168, 85, 247, 0.35) !important;
+            color: #c084fc !important;
+            font-size: 19px !important;
+            cursor: pointer !important;
+            padding: 0 !important;
+            transition: all 0.2s ease !important;
+            box-shadow: 0 0 10px rgba(168, 85, 247, 0.2) !important;
+          }
+          .sg-mobile-menu-toggle:active {
+            transform: scale(0.92) !important;
+            background: rgba(168, 85, 247, 0.3) !important;
+          }
+          .sg-brand-cluster {
+            gap: 7px !important;
+            min-width: 0 !important;
+          }
+          .sg-logo-frame {
+            width: 30px !important;
+            height: 30px !important;
+            min-width: 30px !important;
+            border-radius: 8px !important;
+          }
+          .sg-brand-title {
+            font-size: 12px !important;
+            letter-spacing: 0.02em !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+          }
+          .sg-brand-sub {
+            display: none !important;
+          }
+          .sg-header-right {
+            gap: 5px !important;
+            flex-shrink: 0 !important;
+          }
+          .sg-balance-pill {
+            padding: 4px 7px !important;
+            font-size: 10.5px !important;
+            border-radius: 12px !important;
+          }
+          .sg-telemetry-pill {
+            padding: 4px 6px !important;
+            font-size: 9.5px !important;
+            border-radius: 12px !important;
+            gap: 4px !important;
+          }
+          .sg-telemetry-text {
+            font-size: 9.5px !important;
+          }
+          .sg-ping-text {
+            display: none !important;
+          }
+          .sg-user-profile-pill {
+            padding: 2px 4px !important;
+            gap: 4px !important;
+            border-radius: 12px !important;
+          }
+          .sg-user-name-block {
+            display: none !important;
+          }
+
+          /* 2. Main Layout & Sidebar Drawer */
+          .sg-main-layout {
+            flex-direction: column !important;
+            min-height: calc(100vh - 50px) !important;
+            width: 100% !important;
+          }
+          .sg-sidebar {
+            display: none !important;
+          }
+          .sg-sidebar.open {
+            display: flex !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            bottom: 0 !important;
+            width: 290px !important;
+            max-width: 86vw !important;
+            z-index: 1001 !important;
+            background: #0d0a18 !important;
+            box-shadow: 0 0 60px rgba(0, 0, 0, 0.95), 0 0 30px rgba(168, 85, 247, 0.3) !important;
+            overflow-y: auto !important;
+            padding: 16px 14px 70px !important;
+            border-right: 1px solid rgba(168, 85, 247, 0.35) !important;
+            animation: sgSlideDrawer 0.24s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+          }
+          .sg-mobile-backdrop {
+            display: block !important;
+            position: fixed !important;
+            inset: 0 !important;
+            background-color: rgba(0, 0, 0, 0.8) !important;
+            backdrop-filter: blur(5px) !important;
+            -webkit-backdrop-filter: blur(5px) !important;
+            z-index: 1000 !important;
+            animation: sgFadeIn 0.2s ease both !important;
+          }
+          .sg-mobile-drawer-header {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            padding-bottom: 14px !important;
+            margin-bottom: 12px !important;
+            border-bottom: 1px solid rgba(168, 85, 247, 0.2) !important;
+          }
+          .sg-mobile-close-btn {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 32px !important;
+            height: 32px !important;
+            border-radius: 8px !important;
+            background: rgba(255, 255, 255, 0.08) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            color: #f8fafc !important;
+            font-size: 15px !important;
+            cursor: pointer !important;
+          }
+          .sg-mobile-close-btn:active {
+            transform: scale(0.92) !important;
+          }
+
+          /* 3. Content Pane & Containers */
+          .sg-content-pane {
+            padding: 12px 10px 85px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            overflow-x: hidden !important;
+          }
+          .sg-view-container {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+
+          /* 4. Auth Gateway */
+          .sg-auth-gate-box {
+            width: 94% !important;
+            max-width: 440px !important;
+            margin: 14px auto 35px !important;
+            padding: 18px 14px !important;
+            border-radius: 14px !important;
+          }
+          .sg-auth-tab-selector {
+            gap: 4px !important;
+            padding: 3px !important;
+            margin-bottom: 16px !important;
+          }
+          .sg-auth-tab-btn {
+            padding: 8px 6px !important;
+            font-size: 11px !important;
+          }
+          .sg-auth-head {
+            font-size: 18px !important;
+          }
+          .sg-auth-desc {
+            font-size: 12px !important;
+            margin-bottom: 16px !important;
+          }
+
+          /* 5. Streamer Remote HUD & Controls */
+          .sg-banner-row {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
+          }
+          .sg-remote-actions {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+            width: 100% !important;
+          }
+          .sg-remote-actions > * {
+            flex: 1 1 calc(50% - 6px) !important;
+            min-height: 36px !important;
+            font-size: 11px !important;
+            text-align: center !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 6px 10px !important;
+            box-sizing: border-box !important;
+          }
+          .sg-telemetry-bar {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 10px !important;
+            padding: 10px !important;
+          }
+          .sg-key-select-box {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          .sg-key-select-box select {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          .sg-telemetry-meta-row {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+            width: 100% !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+            padding-top: 8px !important;
+          }
+          .sg-control-grid {
+            grid-template-columns: 1fr !important;
+            gap: 12px !important;
+          }
+          .sg-column-card {
+            padding: 14px 12px !important;
+            border-radius: 12px !important;
+          }
+
+          /* 6. Form Grids (Key Gen, Settings, Top-Up) */
+          .sg-form-grid-2col {
+            grid-template-columns: 1fr !important;
+            gap: 12px !important;
+          }
+          .sg-management-card {
+            padding: 16px 12px !important;
+            border-radius: 14px !important;
+          }
+
+          /* 7. Overview Dashboard Cards */
+          .sg-stat-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 8px !important;
+            margin-bottom: 16px !important;
+          }
+          .sg-stat-card {
+            padding: 12px 10px !important;
+            gap: 10px !important;
+            border-radius: 12px !important;
+          }
+          .sg-stat-num {
+            font-size: 20px !important;
+          }
+          .sg-stat-label {
+            font-size: 11px !important;
+          }
+          .sg-stat-icon-frame {
+            width: 32px !important;
+            height: 32px !important;
+            font-size: 16px !important;
+            border-radius: 8px !important;
+          }
+          .sg-dual-grid {
+            grid-template-columns: 1fr !important;
+            gap: 14px !important;
+          }
+          .sg-card-box {
+            padding: 16px 14px !important;
+            border-radius: 14px !important;
+          }
+          .sg-quick-grid {
+            grid-template-columns: 1fr !important;
+            gap: 8px !important;
+          }
+
+          /* 8. Tables & Horizontal Scroll Container */
+          .sg-table-card {
+            border-radius: 12px !important;
+            width: 100% !important;
+            overflow-x: auto !important;
+          }
+          .sg-data-table {
+            min-width: 680px !important;
+          }
+          .sg-data-table th, .sg-data-table td {
+            padding: 10px 12px !important;
+            font-size: 12px !important;
+          }
+          .sg-filter-scroll-row {
+            display: flex !important;
+            gap: 6px !important;
+            overflow-x: auto !important;
+            padding-bottom: 6px !important;
+            flex-wrap: nowrap !important;
+            -webkit-overflow-scrolling: touch !important;
+            scrollbar-width: none !important;
+          }
+          .sg-filter-scroll-row::-webkit-scrollbar {
+            display: none !important;
+          }
+          .sg-filter-scroll-row > * {
+            flex-shrink: 0 !important;
+          }
+          .sg-search-box {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+
+          /* 9. Modals (Responsive & Scrollable) */
+          .sg-modal-card {
+            width: 94% !important;
+            max-width: 94vw !important;
+            max-height: 88vh !important;
+            overflow-y: auto !important;
+            padding: 20px 14px !important;
+            border-radius: 14px !important;
+            margin: auto !important;
+          }
+
+          /* 10. Mobile Bottom Quick Bar */
+          .sg-mobile-bottom-bar {
+            display: flex !important;
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 990 !important;
+            background: rgba(11, 9, 20, 0.96) !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            border-top: 1px solid rgba(168, 85, 247, 0.3) !important;
+            padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+            justify-content: space-around !important;
+            align-items: center !important;
+            box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.6) !important;
+          }
+          .sg-mobile-bottom-tab {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            gap: 2px !important;
+            background: transparent !important;
+            border: none !important;
+            color: #94a3b8 !important;
+            font-size: 10px !important;
+            font-weight: 700 !important;
+            padding: 4px 8px !important;
+            border-radius: 8px !important;
+            cursor: pointer !important;
+            transition: all 0.18s ease !important;
+            min-width: 52px !important;
+          }
+          .sg-mobile-bottom-tab:active {
+            transform: scale(0.92) !important;
+          }
+          .sg-mobile-bottom-tab.active {
+            color: #c084fc !important;
+            background: rgba(168, 85, 247, 0.16) !important;
+          }
+        }
+
+        @keyframes sgSlideDrawer {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0); }
+        }
+        @keyframes sgFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
       `}</style>
 
       {/* Background Cyber Ambient */}
       <div style={styles.ambientGrid} />
 
       {/* ── TOP NAV HEADER ─────────────────────────────────────────────────── */}
-      <header style={styles.topHeader}>
-        <div style={styles.headerLeft}>
+      <header className="sg-top-header" style={styles.topHeader}>
+        <div className="sg-header-left" style={styles.headerLeft}>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="sg-mobile-menu-toggle"
             style={styles.mobileMenuToggle}
             aria-label="Toggle menu"
           >
             ☰
           </button>
-          <div style={styles.brandCluster}>
-            <div style={styles.logoFrame}>
+          <div className="sg-brand-cluster" style={styles.brandCluster}>
+            <div className="sg-logo-frame" style={styles.logoFrame}>
               <img
                 src="/rymon_logo.jpg"
                 alt="Greenvest StreamGuard"
@@ -2440,51 +2878,51 @@ export default function RymonConnect() {
               />
             </div>
             <div>
-              <div style={styles.brandTitleText}>
+              <div className="sg-brand-title" style={styles.brandTitleText}>
                 GREENVEST <span style={styles.brandVioletPill}>STREAMGUARD</span>
               </div>
-              <div style={styles.brandSubText}>PHANTOM AMETHYST • VIP TELEMETRY HUD</div>
+              <div className="sg-brand-sub" style={styles.brandSubText}>PHANTOM AMETHYST • VIP TELEMETRY HUD</div>
             </div>
           </div>
         </div>
 
-        <div style={styles.headerRight}>
+        <div className="sg-header-right" style={styles.headerRight}>
           {/* Wallet Balance Pill */}
           {isAuthenticated && currentUser?.role !== 'streamer' && (
             <div
+              className="sg-balance-pill"
               style={styles.balancePill}
               onClick={() => (isOwner || isAdmin) && setActiveTab('add-balance')}
               title={isOwner || isAdmin ? 'Click to manage balances' : 'Wallet balance'}
             >
               <span style={{ color: '#00d9ff', fontSize: '13px' }}>💳</span>
               <span style={styles.balanceAmount}>
-                {isOwner ? '∞ FREE (OWNER)' : `₹${walletBalance.toLocaleString('en-IN')}`}
+                {isOwner ? '∞ FREE' : `₹${walletBalance.toLocaleString('en-IN')}`}
               </span>
             </div>
           )}
 
           {/* Database & WebSocket Link Status */}
-          <div style={styles.telemetryPill}>
+          <div className="sg-telemetry-pill" style={styles.telemetryPill}>
             <span
               style={{
                 ...styles.pulseDot,
                 background: isLiveConnected ? '#05df72' : '#64748b'
               }}
             />
-            <span style={styles.telemetryText}>
-              {isLiveConnected ? 'LIVE CLOUD' : 'STANDBY'}
+            <span className="sg-telemetry-text" style={styles.telemetryText}>
+              {isLiveConnected ? 'LIVE' : 'STANDBY'}
             </span>
-            <span style={styles.pingText}>{ping}ms</span>
+            <span className="sg-ping-text" style={styles.pingText}>{ping}ms</span>
           </div>
-
 
           {/* User Profile Pill */}
           {isAuthenticated ? (
-            <div style={styles.userProfilePill}>
+            <div className="sg-user-profile-pill" style={styles.userProfilePill}>
               <div style={styles.userAvatarSquare}>
                 {currentUser?.username.charAt(0).toUpperCase() || 'U'}
               </div>
-              <div style={styles.userNameBlock}>
+              <div className="sg-user-name-block" style={styles.userNameBlock}>
                 <span style={styles.userNameText}>
                   {currentUser?.username || 'VIP Streamer'}
                 </span>
@@ -2511,7 +2949,6 @@ export default function RymonConnect() {
         </div>
       </header>
 
-
       {/* ── NOTIFICATION TOAST ──────────────────────────────────────────────── */}
       {actionSuccessMsg && (
         <div style={styles.toastBanner}>
@@ -2521,36 +2958,38 @@ export default function RymonConnect() {
 
       {/* ── CONDITIONAL VIEW: AUTH GATEWAY VS MAIN WORKSPACE ────────────────── */}
       {!isAuthenticated ? (
-        <div style={styles.authGateBox}>
+        <div className="sg-auth-gate-box" style={styles.authGateBox}>
           <div style={styles.authBadge}>
             <span style={{ fontSize: '10px', marginRight: '6px' }}>🔒</span> SECURE RYMON GATEWAY
           </div>
 
           {/* Dual Gateway Tabs: Staff Portal vs Streamer Key */}
-          <div style={styles.authTabSelector}>
+          <div className="sg-auth-tab-selector" style={styles.authTabSelector}>
             <button
               onClick={() => {
                 setAuthMode('staff')
                 setAuthError('')
               }}
+              className="sg-auth-tab-btn"
               style={{
                 ...styles.authTabBtn,
                 ...(authMode === 'staff' ? styles.authTabBtnActive : {})
               }}
             >
-              👤 Staff Portal (Owner / Reseller)
+              👤 Staff Portal
             </button>
             <button
               onClick={() => {
                 setAuthMode('key')
                 setAuthError('')
               }}
+              className="sg-auth-tab-btn"
               style={{
                 ...styles.authTabBtn,
                 ...(authMode === 'key' ? styles.authTabBtnActive : {})
               }}
             >
-              ⚡ Streamer Remote (License Key)
+              ⚡ Streamer Key
             </button>
           </div>
 
@@ -2819,14 +3258,41 @@ export default function RymonConnect() {
           )}
         </div>
       ) : (
-        <div style={styles.mainLayout}>
+        <div className="sg-main-layout" style={styles.mainLayout}>
+          {/* Mobile Backdrop Overlay */}
+          {mobileMenuOpen && (
+            <div
+              className="sg-mobile-backdrop"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+          )}
+
           {/* LEFT SIDEBAR NAVIGATION */}
           <aside
+            className={`sg-sidebar ${mobileMenuOpen ? 'open' : ''}`}
             style={{
               ...styles.sidebar,
               ...(mobileMenuOpen ? styles.sidebarMobileOpen : {})
             }}
           >
+            {/* Mobile Drawer Header */}
+            <div className="sg-mobile-drawer-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>⚡</span>
+                <span style={{ fontWeight: 800, fontSize: '13px', color: '#c084fc', letterSpacing: '0.04em' }}>
+                  STREAMGUARD MENU
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="sg-mobile-close-btn"
+                aria-label="Close navigation"
+              >
+                ✕
+              </button>
+            </div>
+
             {/* User mini status */}
             <div style={styles.sidebarUserCard}>
               <div style={styles.sidebarUserRow}>
@@ -3106,11 +3572,11 @@ export default function RymonConnect() {
           </aside>
 
           {/* MAIN CONTENT AREA */}
-          <main style={styles.contentPane}>
+          <main className="sg-content-pane" style={styles.contentPane}>
             {/* 1. OVERVIEW DASHBOARD */}
             {activeTab === 'overview' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>Operational Matrix</h2>
                   </div>
@@ -3121,7 +3587,7 @@ export default function RymonConnect() {
                 </div>
 
                 {/* Metric Counters (Clickable to filter License Keys) */}
-                <div style={styles.statGrid}>
+                <div className="sg-stat-grid" style={styles.statGrid}>
                   <div
                     onClick={() => {
                       setKeyStatusFilter('PLAYING')
@@ -3307,13 +3773,13 @@ export default function RymonConnect() {
                 </div>
 
                 {/* Quick Shortcuts & Recent Activities */}
-                <div style={styles.dualGrid}>
-                  <div style={styles.cardBox}>
+                <div className="sg-dual-grid" style={styles.dualGrid}>
+                  <div className="sg-card-box" style={styles.cardBox}>
                     <div style={styles.cardHeader}>
                       <h4>⚡ Fast Actions</h4>
                       <span style={styles.cyanMiniBadge}>RYMON</span>
                     </div>
-                    <div style={styles.quickGrid}>
+                    <div className="sg-quick-grid" style={styles.quickGrid}>
                       <button
                         onClick={() => setActiveTab('remote')}
                         style={styles.quickActionCard}
@@ -3390,7 +3856,7 @@ export default function RymonConnect() {
                     </div>
                   </div>
 
-                  <div style={styles.cardBox}>
+                  <div className="sg-card-box" style={styles.cardBox}>
                     <div style={styles.cardHeader}>
                       <h4>📋 Real-time Activity Log</h4>
                       <span style={styles.cyanMiniBadge}>AUDIT</span>
@@ -3416,8 +3882,8 @@ export default function RymonConnect() {
 
             {/* 2. TOP UP / TRANSFER USER BALANCE */}
             {activeTab === 'add-balance' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
                       {isOwner ? 'Top Up User Balance (Free Owner Mint)' : 'Transfer Balance to Reseller'}
@@ -3434,7 +3900,7 @@ export default function RymonConnect() {
                 </div>
 
                 <div style={styles.centerCardWrapper}>
-                  <div style={styles.managementCard}>
+                  <div className="sg-management-card" style={styles.managementCard}>
                     <div style={styles.cardHeader}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ ...styles.actionIconCircle, background: 'rgba(5,223,114,0.15)', color: '#05df72' }}>
@@ -3454,7 +3920,7 @@ export default function RymonConnect() {
                     </div>
 
                     <form onSubmit={handleTopUpSubmit} style={{ marginTop: '24px' }}>
-                      <div style={styles.formGrid2Col}>
+                      <div className="sg-form-grid-2col" style={styles.formGrid2Col}>
                         <div style={styles.formGroup}>
                           <label style={styles.formLabel}>
                             {isOwner ? 'Select Admin or Reseller' : 'Select Your Downline Reseller'}{' '}
@@ -3570,8 +4036,8 @@ export default function RymonConnect() {
 
             {/* 3. GENERATE KEY */}
             {activeTab === 'generate' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>Generate License Key (Single & Bulk)</h2>
                     <p style={styles.pageSubtitle}>
@@ -3594,7 +4060,7 @@ export default function RymonConnect() {
                         👑 CUSTOM VIP RATES ACTIVE
                       </span>
                     )}
-                    <div style={styles.balancePill}>
+                    <div className="sg-balance-pill" style={styles.balancePill}>
                       <span>Wallet Balance:</span>
                       <strong style={{ color: '#00d9ff', marginLeft: '6px' }}>
                         {isOwner ? '∞ FREE (OWNER)' : `₹${walletBalance.toLocaleString('en-IN')}`}
@@ -3604,9 +4070,9 @@ export default function RymonConnect() {
                 </div>
 
                 <div style={styles.centerCardWrapper}>
-                  <div style={styles.managementCard}>
+                  <div className="sg-management-card" style={styles.managementCard}>
                     <form onSubmit={handleGenerateKey}>
-                      <div style={styles.formGrid2Col}>
+                      <div className="sg-form-grid-2col" style={styles.formGrid2Col}>
                         <div style={styles.formGroup}>
                           <label style={styles.formLabel}>SELECT TARGET GAME / APP</label>
                           <select
@@ -3692,7 +4158,7 @@ export default function RymonConnect() {
                         </div>
                       </div>
 
-                      <div style={{ ...styles.formGrid2Col, marginTop: '16px' }}>
+                      <div className="sg-form-grid-2col" style={{ ...styles.formGrid2Col, marginTop: '16px' }}>
                         <div style={styles.formGroup}>
                           <label style={styles.formLabel}>QUANTITY (BULK GENERATOR)</label>
                           <select
@@ -3928,8 +4394,8 @@ export default function RymonConnect() {
 
             {/* 4. LICENSE KEYS TABLE */}
             {activeTab === 'keys' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
                       License Keys Command Center ({filteredKeys.length} / {stats.total})
@@ -3983,7 +4449,7 @@ export default function RymonConnect() {
                           </option>
                         ))}
                     </select>
-                    <div style={styles.searchBox}>
+                    <div className="sg-search-box" style={styles.searchBox}>
                       <input
                         type="text"
                         value={searchKeyQuery}
@@ -4009,7 +4475,7 @@ export default function RymonConnect() {
                   }}
                 >
                   {/* Row 1: Status Filter Pills with Live Counts */}
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div className="sg-filter-scroll-row" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                     {(
                       [
                         { id: 'ALL', label: `ALL (${stats.total})`, color: '#00d9ff' },
@@ -4287,9 +4753,9 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                <div style={styles.tableCard}>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={styles.dataTable}>
+                <div className="sg-table-card" style={styles.tableCard}>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table className="sg-data-table" style={styles.dataTable}>
                       <thead>
                         <tr>
                           <th style={styles.th}># ID</th>
@@ -4546,8 +5012,8 @@ export default function RymonConnect() {
 
             {/* 5. USERS TABLE (MEDIA_1791705436370_50F30D3E.PNG) */}
             {activeTab === 'users' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
                       {isOwner ? `Registered Users (${usersList.length})` : `My Downline Resellers & Team (${usersList.length})`}
@@ -4558,7 +5024,7 @@ export default function RymonConnect() {
                         : 'Manage your invited downline Resellers, transfer wallet balance, and set custom Reseller key prices.'}
                     </p>
                   </div>
-                  <div style={styles.searchBox}>
+                  <div className="sg-search-box" style={styles.searchBox}>
                     <input
                       type="text"
                       value={searchUserQuery}
@@ -4569,9 +5035,9 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                <div style={styles.tableCard}>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={styles.dataTable}>
+                <div className="sg-table-card" style={styles.tableCard}>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table className="sg-data-table" style={styles.dataTable}>
                       <thead>
                         <tr>
                           <th style={styles.th}>USER PROFILE</th>
@@ -4824,8 +5290,8 @@ export default function RymonConnect() {
 
             {/* 7. DELETE KEYS */}
             {activeTab === 'delete' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
                       {isOwner
@@ -4843,8 +5309,9 @@ export default function RymonConnect() {
                 </div>
 
                 {/* 1-Click Quick Purge Bar */}
-                <div style={{ ...styles.statGrid, marginBottom: '24px' }}>
+                <div className="sg-stat-grid" style={{ ...styles.statGrid, marginBottom: '24px' }}>
                   <div
+                    className="sg-stat-card"
                     onClick={() => handleQuickBulkDelete('expired')}
                     style={{
                       ...styles.statCard,
@@ -4853,15 +5320,16 @@ export default function RymonConnect() {
                       background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.14) 0%, rgba(13, 17, 26, 0.92) 100%)'
                     }}
                   >
-                    <div style={{ ...styles.statIconFrame, color: '#ef4444' }}>🧹</div>
+                    <div className="sg-stat-icon-frame" style={{ ...styles.statIconFrame, color: '#ef4444' }}>🧹</div>
                     <div>
-                      <div style={{ ...styles.statNum, color: '#ef4444' }}>{stats.expired}</div>
-                      <div style={{ ...styles.statLabel, color: '#fca5a5', fontWeight: 700 }}>
+                      <div className="sg-stat-num" style={{ ...styles.statNum, color: '#ef4444' }}>{stats.expired}</div>
+                      <div className="sg-stat-label" style={{ ...styles.statLabel, color: '#fca5a5', fontWeight: 700 }}>
                         1-Click Purge Expired Keys
                       </div>
                     </div>
                   </div>
                   <div
+                    className="sg-stat-card"
                     onClick={() => handleQuickBulkDelete('unused')}
                     style={{
                       ...styles.statCard,
@@ -4870,16 +5338,17 @@ export default function RymonConnect() {
                       background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.14) 0%, rgba(13, 17, 26, 0.92) 100%)'
                     }}
                   >
-                    <div style={{ ...styles.statIconFrame, color: '#eab308' }}>🗑️</div>
+                    <div className="sg-stat-icon-frame" style={{ ...styles.statIconFrame, color: '#eab308' }}>🗑️</div>
                     <div>
-                      <div style={{ ...styles.statNum, color: '#eab308' }}>{stats.unused}</div>
-                      <div style={{ ...styles.statLabel, color: '#fde047', fontWeight: 700 }}>
+                      <div className="sg-stat-num" style={{ ...styles.statNum, color: '#eab308' }}>{stats.unused}</div>
+                      <div className="sg-stat-label" style={{ ...styles.statLabel, color: '#fde047', fontWeight: 700 }}>
                         1-Click Purge Unused Keys
                       </div>
                     </div>
                   </div>
                   {isRootOwner && (
                     <div
+                      className="sg-stat-card"
                       onClick={() => handleQuickBulkDelete('all')}
                       style={{
                         ...styles.statCard,
@@ -4888,10 +5357,10 @@ export default function RymonConnect() {
                         background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.22) 0%, rgba(13, 17, 26, 0.95) 100%)'
                       }}
                     >
-                      <div style={{ ...styles.statIconFrame, color: '#ffffff' }}>💥</div>
+                      <div className="sg-stat-icon-frame" style={{ ...styles.statIconFrame, color: '#ffffff' }}>💥</div>
                       <div>
-                        <div style={{ ...styles.statNum, color: '#ffffff' }}>{stats.total}</div>
-                        <div style={{ ...styles.statLabel, color: '#fecaca', fontWeight: 800 }}>
+                        <div className="sg-stat-num" style={{ ...styles.statNum, color: '#ffffff' }}>{stats.total}</div>
+                        <div className="sg-stat-label" style={{ ...styles.statLabel, color: '#fecaca', fontWeight: 800 }}>
                           1-Click Wipe ALL Keys (Owner)
                         </div>
                       </div>
@@ -4900,7 +5369,7 @@ export default function RymonConnect() {
                 </div>
 
                 <div style={styles.centerCardWrapper}>
-                  <div style={styles.managementCard}>
+                  <div className="sg-management-card" style={styles.managementCard}>
                     <div style={styles.formGroup}>
                       <label style={styles.formLabel}>
                         Target Scope / User <span style={{ color: '#ef4444' }}>*</span>
@@ -4961,8 +5430,8 @@ export default function RymonConnect() {
 
             {/* 8. EXTEND KEYS */}
             {activeTab === 'extend' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>Extend License Duration (Max 30 Days)</h2>
                     <p style={styles.pageSubtitle}>
@@ -4974,7 +5443,7 @@ export default function RymonConnect() {
                 </div>
 
                 <div style={styles.centerCardWrapper}>
-                  <div style={styles.managementCard}>
+                  <div className="sg-management-card" style={styles.managementCard}>
                     <div style={styles.formGroup}>
                       <label style={styles.formLabel}>
                         Select License Key <span style={{ color: '#ef4444' }}>*</span>
@@ -5085,8 +5554,8 @@ export default function RymonConnect() {
 
             {/* 8C. TELEGRAM BOT DISPATCH GATEWAY */}
             {activeTab === 'telegram' && isRootOwner && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
                       Telegram Bot Automation — {OFFICIAL_TELEGRAM_BOT_NAME} ({OFFICIAL_TELEGRAM_BOT_USERNAME})
@@ -5115,9 +5584,9 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
+                <div className="sg-dual-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
                   {/* Configuration Card */}
-                  <div style={styles.cardBox}>
+                  <div className="sg-card-box" style={styles.cardBox}>
                     <div style={styles.cardHeader}>
                       <h4>🤖 {OFFICIAL_TELEGRAM_BOT_NAME} ({OFFICIAL_TELEGRAM_BOT_USERNAME})</h4>
                       <span style={styles.cyanMiniBadge}>VERIFIED BOT API</span>
@@ -5574,8 +6043,8 @@ export default function RymonConnect() {
 
             {/* 9. PRICING & ADVANCE SYSTEM */}
             {activeTab === 'advance' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
                       {isOwner ? 'Key Pricing & Advance System' : 'Downline Reseller Custom Pricing'}
@@ -5590,10 +6059,10 @@ export default function RymonConnect() {
                 </div>
 
                 {/* Pricing Grid: Global Default (Owner) / Wholesale Rates (Admin) vs Target Individual */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+                <div className="sg-dual-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginBottom: '24px' }}>
                   {isOwner ? (
                     /* Card 1 (Owner): Global Default Key Prices */
-                    <div style={styles.cardBox}>
+                    <div className="sg-card-box" style={styles.cardBox}>
                       <div style={styles.cardHeader}>
                         <h4>🌐 Default Key Prices (All Users)</h4>
                         <span style={styles.cyanMiniBadge}>GLOBAL RATE</span>
@@ -5603,7 +6072,7 @@ export default function RymonConnect() {
                       </p>
 
                       <form onSubmit={handleSaveGlobalDefaultPrices} style={{ marginTop: '14px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                        <div className="sg-form-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                           {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
                             <div key={plan} style={styles.formGroup}>
                               <label style={styles.formLabel}>{plan.toUpperCase()} (₹)</label>
@@ -5659,7 +6128,7 @@ export default function RymonConnect() {
                     </div>
                   ) : (
                     /* Card 1 (Admin): Read-only view of Admin's own Wholesale Rates */
-                    <div style={styles.cardBox}>
+                    <div className="sg-card-box" style={styles.cardBox}>
                       <div style={styles.cardHeader}>
                         <h4>🛡️ Your Admin Wholesale Key Rates</h4>
                         <span style={styles.cyanMiniBadge}>YOUR BASE COST</span>
@@ -5667,7 +6136,7 @@ export default function RymonConnect() {
                       <p style={styles.settingDesc}>
                         These are your current key generation rates set by the Owner. You can assign custom rates for your downline Resellers on the right.
                       </p>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '14px' }}>
+                      <div className="sg-form-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '14px' }}>
                         {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
                           <div
                             key={plan}
@@ -5692,7 +6161,7 @@ export default function RymonConnect() {
                   )}
 
                   {/* Card 2: Target Individual Custom Price Override */}
-                  <div style={styles.cardBox}>
+                  <div className="sg-card-box" style={styles.cardBox}>
                     <div style={styles.cardHeader}>
                       <h4>🎯 Target Individual Price Override</h4>
                       <span
@@ -5740,7 +6209,7 @@ export default function RymonConnect() {
                         </select>
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '12px' }}>
+                      <div className="sg-form-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '12px' }}>
                         {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
                           <div key={plan} style={styles.formGroup}>
                             <label style={styles.formLabel}>{plan.toUpperCase()} (₹)</label>
@@ -6282,8 +6751,8 @@ export default function RymonConnect() {
 
             {/* 10. DATABASE SQL SETUP HELPER */}
             {activeTab === 'sql-setup' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>Database SQL & Schema Engine</h2>
                     <p style={styles.pageSubtitle}>
@@ -6292,7 +6761,7 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                <div style={styles.cardBox}>
+                <div className="sg-card-box" style={styles.cardBox}>
                   <div style={styles.cardHeader}>
                     <h4>⚡ RYMON Schema Status</h4>
                     <span
@@ -6337,8 +6806,8 @@ export default function RymonConnect() {
             {/* 12. SOVEREIGN CONNECT URL & APK ENGINE (OWNER ONLY) */}
             {/* 11. REFERRAL / INVITE CODE ENGINE (OWNER & ADMIN) */}
             {activeTab === 'referrals' && (
-              <div style={styles.viewContainer}>
-                <div style={styles.bannerRow}>
+              <div className="sg-view-container" style={styles.viewContainer}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>Role Invite Codes Engine</h2>
                     <p style={styles.pageSubtitle}>
@@ -6353,9 +6822,9 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '24px', alignItems: 'start' }}>
+                <div className="sg-dual-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '24px', alignItems: 'start' }}>
                   {/* Card 1: Generate Code */}
-                  <div style={styles.managementCard}>
+                  <div className="sg-management-card" style={styles.managementCard}>
                     <div style={styles.cardHeader}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ ...styles.actionIconCircle, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff' }}>
@@ -6519,7 +6988,7 @@ export default function RymonConnect() {
                   </div>
 
                   {/* Card 2: Active Codes Table */}
-                  <div style={styles.managementCard}>
+                  <div className="sg-management-card" style={styles.managementCard}>
                     <div style={styles.cardHeader}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                         <div>
@@ -6538,7 +7007,7 @@ export default function RymonConnect() {
                     </div>
 
                     <div style={{ marginTop: '16px', overflowX: 'auto' }}>
-                      <table style={styles.dataTable}>
+                      <table className="sg-data-table" style={styles.dataTable}>
                         <thead>
                           <tr>
                             <th style={styles.th}>INVITE CODE</th>
@@ -6903,9 +7372,9 @@ else:
   }'`;
 
               return (
-                <div style={styles.viewContainer}>
+                <div className="sg-view-container" style={styles.viewContainer}>
                   {/* Top Header */}
-                  <div style={styles.bannerRow}>
+                  <div className="sg-banner-row" style={styles.bannerRow}>
                     <div>
                       <h2 style={styles.pageTitle}>KeyAuth Connect Engine &amp; Client APK Integration</h2>
                       <p style={styles.pageSubtitle}>
@@ -6920,7 +7389,7 @@ else:
                   </div>
 
                   {/* 1. Target Application Selector & Live Credentials Card */}
-                  <div style={{ ...styles.managementCard, marginBottom: '24px', border: '1px solid rgba(0, 217, 255, 0.35)', background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(7, 9, 14, 0.95) 100%)' }}>
+                  <div className="sg-management-card" style={{ ...styles.managementCard, marginBottom: '24px', border: '1px solid rgba(0, 217, 255, 0.35)', background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(7, 9, 14, 0.95) 100%)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ ...styles.actionIconCircle, background: 'rgba(0, 217, 255, 0.2)', color: '#00d9ff', fontSize: '18px' }}>
@@ -7427,9 +7896,9 @@ else:
               );
             })()}            {/* 12B. APP MANAGER (MULTI-APP ECOSYSTEM & PURE KEYAUTH) */}
             {activeTab === 'apps' && isOwner && (
-              <div style={styles.viewContainer}>
+              <div className="sg-view-container" style={styles.viewContainer}>
                 {/* Header Banner */}
-                <div style={styles.bannerRow}>
+                <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>App Manager &amp; Cross-App Isolation Hub</h2>
                     <p style={styles.pageSubtitle}>
@@ -7448,8 +7917,8 @@ else:
                 </div>
 
                 {/* Metrics Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-                  <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
+                <div className="sg-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                  <div className="sg-management-card" style={{ ...styles.managementCard, padding: '16px 20px' }}>
                     <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       TOTAL CONFIGURED APPS
                     </div>
@@ -8017,9 +8486,9 @@ else:
 
             {/* 13. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
             {activeTab === 'remote' && (
-              <div style={styles.viewContainer}>
+              <div className="sg-view-container" style={styles.viewContainer}>
                 {/* Compact Executive Action Header */}
-                <div style={{ ...styles.bannerRow, marginBottom: '12px' }}>
+                <div className="sg-banner-row" style={{ ...styles.bannerRow, marginBottom: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <h2 style={{ ...styles.pageTitle, margin: 0, fontSize: '20px' }}>Streamer Remote</h2>
                     <span
@@ -8097,7 +8566,7 @@ else:
                     </span>
                   </div>
 
-                  <div style={{ ...styles.badgeCluster, gap: '8px' }}>
+                  <div className="sg-remote-actions" style={{ ...styles.badgeCluster, gap: '8px' }}>
                     {/* Hourly Web Control Limit / VIP Realtime Badge */}
                     {(() => {
                       if (isOwner) {
@@ -8288,6 +8757,7 @@ else:
 
                 {/* Unified Single-Line Compact Telemetry Bar */}
                 <div
+                  className="sg-telemetry-bar"
                   style={{
                     background: 'rgba(13, 17, 26, 0.92)',
                     border: isStreamerKeyActivelyPlaying(record)
@@ -8303,7 +8773,7 @@ else:
                     gap: '12px'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: isStaff ? '1 1 280px' : '0 1 auto' }}>
+                  <div className="sg-key-select-box" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: isStaff ? '1 1 280px' : '0 1 auto' }}>
                     <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', letterSpacing: '0.5px' }}>
                       KEY:
                     </span>
@@ -8344,7 +8814,7 @@ else:
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', fontSize: '11px' }}>
+                  <div className="sg-telemetry-meta-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', fontSize: '11px' }}>
                     <div>
                       <span style={{ color: '#64748b', marginRight: '5px' }}>HWID:</span>
                       <strong style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>
@@ -8409,9 +8879,9 @@ else:
                 )}
 
                 {/* 3 Telemetry Column Control Grid */}
-                <div style={styles.controlGrid3Col}>
+                <div className="sg-control-grid" style={styles.controlGrid3Col}>
                   {/* Column 1: Aim Matrix */}
-                  <div style={styles.columnCard}>
+                  <div className="sg-column-card" style={styles.columnCard}>
                     <div style={styles.columnHead}>
                       <span style={styles.columnIcon}>🎯</span>
                       <h4>AIM ASSIST MATRIX</h4>
@@ -8521,7 +8991,7 @@ else:
                   </div>
 
                   {/* Column 2: ESP Visuals */}
-                  <div style={styles.columnCard}>
+                  <div className="sg-column-card" style={styles.columnCard}>
                     <div style={styles.columnHead}>
                       <span style={styles.columnIcon}>👁️</span>
                       <h4>ESP VISUAL OVERLAY</h4>
@@ -8673,7 +9143,7 @@ else:
                   </div>
 
                   {/* Column 3: Kinematics & Themes */}
-                  <div style={styles.columnCard}>
+                  <div className="sg-column-card" style={styles.columnCard}>
                     <div style={styles.columnHead}>
                       <span style={styles.columnIcon}>⚡</span>
                       <h4>KINEMATICS & THEME</h4>
@@ -8797,7 +9267,7 @@ else:
       {/* ── EMERGENCY REMOTE PURGE MODAL ────────────────────────────────────── */}
       {showPurgeModal && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
+          <div className="sg-modal-card" style={styles.modalCard}>
             <div style={styles.modalIcon}>🚨</div>
             <h3 style={styles.modalTitle}>Confirm Emergency Remote Wipe</h3>
             <p style={styles.modalText}>
@@ -8826,6 +9296,7 @@ else:
       {showDownloadModal && (
         <div style={styles.modalOverlay} onClick={() => setShowDownloadModal(false)}>
           <div
+            className="sg-modal-card"
             style={{
               ...styles.modalCard,
               maxWidth: '640px',
@@ -8952,6 +9423,7 @@ else:
       {pwdModalUser && (
         <div style={styles.modalOverlay} onClick={() => setPwdModalUser(null)}>
           <div
+            className="sg-modal-card"
             style={{
               ...styles.modalCard,
               maxWidth: '480px',
@@ -9093,7 +9565,110 @@ else:
         </div>
       )}
 
-      {/* ── NOTIFICATION DRAWER / NOTIFICATION CENTER ───────────────────────── */}
+      {/* ── MOBILE BOTTOM FLOATING QUICK ACCESS BAR ─────────────────────────── */}
+      {isAuthenticated && (
+        <nav className="sg-mobile-bottom-bar" aria-label="Mobile Navigation">
+          {isStreamer ? (
+            <>
+              <button
+                type="button"
+                className={`sg-mobile-bottom-tab ${activeTab === 'remote' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('remote')
+                  setMobileMenuOpen(false)
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>⚡</span>
+                <span>Remote</span>
+              </button>
+              <button
+                type="button"
+                className="sg-mobile-bottom-tab"
+                onClick={() => {
+                  setShowDownloadModal(true)
+                  setMobileMenuOpen(false)
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>📥</span>
+                <span>APK</span>
+              </button>
+              <a
+                href="https://t.me/Rymon007bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="sg-mobile-bottom-tab"
+                style={{ textDecoration: 'none' }}
+              >
+                <span style={{ fontSize: '18px' }}>✈️</span>
+                <span>Bot</span>
+              </a>
+              <button
+                type="button"
+                className={`sg-mobile-bottom-tab ${mobileMenuOpen ? 'active' : ''}`}
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                <span style={{ fontSize: '18px' }}>☰</span>
+                <span>More</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`sg-mobile-bottom-tab ${activeTab === 'remote' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('remote')
+                  setMobileMenuOpen(false)
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>⚡</span>
+                <span>Remote</span>
+              </button>
+              <button
+                type="button"
+                className={`sg-mobile-bottom-tab ${activeTab === 'keys' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('keys')
+                  setMobileMenuOpen(false)
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>🔑</span>
+                <span>Keys</span>
+              </button>
+              <button
+                type="button"
+                className={`sg-mobile-bottom-tab ${activeTab === 'generate' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('generate')
+                  setMobileMenuOpen(false)
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>➕</span>
+                <span>Gen</span>
+              </button>
+              <button
+                type="button"
+                className={`sg-mobile-bottom-tab ${activeTab === 'overview' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('overview')
+                  setMobileMenuOpen(false)
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>📊</span>
+                <span>Stats</span>
+              </button>
+              <button
+                type="button"
+                className={`sg-mobile-bottom-tab ${mobileMenuOpen ? 'active' : ''}`}
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                <span style={{ fontSize: '18px' }}>☰</span>
+                <span>Menu</span>
+              </button>
+            </>
+          )}
+        </nav>
+      )}
 
     </div>
   )
