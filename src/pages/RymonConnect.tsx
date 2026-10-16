@@ -577,12 +577,18 @@ export default function RymonConnect() {
       if (!supabase || isDbSyncing) return
       isDbSyncing = true
       try {
+        const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
+        const isKeyVip = Boolean(
+          targetLic?.plan_duration?.includes('[VIP]') ||
+          record?.streamer_name?.includes('VIP_REALTIME') ||
+          record?.streamer_name?.startsWith('VIP|')
+        )
+        const ctrlPromise = isKeyVip
+          ? supabase.from('rymon_streamer_controls').select('*').eq('license_key', currentKey).maybeSingle()
+          : Promise.resolve({ data: null })
+
         const [{ data: ctrlData }, { data: licData }] = await Promise.all([
-          supabase
-            .from('rymon_streamer_controls')
-            .select('*')
-            .eq('license_key', currentKey)
-            .maybeSingle(),
+          ctrlPromise,
           supabase
             .from('rymon_licenses')
             .select('device_hwid, devices_used, devices_max, last_heartbeat, status, is_paused, expires_at, game, creator_username')
@@ -612,7 +618,7 @@ export default function RymonConnect() {
           }
 
           // If DB had stale is_online=true when activelyPlaying is false, reset in background
-          if (ctrlData) {
+          if (ctrlData && isKeyVip) {
             const tempMerged = { ...ctrlData, last_heartbeat: ctrlData.last_heartbeat || licData?.last_heartbeat } as StreamerControlRecord
             if (ctrlData.is_online && !isStreamerKeyActivelyPlaying(tempMerged)) {
               supabase
@@ -632,6 +638,39 @@ export default function RymonConnect() {
     async function fastPulseTelemetry() {
       if (!isMounted || sliderTimerRef.current) return
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+
+      const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
+      const isKeyVip = Boolean(
+        targetLic?.plan_duration?.includes('[VIP]') ||
+        (cachedCtrl as Partial<StreamerControlRecord> | null)?.streamer_name?.includes('VIP_REALTIME') ||
+        (cachedCtrl as Partial<StreamerControlRecord> | null)?.streamer_name?.startsWith('VIP|') ||
+        record?.streamer_name?.includes('VIP_REALTIME') ||
+        record?.streamer_name?.startsWith('VIP|')
+      )
+
+      if (!isKeyVip) {
+        if (isMounted) {
+          setIsLiveConnected(false)
+          setVipPingMs(null)
+          if (cachedLic) {
+            const activelyPlaying = Boolean(cachedLic?.last_heartbeat && (Date.now() - new Date(cachedLic.last_heartbeat).getTime() < 30000))
+            setRecord((prev) => ({
+              ...(prev || ({} as StreamerControlRecord)),
+              license_key: currentKey,
+              streamer_name: 'Standard Mobile APK (In-Game Only)',
+              game_name: cachedLic?.game || 'Free Fire MAX',
+              is_online: activelyPlaying,
+              is_active: cachedLic?.status !== 'BANNED' && cachedLic?.status !== 'EXPIRED',
+              is_paused: cachedLic?.is_paused ?? false,
+              device_hwid: cachedLic?.device_hwid || '',
+              devices_used: cachedLic?.devices_used ?? 0,
+              devices_max: cachedLic?.devices_max ?? 1,
+              last_heartbeat: cachedLic?.last_heartbeat
+            } as StreamerControlRecord))
+          }
+        }
+        return
+      }
 
       // Gentle 60-second background refresh for license status / expiry without spamming DB
       if (Date.now() - lastDbSyncTime > 60000) {
@@ -743,9 +782,17 @@ export default function RymonConnect() {
 
     const fastSyncTimer = setInterval(fastPulseTelemetry, 1000)
 
-    const channel = supabase
-      .channel(`streamer-remote-${currentKey}`)
-      .on(
+    const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
+    const isKeyVip = Boolean(
+      targetLic?.plan_duration?.includes('[VIP]') ||
+      record?.streamer_name?.includes('VIP_REALTIME') ||
+      record?.streamer_name?.startsWith('VIP|')
+    )
+
+    const channel = supabase.channel(`streamer-remote-${currentKey}`)
+
+    if (isKeyVip) {
+      channel.on(
         'postgres_changes',
         {
           event: '*',
@@ -770,6 +817,9 @@ export default function RymonConnect() {
           }
         }
       )
+    }
+
+    channel
       .on(
         'postgres_changes',
         {
@@ -804,7 +854,7 @@ export default function RymonConnect() {
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED' && isMounted) {
+        if (status === 'SUBSCRIBED' && isMounted && isKeyVip) {
           setIsLiveConnected(true)
         }
       })
@@ -1278,6 +1328,16 @@ export default function RymonConnect() {
   const canControlCurrentKey = (): boolean => {
     if (!currentKey) {
       showToast('⚠️ Please select a Target License Key above to control.')
+      return false
+    }
+    const targetLic = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
+    const isVip = Boolean(
+      targetLic?.plan_duration?.includes('[VIP]') ||
+      record?.streamer_name?.includes('VIP_REALTIME') ||
+      record?.streamer_name?.startsWith('VIP|')
+    )
+    if (!isVip) {
+      showToast('🔒 Web Remote is disabled for Standard Mobile APK keys (In-Game Only).')
       return false
     }
     if (isRootOwner || isStreamer) return true
@@ -8991,7 +9051,14 @@ else:
             )}
 
             {/* 13. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
-            {activeTab === 'remote' && (
+            {activeTab === 'remote' && (() => {
+              const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
+              const isCurrentVip = Boolean(
+                targetLic?.plan_duration?.includes('[VIP]') ||
+                record?.streamer_name?.includes('VIP_REALTIME') ||
+                record?.streamer_name?.startsWith('VIP|')
+              )
+              return (
               <div className="sg-view-container" style={styles.viewContainer}>
                 {/* Compact Executive Action Header */}
                 <div className="sg-banner-row" style={{ ...styles.bannerRow, marginBottom: '12px' }}>
@@ -9014,8 +9081,8 @@ else:
                       {isStreamerKeyActivelyPlaying(record) ? '🟢 IN-GAME' : '⚪ IDLE'}
                     </span>
 
-                    {/* Live Radar Telemetry Badge (Enemies / Bots) */}
-                    {(() => {
+                    {/* Live Radar Telemetry Badge (Enemies / Bots) - VIP Only */}
+                    {isCurrentVip && (() => {
                       const playing = isStreamerKeyActivelyPlaying(record)
                       const liveEnemies = playing ? Number(record?.streamer_name?.match(/E:(\d+)/)?.[1] || 0) : 0
                       const liveBots = playing ? Number(record?.streamer_name?.match(/B:(\d+)/)?.[1] || 0) : 0
@@ -9043,33 +9110,54 @@ else:
                     })()}
 
                     {/* Live Ping & VIP Bridge Latency Meter */}
-                    <span
-                      style={{
-                        padding: '5px 10px',
-                        borderRadius: '8px',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        letterSpacing: '0.3px',
-                        background: isLiveConnected ? 'rgba(5, 223, 114, 0.15)' : 'rgba(234, 179, 8, 0.15)',
-                        border: isLiveConnected ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(234, 179, 8, 0.4)',
-                        color: isLiveConnected ? '#05df72' : '#facc15',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                      title="Realtime latency between Web Controller and Direct RYMON Mesh"
-                    >
+                    {!isCurrentVip ? (
                       <span
                         style={{
-                          width: '7px',
-                          height: '7px',
-                          borderRadius: '50%',
-                          backgroundColor: isLiveConnected ? '#05df72' : '#facc15',
-                          boxShadow: isLiveConnected ? '0 0 8px #05df72' : '0 0 8px #facc15'
+                          padding: '5px 10px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          letterSpacing: '0.3px',
+                          background: 'rgba(56, 189, 248, 0.15)',
+                          border: '1px solid rgba(56, 189, 248, 0.45)',
+                          color: '#38bdf8',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
                         }}
-                      />
-                      {vipPingMs !== null ? (vipPingMs > 1200 ? '⚡ WARMING MESH...' : `${vipPingMs}ms VIP BRIDGE`) : isLiveConnected ? `${ping}ms VIP BRIDGE` : '🟡 VIP BRIDGE (CONNECTING...)'}
-                    </span>
+                      >
+                        <span>🔒</span>
+                        <span>APK ONLY (IN-GAME)</span>
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          padding: '5px 10px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          letterSpacing: '0.3px',
+                          background: isLiveConnected ? 'rgba(5, 223, 114, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                          border: isLiveConnected ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(234, 179, 8, 0.4)',
+                          color: isLiveConnected ? '#05df72' : '#facc15',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                        title="Realtime latency between Web Controller and Direct RYMON Mesh"
+                      >
+                        <span
+                          style={{
+                            width: '7px',
+                            height: '7px',
+                            borderRadius: '50%',
+                            backgroundColor: isLiveConnected ? '#05df72' : '#facc15',
+                            boxShadow: isLiveConnected ? '0 0 8px #05df72' : '0 0 8px #facc15'
+                          }}
+                        />
+                        {vipPingMs !== null ? (vipPingMs > 1200 ? '⚡ WARMING MESH...' : `${vipPingMs}ms VIP BRIDGE`) : isLiveConnected ? `${ping}ms VIP BRIDGE` : '🟡 VIP BRIDGE (CONNECTING...)'}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sg-remote-actions" style={{ ...styles.badgeCluster, gap: '8px' }}>
@@ -9154,7 +9242,7 @@ else:
                       )
                     })()}
 
-                    {currentKey && (
+                    {currentKey && isCurrentVip && (
                       <>
                         {/* 1-Click Remote Overlay vs Web-Only Switch */}
                         <button
@@ -9350,104 +9438,200 @@ else:
                   </div>
                 </div>
 
-                {/* Standard APK Key Notice in Remote Console */}
-                {(() => {
-                  const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
-                  const isCurrentVip = Boolean(
-                    targetLic?.plan_duration?.includes('[VIP]') ||
-                    record?.streamer_name?.includes('VIP_REALTIME') ||
-                    record?.streamer_name?.startsWith('VIP|')
-                  )
-                  if (!currentKey || isCurrentVip) return null
-                  return (
-                    <div
-                      style={{
-                        marginBottom: '14px',
-                        padding: '14px 18px',
-                        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(6, 182, 212, 0.08))',
-                        border: '1px solid rgba(0, 217, 255, 0.45)',
-                        borderRadius: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '14px',
-                        flexWrap: 'wrap'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ fontSize: '24px' }}>📱</span>
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: 800, color: '#00d9ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span>STANDARD MOBILE APK KEY</span>
-                            <span style={{ fontSize: '9.5px', background: 'rgba(0, 217, 255, 0.2)', border: '1px solid rgba(0, 217, 255, 0.5)', padding: '2px 6px', borderRadius: '4px' }}>
-                              IN-GAME MOD ONLY
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                            Key <code style={{ color: '#f8fafc', background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>{currentKey}</code> was created for normal in-game APK use only. Live web remote telemetry is inactive to maintain zero server load.
-                          </div>
-                        </div>
-                      </div>
-                      {(isOwner || isAdmin) && (
-                        <button
-                          onClick={() => handleToggleVipKey(currentKey, true)}
-                          style={{
-                            padding: '7px 14px',
-                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                            border: 'none',
-                            borderRadius: '8px',
-                            color: '#000',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            boxShadow: '0 0 12px rgba(245, 158, 11, 0.35)'
-                          }}
-                        >
-                          👑 UPGRADE TO VIP WEB REMOTE (+50%)
-                        </button>
-                      )}
-                    </div>
-                  )
-                })()}
-
-                {/* Compact Freeze Indicator (Only when Paused) */}
-                {record?.is_paused && (
+                {!currentKey ? (
                   <div
                     style={{
-                      background: 'rgba(255, 183, 0, 0.12)',
-                      border: '1px solid rgba(255, 183, 0, 0.45)',
-                      borderRadius: '8px',
-                      padding: '8px 14px',
-                      marginBottom: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: '#ffb700'
+                      background: 'rgba(15, 23, 42, 0.65)',
+                      border: '1px dashed rgba(148, 163, 184, 0.25)',
+                      borderRadius: '16px',
+                      padding: '40px 20px',
+                      textAlign: 'center',
+                      marginTop: '8px'
                     }}
                   >
-                    <span>❄️ STEALTH FREEZE ACTIVE — All in-game visuals &amp; memory hooks temporarily suspended</span>
-                    <button
-                      onClick={handleToggleStealthFreeze}
+                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>🎯</div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc', marginBottom: '6px' }}>
+                      No Target License Key Selected
+                    </h3>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '420px', margin: '0 auto' }}>
+                      Please select a license key from the dropdown above to view device status or access live streamer telemetry.
+                    </p>
+                  </div>
+                ) : !isCurrentVip ? (
+                  /* Cyber-Glassmorphic Locked Screen for Standard Mobile APK */
+                  <div
+                    style={{
+                      background: 'radial-gradient(ellipse at top, rgba(14, 165, 233, 0.12) 0%, rgba(10, 15, 29, 0.96) 70%)',
+                      border: '1px solid rgba(56, 189, 248, 0.35)',
+                      borderRadius: '16px',
+                      padding: '42px 24px',
+                      textAlign: 'center',
+                      boxShadow: '0 12px 36px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+                      backdropFilter: 'blur(16px)',
+                      marginTop: '8px'
+                    }}
+                  >
+                    <div
                       style={{
-                        background: '#05df72',
-                        color: '#07090e',
-                        border: 'none',
-                        borderRadius: '6px',
-                        padding: '4px 10px',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        cursor: 'pointer'
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        background: 'rgba(56, 189, 248, 0.15)',
+                        border: '1px solid rgba(56, 189, 248, 0.5)',
+                        borderRadius: '999px',
+                        padding: '6px 16px',
+                        marginBottom: '18px'
                       }}
                     >
-                      ▶️ RESUME
-                    </button>
-                  </div>
-                )}
+                      <span style={{ fontSize: '13px' }}>🔒</span>
+                      <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '1px', color: '#38bdf8' }}>
+                        STANDARD MOBILE APK EDITION
+                      </span>
+                    </div>
 
-                {/* 3 Telemetry Column Control Grid */}
-                <div className="sg-control-grid" style={styles.controlGrid3Col}>
+                    <h3
+                      style={{
+                        fontSize: '22px',
+                        fontWeight: 800,
+                        color: '#f8fafc',
+                        marginBottom: '10px',
+                        letterSpacing: '-0.5px'
+                      }}
+                    >
+                      Web Remote Controls Are Locked
+                    </h3>
+
+                    <p
+                      style={{
+                        maxWidth: '620px',
+                        margin: '0 auto 24px auto',
+                        fontSize: '13px',
+                        color: '#94a3b8',
+                        lineHeight: 1.6
+                      }}
+                    >
+                      License Key <code style={{ color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>{currentKey}</code> is a <strong style={{ color: '#f8fafc' }}>Standard Mobile APK Key</strong>.
+                      It operates directly inside the Android Game Overlay with zero web remote sync, saving database egress and network bandwidth.
+                    </p>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                        gap: '14px',
+                        maxWidth: '720px',
+                        margin: '0 auto 28px auto',
+                        textAlign: 'left'
+                      }}
+                    >
+                      <div
+                        style={{
+                          background: 'rgba(15, 23, 42, 0.7)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '12px',
+                          padding: '16px'
+                        }}
+                      >
+                        <div style={{ fontSize: '20px', marginBottom: '8px' }}>📱</div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#f8fafc', marginBottom: '4px' }}>In-Game Floating Menu</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.45 }}>All floating overlay controls and features are fully operational directly on the phone.</div>
+                      </div>
+
+                      <div
+                        style={{
+                          background: 'rgba(15, 23, 42, 0.7)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '12px',
+                          padding: '16px'
+                        }}
+                      >
+                        <div style={{ fontSize: '20px', marginBottom: '8px' }}>🛡️</div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#f8fafc', marginBottom: '4px' }}>Zero Web Telemetry</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.45 }}>Remote daemon is inactive to ensure 0% network lag, zero battery drain, and zero server egress.</div>
+                      </div>
+
+                      <div
+                        style={{
+                          background: 'rgba(15, 23, 42, 0.7)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '12px',
+                          padding: '16px'
+                        }}
+                      >
+                        <div style={{ fontSize: '20px', marginBottom: '8px' }}>👑</div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#f8fafc', marginBottom: '4px' }}>Need Live Web Control?</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.45 }}>Upgrade this license to VIP Web Remote (+50%) for live browser matrix sliders & stealth freeze.</div>
+                      </div>
+                    </div>
+
+                    {(isOwner || isAdmin) ? (
+                      <button
+                        onClick={() => handleToggleVipKey(currentKey, true)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '12px 28px',
+                          background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                          border: 'none',
+                          borderRadius: '10px',
+                          color: '#000',
+                          fontSize: '12.5px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          boxShadow: '0 0 24px rgba(245, 158, 11, 0.45)',
+                          transition: 'transform 0.15s ease'
+                        }}
+                      >
+                        <span>👑</span>
+                        <span>UPGRADE THIS KEY TO VIP WEB REMOTE (+50%)</span>
+                      </button>
+                    ) : (
+                      <div style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
+                        Contact Owner or Administrator to upgrade this license key to VIP Web Remote.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* Compact Freeze Indicator (Only when Paused) */}
+                    {record?.is_paused && (
+                      <div
+                        style={{
+                          background: 'rgba(255, 183, 0, 0.12)',
+                          border: '1px solid rgba(255, 183, 0, 0.45)',
+                          borderRadius: '8px',
+                          padding: '8px 14px',
+                          marginBottom: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          color: '#ffb700'
+                        }}
+                      >
+                        <span>❄️ STEALTH FREEZE ACTIVE — All in-game visuals &amp; memory hooks temporarily suspended</span>
+                        <button
+                          onClick={handleToggleStealthFreeze}
+                          style={{
+                            background: '#05df72',
+                            color: '#07090e',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ▶️ RESUME
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 3 Telemetry Column Control Grid */}
+                    <div className="sg-control-grid" style={styles.controlGrid3Col}>
                   {/* Column 1: Aim Matrix */}
                   <div className="sg-column-card" style={styles.columnCard}>
                     <div style={styles.columnHead}>
@@ -9826,8 +10010,11 @@ else:
                     </div>
                   </div>
                 </div>
-              </div>
+              </>
             )}
+          </div>
+        )
+      })()}
           </main>
         </div>
       )}
