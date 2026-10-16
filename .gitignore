@@ -36,6 +36,8 @@ scripts/deploy-rymon-sql.mjs
 .cursor/
 .agents/
 .mcp.json
+skills-lock.json
+schema.json
 supabase/.temp/
 
 # Internal blueprints & docs (strict rule: NEVER commit or push any .md or secrets)
