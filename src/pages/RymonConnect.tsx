@@ -2244,9 +2244,15 @@ export default function RymonConnect() {
   // Filtered queries
   const filteredKeys = useMemo(() => {
     return keysList.filter((k) => {
+      if (!k) return false
+      const licKey = String(k.license_key || '').toUpperCase()
+      const creator = String(k.creator_username || '').toLowerCase()
+      const gameName = String(k.game || '').toLowerCase()
+      const hwid = String(k.device_hwid || '').toLowerCase()
+
       if (
         keyStatusFilter === 'PLAYING' &&
-        !(!k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(k.license_key.toUpperCase()))
+        !(!k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(licKey))
       ) {
         return false
       }
@@ -2257,23 +2263,23 @@ export default function RymonConnect() {
       if (keyStatusFilter === 'BANNED' && k.status !== 'BANNED') return false
       if (
         keyCreatorFilter !== 'ALL' &&
-        k.creator_username.toLowerCase() !== keyCreatorFilter.toLowerCase()
+        creator !== keyCreatorFilter.toLowerCase()
       ) {
         return false
       }
       if (
         keyGameFilter !== 'ALL' &&
-        (k.game || '').toLowerCase() !== keyGameFilter.toLowerCase()
+        gameName !== keyGameFilter.toLowerCase()
       ) {
         return false
       }
       if (!searchKeyQuery.trim()) return true
       const q = searchKeyQuery.toLowerCase()
       return (
-        k.license_key.toLowerCase().includes(q) ||
-        (k.game && k.game.toLowerCase().includes(q)) ||
-        k.creator_username.toLowerCase().includes(q) ||
-        (k.device_hwid && k.device_hwid.toLowerCase().includes(q))
+        licKey.toLowerCase().includes(q) ||
+        gameName.includes(q) ||
+        creator.includes(q) ||
+        hwid.includes(q)
       )
     })
   }, [keysList, searchKeyQuery, keyStatusFilter, keyCreatorFilter, keyGameFilter, onlineKeySet])
@@ -2283,24 +2289,26 @@ export default function RymonConnect() {
     const q = searchUserQuery.toLowerCase()
     return usersList.filter(
       (u) =>
-        u.username.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q) ||
-        u.uplink.toLowerCase().includes(q)
+        Boolean(u) &&
+        (String(u.username || '').toLowerCase().includes(q) ||
+          String(u.email || '').toLowerCase().includes(q) ||
+          String(u.role || '').toLowerCase().includes(q) ||
+          String(u.uplink || '').toLowerCase().includes(q))
     )
   }, [usersList, searchUserQuery])
 
   // Overview Counts
   const stats = useMemo(() => {
-    const total = keysList.length
-    const active = keysList.filter((k) => k.status === 'ACTIVE' && !k.is_paused).length
-    const paused = keysList.filter((k) => k.is_paused || k.status === 'PAUSED').length
-    const unused = keysList.filter((k) => k.status === 'WAITING').length
-    const expired = keysList.filter((k) => k.status === 'EXPIRED').length
-    const banned = keysList.filter((k) => k.status === 'BANNED').length
-    const reset = keysList.filter((k) => k.devices_used === 0 && k.status === 'ACTIVE').length
-    const playingNow = keysList.filter(
-      (k) => !k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(k.license_key.toUpperCase())
+    const validKeys = keysList.filter(Boolean)
+    const total = validKeys.length
+    const active = validKeys.filter((k) => k.status === 'ACTIVE' && !k.is_paused).length
+    const paused = validKeys.filter((k) => k.is_paused || k.status === 'PAUSED').length
+    const unused = validKeys.filter((k) => k.status === 'WAITING').length
+    const expired = validKeys.filter((k) => k.status === 'EXPIRED').length
+    const banned = validKeys.filter((k) => k.status === 'BANNED').length
+    const reset = validKeys.filter((k) => k.devices_used === 0 && k.status === 'ACTIVE').length
+    const playingNow = validKeys.filter(
+      (k) => !k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(String(k.license_key || '').toUpperCase())
     ).length
     const notPlaying = Math.max(0, total - playingNow)
     return { total, active, paused, unused, expired, banned, reset, playingNow, notPlaying }

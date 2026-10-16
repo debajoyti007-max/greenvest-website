@@ -24,18 +24,37 @@ class ErrorBoundary extends Component<Props, State> {
     console.error('Caught Error in ErrorBoundary:', error, errorInfo)
   }
 
-  private handleReset = () => {
+  private handleReset = async () => {
+    try {
+      sessionStorage.clear()
+      if ('caches' in window) {
+        const keys = await caches.keys()
+        await Promise.all(keys.map((k) => caches.delete(k)))
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(regs.map((r) => r.unregister()))
+      }
+    } catch {}
     this.setState({ hasError: false, error: null })
-    window.location.reload()
+    window.location.href = window.location.pathname + '?nocache=' + Date.now()
   }
 
-  private handleClearCache = () => {
+  private handleClearCache = async () => {
     try {
       localStorage.removeItem('gv_products_cache_v2')
       localStorage.removeItem('gv_reviews_cache_v1')
       sessionStorage.clear()
+      if ('caches' in window) {
+        const keys = await caches.keys()
+        await Promise.all(keys.map((k) => caches.delete(k)))
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(regs.map((r) => r.unregister()))
+      }
     } catch {}
-    window.location.href = '/'
+    window.location.href = '/?nocache=' + Date.now()
   }
 
   public render() {
@@ -54,34 +73,52 @@ class ErrorBoundary extends Component<Props, State> {
           padding: '2rem 1rem',
           textAlign: 'center',
           fontFamily: 'system-ui, sans-serif',
-          background: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)',
+          background: 'linear-gradient(180deg, #0d111a 0%, #161b26 100%)',
+          color: '#e2e8f0'
         }}>
           <div style={{
-            background: 'linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%)',
-            borderRadius: '28px',
+            background: 'linear-gradient(180deg, #161b26 0%, #0d111a 100%)',
+            borderRadius: '24px',
             padding: '2.5rem 1.75rem',
-            maxWidth: '380px',
+            maxWidth: '420px',
             width: '100%',
-            boxShadow: '0 24px 48px -12px rgba(22, 101, 52, 0.14)',
-            border: '1.5px solid #bbf7d0',
+            boxShadow: '0 24px 48px -12px rgba(0, 0, 0, 0.6)',
+            border: '1.5px solid rgba(139, 92, 246, 0.3)',
           }}>
-            <div style={{ fontSize: '3.2rem', marginBottom: '0.4rem', filter: 'drop-shadow(0 6px 12px rgba(22,101,52,0.18))' }}>
-              🥬
+            <div style={{ fontSize: '3rem', marginBottom: '0.4rem' }}>
+              ⚡
             </div>
             
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fee2e2', color: '#b91c1c', padding: '3px 12px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 800, marginBottom: '0.65rem' }}>
-              <span>ERROR</span>
-              <span>·</span>
-              <span>AUTO-LOGGED</span>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '3px 12px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 800, marginBottom: '0.65rem' }}>
+              <span>SYSTEM GLITCH DETECTED</span>
             </div>
 
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#166534', margin: '0 0 0.5rem' }}>
-              সাময়িক সমস্যা · Glitch
+            <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#f1f5f9', margin: '0 0 0.5rem' }}>
+              Temporary Refresh Required
             </h2>
 
-            <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 1.5rem', fontWeight: 600 }}>
-              ✓ টিমকে জানানো হয়েছে। নিচের বোতামে রিস্টোর করুন।
+            <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 1rem', fontWeight: 500 }}>
+              A new version was deployed. Click below to clear cache and load the latest release cleanly.
             </p>
+
+            {this.state.error?.message && (
+              <div style={{
+                margin: '0.8rem 0',
+                padding: '0.6rem 0.8rem',
+                background: 'rgba(0, 0, 0, 0.5)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '10px',
+                fontSize: '0.75rem',
+                color: '#fca5a5',
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+                textAlign: 'left',
+                maxHeight: '100px',
+                overflowY: 'auto'
+              }}>
+                <strong>Reason:</strong> {this.state.error.message}
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               <button
@@ -90,16 +127,16 @@ class ErrorBoundary extends Component<Props, State> {
                 style={{
                   padding: '0.8rem 1.25rem',
                   borderRadius: '14px',
-                  background: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
+                  background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
                   color: '#ffffff',
                   border: 'none',
                   fontWeight: 700,
                   fontSize: '0.92rem',
                   cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(22, 101, 52, 0.25)',
+                  boxShadow: '0 4px 14px rgba(124, 58, 237, 0.4)',
                 }}
               >
-                🔄 রিফ্রেশ করুন / Refresh
+                🔄 Clear Cache & Reload Latest Version
               </button>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>

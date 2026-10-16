@@ -21,9 +21,23 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
         const hasRetried = window.sessionStorage.getItem(storageKey)
         if (!hasRetried) {
           window.sessionStorage.setItem(storageKey, '1')
-          window.location.reload()
+          // Purge Service Worker caches so deleted chunks fetch fresh HTML and assets
+          if ('caches' in window) {
+            try {
+              const keys = await caches.keys()
+              await Promise.all(keys.map((k) => caches.delete(k)))
+            } catch {}
+          }
+          if ('serviceWorker' in navigator) {
+            try {
+              const regs = await navigator.serviceWorker.getRegistrations()
+              await Promise.all(regs.map((r) => r.unregister()))
+            } catch {}
+          }
+          window.location.href = window.location.pathname + '?reload=' + Date.now()
           return new Promise<{ default: T }>(() => {})
         }
+        window.sessionStorage.removeItem(storageKey)
       }
       throw error
     }
