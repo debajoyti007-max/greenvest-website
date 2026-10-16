@@ -93,6 +93,16 @@ type TabType =
 
 const THEME_NAMES = ['Cyber Blue', 'Neon Pink', 'Emerald', 'Violet', 'Amber']
 
+const DEFAULT_ANON_STREAMER: RymonAccount = {
+  id: 'usr-streamer',
+  username: 'Streamer VIP',
+  email: 'streamer@greenvest.shop',
+  role: 'streamer',
+  balance: 0,
+  uplink: 'debajoyti',
+  status: 'ACTIVE'
+}
+
 export default function RymonConnect() {
   // Navigation
   const [activeTab, setActiveTab] = useState<TabType>('overview')
@@ -285,15 +295,7 @@ export default function RymonConnect() {
       setIsAuthenticated(true)
       setActiveTab('remote')
       if (!savedUserJson) {
-        setCurrentUser({
-          id: 'usr-streamer',
-          username: 'Streamer VIP',
-          email: 'streamer@greenvest.shop',
-          role: 'streamer',
-          balance: 0,
-          uplink: 'debajoyti',
-          status: 'ACTIVE'
-        })
+        setCurrentUser(DEFAULT_ANON_STREAMER)
       }
     }
 
@@ -311,15 +313,7 @@ export default function RymonConnect() {
       const exp = savedExp ? new Date(savedExp) : new Date(Date.now() + 30 * 86400000)
       setExpiryDate(exp)
       if (!queryKey) {
-        setCurrentUser({
-          id: 'usr-streamer',
-          username: 'Streamer VIP',
-          email: 'streamer@greenvest.shop',
-          role: 'streamer',
-          balance: 0,
-          uplink: 'debajoyti',
-          status: 'ACTIVE'
-        })
+        setCurrentUser(DEFAULT_ANON_STREAMER)
       }
       setActiveTab('remote')
     }
@@ -405,9 +399,9 @@ export default function RymonConnect() {
         })
 
         // Sync fresh balance if currentUser in list
-        if (currentUser) {
+        if (currentUser && currentUser.username) {
           const freshMe = usrs.find(
-            (u) => u.username.toLowerCase() === currentUser.username.toLowerCase()
+            (u) => (u.username || '').toLowerCase() === currentUser.username.toLowerCase()
           )
           if (freshMe) {
             setWalletBalance(freshMe.balance)
@@ -491,9 +485,9 @@ export default function RymonConnect() {
             if (payload.eventType === 'UPDATE' && payload.new) {
               const updatedAcc = payload.new as RymonAccount
               setUsersList((prev) =>
-                prev.map((u) => (u.id === updatedAcc.id || u.username.toLowerCase() === updatedAcc.username.toLowerCase() ? { ...u, ...updatedAcc } : u))
+                prev.map((u) => (u.id === updatedAcc.id || ((u.username || '').toLowerCase() === (updatedAcc.username || '').toLowerCase()) ? { ...u, ...updatedAcc } : u))
               )
-              if (currentUser && currentUser.username.toLowerCase() === updatedAcc.username.toLowerCase()) {
+              if (currentUser?.username && updatedAcc?.username && currentUser.username.toLowerCase() === updatedAcc.username.toLowerCase()) {
                 setWalletBalance(updatedAcc.balance)
                 setCurrentUser((prev) => prev ? { ...prev, ...updatedAcc } : updatedAcc)
               }
@@ -1034,7 +1028,7 @@ export default function RymonConnect() {
   const handleClearIndividualUserPrices = (username: string) => {
     clearUserCustomPriceMap(username)
     setAllCustomUserMaps(getAllUserCustomPriceMaps())
-    if (targetPriceUser.toLowerCase() === username.toLowerCase()) {
+    if ((targetPriceUser || '').toLowerCase() === (username || '').toLowerCase()) {
       setCustomUserPrices({ ...globalPrices })
     }
     showToast(`Reverted @${username} to global default key prices.`)
@@ -1080,7 +1074,7 @@ export default function RymonConnect() {
     // If custom name was entered and is not yet in registered apps, save it automatically
     if (isCustomAppMode && customAppNameInput.trim()) {
       const trimmed = customAppNameInput.trim()
-      const alreadyExists = registeredApps.some((a) => a.name.toLowerCase() === trimmed.toLowerCase())
+      const alreadyExists = registeredApps.some((a) => (a?.name || '').toLowerCase() === trimmed.toLowerCase())
       if (!alreadyExists) {
         addRegisteredApp({
           name: trimmed,
@@ -1123,7 +1117,7 @@ export default function RymonConnect() {
       if (telegramConfig.is_active && telegramConfig.bot_token) {
         const tgKeyMsg = [
           `⚡ <b>RYMON OFFICIAL — NEW KEY${createdCount > 1 ? 'S' : ''} GENERATED</b>`,
-          `👤 <b>Seller:</b> @${currentUser.username} (${currentUser.role.toUpperCase()})`,
+          `👤 <b>Seller:</b> @${currentUser?.username || 'admin'} (${String(currentUser?.role || 'user').toUpperCase()})`,
           `🎮 <b>Game:</b> ${genGame} • <b>Plan:</b> ${genDuration}`,
           `📱 <b>Max Devices:</b> ${genDevicesMax} • <b>Qty:</b> ${createdCount}`,
           ``,
@@ -1186,7 +1180,7 @@ export default function RymonConnect() {
       setTopUpAmount('')
       fetchAllAccounts(currentUser).then((u) => {
         setUsersList(u)
-        if (currentUser?.username.toLowerCase() === topUpTargetUser.toLowerCase()) {
+        if (currentUser?.username && currentUser.username.toLowerCase() === (topUpTargetUser || '').toLowerCase()) {
           setWalletBalance(res.newBalance!)
           setCurrentUser({ ...currentUser, balance: res.newBalance! })
         }
@@ -1665,7 +1659,7 @@ export default function RymonConnect() {
   }
 
   const handleToggleUserBan = async (targetUser: string, currentlyBanned: boolean) => {
-    if (targetUser.toLowerCase() === 'debajoyti') {
+    if ((targetUser || '').toLowerCase() === 'debajoyti') {
       alert('Action forbidden: Root Owner account cannot be banned.')
       return
     }
@@ -1697,7 +1691,7 @@ export default function RymonConnect() {
       return
     }
 
-    if (cleanTarget.toLowerCase() === currentUser.username.toLowerCase()) {
+    if (currentUser?.username && cleanTarget.toLowerCase() === currentUser.username.toLowerCase()) {
       alert('Action forbidden: You cannot delete your own active account.')
       return
     }
@@ -1708,7 +1702,7 @@ export default function RymonConnect() {
         return
       }
     } else if (isAdmin) {
-      if (targetRole !== 'reseller' || (targetUplink || '').toLowerCase() !== currentUser.username.toLowerCase()) {
+      if (targetRole !== 'reseller' || !currentUser?.username || (targetUplink || '').toLowerCase() !== currentUser.username.toLowerCase()) {
         alert('Permission Denied: Admins can only delete Resellers registered under their own downline.')
         return
       }
@@ -1717,7 +1711,7 @@ export default function RymonConnect() {
       return
     }
 
-    const confirmMsg = `⚠️ PERMANENT DELETE WARNING:\n\nAre you sure you want to permanently delete user @${cleanTarget} (${targetRole.toUpperCase()})?\n\nThis will remove their account credentials, login access, and wallet. This action CANNOT be undone.`
+    const confirmMsg = `⚠️ PERMANENT DELETE WARNING:\n\nAre you sure you want to permanently delete user @${cleanTarget} (${String(targetRole || 'user').toUpperCase()})?\n\nThis will remove their account credentials, login access, and wallet. This action CANNOT be undone.`
     if (!window.confirm(confirmMsg)) return
 
     const res = await deleteAccountBackend(cleanTarget, currentUser)
@@ -2318,7 +2312,7 @@ export default function RymonConnect() {
   const isUserCustomAppAllowed = (user?: RymonAccount | null) => {
     if (!user) return false
     // Only Root Founder (debajoyti) is unconditionally allowed custom apps
-    if (user.username.toLowerCase() === 'debajoyti') return true
+    if ((user.username || '').toLowerCase() === 'debajoyti') return true
     const perm = user.permissions?.allow_custom_apps
     if (perm !== undefined) return Boolean(perm)
     return false
@@ -2329,7 +2323,7 @@ export default function RymonConnect() {
   const handleToggleUserCustomApps = async (targetUsername: string, allow: boolean) => {
     try {
       const updated = usersList.map((u) => {
-        if (u.username.toLowerCase() === targetUsername.toLowerCase()) {
+        if ((u.username || '').toLowerCase() === (targetUsername || '').toLowerCase()) {
           return {
             ...u,
             permissions: {
@@ -2344,7 +2338,7 @@ export default function RymonConnect() {
       saveStoredAccounts(updated)
 
       if (supabase) {
-        const targetObj = updated.find((u) => u.username.toLowerCase() === targetUsername.toLowerCase())
+        const targetObj = updated.find((u) => (u.username || '').toLowerCase() === (targetUsername || '').toLowerCase())
         if (targetObj) {
           await supabase
             .from('rymon_accounts')
@@ -2937,14 +2931,14 @@ export default function RymonConnect() {
           {isAuthenticated ? (
             <div className="sg-user-profile-pill" style={styles.userProfilePill}>
               <div style={styles.userAvatarSquare}>
-                {currentUser?.username.charAt(0).toUpperCase() || 'U'}
+                {currentUser?.username ? currentUser.username.charAt(0).toUpperCase() : 'U'}
               </div>
               <div className="sg-user-name-block" style={styles.userNameBlock}>
                 <span style={styles.userNameText}>
                   {currentUser?.username || 'VIP Streamer'}
                 </span>
                 <span style={styles.userRoleTag}>
-                  {currentUser?.role.toUpperCase() || 'VIP'}
+                  {currentUser?.role ? currentUser.role.toUpperCase() : 'VIP'}
                 </span>
               </div>
               <button onClick={handleLogout} style={styles.headerLogoutBtn} title="Logout">
@@ -3314,14 +3308,14 @@ export default function RymonConnect() {
             <div style={styles.sidebarUserCard}>
               <div style={styles.sidebarUserRow}>
                 <div style={styles.sidebarUserAvatar}>
-                  {currentUser?.username.charAt(0).toUpperCase() || 'U'}
+                  {currentUser?.username ? currentUser.username.charAt(0).toUpperCase() : 'U'}
                 </div>
                 <div>
                   <div style={styles.sidebarUserName}>
                     {currentUser?.username || 'VIP Streamer'}
                   </div>
                   <div style={styles.sidebarUserSub}>
-                    <span style={styles.activeDot} /> {currentUser?.role.toUpperCase()}
+                    <span style={styles.activeDot} /> {currentUser?.role ? currentUser.role.toUpperCase() : 'VIP'}
                   </div>
                 </div>
               </div>
@@ -3955,11 +3949,11 @@ export default function RymonConnect() {
                                 isOwner
                                   ? u.role !== 'owner'
                                   : u.role === 'reseller' &&
-                                    u.username.toLowerCase() !== currentUser?.username.toLowerCase()
+                                    (u.username || '').toLowerCase() !== (currentUser?.username || '').toLowerCase()
                               )
                               .map((u) => (
                                 <option key={u.id} value={u.username}>
-                                  @{u.username} ({u.role.toUpperCase()} • Bal: ₹{u.balance.toLocaleString('en-IN')})
+                                  @{u.username} ({String(u.role || 'user').toUpperCase()} • Bal: ₹{Number(u.balance || 0).toLocaleString('en-IN')})
                                 </option>
                               ))}
                           </select>
@@ -4878,7 +4872,7 @@ export default function RymonConnect() {
                               <td style={styles.td}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <span style={styles.avatarTiny}>
-                                    {k.creator_username.charAt(0).toUpperCase()}
+                                    {(k.creator_username || 'U').charAt(0).toUpperCase()}
                                   </span>
                                   <span style={{ fontWeight: 600, color: '#fde047' }}>
                                     👑 @{k.creator_username}
@@ -5067,21 +5061,21 @@ export default function RymonConnect() {
                       </thead>
                       <tbody>
                         {filteredUsers.map((u) => {
-                          const isSelfRow = u.username.toLowerCase() === currentUser?.username.toLowerCase()
-                          const isTargetRootOwner = u.username.toLowerCase() === 'debajoyti'
+                          const isSelfRow = Boolean(currentUser?.username) && (u.username || '').toLowerCase() === currentUser?.username.toLowerCase()
+                          const isTargetRootOwner = (u.username || '').toLowerCase() === 'debajoyti'
                           const canManageRow = isRootOwner 
                             ? !isSelfRow 
                             : isOwner
                             ? (!isSelfRow && u.role !== 'owner' && !isTargetRootOwner)
                             : isAdmin
-                            ? (!isSelfRow && u.role === 'reseller' && (u.uplink || '').toLowerCase() === currentUser?.username.toLowerCase())
+                            ? (!isSelfRow && u.role === 'reseller' && Boolean(currentUser?.username) && (u.uplink || '').toLowerCase() === currentUser?.username.toLowerCase())
                             : false
                           const canDeleteThisUser = isRootOwner
                             ? !isSelfRow
                             : isOwner
                             ? (!isSelfRow && u.role !== 'owner' && !isTargetRootOwner)
                             : isAdmin
-                            ? (!isSelfRow && u.role === 'reseller' && (u.uplink || '').toLowerCase() === currentUser?.username.toLowerCase())
+                            ? (!isSelfRow && u.role === 'reseller' && Boolean(currentUser?.username) && (u.uplink || '').toLowerCase() === currentUser?.username.toLowerCase())
                             : false
                           const expMs = u.expires_at ? new Date(u.expires_at).getTime() : Date.now() + 30 * 86400000
                           const diffMs = expMs - Date.now()
@@ -5093,7 +5087,7 @@ export default function RymonConnect() {
                               <td style={styles.td}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                   <div style={styles.avatarCircle}>
-                                    {u.username.charAt(0).toUpperCase()}
+                                    {(u.username || 'U').charAt(0).toUpperCase()}
                                   </div>
                                   <div>
                                     <div style={{ fontWeight: 600, color: '#f8fafc' }}>
@@ -5104,7 +5098,7 @@ export default function RymonConnect() {
                                 </div>
                               </td>
                               <td style={styles.td}>
-                                <span style={styles.roleBadge}>{u.role.toUpperCase()}</span>
+                                <span style={styles.roleBadge}>{String(u.role || 'user').toUpperCase()}</span>
                                 <div
                                   style={{
                                     fontSize: '11px',
@@ -5406,7 +5400,7 @@ export default function RymonConnect() {
                         {(isOwner || isAdmin) &&
                           usersList.map((u) => (
                             <option key={u.id} value={u.username}>
-                              @{u.username} ({u.role.toUpperCase()})
+                              @{u.username} ({String(u.role || 'user').toUpperCase()})
                             </option>
                           ))}
                       </select>
@@ -6005,7 +5999,7 @@ export default function RymonConnect() {
                       ) : (
                         Object.values(tgResellerBindings).map((b) => {
                           const acc = usersList.find(
-                            (u) => u.username.toLowerCase() === b.username.toLowerCase()
+                            (u) => (u.username || '').toLowerCase() === (b.username || '').toLowerCase()
                           )
                           return (
                             <div
@@ -6213,13 +6207,13 @@ export default function RymonConnect() {
                             .filter((u) =>
                               isOwner
                                 ? u.role !== 'owner'
-                                : u.role === 'reseller' && u.username.toLowerCase() !== currentUser?.username.toLowerCase()
+                                : u.role === 'reseller' && (u.username || '').toLowerCase() !== (currentUser?.username || '').toLowerCase()
                             )
                             .map((u) => {
                               const hasCustom = Boolean(getUserCustomPriceMap(u.username))
                               return (
                                 <option key={u.id} value={u.username}>
-                                  @{u.username} ({u.role.toUpperCase()}) {hasCustom ? '★ CUSTOM RATE' : '• Default'}
+                                  @{u.username} ({String(u.role || 'user').toUpperCase()}) {hasCustom ? '★ CUSTOM RATE' : '• Default'}
                                 </option>
                               )
                             })}
@@ -6294,9 +6288,9 @@ export default function RymonConnect() {
                               isOwner ||
                               usersList.some(
                                 (u) =>
-                                  u.username.toLowerCase() === uname.toLowerCase() &&
+                                  (u.username || '').toLowerCase() === (uname || '').toLowerCase() &&
                                   u.role === 'reseller' &&
-                                  u.username.toLowerCase() !== currentUser?.username.toLowerCase()
+                                  (u.username || '').toLowerCase() !== (currentUser?.username || '').toLowerCase()
                               )
                             )
                             .map(([uname, pmap]) => (
@@ -7822,8 +7816,8 @@ else:
                                   onClick={() => {
                                     const matching = keysList.find(k =>
                                       connectSelectedApp === 'Free Fire MAX'
-                                        ? (k.game.toLowerCase().includes('free fire'))
-                                        : (!k.game.toLowerCase().includes('free fire'))
+                                        ? String(k?.game || '').toLowerCase().includes('free fire')
+                                        : !String(k?.game || '').toLowerCase().includes('free fire')
                                     );
                                     const keyToPick = matching || keysList[0];
                                     setTestConnectKey(keyToPick.license_key);
@@ -8009,8 +8003,8 @@ else:
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
                         {registeredApps.map((app) => {
-                          const isFf = app.name.toLowerCase().includes('free fire')
-                          const appKeys = keysList.filter((k) => (k.game || '').toLowerCase() === app.name.toLowerCase())
+                          const isFf = String(app?.name || '').toLowerCase().includes('free fire')
+                          const appKeys = keysList.filter((k) => (k.game || '').toLowerCase() === String(app?.name || '').toLowerCase())
                           const activeAppKeys = appKeys.filter((k) => k.status === 'ACTIVE').length
 
                           return (
@@ -8812,7 +8806,7 @@ else:
                           .filter(
                             (k) =>
                               !k.game ||
-                              k.game.toLowerCase().includes('free fire')
+                              String(k.game || '').toLowerCase().includes('free fire')
                           )
                           .map((k) => {
                             const isKeyPlaying = onlineKeySet.has(k.license_key.toUpperCase())
@@ -9482,7 +9476,7 @@ else:
 
             <form onSubmit={handleResetUserPassword}>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>NEW PASSWORD FOR @{pwdModalUser.toUpperCase()}</label>
+                <label style={styles.formLabel}>NEW PASSWORD FOR @{String(pwdModalUser || '').toUpperCase()}</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input
                     type="text"

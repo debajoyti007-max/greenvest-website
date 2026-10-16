@@ -99,7 +99,7 @@ const ProductCard = memo(function ProductCard({
     C: { en: 'C (Economy)', bn: 'C (সাশ্রয়ী)' },
   }
 
-  const isKg = p.unit.toLowerCase() === 'kg'
+  const isKg = (p.unit || '').toLowerCase() === 'kg'
 
   return (
     <article className={`product-tile premium-tile glass-product-tile ${p.inStock ? '' : 'out'}`}>

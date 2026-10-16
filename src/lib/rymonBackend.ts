@@ -97,17 +97,6 @@ export interface StreamerControlRecord {
   updated_at?: string
 }
 
-export interface RymonNotification {
-  id: number
-  sender: string
-  recipient: string
-  title: string
-  message: string
-  type: 'INFO' | 'WARNING' | 'ALERT' | 'UPDATE'
-  is_pinned?: boolean
-  created_at: string
-}
-
 export interface TelegramConfig {
   bot_token: string
   chat_id: string
@@ -244,13 +233,6 @@ export function warmRenderVipBridge(): void {
   try {
     fetch(`${RENDER_VIP_BRIDGE_URL}/`, { method: 'GET', mode: 'no-cors' }).catch(() => {})
   } catch {}
-}
-
-export function isVipTierKey(ctrl?: { plan_duration?: string; streamer_name?: string } | null): boolean {
-  if (!ctrl) return false
-  const p = ctrl.plan_duration || ''
-  const s = ctrl.streamer_name || ''
-  return p.includes('[VIP]') || s.includes('VIP_REALTIME')
 }
 
 export async function fetchRenderVipState(key: string): Promise<StreamerControlRecord | null> {
@@ -1164,18 +1146,19 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
     return stored
   }
   if (user.role === 'owner') {
-    const allowedDownlines = getDownlineUsernamesSync(user.username, stored, true)
+    const allowedDownlines = getDownlineUsernamesSync(user.username || '', stored, true)
     return stored.filter((u) => {
-      const uName = u.username.toLowerCase()
+      const uName = String(u.username || '').toLowerCase()
       return uName !== 'debajoyti' && allowedDownlines.has(uName)
     })
   }
   if (user.role === 'admin') {
-    const allowedDownlines = getDownlineUsernamesSync(user.username, stored, false)
+    const allowedDownlines = getDownlineUsernamesSync(user.username || '', stored, false)
     return stored.filter((u) => {
-      const uName = u.username.toLowerCase()
+      const uName = String(u.username || '').toLowerCase()
+      const myName = String(user.username || '').toLowerCase()
       return (
-        uName === user.username.toLowerCase() ||
+        uName === myName ||
         (u.role === 'reseller' && allowedDownlines.has(uName))
       )
     })
@@ -1184,6 +1167,7 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
 }
 
 export async function fetchAllActivities(user?: RymonAccount | null): Promise<RymonActivity[]> {
+  const userLower = String(user?.username || '').toLowerCase()
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -1194,17 +1178,17 @@ export async function fetchAllActivities(user?: RymonAccount | null): Promise<Ry
 
       if (!error && Array.isArray(data)) {
         const acts = data as RymonActivity[]
-        const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+        const isRootUser = !user || userLower === 'debajoyti'
         if (isRootUser) {
           return acts.slice(0, 30)
         }
         if (user.role === 'reseller') {
           return acts
-            .filter((a) => (a.actor_username || '').toLowerCase() === user.username.toLowerCase())
+            .filter((a) => (a.actor_username || '').toLowerCase() === userLower)
             .slice(0, 20)
         }
         // Partner Owner (RYZEN) or Admin: only see activities from self + downline tree
-        const allowedDownlines = await getDownlineUsernames(user.username, true)
+        const allowedDownlines = await getDownlineUsernames(user.username || '', true)
         return acts
           .filter((a) => {
             const actor = (a.actor_username || '').toLowerCase()
@@ -1215,16 +1199,16 @@ export async function fetchAllActivities(user?: RymonAccount | null): Promise<Ry
     } catch {}
   }
   const storedActs = getStoredActivities()
-  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+  const isRootUser = !user || userLower === 'debajoyti'
   if (isRootUser) {
     return storedActs.slice(0, 30)
   }
   if (user.role === 'reseller') {
     return storedActs
-      .filter((a) => (a.actor_username || '').toLowerCase() === user.username.toLowerCase())
+      .filter((a) => (a.actor_username || '').toLowerCase() === userLower)
       .slice(0, 20)
   }
-  const allowedDownlines = getDownlineUsernamesSync(user.username, getStoredAccounts(), true)
+  const allowedDownlines = getDownlineUsernamesSync(user?.username || '', getStoredAccounts(), true)
   return storedActs
     .filter((a) => {
       const actor = (a.actor_username || '').toLowerCase()
@@ -1235,6 +1219,7 @@ export async function fetchAllActivities(user?: RymonAccount | null): Promise<Ry
 
 export async function fetchAllStreamerControls(user?: RymonAccount | null): Promise<StreamerControlRecord[]> {
   if (user && user.role === 'streamer') return []
+  const userLower = String(user?.username || '').toLowerCase()
   if (supabase) {
     try {
       const { data, error } = await supabase.from('rymon_streamer_controls').select('*')
@@ -1257,17 +1242,17 @@ export async function fetchAllStreamerControls(user?: RymonAccount | null): Prom
             .then(() => {}, () => {})
         }
 
-        const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+        const isRootUser = !user || userLower === 'debajoyti'
         if (isRootUser) {
           return rows
         }
         if (user.role === 'reseller') {
           return rows.filter(
-            (r) => (r.creator || '').toLowerCase() === user.username.toLowerCase()
+            (r) => (r.creator || '').toLowerCase() === userLower
           )
         }
         // Partner Owner (RYZEN) or Admin: only see streamers from self + downline tree
-        const allowedDownlines = await getDownlineUsernames(user.username, true)
+        const allowedDownlines = await getDownlineUsernames(user.username || '', true)
         return rows.filter((r) => {
           const creator = (r.creator || '').toLowerCase()
           return creator !== 'debajoyti' && allowedDownlines.has(creator)
@@ -1654,7 +1639,7 @@ export async function generateLicenseKeyBackend(params: {
   const newBalance = creator.role === 'owner' ? creator.balance : Math.max(0, creator.balance - totalCost)
 
   const accounts = getStoredAccounts()
-  const accIndex = accounts.findIndex((a) => a.username.toLowerCase() === creator.username.toLowerCase())
+  const accIndex = accounts.findIndex((a) => (a.username || '').toLowerCase() === (creator.username || '').toLowerCase())
   if (accIndex >= 0) {
     accounts[accIndex].balance = newBalance
     saveStoredAccounts(accounts)
@@ -1730,7 +1715,7 @@ export async function topUpUserBalanceBackend(
         }
 
         const allowedDownlines = await getDownlineUsernames(cleanActor, false)
-        if (!allowedDownlines.has(targetUser.username.toLowerCase())) {
+        if (!allowedDownlines.has(String(targetUser?.username || '').toLowerCase())) {
           return {
             success: false,
             error: `Power restriction: @${targetUser.username} is outside your downline.`
@@ -1785,17 +1770,17 @@ export async function topUpUserBalanceBackend(
 
   // Fallback storage update
   const accounts = getStoredAccounts()
-  const matched = accounts.find((a) => a.username.toLowerCase() === cleanTarget.toLowerCase())
+  const matched = accounts.find((a) => (a.username || '').toLowerCase() === cleanTarget.toLowerCase())
   if (!matched) return { success: false, error: 'User not found' }
 
   let actorRemainingBalance: number | undefined = undefined
   if (!isRootOwner) {
-    const actorAcc = accounts.find((a) => a.username.toLowerCase() === cleanActor.toLowerCase())
+    const actorAcc = accounts.find((a) => (a.username || '').toLowerCase() === cleanActor.toLowerCase())
     if (!actorAcc || (actorAcc.role !== 'admin' && actorAcc.role !== 'owner')) {
       return { success: false, error: 'Power restriction: Only Owner or Admin can fund accounts.' }
     }
     const allowedDownlines = getDownlineUsernamesSync(cleanActor, accounts, false)
-    if (!allowedDownlines.has(matched.username.toLowerCase())) {
+    if (!allowedDownlines.has(String(matched.username || '').toLowerCase())) {
       return { success: false, error: `Power restriction: @${matched.username} is outside your downline.` }
     }
     if (actorAcc.balance < amount) {
@@ -2018,7 +2003,7 @@ export async function resetUserPasswordBackend(
 
       if (!isRootOwner) {
         const allowedDownlines = await getDownlineUsernames(cleanActor, false)
-        if (!allowedDownlines.has(targetAcc.username.toLowerCase())) {
+        if (!allowedDownlines.has(String(targetAcc?.username || '').toLowerCase())) {
           return {
             success: false,
             message: 'Power restriction: You can only reset passwords for accounts in your downline.'
@@ -2051,11 +2036,11 @@ export async function resetUserPasswordBackend(
   }
 
   const accounts = getStoredAccounts()
-  const u = accounts.find((a) => a.username.toLowerCase() === cleanTarget.toLowerCase())
+  const u = accounts.find((a) => (a.username || '').toLowerCase() === cleanTarget.toLowerCase())
   if (!u) return { success: false, message: `User @${cleanTarget} not found.` }
   if (!isRootOwner) {
     const allowedDownlines = getDownlineUsernamesSync(cleanActor, accounts, false)
-    if (!allowedDownlines.has(u.username.toLowerCase())) {
+    if (!allowedDownlines.has(String(u.username || '').toLowerCase())) {
       return { success: false, message: 'Power restriction: You can only reset passwords for accounts in your downline.' }
     }
   }
@@ -2110,7 +2095,7 @@ export async function renewUserSubscriptionBackend(
 
       if (!isRootOwner) {
         const allowedDownlines = await getDownlineUsernames(cleanActor, false)
-        if (!allowedDownlines.has(targetAcc.username.toLowerCase())) {
+        if (!allowedDownlines.has(String(targetAcc?.username || '').toLowerCase())) {
           return {
             success: false,
             message: 'Power restriction: You can only renew subscriptions for accounts in your downline.'
@@ -2178,13 +2163,13 @@ export async function renewUserSubscriptionBackend(
   }
 
   const accounts = getStoredAccounts()
-  const matched = accounts.find((a) => a.username.toLowerCase() === cleanTarget.toLowerCase())
+  const matched = accounts.find((a) => (a.username || '').toLowerCase() === cleanTarget.toLowerCase())
   if (!matched) {
     return { success: false, message: `User @${cleanTarget} not found.` }
   }
   if (!isRootOwner) {
     const allowedDownlines = getDownlineUsernamesSync(cleanActor, accounts, false)
-    if (!allowedDownlines.has(matched.username.toLowerCase())) {
+    if (!allowedDownlines.has(String(matched.username || '').toLowerCase())) {
       return { success: false, message: 'Power restriction: You can only renew subscriptions for accounts in your downline.' }
     }
   }
@@ -2417,7 +2402,7 @@ export async function deleteAccountBackend(
     } catch {}
   }
   if (!targetRow) {
-    const local = getStoredAccounts().find((a) => a.username.toLowerCase() === cleanTarget.toLowerCase())
+    const local = getStoredAccounts().find((a) => (a.username || '').toLowerCase() === cleanTarget.toLowerCase())
     if (local) targetRow = local
   }
 
@@ -2455,8 +2440,8 @@ export async function deleteAccountBackend(
       await supabase.from('rymon_activities').insert({
         title: `Account Deleted: @${cleanTarget}`,
         event_type: 'USER_DELETED',
-        details: `${actor.role.toUpperCase()} @${actor.username} deleted @${cleanTarget} (${targetRow.role.toUpperCase()})`,
-        actor_username: actor.username,
+        details: `${String(actor?.role || 'user').toUpperCase()} @${actor?.username || cleanActor} deleted @${cleanTarget} (${String(targetRow.role || 'user').toUpperCase()})`,
+        actor_username: actor?.username || cleanActor,
         status: 'SUCCESS'
       })
     } catch (e: any) {
@@ -2465,7 +2450,7 @@ export async function deleteAccountBackend(
   }
 
   // 4. Local Storage Cleanup
-  const stored = getStoredAccounts().filter((a) => a.username.toLowerCase() !== cleanTarget.toLowerCase())
+  const stored = getStoredAccounts().filter((a) => (a.username || '').toLowerCase() !== cleanTarget.toLowerCase())
   saveStoredAccounts(stored)
 
   // Clear any custom pricing set for this user
@@ -2539,7 +2524,7 @@ export async function bulkDeleteKeysBackend(
     allowedCreators.delete('debajoyti')
   }
   const remaining = licenses.filter((l) => {
-    const cName = l.creator_username.toLowerCase()
+    const cName = String(l.creator_username || '').toLowerCase()
     if (!isRootOwner && (!allowedCreators || !allowedCreators.has(cName))) return true
     if (!isAllScope && cName !== cleanTarget.toLowerCase()) return true
 
@@ -2586,7 +2571,7 @@ export async function toggleBanStatusBackend(
 
         if (!isRootOwner) {
           const allowedDownlines = await getDownlineUsernames(cleanActor, false)
-          if (!allowedDownlines.has(targetAcc.username.toLowerCase())) {
+          if (!allowedDownlines.has(String(targetAcc?.username || '').toLowerCase())) {
             return {
               success: false,
               message: 'Power restriction: You can only Ban/Unban accounts in your downline.'
@@ -2637,11 +2622,11 @@ export async function toggleBanStatusBackend(
 
   if (type === 'user') {
     const users = getStoredAccounts()
-    const u = users.find((x) => x.username.toLowerCase() === cleanTarget.toLowerCase())
+    const u = users.find((x) => (x.username || '').toLowerCase() === cleanTarget.toLowerCase())
     if (u) {
       if (!isRootOwner) {
         const allowedDownlines = getDownlineUsernamesSync(cleanActor, users, false)
-        if (!allowedDownlines.has(u.username.toLowerCase())) {
+        if (!allowedDownlines.has(String(u.username || '').toLowerCase())) {
           return { success: false, message: 'Power restriction: You can only Ban/Unban accounts in your downline.' }
         }
       }
@@ -2773,7 +2758,7 @@ export async function extendLicenseBackend(
 
   if (!isRootOwner && cost > 0) {
     const accounts = getStoredAccounts()
-    const actorAcc = accounts.find((a) => a.username.toLowerCase() === cleanActor.toLowerCase())
+    const actorAcc = accounts.find((a) => (a.username || '').toLowerCase() === cleanActor.toLowerCase())
     if (!actorAcc || actorAcc.balance < cost) {
       return {
         success: false,
@@ -3055,7 +3040,7 @@ export async function bulkTogglePauseAllKeysBackend(
   }
   stored.forEach((l) => {
     if (l.status !== 'BANNED' && l.status !== 'EXPIRED') {
-      const creator = l.creator_username.toLowerCase()
+      const creator = String(l.creator_username || '').toLowerCase()
       if (syncAllowed && !syncAllowed.has(creator)) return
       if (!creatorFilter || creator === creatorFilter.toLowerCase()) {
         l.is_paused = pauseState
@@ -3132,7 +3117,7 @@ export async function bulkResetAllHwidBackend(
     syncAllowed.delete('debajoyti')
   }
   stored.forEach((l) => {
-    const creator = l.creator_username.toLowerCase()
+    const creator = String(l.creator_username || '').toLowerCase()
     if (syncAllowed && !syncAllowed.has(creator)) return
     if (!creatorFilter || creator === creatorFilter.toLowerCase()) {
       l.device_hwid = ''
@@ -3246,13 +3231,13 @@ export async function bulkExtendAllKeysBackend(
     syncAllowed.delete('debajoyti')
   }
   const stored = rawLicenses.filter((l) => {
-    const creator = l.creator_username.toLowerCase()
+    const creator = String(l.creator_username || '').toLowerCase()
     return !syncAllowed || syncAllowed.has(creator)
   })
 
   stored.forEach((l) => {
     if (l.status !== 'BANNED') {
-      if (!creatorFilter || l.creator_username.toLowerCase() === creatorFilter.toLowerCase()) {
+      if (!creatorFilter || String(l.creator_username || '').toLowerCase() === creatorFilter.toLowerCase()) {
         const base = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
         l.expires_at = new Date(
           Math.min(Math.max(base, Date.now()) + msToAdd, max30DaysMs)
@@ -3308,7 +3293,7 @@ function getStoredLicenses(): RymonLicense[] {
   return [...SOVEREIGN_FALLBACK_LICENSES]
 }
 
-export function saveStoredLicenses(licenses: RymonLicense[]): void {
+function saveStoredLicenses(licenses: RymonLicense[]): void {
   try {
     localStorage.setItem('rymon_sovereign_licenses', JSON.stringify(licenses))
   } catch {}
@@ -3322,91 +3307,10 @@ function getStoredActivities(): RymonActivity[] {
   return [...SOVEREIGN_FALLBACK_ACTIVITIES]
 }
 
-export function saveStoredActivities(activities: RymonActivity[]): void {
+function saveStoredActivities(activities: RymonActivity[]): void {
   try {
     localStorage.setItem('rymon_sovereign_activities', JSON.stringify(activities))
   } catch {}
-}
-
-export const SOVEREIGN_FALLBACK_NOTIFICATIONS: RymonNotification[] = [
-  {
-    id: 1,
-    sender: 'debajoyti',
-    recipient: 'ALL',
-    title: '🚨 SYSTEM ACTIVE: Welcome to RYMON Network',
-    message: 'The RYMON portal is online on greenvest.shop with zero external latency. All reseller balances, key generators, and streamer telemetry are linked directly to database.',
-    type: 'UPDATE',
-    is_pinned: true,
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 2,
-    sender: 'debajoyti',
-    recipient: 'ALL',
-    title: '⚡ PUBG 3.7 & FreeFire Bypass Live',
-    message: 'All memory injection modules and safe telemetry controls are updated. Ensure your streamers bind HWID before joining live matches.',
-    type: 'INFO',
-    is_pinned: false,
-    created_at: new Date(Date.now() - 7200000).toISOString()
-  },
-  {
-    id: 3,
-    sender: 'debajoyti',
-    recipient: 'ALL',
-    title: '💼 Reseller & Streamer System Online',
-    message: 'The RYMON licensing engine is operational. Generate keys directly from the Generate Key panel or bind active keys for remote control.',
-    type: 'INFO',
-    is_pinned: false,
-    created_at: new Date(Date.now() - 3600000).toISOString()
-  }
-]
-
-function getStoredNotifications(): RymonNotification[] {
-  try {
-    const raw = localStorage.getItem('rymon_sovereign_notifications')
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return [...SOVEREIGN_FALLBACK_NOTIFICATIONS]
-}
-
-export function saveStoredNotifications(notifications: RymonNotification[]): void {
-  try {
-    localStorage.setItem('rymon_sovereign_notifications', JSON.stringify(notifications))
-  } catch {}
-}
-
-export async function fetchNotifications(
-  userFilter?: string
-): Promise<RymonNotification[]> {
-  const isOwnerFilter =
-    !userFilter ||
-    userFilter.toLowerCase() === 'debajoyti'
-
-  if (supabase) {
-    try {
-      let query = supabase
-        .from('rymon_notifications')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (!isOwnerFilter && userFilter) {
-        query = query.or(`recipient.eq.ALL,recipient.ilike.${userFilter}`)
-      }
-
-      const { data, error } = await query
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data as RymonNotification[]
-      }
-    } catch {}
-  }
-
-  const stored = getStoredNotifications()
-  if (!isOwnerFilter && userFilter) {
-    return stored.filter(
-      (n) => n.recipient === 'ALL' || n.recipient.toLowerCase() === userFilter.toLowerCase()
-    )
-  }
-  return stored
 }
 
 export async function sendBroadcastBackend(
@@ -3416,7 +3320,7 @@ export async function sendBroadcastBackend(
   message: string,
   type: 'INFO' | 'WARNING' | 'ALERT' | 'UPDATE' = 'INFO',
   isPinned: boolean = false
-): Promise<{ success: boolean; message: string; notification?: RymonNotification }> {
+): Promise<{ success: boolean; message: string }> {
   const cleanRecipient = recipient.trim() || 'ALL'
   const cleanTitle = title.trim()
   const cleanMessage = message.trim()
@@ -3427,7 +3331,7 @@ export async function sendBroadcastBackend(
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('rymon_notifications')
         .insert({
           sender: sender || 'debajoyti',
@@ -3437,48 +3341,16 @@ export async function sendBroadcastBackend(
           type,
           is_pinned: isPinned
         })
-        .select()
-        .single()
 
-      if (!error && data) {
-        return { success: true, message: 'Broadcast dispatched to database', notification: data as RymonNotification }
+      if (!error) {
+        return { success: true, message: 'Broadcast dispatched to database' }
       }
     } catch {}
   }
 
-  const stored = getStoredNotifications()
-  const newNotif: RymonNotification = {
-    id: Date.now(),
-    sender: sender || 'debajoyti',
-    recipient: cleanRecipient,
-    title: cleanTitle,
-    message: cleanMessage,
-    type,
-    is_pinned: isPinned,
-    created_at: new Date().toISOString()
-  }
-  stored.unshift(newNotif)
-  saveStoredNotifications(stored)
-
-  return { success: true, message: 'Broadcast dispatched to users', notification: newNotif }
+  return { success: true, message: 'Broadcast dispatched' }
 }
 
-export async function deleteNotificationBackend(id: number): Promise<boolean> {
-  if (supabase) {
-    try {
-      const { error } = await supabase
-        .from('rymon_notifications')
-        .delete()
-        .eq('id', id)
-      if (!error) return true
-    } catch {}
-  }
-
-  const stored = getStoredNotifications()
-  const filtered = stored.filter((n) => n.id !== id)
-  saveStoredNotifications(filtered)
-  return true
-}
 
 export const OFFICIAL_TELEGRAM_BOT_NAME = 'RYMON OFFICIAL'
 export const OFFICIAL_TELEGRAM_BOT_USERNAME = '@Rymon007bot'
@@ -3956,7 +3828,7 @@ export async function fetchTelegramResellerBindings(): Promise<
   return localMap
 }
 
-export async function saveTelegramResellerBindings(
+async function saveTelegramResellerBindings(
   map: Record<string, TelegramResellerBinding>
 ): Promise<void> {
   try {
@@ -4300,7 +4172,7 @@ async function resolveTelegramResellerAccount(
     } catch {}
   }
   const localAcc = getStoredAccounts().find(
-    (a) => a.username.toLowerCase() === bound.username.toLowerCase()
+    (a) => (a.username || '').toLowerCase() === (bound.username || '').toLowerCase()
   )
   return localAcc || null
 }
@@ -4734,7 +4606,7 @@ export async function pollAndReplyTelegramBotCommands(
           }
           if (myKeys.length === 0) {
             myKeys = keysList.filter(
-              (k) => k.creator_username.toLowerCase() === activeAccount.username.toLowerCase()
+              (k) => String(k.creator_username || '').toLowerCase() === String(activeAccount.username || '').toLowerCase()
             )
           }
           if (myKeys.length === 0) {
@@ -5185,7 +5057,7 @@ export async function pollAndReplyTelegramBotCommands(
               const targetChat =
                 bindings[targetIdOrUser]?.chat_id ||
                 Object.values(bindings).find(
-                  (b) => b.username.toLowerCase() === resolvedUser.toLowerCase()
+                  (b) => (b.username || '').toLowerCase() === (resolvedUser || '').toLowerCase()
                 )?.chat_id
               if (targetChat) {
                 const pMap = getEffectivePriceMap(resolvedUser)
@@ -5259,14 +5131,16 @@ export async function pollAndReplyTelegramBotCommands(
           }
           const chatByUsername: Record<string, string> = {}
           Object.values(bindings).forEach((b) => {
-            chatByUsername[b.username.toLowerCase()] = b.chat_id
+            if (b?.username) {
+              chatByUsername[b.username.toLowerCase()] = b.chat_id
+            }
           })
           const rows = allAccs.slice(0, 25).map((a, idx) => {
-            const cid = chatByUsername[a.username.toLowerCase()] || 'Unlinked'
+            const cid = (a.username && chatByUsername[a.username.toLowerCase()]) || 'Unlinked'
             const expStr = a.expires_at
               ? new Date(a.expires_at).toLocaleDateString('en-IN')
               : '30D'
-            return `${idx + 1}. <b>@${a.username}</b> (${a.role.toUpperCase()}) • ₹${Number(a.balance || 0).toLocaleString('en-IN')} • Sub: ${expStr} • ChatID: <code>${cid}</code>`
+            return `${idx + 1}. <b>@${a.username}</b> (${String(a.role || 'user').toUpperCase()}) • ₹${Number(a.balance || 0).toLocaleString('en-IN')} • Sub: ${expStr} • ChatID: <code>${cid}</code>`
           })
           const reply = [
             `👥 <b>RESELLERS &amp; STAFF (${allAccs.length})</b>`,
@@ -5430,7 +5304,7 @@ function getStoredReferrals(): RymonReferral[] {
   return [...SOVEREIGN_FALLBACK_REFERRALS]
 }
 
-export function saveStoredReferrals(referrals: RymonReferral[]): void {
+function saveStoredReferrals(referrals: RymonReferral[]): void {
   try {
     localStorage.setItem('rymon_sovereign_referrals', JSON.stringify(referrals))
   } catch {}
@@ -5465,7 +5339,7 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
         .select('*')
         .order('created_at', { ascending: false })
 
-      const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+      const isRootUser = !user || String(user.username || '').toLowerCase() === 'debajoyti'
       const { data, error } = await query
 
       if (!error && Array.isArray(data)) {
@@ -5484,7 +5358,7 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
         // Non-root (Partner Owner RYZEN or Admin): only see referral codes created in their downline tree
         const allowedDownlines = await getDownlineUsernames(user?.username || '', true)
         return enriched.filter((r) => {
-          const creator = (r.created_by || '').toLowerCase()
+          const creator = String(r.created_by || '').toLowerCase()
           return creator !== 'debajoyti' && allowedDownlines.has(creator)
         })
       }
@@ -5495,13 +5369,13 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
     ...r,
     subscription_days: resolveReferralSubscriptionDays(r.code, r.subscription_days, remoteSubMap)
   }))
-  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+  const isRootUser = !user || String(user.username || '').toLowerCase() === 'debajoyti'
   if (isRootUser) {
     return stored
   }
   const allowedDownlines = getDownlineUsernamesSync(user?.username || '', getStoredAccounts(), true)
   return stored.filter((r) => {
-    const creator = (r.created_by || '').toLowerCase()
+    const creator = String(r.created_by || '').toLowerCase()
     return creator !== 'debajoyti' && allowedDownlines.has(creator)
   })
 }
@@ -5631,7 +5505,7 @@ export async function createReferralCode(
 
   if (!isRootOwner && totalFundingRequired > 0) {
     const accounts = getStoredAccounts()
-    const adminAcc = accounts.find((a) => a.username.toLowerCase() === cleanOwner.toLowerCase())
+    const adminAcc = accounts.find((a) => (a.username || '').toLowerCase() === cleanOwner.toLowerCase())
     if (!adminAcc || adminAcc.balance < totalFundingRequired) {
       return {
         success: false,
@@ -5809,7 +5683,7 @@ export async function registerWithReferral(
 
       // Sync local cache
       const storedAccounts = getStoredAccounts()
-      if (!storedAccounts.some((a) => a.username.toLowerCase() === cleanUser.toLowerCase())) {
+      if (!storedAccounts.some((a) => (a.username || '').toLowerCase() === cleanUser.toLowerCase())) {
         storedAccounts.push(newUser)
         saveStoredAccounts(storedAccounts)
       }
@@ -5838,7 +5712,7 @@ export async function registerWithReferral(
   }
 
   const storedAccounts = getStoredAccounts()
-  if (storedAccounts.some((a) => a.username.toLowerCase() === cleanUser.toLowerCase())) {
+  if (storedAccounts.some((a) => (a.username || '').toLowerCase() === cleanUser.toLowerCase())) {
     return { success: false, message: 'Username already taken' }
   }
 
@@ -5986,7 +5860,7 @@ export async function fetchRegisteredApps(): Promise<RegisteredApp[]> {
   return apps
 }
 
-export async function saveRegisteredApps(apps: RegisteredApp[]): Promise<boolean> {
+async function saveRegisteredApps(apps: RegisteredApp[]): Promise<boolean> {
   try {
     localStorage.setItem(REGISTERED_APPS_LOCAL_STORAGE, JSON.stringify(apps))
   } catch {}
@@ -6021,7 +5895,7 @@ export async function addRegisteredApp(newApp: {
 }): Promise<RegisteredApp[]> {
   const current = await fetchRegisteredApps()
   const cleanName = newApp.name.trim()
-  const exists = current.some((a) => a.name.toLowerCase() === cleanName.toLowerCase())
+  const exists = current.some((a) => (a?.name || '').toLowerCase() === cleanName.toLowerCase())
   if (exists) {
     throw new Error(`An app named "${cleanName}" is already registered.`)
   }
@@ -6047,7 +5921,7 @@ export async function deleteRegisteredApp(appIdOrName: string): Promise<Register
   const current = await fetchRegisteredApps()
   const target = appIdOrName.trim().toLowerCase()
   const filtered = current.filter(
-    (a) => a.id.toLowerCase() !== target && a.name.toLowerCase() !== target
+    (a) => String(a?.id || '').toLowerCase() !== target && String(a?.name || '').toLowerCase() !== target
   )
   await saveRegisteredApps(filtered)
   return filtered

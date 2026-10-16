@@ -77,9 +77,9 @@ export default function TrackOrder() {
         const rawInput = paramId.trim().toLowerCase().replace(/^#/, '')
         const userPhone = (user.phone || '').replace(/\D/g, '').slice(-10)
         const found = orders.find((o) => {
-          const oIdRaw = o.id.toLowerCase()
-          const oIdFormatted = formatOrderId(o.id).toLowerCase()
-          const oPhoneDigits = o.phone.replace(/\D/g, '').slice(-10)
+          const oIdRaw = String(o?.id || '').toLowerCase()
+          const oIdFormatted = formatOrderId(String(o?.id || '')).toLowerCase()
+          const oPhoneDigits = String(o?.phone || '').replace(/\D/g, '').slice(-10)
           const isOwner = oPhoneDigits === userPhone || o.userId === user.id
           if (!isOwner) return false
           return (
@@ -172,9 +172,9 @@ export default function TrackOrder() {
 
     // ── Step 1: Check local in-memory orders (logged-in user's own orders) ──
     let found: Order | undefined = orders.find((o) => {
-      const oIdRaw = o.id.toLowerCase()
-      const oIdFormatted = formatOrderId(o.id).toLowerCase()
-      const oPhoneDigits = o.phone.replace(/\D/g, '').slice(-10)
+      const oIdRaw = String(o?.id || '').toLowerCase()
+      const oIdFormatted = formatOrderId(String(o?.id || '')).toLowerCase()
+      const oPhoneDigits = String(o?.phone || '').replace(/\D/g, '').slice(-10)
 
       // MUST match phone first
       if (oPhoneDigits !== rawPhone) return false
