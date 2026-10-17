@@ -1305,6 +1305,31 @@ export default function RymonConnect() {
     }
   }
 
+  // Save & Select Custom Target Game / App
+  const handleSaveCustomTargetApp = async () => {
+    const trimmed = customAppNameInput.trim()
+    if (!trimmed) {
+      showToast('⚠️ Please type an app or game name first.')
+      return
+    }
+    try {
+      const updated = await addRegisteredApp({
+        name: trimmed,
+        platform: 'Custom Platform',
+        icon: '🎮',
+        description: 'Custom KeyAuth Application'
+      })
+      setRegisteredApps(updated)
+      setGenGame(trimmed)
+      localStorage.setItem('rymon_selected_gen_game', trimmed)
+      setIsCustomAppMode(false)
+      setCustomAppNameInput('')
+      showToast(`✅ Game target "${trimmed}" saved & selected!`)
+    } catch (err: unknown) {
+      showToast(`❌ Failed to save game: ${err instanceof Error ? err.message : 'Error'}`)
+    }
+  }
+
   // 8. TOP UP / TRANSFER USER BALANCE HANDLER
   const handleTopUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -2515,8 +2540,8 @@ export default function RymonConnect() {
   // Cross-App & Reseller Generation Permission Engine
   const isUserCustomAppAllowed = (user?: RymonAccount | null) => {
     if (!user) return false
-    // Only Root Founder (debajoyti) is unconditionally allowed custom apps
-    if ((user.username || '').toLowerCase() === 'debajoyti') return true
+    // Root Founder (debajoyti) and all Owner-role accounts are unconditionally allowed custom apps
+    if ((user.username || '').toLowerCase() === 'debajoyti' || user.role === 'owner') return true
     const perm = user.permissions?.allow_custom_apps
     if (perm !== undefined) return Boolean(perm)
     return false
@@ -4412,15 +4437,42 @@ export default function RymonConnect() {
                               <label style={{ ...styles.formLabel, color: '#05df72', marginBottom: '4px', display: 'block' }}>
                                 TYPE ANY CUSTOM APP OR GAME NAME:
                               </label>
-                              <div style={{ display: 'flex', gap: '8px' }}>
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <input
                                   type="text"
                                   value={customAppNameInput}
                                   onChange={(e) => setCustomAppNameInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault()
+                                      handleSaveCustomTargetApp()
+                                    }
+                                  }}
                                   placeholder="Type any custom app or mod name (e.g. Tool X, BGMI, CODM)..."
-                                  style={{ ...styles.keyInput, flex: 1, borderColor: '#05df72', padding: '8px 12px', fontSize: '13px' }}
+                                  style={{ ...styles.keyInput, flex: 1, minWidth: '180px', borderColor: '#05df72', padding: '8px 12px', fontSize: '13px' }}
                                   autoFocus
                                 />
+                                <button
+                                  type="button"
+                                  onClick={handleSaveCustomTargetApp}
+                                  style={{
+                                    background: '#05df72',
+                                    color: '#03140b',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '0 14px',
+                                    fontWeight: 700,
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title="Save and select this game target"
+                                >
+                                  💾 Save &amp; Select
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -4428,7 +4480,7 @@ export default function RymonConnect() {
                                     setCustomAppNameInput('')
                                     setGenGame(localStorage.getItem('rymon_selected_gen_game') || 'Free Fire MAX')
                                   }}
-                                  style={{ ...styles.chipBtn, fontSize: '11px', padding: '0 12px' }}
+                                  style={{ ...styles.chipBtn, fontSize: '11px', padding: '0 12px', whiteSpace: 'nowrap' }}
                                 >
                                   Cancel
                                 </button>

@@ -1093,7 +1093,7 @@ async function processUpdate(upd) {
 
       const licPayloads = generatedKeys.map((k) => ({
         license_key: k,
-        game: 'Free Fire',
+        game: 'Free Fire MAX',
         plan_duration: planDuration,
         creator_username: activeAccount.username,
         devices_used: 0,
@@ -1109,7 +1109,7 @@ async function processUpdate(upd) {
       if (isVipRequested) {
         const ctrlPayloads = generatedKeys.map((k) => ({
           license_key: k,
-          game_name: 'Free Fire',
+          game_name: 'Free Fire MAX',
           plan_duration: planDuration,
           creator: activeAccount.username,
           devices_max: 1,
@@ -1375,9 +1375,6 @@ async function processUpdate(upd) {
 
     if (lowerText.startsWith('/gen')) {
       const parts = text.split(/\s+/)
-      const arg = (parts[1] || '1d').toLowerCase()
-      const isVipRequested = parts.some((p) => p.toLowerCase() === 'vip') || arg.includes('vip')
-      const cleanArg = arg.replace('vip', '')
       const durationMap = {
         '2h': '2 Hours',
         '1d': '1 Day',
@@ -1386,15 +1383,43 @@ async function processUpdate(upd) {
         '15d': '15 Days',
         '30d': '30 Days'
       }
-      const rawDuration = durationMap[cleanArg] || durationMap[arg] || '1 Day'
+
+      let rawDuration = '1 Day'
+      let isVipRequested = false
+      const gameWords = []
+
+      for (let i = 1; i < parts.length; i++) {
+        const p = parts[i]
+        const lp = p.toLowerCase()
+        const cleanP = lp.replace('vip', '')
+        if (lp === 'vip') {
+          isVipRequested = true
+        } else if (durationMap[cleanP]) {
+          rawDuration = durationMap[cleanP]
+          if (lp.includes('vip')) isVipRequested = true
+        } else if (durationMap[lp]) {
+          rawDuration = durationMap[lp]
+        } else {
+          gameWords.push(p)
+        }
+      }
+
+      const rawGame = gameWords.join(' ').trim()
+      const isFf = !rawGame || rawGame.toLowerCase().includes('free fire') || rawGame.toLowerCase() === 'ff'
+      const finalGameName = isFf ? 'Free Fire MAX' : rawGame
       const planDuration = isVipRequested ? `${rawDuration} [VIP]` : rawDuration
+
+      const gameTag = isFf
+        ? 'FF'
+        : (finalGameName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'APP')
+
       const b1 = Math.random().toString(36).substring(2, 6).toUpperCase()
       const b2 = Math.random().toString(36).substring(2, 6).toUpperCase()
-      const newKey = `RYMON-FF-${b1}-${b2}`
+      const newKey = `RYMON-${gameTag}-${b1}-${b2}`
 
       const { error } = await supabase.from('rymon_licenses').insert({
         license_key: newKey,
-        game: 'Free Fire',
+        game: finalGameName,
         plan_duration: planDuration,
         creator_username: 'debajoyti',
         devices_used: 0,
@@ -1406,11 +1431,11 @@ async function processUpdate(upd) {
       })
 
       if (!error) {
-        if (isVipRequested) {
+        if (isFf && isVipRequested) {
           await supabase.from('rymon_streamer_controls').upsert(
             {
               license_key: newKey,
-              game_name: 'Free Fire',
+              game_name: finalGameName,
               plan_duration: planDuration,
               creator: 'debajoyti',
               devices_max: 1,
@@ -1431,7 +1456,7 @@ async function processUpdate(upd) {
           `<code>${newKey}</code>`,
           ``,
           `• <b>Tier:</b> ${isVipRequested ? '👑 VIP Streamer (Web Remote & Live Controls)' : '📱 Standard (Zero-Lag Mobile APK)'}`,
-          `• <b>Game:</b> Free Fire`,
+          `• <b>Game:</b> ${finalGameName}`,
           `• <b>Duration:</b> ${planDuration} (Starts on 1st APK Login)`,
           `• <b>Devices:</b> 1 Device (Max 2 Self-Resets/Day)`
         ].join('\n')

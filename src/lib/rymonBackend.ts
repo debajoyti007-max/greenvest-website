@@ -5992,7 +5992,7 @@ export async function addRegisteredApp(newApp: {
   const cleanName = newApp.name.trim()
   const exists = current.some((a) => (a?.name || '').toLowerCase() === cleanName.toLowerCase())
   if (exists) {
-    throw new Error(`An app named "${cleanName}" is already registered.`)
+    return current
   }
 
   const generatedId = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36).substring(3, 7)
@@ -6001,7 +6001,7 @@ export async function addRegisteredApp(newApp: {
     name: cleanName,
     package_name: (newApp.package_name || '').trim(),
     platform: newApp.platform || 'Android Mobile',
-    icon: newApp.icon || '📦',
+    icon: newApp.icon || '🎮',
     status: 'ACTIVE',
     description: (newApp.description || '').trim(),
     created_at: new Date().toISOString()
