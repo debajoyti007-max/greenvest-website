@@ -936,50 +936,23 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
   const nowMs = Date.now()
   const max30DaysMs = nowMs + 30 * 86400000
   const max30DaysIso = new Date(max30DaysMs).toISOString()
+  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+
   const normalizeExpiry = (rows: RymonLicense[]): RymonLicense[] => {
-    const newlyExpiredKeys: string[] = []
-    const over30DayKeys: string[] = []
-    const normalized = rows.map((r) => {
+    return rows.map((r) => {
       if (
         r.status !== 'BANNED' &&
         r.status !== 'EXPIRED' &&
         r.expires_at &&
         new Date(r.expires_at).getTime() < nowMs
       ) {
-        newlyExpiredKeys.push(r.license_key)
         return { ...r, status: 'EXPIRED' as const, is_paused: false }
       }
       if (r.expires_at && new Date(r.expires_at).getTime() > max30DaysMs) {
-        over30DayKeys.push(r.license_key)
         return { ...r, expires_at: max30DaysIso, plan_duration: '30 Days' }
       }
       return r
     })
-    if (newlyExpiredKeys.length > 0 && supabase) {
-      supabase
-        .from('rymon_licenses')
-        .update({ status: 'EXPIRED', is_paused: false, updated_at: new Date().toISOString() })
-        .in('license_key', newlyExpiredKeys)
-        .then(() => {}, () => {})
-      supabase
-        .from('rymon_streamer_controls')
-        .update({ is_active: false, is_online: false, updated_at: new Date().toISOString() })
-        .in('license_key', newlyExpiredKeys)
-        .then(() => {}, () => {})
-    }
-    if (over30DayKeys.length > 0 && supabase) {
-      supabase
-        .from('rymon_licenses')
-        .update({ expires_at: max30DaysIso, plan_duration: '30 Days', updated_at: new Date().toISOString() })
-        .in('license_key', over30DayKeys)
-        .then(() => {}, () => {})
-      supabase
-        .from('rymon_streamer_controls')
-        .update({ expires_at: max30DaysIso, plan_duration: '30 Days', updated_at: new Date().toISOString() })
-        .in('license_key', over30DayKeys)
-        .then(() => {}, () => {})
-    }
-    return normalized
   }
 
   if (supabase) {
@@ -995,10 +968,29 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
       if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
         allRows = rpcRows as RymonLicense[]
       } else {
-        const { data: tableRows, error: tableErr } = await supabase
+        let tableQuery = supabase
           .from('rymon_licenses')
           .select('*')
           .order('created_at', { ascending: false })
+
+        if (!isRootUser) {
+          if (user.role === 'reseller') {
+            tableQuery = tableQuery.ilike('creator_username', user.username)
+          } else if (user.role === 'admin' || user.role === 'owner') {
+            const allowedSet = await getDownlineUsernames(user.username, true)
+            const allowedArr = Array.from(allowedSet)
+            if (allowedArr.length > 0) {
+              tableQuery = tableQuery.in('creator_username', allowedArr)
+            } else {
+              tableQuery = tableQuery.ilike('creator_username', user.username)
+            }
+            if (user.role === 'owner') {
+              tableQuery = tableQuery.neq('creator_username', 'debajoyti')
+            }
+          }
+        }
+
+        const { data: tableRows, error: tableErr } = await tableQuery
         if (!tableErr && Array.isArray(tableRows)) {
           allRows = tableRows as RymonLicense[]
         }
@@ -1006,7 +998,6 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
 
       if (allRows && Array.isArray(allRows)) {
         const cleanRows = normalizeExpiry(allRows)
-        const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
         if (isRootUser) {
           return cleanRows
         }
@@ -1026,7 +1017,6 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
   }
 
   const stored = normalizeExpiry(getStoredLicenses())
-  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
   if (isRootUser) {
     return stored
   }
@@ -1052,12 +1042,14 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
   const max60DaysIso = new Date(max60DaysMs).toISOString()
   const policy = getSovereignSecurityPolicy()
 
+  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
+
   const normalizeAccountSubscriptions = (rows: RymonAccount[]): RymonAccount[] => {
     const expiredResellerUsernames: string[] = []
     const mapped = rows.map((u) => {
       if (u.role === 'owner') return u
       if (!u.expires_at) {
-        if (supabase && u.id) {
+        if (supabase && u.id && isRootUser) {
           supabase
             .from('rymon_accounts')
             .update({ expires_at: default30DaysIso })
@@ -1071,7 +1063,7 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
         expiredResellerUsernames.push(u.username)
       }
       if (expMs > max60DaysMs) {
-        if (supabase && u.id) {
+        if (supabase && u.id && isRootUser) {
           supabase
             .from('rymon_accounts')
             .update({ expires_at: max60DaysIso })
@@ -1083,8 +1075,8 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
       return u
     })
 
-    // Auto-pause active keys created by expired Resellers if policy is enabled
-    if (policy.auto_pause_keys_on_reseller_expiry && expiredResellerUsernames.length > 0 && supabase) {
+    // Auto-pause active keys created by expired Resellers if policy is enabled (only Root founder fires writes)
+    if (isRootUser && policy.auto_pause_keys_on_reseller_expiry && expiredResellerUsernames.length > 0 && supabase) {
       const nowIso = new Date().toISOString()
       for (const expUser of expiredResellerUsernames) {
         supabase
@@ -1107,18 +1099,26 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      let accQuery = supabase
         .from('rymon_accounts')
-        .select('*')
+        .select('id, username, email, role, balance, uplink, referral_code, status, expires_at, permissions')
         .order('balance', { ascending: false })
+
+      if (user?.role === 'admin') {
+        const myName = (user.username || '').toLowerCase()
+        accQuery = accQuery.or(`username.ilike.${myName},uplink.ilike.${myName}`)
+      } else if (user?.role === 'owner' && !isRootUser) {
+        accQuery = accQuery.neq('username', 'debajoyti')
+      }
+
+      const { data, error } = await accQuery
 
       if (!error && Array.isArray(data)) {
         const rows = normalizeAccountSubscriptions(data as RymonAccount[])
-        const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
         if (isRootUser) {
           return rows
         }
-        if (user.role === 'owner') {
+        if (user?.role === 'owner') {
           // Partner Owner sees only self + their own downline tree (never Debajoyti or Debajoyti's downline)
           const allowedDownlines = await getDownlineUsernames(user.username, true)
           return rows.filter((u) => {
@@ -1126,7 +1126,7 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
             return uName !== 'debajoyti' && allowedDownlines.has(uName)
           })
         }
-        if (user.role === 'admin') {
+        if (user?.role === 'admin') {
           // Admin sees only self + their own downline Resellers (never other Admins or Owner)
           const allowedDownlines = await getDownlineUsernames(user.username, false)
           return rows.filter((u) => {
@@ -1142,7 +1142,6 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
   }
 
   const stored = normalizeAccountSubscriptions(getStoredAccounts())
-  const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
   if (isRootUser) {
     return stored
   }
@@ -1221,39 +1220,46 @@ export async function fetchAllActivities(user?: RymonAccount | null): Promise<Ry
 export async function fetchAllStreamerControls(user?: RymonAccount | null): Promise<StreamerControlRecord[]> {
   if (user && user.role === 'streamer') return []
   const userLower = String(user?.username || '').toLowerCase()
+  const isRootUser = !user || userLower === 'debajoyti'
+
   if (supabase) {
     try {
-      const { data, error } = await supabase.from('rymon_streamer_controls').select('*')
-      if (!error && Array.isArray(data)) {
-        const staleOnlineKeys: string[] = []
-        const rows = (data as StreamerControlRecord[]).map((r) => {
-          const playingNow = isStreamerKeyActivelyPlaying(r)
-          if (r.is_online && !playingNow) {
-            staleOnlineKeys.push(r.license_key)
-            return { ...r, is_online: false }
+      let query = supabase
+        .from('rymon_streamer_controls')
+        .select('id, license_key, streamer_name, is_online, is_paused, last_heartbeat, creator, updated_at')
+
+      if (!isRootUser) {
+        if (user.role === 'reseller') {
+          query = query.ilike('creator', userLower)
+        } else if (user.role === 'admin' || user.role === 'owner') {
+          const allowedDownlines = await getDownlineUsernames(user.username || '', true)
+          const downlineArr = Array.from(allowedDownlines)
+          if (downlineArr.length > 0) {
+            query = query.in('creator', downlineArr)
+          } else {
+            query = query.ilike('creator', userLower)
           }
-          return r
+          if (user.role === 'owner') {
+            query = query.neq('creator', 'debajoyti')
+          }
+        }
+      }
+
+      const { data, error } = await query
+      if (!error && Array.isArray(data)) {
+        // Compute active playing state cleanly in-memory (zero database write amplification)
+        const rows = (data as unknown as StreamerControlRecord[]).map((r) => {
+          const playingNow = isStreamerKeyActivelyPlaying(r)
+          return { ...r, is_online: playingNow }
         })
 
-        if (staleOnlineKeys.length > 0) {
-          supabase
-            .from('rymon_streamer_controls')
-            .update({ is_online: false })
-            .in('license_key', staleOnlineKeys)
-            .then(() => {}, () => {})
-        }
-
-        const isRootUser = !user || userLower === 'debajoyti'
         if (isRootUser) {
           return rows
         }
-        if (user.role === 'reseller') {
-          return rows.filter(
-            (r) => (r.creator || '').toLowerCase() === userLower
-          )
+        if (user?.role === 'reseller') {
+          return rows.filter((r) => (r.creator || '').toLowerCase() === userLower)
         }
-        // Partner Owner (RYZEN) or Admin: only see streamers from self + downline tree
-        const allowedDownlines = await getDownlineUsernames(user.username || '', true)
+        const allowedDownlines = await getDownlineUsernames(user?.username || '', true)
         return rows.filter((r) => {
           const creator = (r.creator || '').toLowerCase()
           return creator !== 'debajoyti' && allowedDownlines.has(creator)
