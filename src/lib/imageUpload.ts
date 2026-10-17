@@ -44,6 +44,7 @@ export async function uploadProductImage(file: File, productKey = 'new'): Promis
   const path = `${productKey}/${Date.now()}.jpg`
   const { error } = await supabase.storage.from('product-images').upload(path, blob, {
     contentType: 'image/jpeg',
+    cacheControl: '2592000',
     upsert: true,
   })
 
