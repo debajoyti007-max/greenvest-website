@@ -1290,7 +1290,10 @@ async function processUpdate(upd) {
     if (lowerText.startsWith('/status')) {
       const [{ data: lics }, { data: ctrls }, { data: usrs }, bindings] = await Promise.all([
         supabase.from('rymon_licenses').select('status, is_paused'),
-        supabase.from('rymon_streamer_controls').select('license_key, is_online, is_paused, device_hwid, last_heartbeat'),
+        supabase
+          .from('rymon_streamer_controls')
+          .select('license_key, is_online, is_paused, device_hwid, last_heartbeat')
+          .eq('is_online', true),
         supabase.from('rymon_accounts').select('id'),
         getSystemConfigValue('telegram_reseller_bindings', {})
       ])
@@ -1350,6 +1353,7 @@ async function processUpdate(upd) {
       const { data: ctrls } = await supabase
         .from('rymon_streamer_controls')
         .select('license_key, is_online, is_paused, device_hwid, last_heartbeat, game_name, creator')
+        .eq('is_online', true)
       const playingList = (ctrls || []).filter((c) => isActivelyPlaying(c))
       if (playingList.length === 0) {
         await sendTelegramReply(
