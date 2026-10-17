@@ -68,7 +68,7 @@ import {
   syncSecurityPolicyFromSupabase,
   resetUserPasswordBackend,
   type RegisteredApp,
-  DEFAULT_REGISTERED_APPS,
+  getLocalRegisteredApps,
   fetchRegisteredApps,
   addRegisteredApp,
   deleteRegisteredApp,
@@ -167,7 +167,8 @@ export default function RymonConnect() {
   )
 
   // Generate Key Form State
-  const [genGame, setGenGame] = useState('Free Fire MAX')
+  const [genGame, setGenGame] = useState<string>(() => localStorage.getItem('rymon_selected_gen_game') || 'Free Fire MAX')
+  const [genCreatedGame, setGenCreatedGame] = useState<string>(() => localStorage.getItem('rymon_selected_gen_game') || 'Free Fire MAX')
   const [genEdition, setGenEdition] = useState<'normal' | 'vip'>('normal')
   const [isCustomAppMode, setIsCustomAppMode] = useState(false)
   const [customAppNameInput, setCustomAppNameInput] = useState('')
@@ -198,7 +199,7 @@ export default function RymonConnect() {
   const [searchUserQuery, setSearchUserQuery] = useState('')
 
   // Ecosystem & Multi-App Management State
-  const [registeredApps, setRegisteredApps] = useState<RegisteredApp[]>(DEFAULT_REGISTERED_APPS)
+  const [registeredApps, setRegisteredApps] = useState<RegisteredApp[]>(() => getLocalRegisteredApps())
   const [appsLoading, setAppsLoading] = useState(false)
   const [newAppName, setNewAppName] = useState('')
   const [newAppPackage, setNewAppPackage] = useState('')
@@ -276,7 +277,7 @@ export default function RymonConnect() {
   const [testConnectLoading, setTestConnectLoading] = useState(false)
   const [testConnectResult, setTestConnectResult] = useState<string>('')
   const [codeSnippetTab, setCodeSnippetTab] = useState<'cpp' | 'java' | 'python' | 'curl'>('cpp')
-  const [connectSelectedApp, setConnectSelectedApp] = useState<'Free Fire MAX' | 'Custom'>('Free Fire MAX')
+  const [connectSelectedApp, setConnectSelectedApp] = useState<string>(() => localStorage.getItem('rymon_connect_selected_app') || 'Free Fire MAX')
   const [connectCustomAppName, setConnectCustomAppName] = useState('Tool X')
 
   // 1. Initial Session & Database Verification on Mount
@@ -562,6 +563,26 @@ export default function RymonConnect() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, currentUser?.username, currentUser?.role])
+
+  // Ensure selected game and connect app fall back gracefully if deleted from registered apps
+  useEffect(() => {
+    if (registeredApps.length > 0) {
+      if (genGame.toLowerCase() !== 'free fire max' && !isCustomAppMode) {
+        const exists = registeredApps.some((a) => (a?.name || '').toLowerCase() === genGame.toLowerCase())
+        if (!exists) {
+          setGenGame('Free Fire MAX')
+          localStorage.setItem('rymon_selected_gen_game', 'Free Fire MAX')
+        }
+      }
+      if (connectSelectedApp.toLowerCase() !== 'free fire max' && connectSelectedApp !== 'Custom') {
+        const exists = registeredApps.some((a) => (a?.name || '').toLowerCase() === connectSelectedApp.toLowerCase())
+        if (!exists) {
+          setConnectSelectedApp('Free Fire MAX')
+          localStorage.setItem('rymon_connect_selected_app', 'Free Fire MAX')
+        }
+      }
+    }
+  }, [registeredApps, genGame, connectSelectedApp, isCustomAppMode])
 
   // 3. Telemetry Realtime Subscription for Current Key
   useEffect(() => {
@@ -1209,15 +1230,22 @@ export default function RymonConnect() {
       const trimmed = customAppNameInput.trim()
       const alreadyExists = registeredApps.some((a) => (a?.name || '').toLowerCase() === trimmed.toLowerCase())
       if (!alreadyExists) {
-        addRegisteredApp({
-          name: trimmed,
-          platform: 'Custom Platform',
-          icon: '🔑',
-          description: 'Custom KeyAuth Application'
-        })
-          .then((updated) => setRegisteredApps(updated))
-          .catch(() => {})
+        try {
+          const updated = await addRegisteredApp({
+            name: trimmed,
+            platform: 'Custom Platform',
+            icon: '🎮',
+            description: 'Custom KeyAuth Application'
+          })
+          setRegisteredApps(updated)
+        } catch {}
       }
+      setGenGame(trimmed)
+      localStorage.setItem('rymon_selected_gen_game', trimmed)
+      setIsCustomAppMode(false)
+      setCustomAppNameInput('')
+    } else {
+      localStorage.setItem('rymon_selected_gen_game', targetGameName)
     }
 
     setAuthLoading(true)
@@ -1235,6 +1263,7 @@ export default function RymonConnect() {
     if (res.success && res.key) {
       const mintedKeys = res.keys && res.keys.length > 0 ? res.keys : [res.key]
       setGenCreatedKeysList(mintedKeys)
+      setGenCreatedGame(targetGameName)
       if (res.remainingBalance !== undefined) {
         setWalletBalance(res.remainingBalance)
         const updatedUser = { ...currentUser, balance: res.remainingBalance }
@@ -1251,7 +1280,7 @@ export default function RymonConnect() {
         const tgKeyMsg = [
           `⚡ <b>RYMON OFFICIAL — NEW KEY${createdCount > 1 ? 'S' : ''} GENERATED</b>`,
           `👤 <b>Seller:</b> @${currentUser?.username || 'admin'} (${String(currentUser?.role || 'user').toUpperCase()})`,
-          `🎮 <b>Game:</b> ${genGame} • <b>Edition:</b> ${isVipSelected ? '👑 VIP Web Remote (+50%)' : '📱 Standard APK'} • <b>Plan:</b> ${genDuration}`,
+          `🎮 <b>Game:</b> ${targetGameName} • <b>Edition:</b> ${isVipSelected ? '👑 VIP Web Remote (+50%)' : '📱 Standard APK'} • <b>Plan:</b> ${genDuration}`,
           `📱 <b>Max Devices:</b> ${genDevicesMax} • <b>Qty:</b> ${createdCount}`,
           ``,
           ...mintedKeys.slice(0, 25).map((k, idx) => `${idx + 1}. <code>${k}</code>`),
@@ -2270,7 +2299,7 @@ export default function RymonConnect() {
   const handleTestConnectApi = async () => {
     setTestConnectLoading(true)
     setTestConnectResult('')
-    const targetApp = connectSelectedApp === 'Free Fire MAX' ? 'Free Fire MAX' : (connectCustomAppName.trim() || 'Tool X')
+    const targetApp = (connectSelectedApp === 'Custom' || connectSelectedApp === '__CUSTOM__') ? (connectCustomAppName.trim() || 'Tool X') : connectSelectedApp
     try {
       // 1. Primary: Edge Gateway (zero headers required, SSL cloud-synced)
       const res = await fetch('https://greenvest.shop/connect', {
@@ -2358,7 +2387,14 @@ export default function RymonConnect() {
     try {
       const updated = await deleteRegisteredApp(app.id)
       setRegisteredApps(updated)
-      if (genGame === app.name) setGenGame('Free Fire MAX')
+      if (genGame.toLowerCase() === (app.name || '').toLowerCase()) {
+        setGenGame('Free Fire MAX')
+        localStorage.setItem('rymon_selected_gen_game', 'Free Fire MAX')
+      }
+      if (connectSelectedApp.toLowerCase() === (app.name || '').toLowerCase()) {
+        setConnectSelectedApp('Free Fire MAX')
+        localStorage.setItem('rymon_connect_selected_app', 'Free Fire MAX')
+      }
       showToast(`Removed app "${app.name}"`)
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Failed to remove application'
@@ -4298,11 +4334,50 @@ export default function RymonConnect() {
                     <form onSubmit={handleGenerateKey}>
                       <div className="sg-form-grid-2col" style={styles.formGrid2Col}>
                         <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>SELECT TARGET GAME / APP</label>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <label style={{ ...styles.formLabel, marginBottom: 0 }}>SELECT TARGET GAME / APP</label>
+                            {isOwner && !isCustomAppMode && genGame.toLowerCase() !== 'free fire max' && registeredApps.some((a) => (a?.name || '').toLowerCase() === genGame.toLowerCase()) && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const targetApp = registeredApps.find((a) => (a?.name || '').toLowerCase() === genGame.toLowerCase())
+                                  if (targetApp) {
+                                    await handleDeleteApp(targetApp)
+                                  } else {
+                                    if (window.confirm(`Are you sure you want to remove "${genGame}" from registered games/apps?`)) {
+                                      const updated = await deleteRegisteredApp(genGame)
+                                      setRegisteredApps(updated)
+                                      setGenGame('Free Fire MAX')
+                                      localStorage.setItem('rymon_selected_gen_game', 'Free Fire MAX')
+                                      showToast(`Removed "${genGame}"`)
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.15)',
+                                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                                  color: '#ef4444',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                                title="Owner Action: Delete this custom game"
+                              >
+                                🗑️ Remove &quot;{genGame}&quot;
+                              </button>
+                            )}
+                          </div>
+
                           <select
-                            value={isCustomAppMode ? '__CUSTOM__' : 'Free Fire MAX'}
+                            value={isCustomAppMode ? '__CUSTOM__' : genGame}
                             onChange={(e) => {
-                              if (e.target.value === '__CUSTOM__') {
+                              const val = e.target.value
+                              if (val === '__CUSTOM__') {
                                 if (!canGenerateCustomApps) {
                                   showToast('🔒 Custom App key generation is restricted by Owner for your role.')
                                   return
@@ -4310,16 +4385,24 @@ export default function RymonConnect() {
                                 setIsCustomAppMode(true)
                               } else {
                                 setIsCustomAppMode(false)
-                                setGenGame('Free Fire MAX')
+                                setGenGame(val)
+                                localStorage.setItem('rymon_selected_gen_game', val)
                               }
                             }}
                             style={styles.selectInput}
                           >
                             <option value="Free Fire MAX">🔥 Free Fire MAX (Streamer &amp; Remote)</option>
+                            {registeredApps
+                              .filter((a) => a && a.name && a.name.trim().toLowerCase() !== 'free fire max')
+                              .map((app) => (
+                                <option key={app.id || app.name} value={app.name}>
+                                  {app.icon || '🎮'} {app.name} (Custom App)
+                                </option>
+                              ))}
                             {canGenerateCustomApps ? (
-                              <option value="__CUSTOM__">✨ Custom</option>
+                              <option value="__CUSTOM__">➕ Add / Type New Custom Game...</option>
                             ) : (
-                              <option value="__CUSTOM__" disabled>🔒 Custom (Restricted by Owner)</option>
+                              <option value="__CUSTOM__" disabled>🔒 Add Custom (Restricted by Owner)</option>
                             )}
                           </select>
 
@@ -4334,7 +4417,7 @@ export default function RymonConnect() {
                                   type="text"
                                   value={customAppNameInput}
                                   onChange={(e) => setCustomAppNameInput(e.target.value)}
-                                  placeholder="Type any custom app or mod name (e.g. Tool X, Private Mod)..."
+                                  placeholder="Type any custom app or mod name (e.g. Tool X, BGMI, CODM)..."
                                   style={{ ...styles.keyInput, flex: 1, borderColor: '#05df72', padding: '8px 12px', fontSize: '13px' }}
                                   autoFocus
                                 />
@@ -4342,7 +4425,8 @@ export default function RymonConnect() {
                                   type="button"
                                   onClick={() => {
                                     setIsCustomAppMode(false)
-                                    setGenGame('Free Fire MAX')
+                                    setCustomAppNameInput('')
+                                    setGenGame(localStorage.getItem('rymon_selected_gen_game') || 'Free Fire MAX')
                                   }}
                                   style={{ ...styles.chipBtn, fontSize: '11px', padding: '0 12px' }}
                                 >
@@ -4353,13 +4437,13 @@ export default function RymonConnect() {
                           )}
 
                           <div style={{ marginTop: '6px', fontSize: '11.5px', lineHeight: '1.4' }}>
-                            {!isCustomAppMode ? (
+                            {!isCustomAppMode && genGame === 'Free Fire MAX' ? (
                               <span style={{ color: '#05df72' }}>
                                 🔥 <strong>Free Fire MAX Exclusive:</strong> Full Streamer Remote controls (ESP, Aimbot, Telemetry HUD) enabled.
                               </span>
                             ) : (
                               <span style={{ color: '#00d9ff' }}>
-                                🔑 <strong>Pure KeyAuth Isolation:</strong> Key will <u>ONLY</u> work on <strong>{customAppNameInput.trim() || 'Custom App'}</strong>. Zero streamer controls (authentication &amp; HWID only).
+                                🔑 <strong>Pure KeyAuth Isolation:</strong> Key will <u>ONLY</u> work on <strong>{isCustomAppMode ? (customAppNameInput.trim() || 'Custom App') : genGame}</strong>. Zero streamer controls (authentication &amp; HWID only).
                               </span>
                             )}
                           </div>
@@ -4651,7 +4735,7 @@ export default function RymonConnect() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDownloadKeysTxt(genCreatedKeysList, `${genDuration}_${genGame}`)}
+                              onClick={() => handleDownloadKeysTxt(genCreatedKeysList, `${genDuration}_${genCreatedGame}`)}
                               style={{
                                 ...styles.copyKeyBtn,
                                 background: 'rgba(0, 217, 255, 0.2)',
@@ -4664,7 +4748,7 @@ export default function RymonConnect() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleCopyAllDeliverySlips(genCreatedKeysList, genDuration, genGame)}
+                              onClick={() => handleCopyAllDeliverySlips(genCreatedKeysList, genDuration, genCreatedGame)}
                               style={{
                                 ...styles.copyKeyBtn,
                                 background: 'rgba(5, 223, 114, 0.2)',
@@ -4678,7 +4762,7 @@ export default function RymonConnect() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleShareKeysWhatsApp(genCreatedKeysList, `${genDuration} (${genGame})`)}
+                              onClick={() => handleShareKeysWhatsApp(genCreatedKeysList, `${genDuration} (${genCreatedGame})`)}
                               style={{
                                 ...styles.copyKeyBtn,
                                 background: 'rgba(34, 197, 94, 0.2)',
@@ -4691,7 +4775,7 @@ export default function RymonConnect() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleShareKeysTelegram(genCreatedKeysList, `${genDuration} (${genGame})`)}
+                              onClick={() => handleShareKeysTelegram(genCreatedKeysList, `${genDuration} (${genCreatedGame})`)}
                               style={{
                                 ...styles.copyKeyBtn,
                                 background: 'rgba(56, 189, 248, 0.2)',
@@ -4719,7 +4803,7 @@ export default function RymonConnect() {
                               <div style={{ display: 'flex', gap: '6px' }}>
                                 <button
                                   type="button"
-                                  onClick={() => handleCopyDeliverySlip(kStr, genDuration, genGame)}
+                                  onClick={() => handleCopyDeliverySlip(kStr, genDuration, genCreatedGame)}
                                   style={{
                                     ...styles.copyKeyBtn,
                                     background: copiedDeliverySlip === kStr ? 'rgba(5, 223, 114, 0.35)' : 'rgba(5, 223, 114, 0.15)',
@@ -7674,7 +7758,8 @@ export default function RymonConnect() {
             )}
 
             {activeTab === 'connect-api' && isOwner && (() => {
-              const effectiveConnectAppName = connectSelectedApp === 'Free Fire MAX' ? 'Free Fire MAX' : (connectCustomAppName.trim() || 'Tool X');
+              const isCustomTypeMode = connectSelectedApp === 'Custom' || connectSelectedApp === '__CUSTOM__';
+              const effectiveConnectAppName = isCustomTypeMode ? (connectCustomAppName.trim() || 'Tool X') : (connectSelectedApp || 'Free Fire MAX');
               const getAppSecret = (appName: string): string => {
                 if (appName === 'Free Fire MAX') return 'ff_max_sec_7a8b9c1d2e3f405162738495a6b7c8d9e0f1';
                 let hash1 = 0x811c9dc5;
@@ -7972,14 +8057,17 @@ else:
                       </div>
 
                       {/* App Switcher Buttons */}
-                      <div style={{ display: 'flex', gap: '8px', background: 'rgba(3, 7, 18, 0.7)', padding: '4px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                      <div style={{ display: 'flex', gap: '8px', background: 'rgba(3, 7, 18, 0.7)', padding: '4px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)', flexWrap: 'wrap', alignItems: 'center' }}>
                         <button
                           type="button"
-                          onClick={() => setConnectSelectedApp('Free Fire MAX')}
+                          onClick={() => {
+                            setConnectSelectedApp('Free Fire MAX')
+                            localStorage.setItem('rymon_connect_selected_app', 'Free Fire MAX')
+                          }}
                           style={{
                             ...styles.chipBtn,
-                            background: connectSelectedApp === 'Free Fire MAX' ? 'linear-gradient(135deg, #05df72 0%, #047857 100%)' : 'transparent',
-                            color: connectSelectedApp === 'Free Fire MAX' ? '#07090e' : '#cbd5e1',
+                            background: connectSelectedApp.toLowerCase() === 'free fire max' ? 'linear-gradient(135deg, #05df72 0%, #047857 100%)' : 'transparent',
+                            color: connectSelectedApp.toLowerCase() === 'free fire max' ? '#07090e' : '#cbd5e1',
                             border: 'none',
                             fontWeight: 800,
                             padding: '6px 14px'
@@ -7987,22 +8075,94 @@ else:
                         >
                           🎮 Free Fire MAX
                         </button>
+
+                        {registeredApps
+                          .filter((a) => a && a.name && a.name.trim().toLowerCase() !== 'free fire max')
+                          .map((app) => {
+                            const isSelected = connectSelectedApp.toLowerCase() === app.name.toLowerCase();
+                            return (
+                              <button
+                                key={app.id || app.name}
+                                type="button"
+                                onClick={() => {
+                                  setConnectSelectedApp(app.name)
+                                  localStorage.setItem('rymon_connect_selected_app', app.name)
+                                }}
+                                style={{
+                                  ...styles.chipBtn,
+                                  background: isSelected ? 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)' : 'transparent',
+                                  color: isSelected ? '#07090e' : '#cbd5e1',
+                                  border: 'none',
+                                  fontWeight: 800,
+                                  padding: '6px 14px'
+                                }}
+                              >
+                                {app.icon || '🎮'} {app.name}
+                              </button>
+                            );
+                          })}
+
                         <button
                           type="button"
-                          onClick={() => setConnectSelectedApp('Custom')}
+                          onClick={() => {
+                            setConnectSelectedApp('Custom')
+                            localStorage.setItem('rymon_connect_selected_app', 'Custom')
+                          }}
                           style={{
                             ...styles.chipBtn,
-                            background: connectSelectedApp === 'Custom' ? 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)' : 'transparent',
-                            color: connectSelectedApp === 'Custom' ? '#07090e' : '#cbd5e1',
+                            background: connectSelectedApp === 'Custom' ? 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)' : 'transparent',
+                            color: connectSelectedApp === 'Custom' ? '#ffffff' : '#cbd5e1',
                             border: 'none',
                             fontWeight: 800,
                             padding: '6px 14px'
                           }}
                         >
-                          ⚙️ Custom Application...
+                          ➕ Type New Custom App...
                         </button>
                       </div>
                     </div>
+
+                    {/* Owner Action: Remove Registered App if currently selected */}
+                    {isOwner && connectSelectedApp.toLowerCase() !== 'free fire max' && connectSelectedApp !== 'Custom' && (
+                      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                          Target Application: <strong style={{ color: '#00d9ff' }}>{connectSelectedApp}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const targetApp = registeredApps.find((a) => (a?.name || '').toLowerCase() === connectSelectedApp.toLowerCase())
+                            if (targetApp) {
+                              await handleDeleteApp(targetApp)
+                            } else {
+                              if (window.confirm(`Are you sure you want to remove "${connectSelectedApp}" from registered applications?`)) {
+                                const updated = await deleteRegisteredApp(connectSelectedApp)
+                                setRegisteredApps(updated)
+                                setConnectSelectedApp('Free Fire MAX')
+                                localStorage.setItem('rymon_connect_selected_app', 'Free Fire MAX')
+                                showToast(`Removed "${connectSelectedApp}"`)
+                              }
+                            }
+                          }}
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                            color: '#ef4444',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Owner Action: Delete this registered app"
+                        >
+                          🗑️ Remove &quot;{connectSelectedApp}&quot;
+                        </button>
+                      </div>
+                    )}
 
                     {/* Custom App Name Input Row (Shown when Custom is selected) */}
                     {connectSelectedApp === 'Custom' && (
@@ -8025,6 +8185,42 @@ else:
                             fontWeight: 700
                           }}
                         />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const trimmed = connectCustomAppName.trim()
+                            if (!trimmed) {
+                              showToast('Please type an app name first.')
+                              return
+                            }
+                            try {
+                              const updated = await addRegisteredApp({
+                                name: trimmed,
+                                platform: 'Android Mobile',
+                                icon: '🎮',
+                                description: 'Pure KeyAuth Mobile Application'
+                              })
+                              setRegisteredApps(updated)
+                              setConnectSelectedApp(trimmed)
+                              localStorage.setItem('rymon_connect_selected_app', trimmed)
+                              showToast(`Successfully registered "${trimmed}"!`)
+                            } catch (err: unknown) {
+                              const msg = err instanceof Error ? err.message : 'Failed to register app'
+                              showToast(msg)
+                            }
+                          }}
+                          style={{
+                            ...styles.chipBtn,
+                            background: '#00d9ff',
+                            color: '#07090e',
+                            fontWeight: 800,
+                            padding: '6px 14px',
+                            whiteSpace: 'nowrap',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          💾 Save App
+                        </button>
                         <span style={{ fontSize: '11px', color: '#94a3b8' }}>
                           💡 Pure KeyAuth Only (HWID lock &amp; license validation, no streamer remote panel)
                         </span>
@@ -8158,8 +8354,8 @@ else:
                     <div style={{
                       padding: '16px 20px',
                       borderRadius: '12px',
-                      background: connectSelectedApp === 'Free Fire MAX' ? 'rgba(5, 223, 114, 0.08)' : 'rgba(15, 23, 42, 0.6)',
-                      border: connectSelectedApp === 'Free Fire MAX' ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)'
+                      background: effectiveConnectAppName.toLowerCase() === 'free fire max' ? 'rgba(5, 223, 114, 0.08)' : 'rgba(15, 23, 42, 0.6)',
+                      border: effectiveConnectAppName.toLowerCase() === 'free fire max' ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                         <div style={{ fontSize: '14px', fontWeight: 800, color: '#05df72', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -8180,8 +8376,8 @@ else:
                     <div style={{
                       padding: '16px 20px',
                       borderRadius: '12px',
-                      background: connectSelectedApp === 'Custom' ? 'rgba(0, 217, 255, 0.08)' : 'rgba(15, 23, 42, 0.6)',
-                      border: connectSelectedApp === 'Custom' ? '1px solid rgba(0, 217, 255, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)'
+                      background: effectiveConnectAppName.toLowerCase() !== 'free fire max' ? 'rgba(0, 217, 255, 0.08)' : 'rgba(15, 23, 42, 0.6)',
+                      border: effectiveConnectAppName.toLowerCase() !== 'free fire max' ? '1px solid rgba(0, 217, 255, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                         <div style={{ fontSize: '14px', fontWeight: 800, color: '#00d9ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -8370,9 +8566,9 @@ else:
                                   type="button"
                                   onClick={() => {
                                     const matching = keysList.find(k =>
-                                      connectSelectedApp === 'Free Fire MAX'
+                                      effectiveConnectAppName.toLowerCase() === 'free fire max'
                                         ? String(k?.game || '').toLowerCase().includes('free fire')
-                                        : !String(k?.game || '').toLowerCase().includes('free fire')
+                                        : String(k?.game || '').toLowerCase() === effectiveConnectAppName.toLowerCase()
                                     );
                                     const keyToPick = matching || keysList[0];
                                     setTestConnectKey(keyToPick.license_key);

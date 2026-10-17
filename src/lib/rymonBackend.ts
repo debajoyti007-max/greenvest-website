@@ -1643,7 +1643,7 @@ export async function generateLicenseKeyBackend(params: {
             buildDefaultStreamerControlPayload({
               license_key: k,
               streamer_name: effectiveStreamerName,
-              game_name: 'Free Fire MAX',
+              game_name: game || 'Free Fire MAX',
               plan_duration: effectivePlanDuration,
               creator: creatorName,
               devices_max: safeDevices,
@@ -5931,8 +5931,9 @@ export function getLocalRegisteredApps(): RegisteredApp[] {
     if (raw) {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const cleaned = parsed.filter((a: any) => a.id !== 'bgmi' && a.id !== 'codm' && !a.name?.toLowerCase().includes('bgmi') && !a.name?.toLowerCase().includes('duty'))
-        if (cleaned.length > 0) return cleaned
+        // Ensure default Free Fire MAX is always present
+        const hasFf = parsed.some((a) => (a?.name || '').toLowerCase() === 'free fire max')
+        return hasFf ? parsed : [...DEFAULT_REGISTERED_APPS, ...parsed]
       }
     }
   } catch {}
@@ -5950,10 +5951,9 @@ export async function fetchRegisteredApps(): Promise<RegisteredApp[]> {
         .maybeSingle()
 
       if (cfgRow?.value && Array.isArray(cfgRow.value) && cfgRow.value.length > 0) {
-        const cleaned = (cfgRow.value as RegisteredApp[]).filter(
-          (a) => a.id !== 'bgmi' && a.id !== 'codm' && !a.name?.toLowerCase().includes('bgmi') && !a.name?.toLowerCase().includes('duty')
-        )
-        apps = cleaned.length > 0 ? cleaned : [...DEFAULT_REGISTERED_APPS]
+        const remoteApps = cfgRow.value as RegisteredApp[]
+        const hasFf = remoteApps.some((a) => (a?.name || '').toLowerCase() === 'free fire max')
+        apps = hasFf ? remoteApps : [...DEFAULT_REGISTERED_APPS, ...remoteApps]
         try {
           localStorage.setItem(REGISTERED_APPS_LOCAL_STORAGE, JSON.stringify(apps))
         } catch {}
@@ -6027,6 +6027,9 @@ export async function addRegisteredApp(newApp: {
 export async function deleteRegisteredApp(appIdOrName: string): Promise<RegisteredApp[]> {
   const current = await fetchRegisteredApps()
   const target = appIdOrName.trim().toLowerCase()
+  if (target === 'ffmax' || target === 'free fire max') {
+    return current
+  }
   const filtered = current.filter(
     (a) => String(a?.id || '').toLowerCase() !== target && String(a?.name || '').toLowerCase() !== target
   )
