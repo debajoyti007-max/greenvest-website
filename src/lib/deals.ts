@@ -1,6 +1,6 @@
 import type { PromotionalDeal } from '../types'
 
-export const DEALS_STORAGE_KEY = 'gv_promotional_deals_v1'
+const DEALS_STORAGE_KEY = 'gv_promotional_deals_v1'
 
 export const DEAL_GRADIENTS = [
   { label: 'Emerald Forest (Default)', value: 'linear-gradient(135deg, #15803d 0%, #166534 100%)' },
@@ -11,8 +11,6 @@ export const DEAL_GRADIENTS = [
   { label: 'Deep Indigo', value: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)' },
 ]
 
-// Default promotional deals for customer storefront: empty by default so no fake/demo offers show up
-export const DEFAULT_PROMOTIONAL_DEALS: PromotionalDeal[] = []
 
 // Optional sample templates available in Seller Hub for one-click deal creation
 export const SAMPLE_PROMOTIONAL_TEMPLATES: PromotionalDeal[] = [

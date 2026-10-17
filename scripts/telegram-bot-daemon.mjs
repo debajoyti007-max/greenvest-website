@@ -867,7 +867,8 @@ async function processUpdate(upd) {
       `• <code>/addbal &lt;CHAT_ID_OR_USER&gt; &lt;amount&gt;</code>`,
       `• <code>/renew &lt;CHAT_ID_OR_USER&gt; &lt;30d|60d&gt;</code>`,
       `• <code>/banuser &lt;CHAT_ID_OR_USER&gt;</code> | <code>/unbanuser &lt;CHAT_ID_OR_USER&gt;</code>`,
-      `• <code>/gen 1d|3d|7d|15d|30d|2h</code>`,
+      `• <code>/gen 1d|3d|7d|15d|30d|2h [vip]</code>`,
+      `• <code>/purgekeys [days]</code> — Clean expired short-term keys`,
       `• <code>/pause KEY</code> | <code>/resume KEY</code> | <code>/reset KEY</code>`
     ].join('\n')
     await sendTelegramReply(chatId, reply, buildOwnerInlineKeyboard())
@@ -1023,6 +1024,8 @@ async function processUpdate(upd) {
     if (lowerText.startsWith('/buy')) {
       const parts = text.split(/\s+/)
       const arg = (parts[1] || '1d').toLowerCase()
+      const isVipRequested = parts.some((p) => p.toLowerCase() === 'vip') || arg.includes('vip')
+      const cleanArg = arg.replace('vip', '')
       const qty = Math.min(10, Math.max(1, parseInt(parts[2] || '1') || 1))
       const durationMap = {
         '2h': '2 Hours',
@@ -1032,15 +1035,16 @@ async function processUpdate(upd) {
         '15d': '15 Days',
         '30d': '30 Days'
       }
-      const planDuration = durationMap[arg]
-      if (!planDuration) {
+      const rawDuration = durationMap[cleanArg] || durationMap[arg]
+      if (!rawDuration) {
         await sendTelegramReply(
           chatId,
-          `ℹ️ <b>Usage:</b> Tap a Buy button below or send:\n<code>/buy 1d</code> | <code>/buy 3d</code> | <code>/buy 7d</code> | <code>/buy 15d</code> | <code>/buy 30d</code>`,
+          `ℹ️ <b>Usage:</b> Tap a Buy button below or send:\n<code>/buy 1d</code> (Standard) | <code>/buy 1d vip</code> (VIP Streamer)\n<code>/buy 3d</code> | <code>/buy 7d</code> | <code>/buy 30d</code>`,
           buildResellerInlineKeyboard(priceMap)
         )
         return
       }
+      const planDuration = isVipRequested ? `${rawDuration} [VIP]` : rawDuration
 
       if (activeAccount.status === 'BANNED') {
         await sendTelegramReply(chatId, `🚫 Your account is suspended and cannot generate keys.`)
@@ -1058,7 +1062,8 @@ async function processUpdate(upd) {
         return
       }
 
-      const unitPrice = priceMap[planDuration] ?? 35
+      const basePrice = priceMap[rawDuration] ?? 35
+      const unitPrice = isVipRequested ? Math.round(basePrice * 1.5) : basePrice
       const totalCost = unitPrice * qty
       const liveBal = Number(activeAccount.balance || 0)
 
@@ -1100,28 +1105,32 @@ async function processUpdate(upd) {
       }))
       await supabase.from('rymon_licenses').insert(licPayloads)
 
-      const ctrlPayloads = generatedKeys.map((k) => ({
-        license_key: k,
-        game_name: 'Free Fire',
-        plan_duration: planDuration,
-        creator: activeAccount.username,
-        devices_max: 1,
-        devices_used: 0,
-        device_hwid: '',
-        is_active: true,
-        is_paused: false,
-        is_online: false,
-        updated_at: new Date().toISOString()
-      }))
-      await supabase.from('rymon_streamer_controls').upsert(ctrlPayloads, { onConflict: 'license_key' })
+      // Lazy Creation: Only insert into rymon_streamer_controls if VIP Streamer Key
+      if (isVipRequested) {
+        const ctrlPayloads = generatedKeys.map((k) => ({
+          license_key: k,
+          game_name: 'Free Fire',
+          plan_duration: planDuration,
+          creator: activeAccount.username,
+          devices_max: 1,
+          devices_used: 0,
+          device_hwid: '',
+          is_active: true,
+          is_paused: false,
+          is_online: false,
+          updated_at: new Date().toISOString()
+        }))
+        await supabase.from('rymon_streamer_controls').upsert(ctrlPayloads, { onConflict: 'license_key' })
+      }
 
       const keyLines = generatedKeys.map((k, idx) => `${idx + 1}. <code>${k}</code>`).join('\n')
       const reply = [
-        `✅ <b>KEY PURCHASED &amp; GENERATED!</b>`,
+        `✅ <b>${isVipRequested ? '👑 VIP STREAMER' : '📱 STANDARD'} KEY PURCHASED &amp; GENERATED!</b>`,
         ``,
         `🔑 <b>Tap Key to Copy:</b>`,
         keyLines,
         ``,
+        `• <b>Tier:</b> ${isVipRequested ? '👑 VIP Streamer (Web Remote Enabled)' : '📱 Standard (Zero-Lag Mobile APK)'}`,
         `• <b>Game:</b> Free Fire`,
         `• <b>Plan:</b> ${planDuration} (Starts on 1st APK Login)`,
         `• <b>Cost Deducted:</b> ${activeAccount.role === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
@@ -1266,7 +1275,9 @@ async function processUpdate(upd) {
     lowerText.startsWith('/invite') ||
     lowerText.startsWith('/banuser') ||
     lowerText.startsWith('/unbanuser') ||
-    lowerText.startsWith('/broadcast')
+    lowerText.startsWith('/broadcast') ||
+    lowerText.startsWith('/purgekeys') ||
+    lowerText.startsWith('/clean')
   ) {
     if (!isOwnerChat) {
       await sendTelegramReply(
@@ -1365,6 +1376,8 @@ async function processUpdate(upd) {
     if (lowerText.startsWith('/gen')) {
       const parts = text.split(/\s+/)
       const arg = (parts[1] || '1d').toLowerCase()
+      const isVipRequested = parts.some((p) => p.toLowerCase() === 'vip') || arg.includes('vip')
+      const cleanArg = arg.replace('vip', '')
       const durationMap = {
         '2h': '2 Hours',
         '1d': '1 Day',
@@ -1373,7 +1386,8 @@ async function processUpdate(upd) {
         '15d': '15 Days',
         '30d': '30 Days'
       }
-      const planDuration = durationMap[arg] || '1 Day'
+      const rawDuration = durationMap[cleanArg] || durationMap[arg] || '1 Day'
+      const planDuration = isVipRequested ? `${rawDuration} [VIP]` : rawDuration
       const b1 = Math.random().toString(36).substring(2, 6).toUpperCase()
       const b2 = Math.random().toString(36).substring(2, 6).toUpperCase()
       const newKey = `RYMON-FF-${b1}-${b2}`
@@ -1392,28 +1406,31 @@ async function processUpdate(upd) {
       })
 
       if (!error) {
-        await supabase.from('rymon_streamer_controls').upsert(
-          {
-            license_key: newKey,
-            game_name: 'Free Fire',
-            plan_duration: planDuration,
-            creator: 'debajoyti',
-            devices_max: 1,
-            devices_used: 0,
-            device_hwid: '',
-            is_active: true,
-            is_paused: false,
-            is_online: false,
-            updated_at: new Date().toISOString()
-          },
-          { onConflict: 'license_key' }
-        )
+        if (isVipRequested) {
+          await supabase.from('rymon_streamer_controls').upsert(
+            {
+              license_key: newKey,
+              game_name: 'Free Fire',
+              plan_duration: planDuration,
+              creator: 'debajoyti',
+              devices_max: 1,
+              devices_used: 0,
+              device_hwid: '',
+              is_active: true,
+              is_paused: false,
+              is_online: false,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'license_key' }
+          )
+        }
         const reply = [
-          `✨ <b>NEW VIP KEY GENERATED!</b>`,
+          `✨ <b>NEW ${isVipRequested ? '👑 VIP STREAMER' : '📱 STANDARD'} KEY GENERATED!</b>`,
           ``,
           `🔑 <b>Tap to Copy Key:</b>`,
           `<code>${newKey}</code>`,
           ``,
+          `• <b>Tier:</b> ${isVipRequested ? '👑 VIP Streamer (Web Remote & Live Controls)' : '📱 Standard (Zero-Lag Mobile APK)'}`,
           `• <b>Game:</b> Free Fire`,
           `• <b>Duration:</b> ${planDuration} (Starts on 1st APK Login)`,
           `• <b>Devices:</b> 1 Device (Max 2 Self-Resets/Day)`
@@ -1652,6 +1669,34 @@ async function processUpdate(upd) {
           ? `❄️ Key <code>${licRow.license_key}</code> PAUSED — Countdown timer frozen.`
           : `▶️ Key <code>${licRow.license_key}</code> RESUMED!`
       )
+      return
+    }
+
+    if (lowerText.startsWith('/purgekeys') || lowerText.startsWith('/clean')) {
+      const parts = text.split(/\s+/)
+      const daysArg = parseInt(parts[1] || '60') || 60
+      const { data, error } = await supabase.rpc('rpc_rymon_purge_expired_keys', {
+        p_days_retention: daysArg,
+        p_actor_username: 'telegram_owner'
+      })
+      if (error) {
+        await sendTelegramReply(chatId, `❌ <b>Database Purge Failed:</b> ${error.message}`)
+      } else {
+        const deletedKeys = data?.deleted_keys_count ?? 0
+        const deletedControls = data?.deleted_controls_count ?? 0
+        const cutoff = data?.cutoff_timestamp
+          ? new Date(data.cutoff_timestamp).toLocaleString('en-IN')
+          : `${daysArg} days ago`
+        const reply = [
+          `🧹 <b>DATABASE RETENTION PURGE COMPLETE</b>`,
+          ``,
+          `• <b>Retention Cutoff:</b> Older than ${daysArg} days (${cutoff})`,
+          `• <b>Purged Expired Short-Term Keys:</b> ${deletedKeys}`,
+          `• <b>Purged Orphaned Streamer Controls:</b> ${deletedControls}`,
+          `• <b>Database Health:</b> 100% Optimized (Supabase Free Tier Clean)`
+        ].join('\n')
+        await sendTelegramReply(chatId, reply, buildOwnerInlineKeyboard())
+      }
       return
     }
   }

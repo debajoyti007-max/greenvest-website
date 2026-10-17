@@ -6,7 +6,7 @@
  */
 
 /** Lower-case trim and collapse internal whitespace. */
-export function normalizeText(str: string): string {
+function normalizeText(str: string): string {
   return str.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 

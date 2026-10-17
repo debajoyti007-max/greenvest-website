@@ -1,7 +1,7 @@
 import { isSupabaseConfigured } from './supabase'
 
 /** True if running in production without Supabase configuration. */
-export function isProductionMisconfigured(): boolean {
+function isProductionMisconfigured(): boolean {
   return !import.meta.env.DEV && !isSupabaseConfigured
 }
 

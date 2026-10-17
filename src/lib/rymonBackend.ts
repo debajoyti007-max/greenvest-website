@@ -106,7 +106,7 @@ export interface TelegramConfig {
 }
 
 // Sovereign In-Memory Fallback Seed (Only genuine Root Owner)
-export const SOVEREIGN_FALLBACK_ACCOUNTS: RymonAccount[] = [
+const SOVEREIGN_FALLBACK_ACCOUNTS: RymonAccount[] = [
   {
     id: '941a9e4e-e3cd-49de-8872-390cc7e4dcaf',
     username: 'debajoyti',
@@ -158,7 +158,7 @@ export interface RymonReferral {
   created_at: string
 }
 
-export const STREAMER_HEARTBEAT_TIMEOUT_MS = 90000 // 90 seconds (generous grace period to prevent mobile network dropouts)
+const STREAMER_HEARTBEAT_TIMEOUT_MS = 90000 // 90 seconds (generous grace period to prevent mobile network dropouts)
 
 export function isStreamerKeyActivelyPlaying(
   ctrl?: Partial<StreamerControlRecord> | null
@@ -225,7 +225,7 @@ export function buildDefaultStreamerControlPayload(
 // HIGH-SPEED IN-MEMORY VIP REALTIME BRIDGE (RENDER CLOUD RAM)
 // Sub-50ms RAM latency, zero Supabase database load, unlimited instant toggles
 // ============================================================================
-export const RENDER_VIP_BRIDGE_URL = 'https://rymon-telegram-bot.onrender.com'
+const RENDER_VIP_BRIDGE_URL = 'https://rymon-telegram-bot.onrender.com'
 
 let warmingStarted = false
 export function warmRenderVipBridge(): void {
@@ -287,7 +287,7 @@ export async function sendRenderVipPatch(key: string, patch: Partial<StreamerCon
   }
 }
 
-export const SOVEREIGN_FALLBACK_REFERRALS: RymonReferral[] = [
+const SOVEREIGN_FALLBACK_REFERRALS: RymonReferral[] = [
   {
     id: 1,
     code: 'RYMON-RES30D-VIP',
@@ -314,7 +314,7 @@ export const SOVEREIGN_FALLBACK_REFERRALS: RymonReferral[] = [
   }
 ]
 
-export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
+const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
   {
     id: 38505,
     license_key: 'RYMON-FF-94A2-9981',
@@ -398,22 +398,10 @@ export const SOVEREIGN_FALLBACK_LICENSES: RymonLicense[] = [
     device_hwid: 'HWID-REV-01',
     status: 'ACTIVE',
     expires_at: new Date(Date.now() + 86400000).toISOString()
-  },
-  {
-    id: 38506,
-    license_key: 'RYMON-FF-94A2-9981',
-    game: 'Free Fire MAX',
-    plan_duration: '30 Days',
-    creator_username: 'debajoyti',
-    devices_used: 1,
-    devices_max: 1,
-    device_hwid: 'HWID-VIP-STREAMER',
-    status: 'ACTIVE',
-    expires_at: new Date(Date.now() + 30 * 86400000).toISOString()
   }
 ]
 
-export const SOVEREIGN_FALLBACK_ACTIVITIES: RymonActivity[] = [
+const SOVEREIGN_FALLBACK_ACTIVITIES: RymonActivity[] = [
   {
     id: 1,
     title: 'Ticket #387',
@@ -834,7 +822,7 @@ export async function verifyLicenseKey(
  * Recursively resolves all usernames belonging to actor's downline tree.
  * Traverses parent (uplink) -> child relationship in full breadth/depth.
  */
-export async function getDownlineUsernames(
+async function getDownlineUsernames(
   actorUsername: string,
   includeSelf: boolean = true
 ): Promise<Set<string>> {
@@ -887,7 +875,7 @@ export async function getDownlineUsernames(
   return result
 }
 
-export function getDownlineUsernamesSync(
+function getDownlineUsernamesSync(
   actorUsername: string,
   accounts: { username: string; uplink?: string }[],
   includeSelf: boolean = true
@@ -1291,7 +1279,7 @@ let cachedPricingResult: {
   customUserMaps: Record<string, Record<string, number>>
 } | null = null
 
-export function invalidatePricingCache(): void {
+function invalidatePricingCache(): void {
   lastPricingSyncTime = 0
   cachedPricingResult = null
 }
@@ -1908,7 +1896,7 @@ const SECURITY_POLICY_STORAGE_KEY = 'rymon_sovereign_security_policy_v1'
 const PAUSED_TIMESTAMPS_STORAGE_KEY = 'rymon_paused_key_timestamps_v1'
 const HWID_RESET_LOG_STORAGE_KEY = 'rymon_hwid_reset_daily_log_v1'
 
-export const DEFAULT_SECURITY_POLICY: SovereignSecurityPolicy = {
+const DEFAULT_SECURITY_POLICY: SovereignSecurityPolicy = {
   reseller_hwid_limit_per_day: 2,
   auto_pause_keys_on_reseller_expiry: true,
   admin_sub_renew_fee_30d: 0,
@@ -1942,7 +1930,7 @@ export function getSovereignSecurityPolicy(): SovereignSecurityPolicy {
 let lastSecurityPolicySyncTime = 0
 let cachedSecurityPolicyResult: SovereignSecurityPolicy | null = null
 
-export function invalidateSecurityPolicyCache(): void {
+function invalidateSecurityPolicyCache(): void {
   lastSecurityPolicySyncTime = 0
   cachedSecurityPolicyResult = null
 }
@@ -3666,7 +3654,7 @@ export async function selfServiceResetKeyHwidBackend(
   }
 }
 
-export async function getKeyDailyResetUsage(rawKey: string): Promise<{
+async function getKeyDailyResetUsage(rawKey: string): Promise<{
   usedToday: number
   remainingResets: number
   dailyLimit: number
@@ -5388,7 +5376,7 @@ function saveReferralSubDays(code: string, days: 30 | 60): void {
   }
 }
 
-export function resolveReferralSubscriptionDays(
+function resolveReferralSubscriptionDays(
   code: string,
   explicitDays?: number,
   remoteMap?: Record<string, number>
@@ -5909,7 +5897,7 @@ export interface RegisteredApp {
   created_at: string
 }
 
-export const DEFAULT_REGISTERED_APPS: RegisteredApp[] = [
+const DEFAULT_REGISTERED_APPS: RegisteredApp[] = [
   {
     id: 'ff_max',
     name: 'Free Fire MAX',

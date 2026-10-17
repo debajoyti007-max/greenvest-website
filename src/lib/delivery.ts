@@ -157,7 +157,7 @@ export function calcDeliveryFee(
   }
 }
 
-export async function reverseGeocodeLocation(
+async function reverseGeocodeLocation(
   lat: number,
   lng: number,
 ): Promise<{ village?: string; town?: string; pin?: string; displayName?: string }> {

@@ -24,7 +24,7 @@ async function compressToBlob(file: File, maxSide = 1000, quality = 0.78): Promi
 }
 
 /** @deprecated Prefer uploadProductImage — kept for offline/dev fallback */
-export async function fileToProductImage(file: File, maxSide = 800, quality = 0.72): Promise<string> {
+async function fileToProductImage(file: File, maxSide = 800, quality = 0.72): Promise<string> {
   const blob = await compressToBlob(file, maxSide, quality)
   return await new Promise((resolve, reject) => {
     const reader = new FileReader()

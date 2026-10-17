@@ -46,7 +46,7 @@ const BANGLISH_ALIASES: Record<string, string[]> = {
 /**
  * Normalizes text by removing diacritics, punctuation, extra spaces, and converting to lowercase.
  */
-export function normalizeSearchText(text: string): string {
+function normalizeSearchText(text: string): string {
   return text
     .toLowerCase()
     .trim()

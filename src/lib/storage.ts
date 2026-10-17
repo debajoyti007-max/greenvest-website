@@ -42,7 +42,7 @@ function writePinStore(pins: Record<string, string>): void {
   } catch {}
 }
 
-export function getStoredPin(identifier: string): string {
+function getStoredPin(identifier: string): string {
   if (!identifier) return ''
   const pins = readPinStore()
   return pins[identifier.toLowerCase()] || ''
