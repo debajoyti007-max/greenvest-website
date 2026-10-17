@@ -1193,9 +1193,9 @@ export default function RymonConnect() {
       return
     }
 
-    // Role Permission Check: Custom Apps
-    if (isCustomAppMode && !canGenerateCustomApps) {
-      setGenError('Permission Denied: Your account is restricted by Owner to Free Fire MAX keys only. Custom App generation requires Owner authorization.')
+    // Exclusive Authorization Check: Custom Apps (Debajoyti Only)
+    if (isCustomAppMode && (currentUser.username || '').toLowerCase() !== 'debajoyti') {
+      setGenError('Permission Denied: Only Root Founder (@debajoyti) is authorized to create new custom game names.')
       return
     }
 
@@ -1305,8 +1305,12 @@ export default function RymonConnect() {
     }
   }
 
-  // Save & Select Custom Target Game / App
+  // Save & Select Custom Target Game / App (Debajoyti Exclusively)
   const handleSaveCustomTargetApp = async () => {
+    if ((currentUser?.username || '').toLowerCase() !== 'debajoyti') {
+      showToast('🔒 Permission Denied: Only Root Founder (@debajoyti) can create new custom game names.')
+      return
+    }
     const trimmed = customAppNameInput.trim()
     if (!trimmed) {
       showToast('⚠️ Please type an app or game name first.')
@@ -2537,14 +2541,11 @@ export default function RymonConnect() {
     return { total, active, paused, unused, expired, banned, reset, playingNow, notPlaying, vipCount, normalCount }
   }, [keysList, onlineKeySet])
 
-  // Cross-App & Reseller Generation Permission Engine
+  // Cross-App & Reseller Generation Permission Engine (Debajoyti Exclusively)
   const isUserCustomAppAllowed = (user?: RymonAccount | null) => {
     if (!user) return false
-    // Root Founder (debajoyti) and all Owner-role accounts are unconditionally allowed custom apps
-    if ((user.username || '').toLowerCase() === 'debajoyti' || user.role === 'owner') return true
-    const perm = user.permissions?.allow_custom_apps
-    if (perm !== undefined) return Boolean(perm)
-    return false
+    // ONLY Root Founder (debajoyti) is authorized to create/generate custom game apps
+    return (user.username || '').toLowerCase() === 'debajoyti'
   }
 
   const canGenerateCustomApps = isUserCustomAppAllowed(currentUser)
@@ -4427,7 +4428,7 @@ export default function RymonConnect() {
                             {canGenerateCustomApps ? (
                               <option value="__CUSTOM__">➕ Add / Type New Custom Game...</option>
                             ) : (
-                              <option value="__CUSTOM__" disabled>🔒 Add Custom (Restricted by Owner)</option>
+                              <option value="__CUSTOM__" disabled>🔒 Add Custom (debajoyti Only)</option>
                             )}
                           </select>
 

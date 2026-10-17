@@ -1464,26 +1464,11 @@ export async function generateLicenseKeyBackend(params: {
   const isRealtime = isFf && params.isVipRealtime !== false
   const policy = getSovereignSecurityPolicy()
 
-  // 1A. Role Permission Enforcement: Custom App Generation
-  if (!isFf && creator.role !== 'owner') {
-    const isReseller = creator.role === 'reseller'
-    const isAdmin = creator.role === 'admin'
-    const userPerm = creator.permissions?.allow_custom_apps
-
-    const customAllowed =
-      userPerm !== undefined
-        ? userPerm
-        : isReseller
-        ? Boolean(policy.allow_reseller_custom_apps)
-        : isAdmin
-        ? Boolean(policy.allow_admin_custom_apps ?? true)
-        : false
-
-    if (!customAllowed) {
-      return {
-        success: false,
-        error: `Permission Denied: Your ${creator.role.toUpperCase()} account is restricted to Free Fire MAX keys only. Custom App generation requires Owner authorization.`
-      }
+  // 1A. Exclusive Permission Enforcement: Custom App Generation (Debajoyti Exclusively)
+  if (!isFf && (creator.username || '').toLowerCase() !== 'debajoyti') {
+    return {
+      success: false,
+      error: `Permission Denied: Custom App creation and key generation are exclusively reserved for Root Founder (@debajoyti).`
     }
   }
 
