@@ -494,7 +494,7 @@ async function resolveTelegramReseller(chatId) {
   if (!bound || !bound.username) return null
   const { data } = await supabase
     .from('rymon_accounts')
-    .select('*')
+    .select('id, username, role, balance, status, expires_at')
     .ilike('username', bound.username)
     .maybeSingle()
   return data || null
@@ -532,7 +532,7 @@ async function grantResellerByChatId({
 
   const { data: existingAcc } = await supabase
     .from('rymon_accounts')
-    .select('*')
+    .select('id, username, balance, role')
     .ilike('username', desiredUsername)
     .maybeSingle()
 
@@ -567,7 +567,7 @@ async function grantResellerByChatId({
         status: 'ACTIVE',
         expires_at: expiresAtIso
       })
-      .select('*')
+      .select('username, balance')
       .maybeSingle()
     if (inserted) {
       finalUsername = inserted.username
@@ -623,7 +623,7 @@ async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel) {
 
   const { data: licRecord } = await supabase
     .from('rymon_licenses')
-    .select('*')
+    .select('license_key, status, expires_at, is_paused, game, plan_duration')
     .ilike('license_key', cleanKey)
     .maybeSingle()
 
@@ -937,7 +937,7 @@ async function processUpdate(upd) {
     }
     const { data: userRow } = await supabase
       .from('rymon_accounts')
-      .select('*')
+      .select('id, username, role, balance, password_hash')
       .ilike('username', uName)
       .maybeSingle()
     if (!userRow || userRow.password_hash !== uPass) {
@@ -1141,7 +1141,7 @@ async function processUpdate(upd) {
     if (lowerText.startsWith('/mykeys')) {
       const { data: myKeys } = await supabase
         .from('rymon_licenses')
-        .select('*')
+        .select('license_key, plan_duration, status')
         .ilike('creator_username', activeAccount.username)
         .order('created_at', { ascending: false })
         .limit(30)
@@ -1224,8 +1224,8 @@ async function processUpdate(upd) {
       return
     }
     const [{ data: found }, { data: ctrl }, logMap] = await Promise.all([
-      supabase.from('rymon_licenses').select('*').ilike('license_key', queryKey).maybeSingle(),
-      supabase.from('rymon_streamer_controls').select('*').ilike('license_key', queryKey).maybeSingle(),
+      supabase.from('rymon_licenses').select('license_key, status, game, plan_duration, creator_username, device_hwid, expires_at').ilike('license_key', queryKey).maybeSingle(),
+      supabase.from('rymon_streamer_controls').select('license_key, is_online, is_paused, device_hwid, last_heartbeat').ilike('license_key', queryKey).maybeSingle(),
       getSystemConfigValue('hwid_reset_daily_log', {})
     ])
     if (!found) {
@@ -1278,8 +1278,8 @@ async function processUpdate(upd) {
 
     if (lowerText.startsWith('/status')) {
       const [{ data: lics }, { data: ctrls }, { data: usrs }, bindings] = await Promise.all([
-        supabase.from('rymon_licenses').select('*'),
-        supabase.from('rymon_streamer_controls').select('*'),
+        supabase.from('rymon_licenses').select('status, is_paused'),
+        supabase.from('rymon_streamer_controls').select('license_key, is_online, is_paused, device_hwid, last_heartbeat'),
         supabase.from('rymon_accounts').select('id'),
         getSystemConfigValue('telegram_reseller_bindings', {})
       ])
@@ -1308,7 +1308,7 @@ async function processUpdate(upd) {
     if (lowerText.startsWith('/unused')) {
       const { data: unusedKeys } = await supabase
         .from('rymon_licenses')
-        .select('*')
+        .select('license_key, plan_duration, game')
         .eq('status', 'WAITING')
         .order('created_at', { ascending: false })
       const list = unusedKeys || []
@@ -1336,7 +1336,9 @@ async function processUpdate(upd) {
     }
 
     if (lowerText.startsWith('/playing')) {
-      const { data: ctrls } = await supabase.from('rymon_streamer_controls').select('*')
+      const { data: ctrls } = await supabase
+        .from('rymon_streamer_controls')
+        .select('license_key, is_online, is_paused, device_hwid, last_heartbeat, game_name, creator')
       const playingList = (ctrls || []).filter((c) => isActivelyPlaying(c))
       if (playingList.length === 0) {
         await sendTelegramReply(
@@ -1479,7 +1481,7 @@ async function processUpdate(upd) {
       const resolvedUser = bindings[targetIdOrUser]?.username || targetIdOrUser
       const { data: userRow } = await supabase
         .from('rymon_accounts')
-        .select('*')
+        .select('id, username, balance')
         .ilike('username', resolvedUser)
         .maybeSingle()
 
@@ -1531,7 +1533,7 @@ async function processUpdate(upd) {
       const resolvedUser = bindings[targetIdOrUser]?.username || targetIdOrUser
       const { data: userRow } = await supabase
         .from('rymon_accounts')
-        .select('*')
+        .select('id, username')
         .ilike('username', resolvedUser)
         .maybeSingle()
       if (!userRow) {
@@ -1554,7 +1556,7 @@ async function processUpdate(upd) {
       const [{ data: allAccs }, bindings] = await Promise.all([
         supabase
           .from('rymon_accounts')
-          .select('*')
+          .select('username, role, balance, expires_at')
           .neq('role', 'owner')
           .order('balance', { ascending: false }),
         getSystemConfigValue('telegram_reseller_bindings', {})
@@ -1627,7 +1629,7 @@ async function processUpdate(upd) {
       }
       const { data: licRow } = await supabase
         .from('rymon_licenses')
-        .select('*')
+        .select('license_key, expires_at')
         .ilike('license_key', targetKey)
         .maybeSingle()
       if (!licRow) {
