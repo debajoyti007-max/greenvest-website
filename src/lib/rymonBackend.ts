@@ -3983,7 +3983,7 @@ export function buildCustomerInlineKeyboard(
       { text: '🔍 Check Key Status', callback_data: 'cmd:help_check' }
     ],
     [
-      { text: '📲 Download APK', callback_data: 'cmd:apk' },
+      { text: '💬 Contact Owner (@montage007pc)', url: 'https://t.me/montage007pc' },
       { text: '🆔 My Chat ID', callback_data: 'cmd:id' }
     ]
   ]
@@ -4474,7 +4474,7 @@ export async function pollAndReplyTelegramBotCommands(
           `🔄 <b>Customer Self-Service Key Reset (Max 2/Day):</b>`,
           `• <b>Paste your License Key directly</b> (e.g. <code>RYMON-FF-XXXX-XXXX</code>) or use <code>/reset KEY</code>`,
           `• <code>/check KEY</code> — Check key status &amp; daily resets`,
-          `• <code>/apk</code> — Download Latest RYMON STREAMER APK`
+          `• <code>/apk</code> — Contact Owner for Official APK`
         ]
         if (isResellerChat && linkedReseller) {
           lines.push(

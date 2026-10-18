@@ -1927,7 +1927,7 @@ export default function RymonConnect() {
       '',
       ...keys.map((k, idx) => `${idx + 1}. \`${k}\``),
       '',
-      `🌐 Portal & APK Download: https://greenvest.shop/`
+      `🌐 Web Remote Console: https://greenvest.shop/`
     ].join('\n')
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
   }
