@@ -1654,6 +1654,20 @@ export async function generateLicenseKeyBackend(params: {
           status: 'SUCCESS'
         })
 
+        // Dispatch instant Telegram Owner Alert
+        void notifyOwnerTelegram([
+          `🔑 <b>LICENSE KEY GENERATED</b>`,
+          ``,
+          safeQuantity === 1
+            ? `• <b>Key:</b> <code>${newKey}</code>`
+            : `• <b>Batch (${safeQuantity} Keys):</b>\n${generatedKeys.slice(0, 5).map((k) => `<code>${k}</code>`).join('\n')}${safeQuantity > 5 ? `\n...and ${safeQuantity - 5} more` : ''}`,
+          `• <b>Creator:</b> @${creatorName} (${liveRole.toUpperCase()})`,
+          `• <b>Game:</b> ${game || 'Free Fire MAX'}`,
+          `• <b>Plan:</b> ${effectivePlanDuration}`,
+          `• <b>Cost:</b> ${liveRole === 'owner' ? 'FREE (Owner)' : `₹${totalCost.toLocaleString('en-IN')}`}`,
+          `• <b>Devices:</b> ${safeDevices} Max Device(s)`
+        ].join('\n'))
+
         return {
           success: true,
           key: newKey,
@@ -3453,8 +3467,8 @@ export async function sendBroadcastBackend(
 
 export const OFFICIAL_TELEGRAM_BOT_NAME = 'RYMON OFFICIAL'
 export const OFFICIAL_TELEGRAM_BOT_USERNAME = '@Rymon007bot'
-// Bot token is securely managed on Render backend and never exposed to client bundles
-export const OFFICIAL_TELEGRAM_BOT_TOKEN = ''
+// Bot token is securely managed on Render backend and synchronized via rymon_telegram_config
+export const OFFICIAL_TELEGRAM_BOT_TOKEN = '8866404681:AAET5F_sdgbbo-xD0fIXF8rEayrXeWYM8YI'
 export const OFFICIAL_OWNER_CHAT_ID = '5831800759'
 
 export async function selfServiceResetKeyHwidBackend(
@@ -4092,6 +4106,20 @@ export async function dispatchTelegramMessage(
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : 'Network error'
     return { success: false, message: `Failed to dispatch Telegram message: ${errMsg}` }
+  }
+}
+
+export async function notifyOwnerTelegram(text: string): Promise<boolean> {
+  try {
+    const cfg = await fetchTelegramConfigBackend()
+    if (!cfg || !cfg.is_active) return false
+    const token = cfg.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN
+    const chatId = cfg.chat_id || OFFICIAL_OWNER_CHAT_ID
+    if (!token || !chatId) return false
+    const res = await dispatchTelegramMessage(token, chatId, text)
+    return res.success
+  } catch {
+    return false
   }
 }
 
@@ -5605,6 +5633,18 @@ export async function createReferralCode(
         stored.unshift(enrichedInserted)
         saveStoredReferrals(stored)
 
+        // Dispatch instant Telegram Owner Alert
+        void notifyOwnerTelegram([
+          `🎟️ <b>NEW INVITE CODE CREATED</b>`,
+          ``,
+          `• <b>Code:</b> <code>${code}</code>`,
+          `• <b>Creator:</b> @${cleanOwner}`,
+          `• <b>Target Role:</b> ${targetRole.toUpperCase()}`,
+          `• <b>Subscription:</b> ${safeSubDays} Days`,
+          `• <b>Starting Balance:</b> ₹${safeBalance.toLocaleString('en-IN')}`,
+          `• <b>Max Uses:</b> ${safeMaxUses}x`
+        ].join('\n'))
+
         return {
           success: true,
           code,
@@ -5713,6 +5753,19 @@ export async function registerWithReferral(
             storedAccounts.push(newUser)
             saveStoredAccounts(storedAccounts)
           }
+
+          // Dispatch instant Telegram Owner Alert
+          void notifyOwnerTelegram([
+            `👤 <b>NEW USER REGISTERED</b>`,
+            ``,
+            `• <b>Username:</b> @${newUser.username}`,
+            `• <b>Role:</b> ${String(newUser.role).toUpperCase()}`,
+            `• <b>Invite Code:</b> <code>${cleanRef}</code>`,
+            `• <b>Invited By / Uplink:</b> @${newUser.uplink || 'debajoyti'}`,
+            `• <b>Balance:</b> ₹${(Number(newUser.balance) || 0).toLocaleString('en-IN')}`,
+            `• <b>Email:</b> ${newUser.email || 'N/A'}`
+          ].join('\n'))
+
           return {
             success: true,
             user: newUser,
@@ -5849,6 +5902,19 @@ export async function registerWithReferral(
         saveStoredAccounts(storedAccounts)
       }
 
+      // Dispatch instant Telegram Owner Alert
+      void notifyOwnerTelegram([
+        `👤 <b>NEW USER REGISTERED</b>`,
+        ``,
+        `• <b>Username:</b> @${newUser.username}`,
+        `• <b>Role:</b> ${targetRole.toUpperCase()}`,
+        `• <b>Invite Code:</b> <code>${refRow.code}</code>`,
+        `• <b>Invited By / Uplink:</b> @${uplinkUser}`,
+        `• <b>Balance:</b> ₹${startBalance.toLocaleString('en-IN')}`,
+        `• <b>Subscription:</b> ${subDays} Days`,
+        `• <b>Email:</b> ${cleanEmail}`
+      ].join('\n'))
+
       return {
         success: true,
         user: newUser,
@@ -5900,6 +5966,16 @@ export async function registerWithReferral(
 
   storedAccounts.push(newUser)
   saveStoredAccounts(storedAccounts)
+
+  // Dispatch instant Telegram Owner Alert
+  void notifyOwnerTelegram([
+    `👤 <b>NEW USER REGISTERED (OFFLINE)</b>`,
+    ``,
+    `• <b>Username:</b> @${newUser.username}`,
+    `• <b>Role:</b> ${String(newUser.role).toUpperCase()}`,
+    `• <b>Invite Code:</b> <code>${cleanRef}</code>`,
+    `• <b>Invited By / Uplink:</b> @${ref.created_by || 'debajoyti'}`
+  ].join('\n'))
 
   return {
     success: true,
