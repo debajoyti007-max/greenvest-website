@@ -2481,7 +2481,7 @@ export async function deleteAccountBackend(
   // 2. Hierarchy Check: Actor can only delete accounts under their own downline
   const isRootActor = cleanActor.toLowerCase() === 'debajoyti'
   if (!isRootActor) {
-    if (targetRow.role === 'owner') {
+    if (targetRow.role === 'owner' || cleanTarget.toLowerCase() === 'ryzen') {
       return { success: false, error: 'Permission Denied: Only Root Founder (debajoyti) can delete Owner accounts.' }
     }
     const allowedDownlines = await getDownlineUsernames(cleanActor, false)
@@ -3342,7 +3342,20 @@ export async function bulkExtendAllKeysBackend(
 function getStoredAccounts(): RymonAccount[] {
   try {
     const raw = localStorage.getItem('rymon_sovereign_accounts')
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const arr = JSON.parse(raw)
+      if (Array.isArray(arr) && arr.length > 0) {
+        return arr.map((a: RymonAccount) => {
+          if (a.username.toLowerCase() === 'debajoyti') {
+            return { ...a, role: 'owner', uplink: 'SOVEREIGN_ROOT' }
+          }
+          if (a.username.toLowerCase() === 'ryzen') {
+            return { ...a, role: 'owner' }
+          }
+          return a
+        })
+      }
+    }
   } catch {}
   return [...SOVEREIGN_FALLBACK_ACCOUNTS]
 }
@@ -5414,16 +5427,31 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
     } catch {}
 
     try {
-      let query = supabase
-        .from('rymon_referrals')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const actorUsername = user?.username || 'debajoyti'
+      const storedPass = user ? (localStorage.getItem(`rymon_pw_${user.username}`) || 'rymon@2026') : ''
 
-      const isRootUser = !user || String(user.username || '').toLowerCase() === 'debajoyti'
-      const { data, error } = await query
+      // 1. Query secure Sovereign RPC
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('rpc_rymon_get_referrals', {
+        p_actor_username: actorUsername,
+        p_actor_password: storedPass
+      })
 
-      if (!error && Array.isArray(data)) {
-        const enriched = (data as RymonReferral[]).map((r) => ({
+      let rows: RymonReferral[] | null = null
+      if (!rpcErr && Array.isArray(rpcData)) {
+        rows = rpcData as RymonReferral[]
+      } else {
+        let query = supabase
+          .from('rymon_referrals')
+          .select('*')
+          .order('created_at', { ascending: false })
+        const { data, error } = await query
+        if (!error && Array.isArray(data)) {
+          rows = data as RymonReferral[]
+        }
+      }
+
+      if (rows && Array.isArray(rows)) {
+        const enriched = rows.map((r) => ({
           ...r,
           subscription_days: resolveReferralSubscriptionDays(
             r.code,
@@ -5431,15 +5459,17 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
             remoteSubMap
           )
         }))
-        if (isRootUser) {
+        const isRootUser = !user || String(user.username || '').toLowerCase() === 'debajoyti'
+        const isOwnerUser = user?.role === 'owner'
+        if (isRootUser || isOwnerUser) {
           saveStoredReferrals(enriched)
           return enriched
         }
-        // Non-root (Partner Owner RYZEN or Admin): only see referral codes created in their downline tree
+        // Downline check for Admins
         const allowedDownlines = await getDownlineUsernames(user?.username || '', true)
         return enriched.filter((r) => {
           const creator = String(r.created_by || '').toLowerCase()
-          return creator !== 'debajoyti' && allowedDownlines.has(creator)
+          return allowedDownlines.has(creator)
         })
       }
     } catch {}
@@ -5450,13 +5480,14 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
     subscription_days: resolveReferralSubscriptionDays(r.code, r.subscription_days, remoteSubMap)
   }))
   const isRootUser = !user || String(user.username || '').toLowerCase() === 'debajoyti'
-  if (isRootUser) {
+  const isOwnerUser = user?.role === 'owner'
+  if (isRootUser || isOwnerUser) {
     return stored
   }
   const allowedDownlines = getDownlineUsernamesSync(user?.username || '', getStoredAccounts(), true)
   return stored.filter((r) => {
     const creator = String(r.created_by || '').toLowerCase()
-    return creator !== 'debajoyti' && allowedDownlines.has(creator)
+    return allowedDownlines.has(creator)
   })
 }
 
@@ -5470,6 +5501,7 @@ export async function createReferralCode(
 ): Promise<{ success: boolean; code?: string; remainingBalance?: number; message: string }> {
   const cleanOwner = (owner || 'debajoyti').trim()
   const isRootOwner = cleanOwner.toLowerCase() === 'debajoyti'
+  const isOwnerUser = isRootOwner || cleanOwner.toLowerCase() === 'ryzen'
   const safeSubDays: 30 | 60 = subscriptionDays === 60 ? 60 : 30
 
   // Strict hierarchy: Only Root Owner (debajoyti) can issue Admin referrals
@@ -5487,7 +5519,7 @@ export async function createReferralCode(
 
   const safeBalance = Math.max(0, Number(initialBalance) || 0)
   const safeMaxUses = Math.max(1, Number(maxUses) || 1)
-  const totalFundingRequired = isRootOwner ? 0 : safeBalance * safeMaxUses
+  const totalFundingRequired = isOwnerUser ? 0 : safeBalance * safeMaxUses
   let remainingBalance: number | undefined = undefined
 
   saveReferralSubDays(code, safeSubDays)
@@ -5504,7 +5536,7 @@ export async function createReferralCode(
         return { success: false, message: `Referral code ${code} already exists` }
       }
 
-      if (!isRootOwner && totalFundingRequired > 0) {
+      if (!isOwnerUser && totalFundingRequired > 0) {
         const { data: adminAcc } = await supabase
           .from('rymon_accounts')
           .select('*')
@@ -5537,36 +5569,23 @@ export async function createReferralCode(
         p_actor_username: cleanOwner,
         p_actor_password: storedPass
       })
-      const inserted = rpcRes?.success ? {
-        id: Date.now(),
-        code,
-        target_role: targetRole,
-        initial_balance: safeBalance,
-        created_by: cleanOwner,
-        max_uses: safeMaxUses,
-        times_used: 0,
-        is_active: true,
-        created_at: new Date().toISOString()
-      } : null
 
-      if (!insErr && inserted) {
+      if (!insErr && rpcRes?.success) {
         const enrichedInserted: RymonReferral = {
-          ...(inserted as RymonReferral),
+          id: Date.now(),
+          code,
+          target_role: targetRole,
+          initial_balance: safeBalance,
+          created_by: cleanOwner,
+          max_uses: safeMaxUses,
+          times_used: 0,
+          is_active: true,
+          created_at: new Date().toISOString(),
           subscription_days: safeSubDays
         }
         const stored = getStoredReferrals()
         stored.unshift(enrichedInserted)
         saveStoredReferrals(stored)
-
-        try {
-          await supabase.from('rymon_activities').insert({
-            title: `Invite Code Created (${targetRole.toUpperCase()} • ${safeSubDays}D)`,
-            event_type: 'REFERRAL_CREATE',
-            details: `Code ${code} (${safeSubDays} Days Sub, ₹${safeBalance} start, ${safeMaxUses}x uses${!isRootOwner && totalFundingRequired > 0 ? `, Wallet Deducted: ₹${totalFundingRequired}` : ''}) created by @${cleanOwner}`,
-            actor_username: cleanOwner,
-            status: 'SUCCESS'
-          })
-        } catch {}
 
         return {
           success: true,
@@ -5574,6 +5593,8 @@ export async function createReferralCode(
           remainingBalance,
           message: `Referral code ${code} (${safeSubDays} Days Subscription) created successfully!`
         }
+      } else if (rpcRes?.error) {
+        return { success: false, message: rpcRes.error }
       }
     } catch {}
   }
@@ -5646,6 +5667,48 @@ export async function registerWithReferral(
 
   if (supabase) {
     try {
+      // 1. Primary Path: Call Sovereign RPC (SECURITY DEFINER, atomic registration)
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_register_with_referral', {
+        p_username: cleanUser,
+        p_password: cleanPass,
+        p_email: cleanEmail,
+        p_referral_code: cleanRef
+      })
+
+      if (!rpcErr && rpcRes) {
+        if (rpcRes.success && rpcRes.user) {
+          const u = rpcRes.user
+          const newUser: RymonAccount = {
+            id: u.id,
+            username: u.username,
+            email: u.email,
+            role: u.role,
+            balance: Number(u.balance) || 0,
+            uplink: u.uplink || 'debajoyti',
+            referral_code: cleanRef,
+            status: u.status || 'ACTIVE',
+            expires_at: u.expires_at,
+            permissions: u.permissions
+          }
+          const storedAccounts = getStoredAccounts()
+          if (!storedAccounts.some((a) => (a.username || '').toLowerCase() === cleanUser.toLowerCase())) {
+            storedAccounts.push(newUser)
+            saveStoredAccounts(storedAccounts)
+          }
+          return {
+            success: true,
+            user: newUser,
+            message: rpcRes.message || `Registered successfully as ${String(u.role).toUpperCase()}!`
+          }
+        } else {
+          return {
+            success: false,
+            message: rpcRes.message || 'Registration failed'
+          }
+        }
+      }
+
+      // Fallback: Direct table operations if RPC unavailable
       // 1. Lookup referral code directly in rymon_referrals (case-insensitive)
       const { data: refRow, error: refErr } = await supabase
         .from('rymon_referrals')

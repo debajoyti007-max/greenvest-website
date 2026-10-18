@@ -405,11 +405,54 @@ export default function RymonConnect() {
 
     if (savedUserJson) {
       try {
-        const u = JSON.parse(savedUserJson) as RymonAccount
+        let u = JSON.parse(savedUserJson) as RymonAccount
+        // Immediate Sovereign Role Enforcement for Root Founder & Owner:
+        if (u.username && (u.username.toLowerCase() === 'ryzen' || u.username.toLowerCase() === 'debajoyti')) {
+          u.role = 'owner'
+          try {
+            localStorage.setItem('rymon_session_user', JSON.stringify(u))
+          } catch {}
+        }
         setCurrentUser(u)
         setWalletBalance(u.balance || 0)
         setIsAuthenticated(true)
         if (savedKey && savedKey !== 'RYMON-MASTER-KEY') setCurrentKey(savedKey)
+
+        // Live Cloud Sync: ensure role, permissions, and wallet balance are up to date from Supabase
+        if (supabase && u.username) {
+          ;(async () => {
+            try {
+              const { data: liveAcc } = await supabase
+                .from('rymon_accounts')
+                .select('*')
+                .ilike('username', u.username)
+                .maybeSingle()
+
+              if (liveAcc) {
+                const isSovereignOwner =
+                  liveAcc.username?.toLowerCase() === 'debajoyti' || liveAcc.username?.toLowerCase() === 'ryzen'
+                const effectiveRole = isSovereignOwner ? 'owner' : (liveAcc.role || u.role)
+                const refreshedUser: RymonAccount = {
+                  ...u,
+                  id: liveAcc.id || u.id,
+                  username: liveAcc.username,
+                  email: liveAcc.email,
+                  role: effectiveRole,
+                  balance: Number(liveAcc.balance ?? u.balance ?? 0),
+                  uplink: liveAcc.uplink || u.uplink,
+                  status: liveAcc.status || u.status,
+                  expires_at: liveAcc.expires_at || u.expires_at,
+                  permissions: liveAcc.permissions || u.permissions
+                }
+                setCurrentUser(refreshedUser)
+                setWalletBalance(Number(refreshedUser.balance) || 0)
+                try {
+                  localStorage.setItem('rymon_session_user', JSON.stringify(refreshedUser))
+                } catch {}
+              }
+            } catch {}
+          })()
+        }
       } catch {}
     } else if (savedKey && savedKey !== 'RYMON-MASTER-KEY') {
       setCurrentKey(savedKey)
@@ -2060,6 +2103,11 @@ export default function RymonConnect() {
       return
     }
 
+    if (cleanTarget.toLowerCase() === 'ryzen' && !isRootOwner) {
+      alert('Action forbidden: Owner account @RYZEN cannot be deleted.')
+      return
+    }
+
     if (currentUser?.username && cleanTarget.toLowerCase() === currentUser.username.toLowerCase()) {
       alert('Action forbidden: You cannot delete your own active account.')
       return
@@ -2098,7 +2146,7 @@ export default function RymonConnect() {
       alert('Please select a target scope or user.')
       return
     }
-    if (!isOwner && deleteKeyType === 'all') {
+    if (!isRootOwner && deleteKeyType === 'all') {
       alert('Power restriction: Only the Root Owner can delete ALL active keys. You can clean Expired or Unused keys.')
       return
     }
@@ -3364,7 +3412,9 @@ export default function RymonConnect() {
                   {currentUser?.username || 'VIP Streamer'}
                 </span>
                 <span style={styles.userRoleTag}>
-                  {currentUser?.role ? currentUser.role.toUpperCase() : 'VIP'}
+                  {currentUser?.role === 'owner'
+                    ? (currentUser.username?.toLowerCase() === 'debajoyti' ? 'ROOT OWNER' : 'OWNER')
+                    : (currentUser?.role ? currentUser.role.toUpperCase() : 'VIP')}
                 </span>
               </div>
               <button onClick={handleLogout} style={styles.headerLogoutBtn} title="Logout">
@@ -3822,7 +3872,10 @@ export default function RymonConnect() {
                     {currentUser?.username || 'VIP Streamer'}
                   </div>
                   <div style={styles.sidebarUserSub}>
-                    <span style={styles.activeDot} /> {currentUser?.role ? currentUser.role.toUpperCase() : 'VIP'}
+                    <span style={styles.activeDot} />{' '}
+                    {currentUser?.role === 'owner'
+                      ? (currentUser.username?.toLowerCase() === 'debajoyti' ? 'ROOT OWNER' : 'OWNER')
+                      : (currentUser?.role ? currentUser.role.toUpperCase() : 'VIP')}
                   </div>
                 </div>
               </div>
@@ -5863,17 +5916,18 @@ export default function RymonConnect() {
                         {filteredUsers.map((u) => {
                           const isSelfRow = Boolean(currentUser?.username) && (u.username || '').toLowerCase() === currentUser?.username.toLowerCase()
                           const isTargetRootOwner = (u.username || '').toLowerCase() === 'debajoyti'
+                          const isTargetRyzen = (u.username || '').toLowerCase() === 'ryzen'
                           const canManageRow = isRootOwner 
                             ? !isSelfRow 
                             : isOwner
-                            ? (!isSelfRow && u.role !== 'owner' && !isTargetRootOwner)
+                            ? (!isSelfRow && u.role !== 'owner' && !isTargetRootOwner && !isTargetRyzen)
                             : isAdmin
                             ? (!isSelfRow && u.role === 'reseller' && Boolean(currentUser?.username) && (u.uplink || '').toLowerCase() === currentUser?.username.toLowerCase())
                             : false
                           const canDeleteThisUser = isRootOwner
                             ? !isSelfRow
                             : isOwner
-                            ? (!isSelfRow && u.role !== 'owner' && !isTargetRootOwner)
+                            ? (!isSelfRow && u.role !== 'owner' && !isTargetRootOwner && !isTargetRyzen)
                             : isAdmin
                             ? (!isSelfRow && u.role === 'reseller' && Boolean(currentUser?.username) && (u.uplink || '').toLowerCase() === currentUser?.username.toLowerCase())
                             : false
@@ -5898,7 +5952,11 @@ export default function RymonConnect() {
                                 </div>
                               </td>
                               <td style={styles.td}>
-                                <span style={styles.roleBadge}>{String(u.role || 'user').toUpperCase()}</span>
+                                <span style={styles.roleBadge}>
+                                  {u.role === 'owner'
+                                    ? (u.username?.toLowerCase() === 'debajoyti' ? 'ROOT OWNER' : 'OWNER')
+                                    : String(u.role || 'user').toUpperCase()}
+                                </span>
                                 <div
                                   style={{
                                     fontSize: '11px',
@@ -5923,7 +5981,7 @@ export default function RymonConnect() {
                               <td style={styles.td}>
                                 {u.role === 'owner' ? (
                                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#fde047' }}>
-                                    👑 ROOT OWNER
+                                    {u.username?.toLowerCase() === 'debajoyti' ? '👑 ROOT OWNER' : '👑 OWNER'}
                                   </span>
                                 ) : (
                                   <div>
