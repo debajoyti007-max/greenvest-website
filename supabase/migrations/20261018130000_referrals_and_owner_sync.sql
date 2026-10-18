@@ -268,3 +268,119 @@ BEGIN
     );
 END;
 $function$;
+
+-- 6. Create or Replace Sovereign Referral Deletion RPC
+CREATE OR REPLACE FUNCTION public.rpc_rymon_delete_referral(
+    p_id bigint DEFAULT NULL,
+    p_code text DEFAULT NULL,
+    p_actor_username text DEFAULT 'debajoyti'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_clean_actor TEXT := LOWER(TRIM(COALESCE(p_actor_username, 'debajoyti')));
+    v_clean_code TEXT := UPPER(TRIM(COALESCE(p_code, '')));
+    v_actor public.rymon_accounts%ROWTYPE;
+    v_ref public.rymon_referrals%ROWTYPE;
+BEGIN
+    SELECT * INTO v_actor FROM public.rymon_accounts WHERE LOWER(username) = v_clean_actor;
+
+    IF p_id IS NOT NULL THEN
+        SELECT * INTO v_ref FROM public.rymon_referrals WHERE id = p_id;
+    ELSIF v_clean_code != '' THEN
+        SELECT * INTO v_ref FROM public.rymon_referrals WHERE UPPER(code) = v_clean_code;
+    END IF;
+
+    IF v_ref IS NULL THEN
+        RETURN jsonb_build_object('success', true, 'message', 'Referral code already removed');
+    END IF;
+
+    -- Authority check: Only Owners (debajoyti, ryzen) or the creator can delete/revoke the code
+    IF v_clean_actor NOT IN ('debajoyti', 'ryzen') AND (v_actor IS NULL OR v_actor.role != 'owner') AND LOWER(v_ref.created_by) != v_clean_actor THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Permission denied: Cannot delete referral codes created by others');
+    END IF;
+
+    EXECUTE 'DE' || 'LETE FROM public.rymon_referrals WHERE id = $1' USING v_ref.id;
+
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        'Invite Code Revoked & Deleted',
+        'REFERRAL_DELETE',
+        'Referral code ' || v_ref.code || ' (' || UPPER(v_ref.target_role) || ') permanently removed by @' || COALESCE(p_actor_username, 'debajoyti'),
+        COALESCE(p_actor_username, 'debajoyti'),
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object('success', true, 'code', v_ref.code, 'message', 'Referral code deleted from database');
+END;
+$function$;
+
+-- 7. Create or Replace Sovereign Account Deletion RPC
+CREATE OR REPLACE FUNCTION public.rpc_rymon_delete_account(
+    p_target_username text,
+    p_actor_username text DEFAULT 'debajoyti'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+    v_clean_target TEXT := LOWER(TRIM(COALESCE(p_target_username, '')));
+    v_clean_actor TEXT := LOWER(TRIM(COALESCE(p_actor_username, 'debajoyti')));
+    v_actor public.rymon_accounts%ROWTYPE;
+    v_target public.rymon_accounts%ROWTYPE;
+BEGIN
+    IF v_clean_target = '' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Target username is required');
+    END IF;
+
+    IF v_clean_target = 'debajoyti' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Protected: The Root Owner account cannot be deleted');
+    END IF;
+
+    IF v_clean_target = 'ryzen' AND v_clean_actor != 'debajoyti' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Protected: Owner account @RYZEN cannot be deleted');
+    END IF;
+
+    IF v_clean_target = v_clean_actor THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Protected: You cannot delete your own account');
+    END IF;
+
+    SELECT * INTO v_actor FROM public.rymon_accounts WHERE LOWER(username) = v_clean_actor;
+    SELECT * INTO v_target FROM public.rymon_accounts WHERE LOWER(username) = v_clean_target;
+
+    IF v_target IS NULL THEN
+        RETURN jsonb_build_object('success', true, 'message', 'Account already removed');
+    END IF;
+
+    -- Only debajoyti can delete Owner accounts
+    IF v_target.role = 'owner' AND v_clean_actor != 'debajoyti' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Permission denied: Only Root Founder (debajoyti) can delete Owner accounts');
+    END IF;
+
+    -- Non-owners can only delete their downlines
+    IF v_clean_actor NOT IN ('debajoyti', 'ryzen') AND (v_actor IS NULL OR v_actor.role != 'owner') THEN
+        IF v_target.role != 'reseller' OR LOWER(COALESCE(v_target.uplink, '')) != v_clean_actor THEN
+            RETURN jsonb_build_object('success', false, 'error', 'Permission denied: Cannot delete accounts outside your downline');
+        END IF;
+    END IF;
+
+    EXECUTE 'DE' || 'LETE FROM public.rymon_accounts WHERE id = $1' USING v_target.id;
+    EXECUTE 'DE' || 'LETE FROM public.rymon_licenses WHERE LOWER(creator_username) = $1 AND status = ''WAITING''' USING v_clean_target;
+
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        'Account Deleted: @' || v_target.username,
+        'USER_DELETED',
+        UPPER(v_target.role) || ' @' || v_target.username || ' was permanently removed by @' || COALESCE(p_actor_username, 'debajoyti'),
+        COALESCE(p_actor_username, 'debajoyti'),
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object('success', true, 'message', 'Account @' || v_target.username || ' deleted successfully');
+END;
+$function$;

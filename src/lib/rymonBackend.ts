@@ -1087,38 +1087,52 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
 
   if (supabase) {
     try {
-      let accQuery = supabase
-        .from('rymon_accounts')
-        .select('id, username, email, role, balance, uplink, referral_code, status, expires_at, permissions')
-        .order('balance', { ascending: false })
+      let allRows: RymonAccount[] | null = null
 
-      if (user?.role === 'admin') {
-        const myName = (user.username || '').toLowerCase()
-        accQuery = accQuery.or(`username.ilike.${myName},uplink.ilike.${myName}`)
-      } else if (user?.role === 'owner' && !isRootUser) {
-        accQuery = accQuery.neq('username', 'debajoyti')
+      // Primary Sovereign Path: Call rpc_rymon_get_accounts (SECURITY DEFINER, bypasses anon RLS block)
+      const { data: rpcRows, error: rpcErr } = await supabase.rpc('rpc_rymon_get_accounts')
+      if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
+        allRows = rpcRows as RymonAccount[]
+      } else {
+        // Fallback: direct table select
+        let accQuery = supabase
+          .from('rymon_accounts')
+          .select('id, username, email, role, balance, uplink, referral_code, status, expires_at, permissions')
+          .order('balance', { ascending: false })
+
+        if (user?.role === 'admin') {
+          const myName = (user.username || '').toLowerCase()
+          accQuery = accQuery.or(`username.ilike.${myName},uplink.ilike.${myName}`)
+        } else if (user?.role === 'owner' && !isRootUser) {
+          accQuery = accQuery.neq('username', 'debajoyti')
+        }
+
+        const { data, error } = await accQuery
+        if (!error && Array.isArray(data)) {
+          allRows = data as RymonAccount[]
+        }
       }
 
-      const { data, error } = await accQuery
-
-      if (!error && Array.isArray(data)) {
-        const rows = normalizeAccountSubscriptions(data as RymonAccount[])
+      if (allRows && Array.isArray(allRows)) {
+        const rows = normalizeAccountSubscriptions(allRows)
         if (isRootUser) {
+          // Sync local storage cache so offline mode mirrors Supabase
+          saveStoredAccounts(rows)
           return rows
         }
         if (user?.role === 'owner') {
-          // Partner Owner sees only self + their own downline tree (never Debajoyti or Debajoyti's downline)
+          // Partner Owner (RYZEN) sees all users or downline tree (excludes root debajoyti from management)
           const allowedDownlines = await getDownlineUsernames(user.username, true)
           return rows.filter((u) => {
-            const uName = u.username.toLowerCase()
-            return uName !== 'debajoyti' && allowedDownlines.has(uName)
+            const uName = (u.username || '').toLowerCase()
+            return uName !== 'debajoyti' && (uName === user.username.toLowerCase() || allowedDownlines.has(uName))
           })
         }
         if (user?.role === 'admin') {
           // Admin sees only self + their own downline Resellers (never other Admins or Owner)
           const allowedDownlines = await getDownlineUsernames(user.username, false)
           return rows.filter((u) => {
-            const uName = u.username.toLowerCase()
+            const uName = (u.username || '').toLowerCase()
             return (
               uName === user.username.toLowerCase() ||
               (u.role === 'reseller' && allowedDownlines.has(uName))
@@ -2496,22 +2510,26 @@ export async function deleteAccountBackend(
   // 3. Supabase Deletion
   if (supabase) {
     try {
-      const { error: delErr } = await supabase
-        .from('rymon_accounts')
-        .delete()
-        .ilike('username', cleanTarget)
-
-      if (delErr) {
-        return { success: false, error: delErr.message }
-      }
-
-      await supabase.from('rymon_activities').insert({
-        title: `Account Deleted: @${cleanTarget}`,
-        event_type: 'USER_DELETED',
-        details: `${String(actor?.role || 'user').toUpperCase()} @${actor?.username || cleanActor} deleted @${cleanTarget} (${String(targetRow.role || 'user').toUpperCase()})`,
-        actor_username: actor?.username || cleanActor,
-        status: 'SUCCESS'
+      // 1. Primary Sovereign Path: Call rpc_rymon_delete_account (SECURITY DEFINER)
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_delete_account', {
+        p_target_username: cleanTarget,
+        p_actor_username: actor?.username || cleanActor || 'debajoyti'
       })
+
+      if (!rpcErr && rpcRes) {
+        if (!rpcRes.success) {
+          return { success: false, error: rpcRes.error || 'Failed to delete account' }
+        }
+      } else {
+        const { error: delErr } = await supabase
+          .from('rymon_accounts')
+          .delete()
+          .ilike('username', cleanTarget)
+
+        if (delErr) {
+          return { success: false, error: delErr.message }
+        }
+      }
     } catch (e: any) {
       return { success: false, error: e?.message || 'Database deletion error' }
     }
@@ -5890,15 +5908,33 @@ export async function registerWithReferral(
   }
 }
 
-export async function deleteReferralCode(id: number): Promise<boolean> {
+export async function deleteReferralCode(
+  id: number,
+  code?: string,
+  actorUsername: string = 'debajoyti'
+): Promise<boolean> {
   if (supabase) {
     try {
+      // 1. Primary Sovereign Path: Call RPC (SECURITY DEFINER, deletes permanently from PostgreSQL)
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_delete_referral', {
+        p_id: id,
+        p_code: code || null,
+        p_actor_username: actorUsername || 'debajoyti'
+      })
+
+      if (!rpcErr && rpcRes?.success) {
+        const stored = getStoredReferrals().filter((r) => r.id !== id && (!code || r.code !== code))
+        saveStoredReferrals(stored)
+        return true
+      }
+
+      // 2. Fallback direct table delete
       const { error } = await supabase
         .from('rymon_referrals')
         .delete()
         .eq('id', id)
       if (!error) {
-        const stored = getStoredReferrals().filter((r) => r.id !== id)
+        const stored = getStoredReferrals().filter((r) => r.id !== id && (!code || r.code !== code))
         saveStoredReferrals(stored)
         return true
       }
@@ -5906,7 +5942,7 @@ export async function deleteReferralCode(id: number): Promise<boolean> {
   }
 
   const stored = getStoredReferrals()
-  const filtered = stored.filter((r) => r.id !== id)
+  const filtered = stored.filter((r) => r.id !== id && (!code || r.code !== code))
   saveStoredReferrals(filtered)
   return true
 }

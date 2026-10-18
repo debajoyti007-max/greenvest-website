@@ -2384,12 +2384,12 @@ export default function RymonConnect() {
     }
   }
 
-  const handleDeleteReferral = async (id: number) => {
-    if (!confirm('Are you sure you want to deactivate and remove this invite code?')) return
-    const success = await deleteReferralCode(id)
+  const handleDeleteReferral = async (id: number, code?: string) => {
+    if (!confirm('Are you sure you want to permanently delete this invite code from the database?')) return
+    const success = await deleteReferralCode(id, code, currentUser?.username || 'debajoyti')
     if (success) {
-      setReferralList((prev) => prev.filter((r) => r.id !== id))
-      showToast('Referral code deleted')
+      setReferralList((prev) => prev.filter((r) => r.id !== id && (!code || r.code !== code)))
+      showToast('Invite code permanently deleted from database')
     }
   }
 
@@ -8078,7 +8078,7 @@ export default function RymonConnect() {
                                 </td>
                                 <td style={styles.td}>
                                   <button
-                                    onClick={() => handleDeleteReferral(ref.id)}
+                                    onClick={() => handleDeleteReferral(ref.id, ref.code)}
                                     style={{ ...styles.actionIconBtn, color: '#ef4444' }}
                                     title="Revoke / Delete Code"
                                   >
