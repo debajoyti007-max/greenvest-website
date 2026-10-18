@@ -204,8 +204,7 @@ export default function RymonConnect() {
   const [ping, setPing] = useState(28)
   const [isLiveConnected, setIsLiveConnected] = useState(false)
   const [showPurgeModal, setShowPurgeModal] = useState(false)
-  const [showDownloadModal, setShowDownloadModal] = useState(false)
-  const sliderTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const sliderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Live Database Collections
   const [keysList, setKeysList] = useState<RymonLicense[]>([])
@@ -3793,27 +3792,6 @@ export default function RymonConnect() {
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => setShowDownloadModal(true)}
-                  style={{
-                    width: '100%',
-                    padding: '11px',
-                    borderRadius: '10px',
-                    backgroundColor: 'rgba(0, 217, 255, 0.12)',
-                    border: '1px solid rgba(0, 217, 255, 0.35)',
-                    color: '#00d9ff',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>📥</span> DOWNLOAD RYMON STREAMER APK
-                </button>
 
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
@@ -3952,20 +3930,6 @@ export default function RymonConnect() {
                 <span style={styles.cyanMiniBadge}>LIVE</span>
               </button>
 
-              <button
-                onClick={() => {
-                  setShowDownloadModal(true)
-                  setMobileMenuOpen(false)
-                }}
-                style={{
-                  ...styles.navItem,
-                  color: '#00d9ff'
-                }}
-              >
-                <span style={styles.navIcon}>📥</span>
-                <span>Download APK</span>
-                <span style={{ ...styles.cyanMiniBadge, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff', border: '1px solid rgba(0, 217, 255, 0.4)' }}>BUILDS</span>
-              </button>
 
               {/* Staff-Only Navigation Sections (Hidden from key-login Streamers) */}
               {!isStreamer && (
@@ -9917,21 +9881,6 @@ else:
                       <span>✈️</span> BOT
                     </a>
                     <button
-                      onClick={() => setShowDownloadModal(true)}
-                      style={{
-                        backgroundColor: 'rgba(0, 217, 255, 0.14)',
-                        border: '1px solid rgba(0, 217, 255, 0.45)',
-                        color: '#00d9ff',
-                        borderRadius: '8px',
-                        padding: '6px 11px',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      📥 APK
-                    </button>
-                    <button
                       onClick={() => setShowPurgeModal(true)}
                       style={{ ...styles.emergencyPurgeBtn, padding: '6px 11px', fontSize: '11px' }}
                     >
@@ -10638,132 +10587,6 @@ else:
         </div>
       )}
 
-      {/* ── APK DOWNLOAD MODAL ──────────────────────────────────────────────── */}
-      {showDownloadModal && (
-        <div style={styles.modalOverlay} onClick={() => setShowDownloadModal(false)}>
-          <div
-            className="sg-modal-card"
-            style={{
-              ...styles.modalCard,
-              maxWidth: '640px',
-              width: '90%',
-              textAlign: 'left',
-              padding: '28px',
-              backgroundColor: 'rgba(16, 12, 26, 0.96)',
-              border: '1px solid rgba(168, 85, 247, 0.45)',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(168, 85, 247, 0.22)'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '26px' }}>📥</span>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.5px' }}>
-                    GREENVEST STREAMGUARD OFFICIAL APK
-                  </h3>
-                  <div style={{ fontSize: '11px', color: '#a78bfa', marginTop: '2px' }}>
-                    Unified Android ARM64 Client • Web Control + In-Game Panel
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowDownloadModal(false)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid rgba(168, 85, 247, 0.3)',
-                  borderRadius: '6px',
-                  color: '#c084fc',
-                  padding: '4px 10px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div
-                style={{
-                  background: 'rgba(18, 14, 29, 0.9)',
-                  border: '1px solid rgba(168, 85, 247, 0.35)',
-                  borderRadius: '12px',
-                  padding: '18px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '16px',
-                  flexWrap: 'wrap'
-                }}
-              >
-                <div style={{ flex: '1 1 300px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 800, color: '#c084fc' }}>
-                      ⚡ GREENVEST STREAMGUARD (All-in-One)
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '9px',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontWeight: 800,
-                        background: 'rgba(5, 223, 114, 0.2)',
-                        color: '#05df72',
-                        border: '1px solid rgba(5, 223, 114, 0.4)'
-                      }}
-                    >
-                      WEB + IN-GAME PANEL
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: '1.4', marginBottom: '8px' }}>
-                    Includes both <strong>Web Control</strong> &amp; <strong>In-Game Panel</strong> by default, or switch to <strong>Web Control Only</strong> directly inside the APK.
-                  </div>
-                  <div style={{ fontSize: '10px', color: '#64748b', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                    <span>⚙️ Arch: <strong>ARM64-v8a</strong></span>
-                    <span>🔄 Modes: <strong>Web + In-Game / Web Only</strong></span>
-                  </div>
-                </div>
-
-                <a
-                  href="/download/RYMON_STREAMER_LATEST.apk"
-                  download="GREENVEST_STREAMGUARD.apk"
-                  style={{
-                    background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
-                    color: '#ffffff',
-                    padding: '11px 20px',
-                    borderRadius: '8px',
-                    fontWeight: 800,
-                    fontSize: '12px',
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    whiteSpace: 'nowrap',
-                    boxShadow: '0 4px 16px rgba(168, 85, 247, 0.45)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <span>⬇️</span> Download APK
-                </a>
-              </div>
-            </div>
-
-            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowDownloadModal(false)}
-                style={{
-                  ...styles.modalCancelBtn,
-                  padding: '8px 20px',
-                  fontSize: '12px'
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── RESET USER PASSWORD MODAL ───────────────────────────────────────── */}
       {pwdModalUser && (
@@ -10926,17 +10749,6 @@ else:
               >
                 <span style={{ fontSize: '18px' }}>⚡</span>
                 <span>Remote</span>
-              </button>
-              <button
-                type="button"
-                className="sg-mobile-bottom-tab"
-                onClick={() => {
-                  setShowDownloadModal(true)
-                  setMobileMenuOpen(false)
-                }}
-              >
-                <span style={{ fontSize: '18px' }}>📥</span>
-                <span>APK</span>
               </button>
               <a
                 href="https://t.me/Rymon007bot"
