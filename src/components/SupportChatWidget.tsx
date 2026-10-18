@@ -27,6 +27,12 @@ export default function SupportChatWidget() {
     !location.pathname.startsWith('/picker') &&
     !location.pathname.startsWith('/manager')
 
+  // Detect whether mobile sticky action bar is actively rendered on cart or checkout
+  const hasStickyBar =
+    (location.pathname === '/cart' && cartCount > 0) ||
+    location.pathname === '/checkout'
+  const hasBottomBar = hasCartBar || hasStickyBar
+
   // Filter messages for current user
   const userThread = useMemo(() => {
     if (!user) return []
@@ -94,7 +100,7 @@ export default function SupportChatWidget() {
           className={`support-bubble${userThread.some((m) => m.status === 'open' && m.senderRole === 'seller') ? ' has-unread' : ''}`}
           style={{
             position: 'fixed',
-            bottom: hasCartBar
+            bottom: hasBottomBar
               ? 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 84px)'
               : 'calc(var(--bottom-nav-h, 68px) + env(safe-area-inset-bottom, 0px) + 12px)',
             right: '16px',

@@ -202,10 +202,22 @@ const ProductCard = memo(function ProductCard({
           </span>
         </div>
 
-        {/* Grade selector chips (Option A, B, C toggled on demand by Seller) */}
+        {/* Grade selector chips (Option A, B, C toggled on demand by Seller) - Smooth single-row track */}
         {activeGrades.length > 1 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', margin: '2px 0 6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              margin: '2px 0 6px',
+              overflowX: 'auto',
+              flexWrap: 'nowrap',
+              scrollbarWidth: 'none',
+              WebkitOverflowScrolling: 'touch',
+              paddingBottom: '2px',
+            }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)', flexShrink: 0 }}>
               {lang === 'bn' ? 'গ্রেড:' : 'Grade:'}
             </span>
             {activeGrades.map((g) => (
@@ -214,7 +226,7 @@ const ProductCard = memo(function ProductCard({
                 type="button"
                 className={`grade-chip-glass ${cardGrade === g ? 'active' : ''}`}
                 onClick={() => setCardGrade(g)}
-                style={{ padding: '2px 8px', fontSize: 'var(--text-xs)', borderRadius: 'var(--radius-sm)' }}
+                style={{ padding: '2px 8px', fontSize: 'var(--text-xs)', borderRadius: 'var(--radius-sm)', flexShrink: 0 }}
                 aria-pressed={cardGrade === g}
               >
                 Grade {g}
@@ -225,7 +237,7 @@ const ProductCard = memo(function ProductCard({
               className="info-btn-glass"
               onClick={() => setShowGradeInfo(!showGradeInfo)}
               title="Quality grade info"
-              style={{ fontSize: 'var(--text-xs)', padding: '1px 4px' }}
+              style={{ fontSize: 'var(--text-xs)', padding: '1px 4px', flexShrink: 0 }}
             >
               ℹ️
             </button>

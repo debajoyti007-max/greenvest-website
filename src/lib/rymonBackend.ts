@@ -5504,11 +5504,11 @@ export async function createReferralCode(
   const isOwnerUser = isRootOwner || cleanOwner.toLowerCase() === 'ryzen'
   const safeSubDays: 30 | 60 = subscriptionDays === 60 ? 60 : 30
 
-  // Strict hierarchy: Only Root Owner (debajoyti) can issue Admin referrals
-  if (!isRootOwner && targetRole === 'admin') {
+  // Strict hierarchy: Only Owners (debajoyti & ryzen) can issue Admin referrals
+  if (!isOwnerUser && targetRole === 'admin') {
     return {
       success: false,
-      message: 'Power restriction: Only Root Owner (debajoyti) can issue Admin referral codes. Admins can only invite Resellers.'
+      message: 'Power restriction: Only Owners (debajoyti & ryzen) can issue Admin referral codes. Admins can only invite Resellers.'
     }
   }
 
@@ -5604,7 +5604,7 @@ export async function createReferralCode(
     return { success: false, message: 'Referral code already exists' }
   }
 
-  if (!isRootOwner && totalFundingRequired > 0) {
+  if (!isOwnerUser && totalFundingRequired > 0) {
     const accounts = getStoredAccounts()
     const adminAcc = accounts.find((a) => (a.username || '').toLowerCase() === cleanOwner.toLowerCase())
     if (!adminAcc || adminAcc.balance < totalFundingRequired) {

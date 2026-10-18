@@ -61,9 +61,9 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'Actor not found');
     END IF;
 
-    -- Root Founder Authority Check: Only debajoyti can issue Admin invite codes
-    IF v_clean_role = 'admin' AND LOWER(v_actor.username) != 'debajoyti' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Power restriction: Only Root Owner (debajoyti) can issue Admin invite codes.');
+    -- Owner Authority Check: Both debajoyti and ryzen (and any Owner) can issue Admin invite codes
+    IF v_clean_role = 'admin' AND v_actor.role != 'owner' AND LOWER(v_actor.username) NOT IN ('debajoyti', 'ryzen') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Power restriction: Only Owners (debajoyti & ryzen) can issue Admin invite codes.');
     END IF;
 
     IF EXISTS (SELECT 1 FROM public.rymon_referrals WHERE code = v_clean_code) THEN

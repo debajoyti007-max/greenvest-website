@@ -2353,7 +2353,7 @@ export default function RymonConnect() {
   const handleCreateReferral = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isOwner && refTargetRole !== 'reseller') {
-      alert('Power restriction: Only the Root Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
+      alert('Power restriction: Only Owners (debajoyti & ryzen) can issue Administrator invite codes. Admins can only invite downline Resellers.')
       return
     }
     setRefCreating(true)
