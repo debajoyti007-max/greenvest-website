@@ -74,6 +74,7 @@ import {
   deleteRegisteredApp,
   saveStoredAccounts
 } from '../lib/rymonBackend'
+import RymonAnimatedLogo from '../components/RymonAnimatedLogo'
 
 type TabType =
   | 'overview'
@@ -3349,22 +3350,18 @@ export default function RymonConnect() {
           >
             ☰
           </button>
-          <div className="sg-brand-cluster" style={styles.brandCluster}>
-            <div className="sg-logo-frame" style={styles.logoFrame}>
-              <img
-                src="/rymon_logo.jpg"
-                alt="Greenvest StreamGuard"
-                style={styles.logoImage}
-                onError={(e) => {
-                  ;(e.target as any).src = 'https://placehold.co/80x80/08070e/c084fc?text=GS'
-                }}
-              />
-            </div>
+          <div
+            className="sg-brand-cluster"
+            style={{ ...styles.brandCluster, cursor: 'pointer' }}
+            onClick={() => window.dispatchEvent(new CustomEvent('replay_rymon_intro'))}
+            title="Click to replay RYMON CORPORATION Intro"
+          >
+            <RymonAnimatedLogo size="sm" showText={false} />
             <div>
               <div className="sg-brand-title" style={styles.brandTitleText}>
-                GREENVEST <span style={styles.brandVioletPill}>STREAMGUARD</span>
+                RYMON <span style={styles.brandVioletPill}>CORPORATION</span>
               </div>
-              <div className="sg-brand-sub" style={styles.brandSubText}>PHANTOM AMETHYST • VIP TELEMETRY HUD</div>
+              <div className="sg-brand-sub" style={styles.brandSubText}>SOVEREIGN DEFENSE • HARDWARE TELEMETRY</div>
             </div>
           </div>
         </div>
@@ -3400,6 +3397,31 @@ export default function RymonConnect() {
               {ping > 1200 ? 'WARMING...' : `${ping}ms`}
             </span>
           </div>
+
+          {/* 🎬 Brand Intro Replay Button */}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('replay_rymon_intro'))}
+            className="sg-intro-replay-btn"
+            title="Replay RYMON CORPORATION Intro"
+            style={{
+              background: 'rgba(168, 85, 247, 0.14)',
+              border: '1px solid rgba(168, 85, 247, 0.35)',
+              color: '#c084fc',
+              padding: '4px 10px',
+              borderRadius: '999px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>🎬</span>
+            <span>Intro</span>
+          </button>
 
           {/* User Profile Pill */}
           {isAuthenticated ? (
@@ -3446,6 +3468,14 @@ export default function RymonConnect() {
       {/* ── CONDITIONAL VIEW: AUTH GATEWAY VS MAIN WORKSPACE ────────────────── */}
       {!isAuthenticated ? (
         <div className="sg-auth-gate-box" style={styles.authGateBox}>
+          <div
+            style={{ display: 'flex', justifyContent: 'center', marginBottom: '22px', cursor: 'pointer' }}
+            onClick={() => window.dispatchEvent(new CustomEvent('replay_rymon_intro'))}
+            title="Click to replay RYMON CORPORATION Intro"
+          >
+            <RymonAnimatedLogo size="lg" showText={true} />
+          </div>
+
           <div style={styles.authBadge}>
             <span style={{ fontSize: '10px', marginRight: '6px' }}>🔒</span> SECURE RYMON GATEWAY
           </div>

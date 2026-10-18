@@ -6367,3 +6367,99 @@ button.linkish {
   animation: spin 0.8s linear infinite;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   👑 RYMON CORPORATION — CINEMATIC INTRO & ANIMATED LOGO KEYFRAMES
+   ══════════════════════════════════════════════════════════════════════════ */
+@keyframes rymonAuraPulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0.85;
+  }
+}
+
+@keyframes rymonOrbitSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes rymonLaserSweep {
+  0% {
+    transform: translateX(-180%) skewX(-25deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateX(180%) skewX(-25deg);
+    opacity: 0.8;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes rymonFadeSlideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rymonFadeSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rymonEmblemZoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.75) rotate(-6deg);
+    filter: blur(10px);
+  }
+  60% {
+    transform: scale(1.04) rotate(1deg);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes rymonIntroProgress {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.rymon-animated-logo-wrap:hover .rymon-img-shell img {
+  transform: scale(1.08) !important;
+}
+
+.rymon-animated-logo-wrap:hover .rymon-aura-bloom {
+  opacity: 1 !important;
+  transform: scale(1.25) !important;
+}
+

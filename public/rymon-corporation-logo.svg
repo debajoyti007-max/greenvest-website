@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 180" width="720" height="180">
+  <defs>
+    <!-- Background Gradient for dark preview -->
+    <linearGradient id="corpBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0c14" />
+      <stop offset="100%" stop-color="#040508" />
+    </linearGradient>
+
+    <!-- Metallic Titanium Gradient -->
+    <linearGradient id="titaniumSheen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="25%" stop-color="#e2e8f0" />
+      <stop offset="55%" stop-color="#94a3b8" />
+      <stop offset="80%" stop-color="#cbd5e1" />
+      <stop offset="100%" stop-color="#ffffff" />
+    </linearGradient>
+
+    <!-- Cyber Amethyst & Laser Accent Gradient -->
+    <linearGradient id="amethystLaser" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7" />
+      <stop offset="50%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#00f5ff" />
+    </linearGradient>
+
+    <!-- Deep Bevel Shadow -->
+    <linearGradient id="bevelDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e2230" />
+      <stop offset="100%" stop-color="#090b10" />
+    </linearGradient>
+
+    <!-- Subtle Optical Flare Filter -->
+    <filter id="corpGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Deep Obsidian Technical Frame (Transparent/Dark Responsive) -->
+  <rect width="720" height="180" rx="20" fill="url(#corpBg)" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       AUTHENTIC HUMAN-ENGINEERED VECTOR EMBLEM (HEXAGONAL AEROSPACE CREST)
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <g transform="translate(40, 20)">
+    <!-- Outer Technical Chamfered Hex-Shield -->
+    <polygon
+      points="70,6 126,38 126,102 70,134 14,102 14,38"
+      fill="#0c0e18"
+      stroke="#1e293b"
+      stroke-width="2.5"
+    />
+
+    <!-- Inner Precision Accent Ring -->
+    <polygon
+      points="70,14 118,42 118,98 70,126 22,98 22,42"
+      fill="none"
+      stroke="url(#amethystLaser)"
+      stroke-width="1.5"
+      opacity="0.85"
+    />
+
+    <!-- Technical Index Ticks -->
+    <line x1="70" y1="2" x2="70" y2="8" stroke="#00f5ff" stroke-width="2" />
+    <line x1="70" y1="132" x2="70" y2="138" stroke="#a855f7" stroke-width="2" />
+    <line x1="10" y1="70" x2="16" y2="70" stroke="#94a3b8" stroke-width="1.5" />
+    <line x1="124" y1="70" x2="130" y2="70" stroke="#94a3b8" stroke-width="1.5" />
+
+    <!-- ── PRECISION MONOGRAM "R" — TRUE ARCHITECTURAL VECTOR FORM ── -->
+    <!-- Left Vertical Anchor Spine -->
+    <path
+      d="M 44 38 L 58 38 L 58 102 L 44 102 Z"
+      fill="url(#titaniumSheen)"
+    />
+    <!-- Spine Micro Hairline Groove -->
+    <line x1="51" y1="42" x2="51" y2="98" stroke="#00f5ff" stroke-width="1.2" opacity="0.9" />
+
+    <!-- Upper Loop (Faceted Architectural R-Bowl) -->
+    <path
+      d="M 58 38 L 84 38 C 96 38 102 44 102 54 C 102 64 96 70 84 70 L 58 70 Z"
+      fill="url(#titaniumSheen)"
+    />
+    <!-- Inner Bowl Void (Geometric Negative Space) -->
+    <path
+      d="M 58 48 L 82 48 C 88 48 92 50 92 54 C 92 58 88 60 82 60 L 58 60 Z"
+      fill="#0c0e18"
+    />
+
+    <!-- Dynamic 45-Degree Angular Kick Leg -->
+    <polygon
+      points="70,68 86,68 104,102 88,102"
+      fill="url(#titaniumSheen)"
+    />
+
+    <!-- Electric Cyan Center Splice Line -->
+    <line x1="68" y1="70" x2="84" y2="102" stroke="#00f5ff" stroke-width="1.5" filter="url(#corpGlow)" />
+
+    <!-- Technical Status Indicator Node -->
+    <circle cx="70" cy="14" r="2.5" fill="#00f5ff" />
+    <circle cx="118" cy="42" r="2" fill="#a855f7" />
+    <circle cx="118" cy="98" r="2" fill="#00f5ff" />
+    <circle cx="70" cy="126" r="2.5" fill="#a855f7" />
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SWISS ARCHITECTURAL TYPOGRAPHY — CRISP, TIMELESS, REAL CORPORATE LOOK
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <g transform="translate(200, 54)">
+    <!-- Brand Primary Name "RYMON" in Bold Geometric Architectural Typeset -->
+    <text
+      x="0"
+      y="42"
+      font-family="'Inter', 'Helvetica Neue', 'Arial', sans-serif"
+      font-size="46"
+      font-weight="900"
+      letter-spacing="9"
+      fill="url(#titaniumSheen)"
+    >RYMON</text>
+
+    <!-- Thin Laser Divider -->
+    <line x1="0" y1="58" x2="480" y2="58" stroke="#334155" stroke-width="1" />
+    <line x1="0" y1="58" x2="160" y2="58" stroke="url(#amethystLaser)" stroke-width="1.8" />
+
+    <!-- Sub-Brand "CORPORATION" in Tracked Titanium Letterforms -->
+    <text
+      x="2"
+      y="78"
+      font-family="'Inter', 'Helvetica Neue', 'Arial', sans-serif"
+      font-size="14"
+      font-weight="700"
+      letter-spacing="10"
+      fill="#94a3b8"
+    >CORPORATION</text>
+
+    <!-- Technical Authentication Moniker -->
+    <text
+      x="2"
+      y="100"
+      font-family="'JetBrains Mono', 'SF Mono', monospace"
+      font-size="9"
+      font-weight="500"
+      letter-spacing="2.5"
+      fill="#64748b"
+    >ADVANCED HARDWARE TELEMETRY &amp; SOVEREIGN SYSTEMS</text>
+  </g>
+</svg>

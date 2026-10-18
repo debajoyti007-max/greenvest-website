@@ -7,6 +7,7 @@ import { AuthProvider } from './context/AuthContext'
 import { useAuth } from './context/useAuth'
 import { StoreProvider } from './context/StoreContext'
 import type { Role } from './types'
+import RymonIntroVideo from './components/RymonIntroVideo'
 
 // Resilient lazy import with automatic retry on chunk loading errors (e.g. after new deployments)
 function lazyWithRetry<T extends React.ComponentType<any>>(
@@ -198,6 +199,7 @@ export default function App() {
     <AuthProvider>
       <StoreProvider>
         <BrowserRouter basename={routerBasename}>
+          <RymonIntroVideo />
           <AppRoutes />
         </BrowserRouter>
       </StoreProvider>
