@@ -2958,34 +2958,47 @@ export default function RymonConnect() {
             max-width: 100vw !important;
           }
 
-          /* 1. Header Optimization */
+          /* 1. Header Optimization (Zero-Overlap Architectural Shield) */
           .sg-top-header {
             padding: 8px 10px !important;
             gap: 6px !important;
             position: sticky !important;
             top: 0 !important;
             z-index: 100 !important;
+            width: 100vw !important;
+            max-width: 100vw !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            overflow: hidden !important;
           }
           .sg-header-left {
-            gap: 8px !important;
-            flex: 1 1 auto !important;
+            gap: 6px !important;
+            flex: 0 1 auto !important;
             min-width: 0 !important;
+            max-width: 44% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
           }
           .sg-mobile-menu-toggle {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 36px !important;
-            height: 36px !important;
-            min-width: 36px !important;
+            width: 34px !important;
+            height: 34px !important;
+            min-width: 34px !important;
             border-radius: 9px !important;
             background: rgba(168, 85, 247, 0.16) !important;
             border: 1px solid rgba(168, 85, 247, 0.35) !important;
             color: #c084fc !important;
-            font-size: 19px !important;
+            font-size: 18px !important;
             cursor: pointer !important;
             padding: 0 !important;
+            flex-shrink: 0 !important;
             transition: all 0.2s ease !important;
+            touch-action: manipulation !important;
             box-shadow: 0 0 10px rgba(168, 85, 247, 0.2) !important;
           }
           .sg-mobile-menu-toggle:active {
@@ -2993,42 +3006,65 @@ export default function RymonConnect() {
             background: rgba(168, 85, 247, 0.3) !important;
           }
           .sg-brand-cluster {
-            gap: 7px !important;
+            gap: 6px !important;
             min-width: 0 !important;
+            max-width: calc(100% - 40px) !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+            cursor: default !important;
           }
-          .sg-logo-frame {
-            width: 30px !important;
-            height: 30px !important;
-            min-width: 30px !important;
-            border-radius: 8px !important;
+          .sg-brand-text-block {
+            min-width: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
           }
           .sg-brand-title {
-            font-size: 12px !important;
-            letter-spacing: 0.02em !important;
+            font-size: 13px !important;
+            font-weight: 900 !important;
+            letter-spacing: 0.05em !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
+            max-width: 90px !important;
+            line-height: 1.15 !important;
+          }
+          .sg-brand-corp-text {
+            display: none !important;
           }
           .sg-brand-sub {
             display: none !important;
           }
           .sg-header-right {
-            gap: 5px !important;
-            flex-shrink: 0 !important;
+            gap: 4px !important;
+            flex: 0 0 auto !important;
+            margin-left: auto !important;
+            max-width: 56% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-end !important;
           }
           .sg-balance-pill {
-            padding: 4px 7px !important;
+            padding: 3px 7px !important;
             font-size: 10.5px !important;
             border-radius: 12px !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+            touch-action: manipulation !important;
           }
           .sg-telemetry-pill {
-            padding: 4px 6px !important;
+            padding: 3px 6px !important;
             font-size: 9.5px !important;
             border-radius: 12px !important;
-            gap: 4px !important;
+            gap: 3px !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+            touch-action: manipulation !important;
           }
           .sg-telemetry-text {
             font-size: 9.5px !important;
+            font-weight: 700 !important;
           }
           .sg-ping-text {
             display: none !important;
@@ -3037,6 +3073,8 @@ export default function RymonConnect() {
             padding: 2px 4px !important;
             gap: 4px !important;
             border-radius: 12px !important;
+            flex-shrink: 0 !important;
+            touch-action: manipulation !important;
           }
           .sg-user-name-block {
             display: none !important;
@@ -3214,6 +3252,17 @@ export default function RymonConnect() {
             padding: 12px 10px !important;
             gap: 10px !important;
             border-radius: 12px !important;
+            touch-action: manipulation !important;
+            -webkit-tap-highlight-color: rgba(168, 85, 247, 0.25) !important;
+            cursor: pointer !important;
+            position: relative !important;
+            z-index: 10 !important;
+            user-select: none !important;
+            transition: transform 0.12s ease, opacity 0.12s ease !important;
+          }
+          .sg-stat-card:active {
+            transform: scale(0.96) !important;
+            opacity: 0.85 !important;
           }
           .sg-stat-num {
             font-size: 20px !important;
@@ -3352,14 +3401,12 @@ export default function RymonConnect() {
           </button>
           <div
             className="sg-brand-cluster"
-            style={{ ...styles.brandCluster, cursor: 'pointer' }}
-            onClick={() => window.dispatchEvent(new CustomEvent('replay_rymon_intro'))}
-            title="Click to replay RYMON CORPORATION Intro"
+            style={styles.brandCluster}
           >
             <RymonAnimatedLogo size="sm" showText={false} />
-            <div>
+            <div className="sg-brand-text-block" style={{ minWidth: 0, overflow: 'hidden' }}>
               <div className="sg-brand-title" style={styles.brandTitleText}>
-                RYMON <span style={styles.brandVioletPill}>CORPORATION</span>
+                RYMON <span className="sg-brand-corp-text" style={styles.brandVioletPill}>CORPORATION</span>
               </div>
               <div className="sg-brand-sub" style={styles.brandSubText}>SOVEREIGN DEFENSE • HARDWARE TELEMETRY</div>
             </div>
@@ -3397,31 +3444,6 @@ export default function RymonConnect() {
               {ping > 1200 ? 'WARMING...' : `${ping}ms`}
             </span>
           </div>
-
-          {/* 🎬 Brand Intro Replay Button */}
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('replay_rymon_intro'))}
-            className="sg-intro-replay-btn"
-            title="Replay RYMON CORPORATION Intro"
-            style={{
-              background: 'rgba(168, 85, 247, 0.14)',
-              border: '1px solid rgba(168, 85, 247, 0.35)',
-              color: '#c084fc',
-              padding: '4px 10px',
-              borderRadius: '999px',
-              fontSize: '11px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>🎬</span>
-            <span>Intro</span>
-          </button>
 
           {/* User Profile Pill */}
           {isAuthenticated ? (
@@ -11455,7 +11477,9 @@ const styles: Record<string, React.CSSProperties> = {
   contentPane: {
     flex: 1,
     padding: '30px',
-    overflowY: 'auto'
+    overflowY: 'auto',
+    position: 'relative',
+    zIndex: 1
   },
   viewContainer: {
     maxWidth: '1240px',
@@ -11501,7 +11525,9 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
     gap: '16px',
-    marginBottom: '28px'
+    marginBottom: '28px',
+    position: 'relative',
+    zIndex: 5
   },
   statCard: {
     display: 'flex',
@@ -11512,7 +11538,10 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid rgba(168, 85, 247, 0.2)',
     borderRadius: '16px',
     backdropFilter: 'blur(16px)',
-    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
+    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+    cursor: 'pointer',
+    userSelect: 'none',
+    touchAction: 'manipulation'
   },
   statIconFrame: {
     width: '44px',

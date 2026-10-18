@@ -112,7 +112,7 @@ export default function RymonIntroVideo() {
   const animFrameRef = useRef<number | null>(null)
   const dismissedRef = useRef(false)
 
-  // 🚪 Instant Graceful Dismiss
+  // 🚪 Instant Graceful Dismiss with Immediate Click Pass-Through
   const dismissIntro = useCallback(() => {
     if (dismissedRef.current) return
     dismissedRef.current = true
@@ -122,7 +122,7 @@ export default function RymonIntroVideo() {
     setDissolving(true)
     setTimeout(() => {
       setActive(false)
-    }, 280)
+    }, 120)
   }, [])
 
   // 🎬 External Replay Event Listener (from Hero Banner or Console header)
@@ -302,9 +302,11 @@ export default function RymonIntroVideo() {
         overflow: 'hidden',
         userSelect: 'none',
         cursor: 'pointer',
+        pointerEvents: dissolving ? 'none' : 'auto',
+        touchAction: 'manipulation',
         opacity: dissolving ? 0 : 1,
-        transform: dissolving ? 'scale(1.03)' : 'scale(1)',
-        transition: 'opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
+        transform: dissolving ? 'scale(1.02)' : 'scale(1)',
+        transition: 'opacity 0.14s ease-out, transform 0.14s ease-out',
       }}
     >
       {/* 🌌 High-Performance Canvas Particles */}
