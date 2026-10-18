@@ -82,7 +82,14 @@ function padPin(pin: string): string {
 function getLoginAttemptRecord(identifier: string): { count: number; lockedUntil: number } {
   try {
     const raw = localStorage.getItem(`gv_auth_lock_${identifier.toLowerCase()}`)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed.lockedUntil && Date.now() > parsed.lockedUntil) {
+        localStorage.removeItem(`gv_auth_lock_${identifier.toLowerCase()}`)
+        return { count: 0, lockedUntil: 0 }
+      }
+      return parsed
+    }
   } catch {}
   return { count: 0, lockedUntil: 0 }
 }
@@ -95,7 +102,7 @@ function recordFailedLoginAttempt(identifier: string): { locked: boolean; remain
   let lockedUntil = rec.lockedUntil
 
   if (count >= 5) {
-    lockedUntil = now + 15 * 60 * 1000 // 15 minutes lockout
+    lockedUntil = now + 5 * 60 * 1000 // 5 minutes lockout
   }
 
   try {
@@ -735,12 +742,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Track failed attempt for brute-force protection
           const failed = recordFailedLoginAttempt(authEmail)
           if (failed.locked) {
-            return { ok: false, error: `🔒 Account locked for 15 minutes due to 5 consecutive failed PIN attempts.` }
+            return { ok: false, error: `🔒 Account locked for 5 minutes due to 5 consecutive failed PIN attempts.` }
           }
           if (serverMsg === 'Invalid credentials') {
             return {
               ok: false,
-              error: `❌ Incorrect PIN. (${failed.remaining} attempt${failed.remaining === 1 ? '' : 's'} remaining before 15-minute security lockout).`,
+              error: `❌ Incorrect PIN. (${failed.remaining} attempt${failed.remaining === 1 ? '' : 's'} remaining before 5-minute security lockout).`,
             }
           }
           if (serverMsg.includes('no account') || serverMsg.includes('No account')) {

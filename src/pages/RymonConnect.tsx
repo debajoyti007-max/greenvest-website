@@ -103,6 +103,62 @@ const DEFAULT_ANON_STREAMER: RymonAccount = {
   status: 'ACTIVE'
 }
 
+// ── Rate Limiting & Brute-Force Lockout Engine (5-Minute Window) ──
+interface RymonThrottleRecord {
+  count: number
+  lockedUntil: number
+}
+
+function getRymonThrottle(key: string): RymonThrottleRecord {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw) {
+      const parsed = JSON.parse(raw) as RymonThrottleRecord
+      if (parsed.lockedUntil && Date.now() > parsed.lockedUntil) {
+        localStorage.removeItem(key)
+        return { count: 0, lockedUntil: 0 }
+      }
+      return parsed
+    }
+  } catch {}
+  return { count: 0, lockedUntil: 0 }
+}
+
+function recordRymonFailedAttempt(
+  key: string,
+  maxAttempts = 5,
+  lockDurationMs = 5 * 60 * 1000
+): { locked: boolean; remaining: number; waitSecs: number } {
+  const now = Date.now()
+  const rec = getRymonThrottle(key)
+  const count = rec.count + 1
+  let lockedUntil = rec.lockedUntil
+
+  if (count >= maxAttempts) {
+    lockedUntil = now + lockDurationMs
+  }
+
+  try {
+    localStorage.setItem(key, JSON.stringify({ count, lockedUntil }))
+  } catch {}
+
+  const remaining = Math.max(0, maxAttempts - count)
+  const waitSecs = Math.max(0, Math.ceil((lockedUntil - now) / 1000))
+  return { locked: count >= maxAttempts, remaining, waitSecs }
+}
+
+function clearRymonThrottle(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {}
+}
+
+function formatLockCountdown(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+}
+
 export default function RymonConnect() {
   // Navigation
   const [activeTab, setActiveTab] = useState<TabType>('overview')
@@ -115,6 +171,11 @@ export default function RymonConnect() {
   const [keyInput, setKeyInput] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState('')
+
+  // Rate Limiting & Brute-Force Lockout State (5-min lock duration)
+  const [staffLockSeconds, setStaffLockSeconds] = useState(0)
+  const [keyLockSeconds, setKeyLockSeconds] = useState(0)
+  const [lastAuthSubmitTime, setLastAuthSubmitTime] = useState(0)
 
   // Authenticated Session State
   const [currentUser, setCurrentUser] = useState<RymonAccount | null>(null)
@@ -279,6 +340,39 @@ export default function RymonConnect() {
   const [codeSnippetTab, setCodeSnippetTab] = useState<'cpp' | 'java' | 'python' | 'curl'>('cpp')
   const [connectSelectedApp, setConnectSelectedApp] = useState<string>(() => localStorage.getItem('rymon_connect_selected_app') || 'Free Fire MAX')
   const [connectCustomAppName, setConnectCustomAppName] = useState('Tool X')
+
+  // Rate Limiting Live Cooldown Monitors
+  useEffect(() => {
+    const cleanUser = staffUsername.trim().toLowerCase()
+    if (!cleanUser) {
+      setStaffLockSeconds(0)
+      return
+    }
+    const rec = getRymonThrottle(`rymon_auth_lock_${cleanUser}`)
+    if (rec.lockedUntil && rec.lockedUntil > Date.now()) {
+      setStaffLockSeconds(Math.ceil((rec.lockedUntil - Date.now()) / 1000))
+    } else {
+      setStaffLockSeconds(0)
+    }
+  }, [staffUsername])
+
+  useEffect(() => {
+    const rec = getRymonThrottle('rymon_keyauth_lock')
+    if (rec.lockedUntil && rec.lockedUntil > Date.now()) {
+      setKeyLockSeconds(Math.ceil((rec.lockedUntil - Date.now()) / 1000))
+    } else {
+      setKeyLockSeconds(0)
+    }
+  }, [authMode])
+
+  useEffect(() => {
+    if (staffLockSeconds <= 0 && keyLockSeconds <= 0) return
+    const timer = setInterval(() => {
+      setStaffLockSeconds((prev) => (prev > 1 ? prev - 1 : 0))
+      setKeyLockSeconds((prev) => (prev > 1 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [staffLockSeconds, keyLockSeconds])
 
   // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
@@ -918,13 +1012,38 @@ export default function RymonConnect() {
   // 6. REAL AUTHENTICATION HANDLERS
   const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setAuthLoading(true)
     setAuthError('')
 
+    const cleanUser = staffUsername.trim().toLowerCase()
+    if (!cleanUser) {
+      setAuthError('Please enter your registered username.')
+      return
+    }
+
+    const throttleKey = `rymon_auth_lock_${cleanUser}`
+    const currentThrottle = getRymonThrottle(throttleKey)
+    if (currentThrottle.lockedUntil && currentThrottle.lockedUntil > Date.now()) {
+      const rem = Math.ceil((currentThrottle.lockedUntil - Date.now()) / 1000)
+      setStaffLockSeconds(rem)
+      setAuthError(`🔒 Security Lockout: Too many failed login attempts. Please wait ${formatLockCountdown(rem)} before trying again.`)
+      return
+    }
+
+    // Debounce rapid submits (2 seconds)
+    const now = Date.now()
+    if (now - lastAuthSubmitTime < 2000) {
+      setAuthError('⚠️ Please wait a moment before trying again.')
+      return
+    }
+    setLastAuthSubmitTime(now)
+
+    setAuthLoading(true)
     const res = await loginWithCredentials(staffUsername, staffPassword)
     setAuthLoading(false)
 
     if (res.success && res.user) {
+      clearRymonThrottle(throttleKey)
+      setStaffLockSeconds(0)
       setCurrentUser(res.user)
       setWalletBalance(res.user.balance)
       setIsAuthenticated(true)
@@ -933,19 +1052,45 @@ export default function RymonConnect() {
       showToast(`Welcome back, ${res.user.username} (${res.user.role.toUpperCase()})!`)
       setActiveTab('overview')
     } else {
-      setAuthError(res.error || 'Authentication failed. Please verify credentials.')
+      const failed = recordRymonFailedAttempt(throttleKey, 5, 5 * 60 * 1000)
+      if (failed.locked) {
+        setStaffLockSeconds(failed.waitSecs)
+        setAuthError(`🔒 Account locked for 5 minutes due to 5 consecutive failed login attempts. Please wait ${formatLockCountdown(failed.waitSecs)}.`)
+      } else if (failed.remaining === 1) {
+        setAuthError(`❌ ${res.error || 'Authentication failed. Please verify credentials.'} (⚠️ 1 attempt remaining before 5-minute security lockout).`)
+      } else {
+        setAuthError(`❌ ${res.error || 'Authentication failed. Please verify credentials.'} (${failed.remaining} attempts remaining before 5-minute security lockout).`)
+      }
     }
   }
 
   const handleKeyAuth = async (e: React.FormEvent) => {
     e.preventDefault()
-    setAuthLoading(true)
     setAuthError('')
 
+    const throttleKey = 'rymon_keyauth_lock'
+    const currentThrottle = getRymonThrottle(throttleKey)
+    if (currentThrottle.lockedUntil && currentThrottle.lockedUntil > Date.now()) {
+      const rem = Math.ceil((currentThrottle.lockedUntil - Date.now()) / 1000)
+      setKeyLockSeconds(rem)
+      setAuthError(`🔒 Key authentication locked. Too many invalid attempts. Please wait ${formatLockCountdown(rem)}.`)
+      return
+    }
+
+    const now = Date.now()
+    if (now - lastAuthSubmitTime < 2000) {
+      setAuthError('⚠️ Please wait a moment before trying again.')
+      return
+    }
+    setLastAuthSubmitTime(now)
+
+    setAuthLoading(true)
     const res = await verifyLicenseKey(keyInput)
     setAuthLoading(false)
 
     if (res.valid && res.key) {
+      clearRymonThrottle(throttleKey)
+      setKeyLockSeconds(0)
       const cleanKey = res.key
       setCurrentKey(cleanKey)
       const exp = res.expiresAt ? new Date(res.expiresAt) : new Date(Date.now() + 30 * 86400000)
@@ -970,7 +1115,13 @@ export default function RymonConnect() {
       showToast(`Connected license ${cleanKey}!`)
       setActiveTab('remote')
     } else {
-      setAuthError(res.error || 'Invalid license key.')
+      const failed = recordRymonFailedAttempt(throttleKey, 5, 5 * 60 * 1000)
+      if (failed.locked) {
+        setKeyLockSeconds(failed.waitSecs)
+        setAuthError(`🔒 Key authentication locked for 5 minutes due to 5 invalid attempts. Please wait ${formatLockCountdown(failed.waitSecs)}.`)
+      } else {
+        setAuthError(`❌ ${res.error || 'Invalid license key.'} (${failed.remaining} attempt${failed.remaining === 1 ? '' : 's'} remaining before 5-minute security lockout).`)
+      }
     }
   }
 
@@ -3359,9 +3510,50 @@ export default function RymonConnect() {
                       />
                     </div>
 
-                    <button type="submit" disabled={authLoading} style={styles.submitBtn}>
-                      {authLoading ? 'AUTHENTICATING...' : 'SIGN IN TO DASHBOARD'}
+                    <button
+                      type="submit"
+                      disabled={authLoading || staffLockSeconds > 0}
+                      style={{
+                        ...styles.submitBtn,
+                        ...(staffLockSeconds > 0
+                          ? {
+                              background: 'rgba(239, 68, 68, 0.2)',
+                              border: '1px solid #ef4444',
+                              color: '#f87171',
+                              cursor: 'not-allowed'
+                            }
+                          : {})
+                      }}
+                    >
+                      {authLoading
+                        ? 'AUTHENTICATING...'
+                        : staffLockSeconds > 0
+                          ? `🔒 LOCKED (${formatLockCountdown(staffLockSeconds)})`
+                          : 'SIGN IN TO DASHBOARD'}
                     </button>
+
+                    {staffLockSeconds > 0 && (
+                      <div
+                        style={{
+                          marginTop: '10px',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          color: '#f87171',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <span>🔒 5-Minute Security Lockout Active</span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '14px', color: '#ef4444' }}>
+                          {formatLockCountdown(staffLockSeconds)}
+                        </span>
+                      </div>
+                    )}
 
                     {authError && <div style={styles.errorBox}>{authError}</div>}
                   </form>
@@ -3455,9 +3647,49 @@ export default function RymonConnect() {
                   required
                 />
 
-                <button type="submit" disabled={authLoading} style={styles.submitBtn}>
-                  {authLoading ? 'VERIFYING KEYAUTH...' : 'CONNECT GHOST REMOTE'}
+                <button
+                  type="submit"
+                  disabled={authLoading || keyLockSeconds > 0}
+                  style={{
+                    ...styles.submitBtn,
+                    ...(keyLockSeconds > 0
+                      ? {
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          border: '1px solid #ef4444',
+                          color: '#f87171',
+                          cursor: 'not-allowed'
+                        }
+                      : {})
+                  }}
+                >
+                  {authLoading
+                    ? 'VERIFYING KEYAUTH...'
+                    : keyLockSeconds > 0
+                      ? `🔒 LOCKED (${formatLockCountdown(keyLockSeconds)})`
+                      : 'CONNECT GHOST REMOTE'}
                 </button>
+
+                {keyLockSeconds > 0 && (
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      color: '#f87171',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <span>🔒 5-Minute KeyAuth Lockout Active</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '14px', color: '#ef4444' }}>
+                      {formatLockCountdown(keyLockSeconds)}
+                    </span>
+                  </div>
+                )}
 
                 <button
                   type="button"
