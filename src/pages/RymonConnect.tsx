@@ -9417,7 +9417,7 @@ else:
                                   type="button"
                                   onClick={() => {
                                     setKeyGameFilter(app.name)
-                                    setActiveTab('keys')
+                                    handleSelectTab('keys')
                                   }}
                                   style={{
                                     padding: '6px 12px',
@@ -10772,7 +10772,7 @@ else:
 
       {/* ── EMERGENCY REMOTE PURGE MODAL ────────────────────────────────────── */}
       {showPurgeModal && (
-        <div style={styles.modalOverlay}>
+        <div className="sg-modal-overlay" style={styles.modalOverlay}>
           <div className="sg-modal-card" style={styles.modalCard}>
             <div style={styles.modalIcon}>🚨</div>
             <h3 style={styles.modalTitle}>Confirm Emergency Remote Wipe</h3>
@@ -10801,7 +10801,7 @@ else:
 
       {/* ── RESET USER PASSWORD MODAL ───────────────────────────────────────── */}
       {pwdModalUser && (
-        <div style={styles.modalOverlay} onClick={() => setPwdModalUser(null)}>
+        <div className="sg-modal-overlay" style={styles.modalOverlay} onClick={() => setPwdModalUser(null)}>
           <div
             className="sg-modal-card"
             style={{
@@ -10953,10 +10953,7 @@ else:
               <button
                 type="button"
                 className={`sg-mobile-bottom-tab ${activeTab === 'remote' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('remote')
-                  setMobileMenuOpen(false)
-                }}
+                onClick={() => handleSelectTab('remote')}
               >
                 <span style={{ fontSize: '18px' }}>⚡</span>
                 <span>Remote</span>
@@ -10985,10 +10982,7 @@ else:
               <button
                 type="button"
                 className={`sg-mobile-bottom-tab ${activeTab === 'remote' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('remote')
-                  setMobileMenuOpen(false)
-                }}
+                onClick={() => handleSelectTab('remote')}
               >
                 <span style={{ fontSize: '18px' }}>⚡</span>
                 <span>Remote</span>
@@ -10996,10 +10990,7 @@ else:
               <button
                 type="button"
                 className={`sg-mobile-bottom-tab ${activeTab === 'keys' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('keys')
-                  setMobileMenuOpen(false)
-                }}
+                onClick={() => handleSelectTab('keys')}
               >
                 <span style={{ fontSize: '18px' }}>🔑</span>
                 <span>Keys</span>
@@ -11007,10 +10998,7 @@ else:
               <button
                 type="button"
                 className={`sg-mobile-bottom-tab ${activeTab === 'generate' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('generate')
-                  setMobileMenuOpen(false)
-                }}
+                onClick={() => handleSelectTab('generate')}
               >
                 <span style={{ fontSize: '18px' }}>➕</span>
                 <span>Gen</span>
@@ -11018,10 +11006,7 @@ else:
               <button
                 type="button"
                 className={`sg-mobile-bottom-tab ${activeTab === 'overview' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('overview')
-                  setMobileMenuOpen(false)
-                }}
+                onClick={() => handleSelectTab('overview')}
               >
                 <span style={{ fontSize: '18px' }}>📊</span>
                 <span>Stats</span>
@@ -12005,7 +11990,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 999
+    zIndex: 1200
   },
   modalCard: {
     maxWidth: '460px',
