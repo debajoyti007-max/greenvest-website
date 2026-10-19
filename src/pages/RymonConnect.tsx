@@ -81,7 +81,6 @@ type TabType =
   | 'remote'
   | 'generate'
   | 'keys'
-  | 'telegram'
   | 'users'
   | 'connect-api'
   | 'apps'
@@ -90,6 +89,7 @@ type TabType =
   | 'delete'
   | 'extend'
   | 'advance'
+  | 'telegram'
   | 'sql-setup'
 
 const THEME_NAMES = ['Cyber Blue', 'Neon Pink', 'Emerald', 'Violet', 'Amber']
@@ -203,7 +203,11 @@ export default function RymonConnect() {
     isOnline: true,
     tablesCreated: true
   })
+  const [dbChecking, setDbChecking] = useState(false)
   const [copiedSql, setCopiedSql] = useState(false)
+  const [showSqlPreview, setShowSqlPreview] = useState(false)
+  const [sqlContent, setSqlContent] = useState<string>('')
+  const [sqlLoading, setSqlLoading] = useState(false)
 
   // Streamer Telemetry State
   const [record, setRecord] = useState<StreamerControlRecord | null>(null)
@@ -381,6 +385,78 @@ export default function RymonConnect() {
     }, 1000)
     return () => clearInterval(timer)
   }, [staffLockSeconds, keyLockSeconds])
+
+  const handleCopySqlScript = async () => {
+    try {
+      setSqlLoading(true)
+      let text = sqlContent
+      if (!text) {
+        const res = await fetch('/MASTER_RYMON_BACKEND.sql')
+        if (res.ok) {
+          text = await res.text()
+          setSqlContent(text)
+        }
+      }
+      if (text) {
+        await navigator.clipboard.writeText(text)
+        setCopiedSql(true)
+        setTimeout(() => setCopiedSql(false), 3000)
+      } else {
+        alert('Could not load SQL file from server. Please try downloading it.')
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSqlLoading(false)
+    }
+  }
+
+  const handleDownloadSql = async () => {
+    try {
+      const res = await fetch('/MASTER_RYMON_BACKEND.sql')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'MASTER_RYMON_BACKEND.sql'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleToggleSqlPreview = async () => {
+    if (!showSqlPreview && !sqlContent) {
+      try {
+        setSqlLoading(true)
+        const res = await fetch('/MASTER_RYMON_BACKEND.sql')
+        if (res.ok) {
+          const text = await res.text()
+          setSqlContent(text)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setSqlLoading(false)
+      }
+    }
+    setShowSqlPreview((prev) => !prev)
+  }
+
+  const handleRecheckDbStatus = async () => {
+    setDbChecking(true)
+    try {
+      const status = await checkSupabaseSchemaStatus()
+      setDbStatus(status)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setDbChecking(false)
+    }
+  }
 
   // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
@@ -689,7 +765,39 @@ export default function RymonConnect() {
             if (!isMounted) return
             if (payload.eventType === 'INSERT' && payload.new) {
               const newAct = payload.new as RymonActivity
-              setActivities((prev) => [newAct, ...prev.slice(0, 29)])
+              const actorLower = String(newAct.actor_username || '').toLowerCase()
+              const curUser = (currentUser?.username || '').toLowerCase()
+              const role = currentUser?.role || ''
+
+              // 1. Root Owner (debajoyti): sees all platform activities
+              if (!currentUser || curUser === 'debajoyti') {
+                setActivities((prev) => [newAct, ...prev.slice(0, 29)])
+                return
+              }
+              // 2. Reseller: only sees activities they performed themselves
+              if (role === 'reseller') {
+                if (actorLower === curUser) {
+                  setActivities((prev) => [newAct, ...prev.slice(0, 29)])
+                }
+                return
+              }
+              // 3. Admin: sees activities for themselves + their downline
+              if (role === 'admin') {
+                const isDownline = usersListRef.current.some(
+                  (u) => (u.username || '').toLowerCase() === actorLower
+                )
+                if (actorLower === curUser || isDownline) {
+                  setActivities((prev) => [newAct, ...prev.slice(0, 29)])
+                }
+                return
+              }
+              // 4. Partner Owner: sees activities for themselves and non-root downlines
+              if (role === 'owner') {
+                if (actorLower !== 'debajoyti') {
+                  setActivities((prev) => [newAct, ...prev.slice(0, 29)])
+                }
+                return
+              }
             }
           }
         )
@@ -2909,7 +3017,7 @@ export default function RymonConnect() {
       setActiveTab('remote')
     } else if (
       isReseller &&
-      !['remote', 'overview', 'generate', 'keys', 'extend', 'delete'].includes(activeTab)
+      !['remote', 'overview', 'generate', 'keys', 'extend', 'advance'].includes(activeTab)
     ) {
       setActiveTab('overview')
     } else if (
@@ -2922,12 +3030,13 @@ export default function RymonConnect() {
         'extend',
         'users',
         'add-balance',
+        'referrals',
         'delete',
         'advance'
       ].includes(activeTab)
     ) {
       setActiveTab('overview')
-    } else if (!isRootOwner && (activeTab === 'telegram' || activeTab === 'connect-api' || activeTab === 'apps')) {
+    } else if (!isRootOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
       setActiveTab('overview')
     }
   }, [isStreamer, isReseller, isAdmin, isOwner, isRootOwner, activeTab])
@@ -3985,7 +4094,7 @@ export default function RymonConnect() {
                     disabled={selfResetBusy}
                     onClick={() => handleCustomerSelfResetHwid(keyInput)}
                     style={{
-                      flex: 1,
+                      width: '100%',
                       padding: '10px 12px',
                       borderRadius: '10px',
                       backgroundColor: 'rgba(5, 223, 114, 0.12)',
@@ -3999,26 +4108,6 @@ export default function RymonConnect() {
                   >
                     {selfResetBusy ? 'RESETTING HWID...' : '🔄 RESET KEY HWID (2/DAY)'}
                   </button>
-                  <a
-                    href="https://t.me/Rymon007bot"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      flex: 1,
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      backgroundColor: 'rgba(56, 189, 248, 0.12)',
-                      border: '1px solid rgba(56, 189, 248, 0.4)',
-                      color: '#38bdf8',
-                      fontWeight: 800,
-                      fontSize: '11px',
-                      textDecoration: 'none',
-                      textAlign: 'center',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    ✈️ TG RESET BOT (@Rymon007bot)
-                  </a>
                 </div>
 
                 {selfResetMsg && (
@@ -4118,16 +4207,6 @@ export default function RymonConnect() {
               {isStreamer && (
                 <>
                   <div style={styles.navCategoryHeader}>STREAMER UTILITIES</div>
-                  <a
-                    href="https://t.me/Rymon007bot"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ ...styles.navItem, textDecoration: 'none' }}
-                  >
-                    <span style={styles.navIcon}>✈️</span>
-                    <span>Telegram Bot</span>
-                    <span style={{ ...styles.cyanMiniBadge, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>SUPPORT</span>
-                  </a>
                   <button
                     onClick={() => {
                       setMobileMenuOpen(false)
@@ -4181,18 +4260,7 @@ export default function RymonConnect() {
                         <span>License Keys</span>
                       </button>
 
-                      <div style={styles.navCategoryHeader}>MY WALLET</div>
-                      <button
-                        onClick={() => handleSelectTab('add-balance')}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'add-balance' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}>💼</span>
-                        <span>Transfer Balance</span>
-                        <span style={styles.cyanMiniBadge}>WALLET</span>
-                      </button>
+                      <div style={styles.navCategoryHeader}>PRICING</div>
                       <button
                         onClick={() => handleSelectTab('advance')}
                         style={{
@@ -4242,19 +4310,6 @@ export default function RymonConnect() {
                         <span style={styles.navIcon}>🔑</span>
                         <span>License Keys</span>
                       </button>
-                      {isRootOwner && (
-                        <button
-                          onClick={() => handleSelectTab('telegram')}
-                          style={{
-                            ...styles.navItem,
-                            ...(activeTab === 'telegram' ? styles.navItemActive : {})
-                          }}
-                        >
-                          <span style={styles.navIcon}>✈️</span>
-                          <span>Telegram Bot</span>
-                          <span style={styles.cyanMiniBadge}>ROOT</span>
-                        </button>
-                      )}
                       {isRootOwner && (
                         <button
                           onClick={() => handleSelectTab('connect-api')}
@@ -4338,19 +4393,6 @@ export default function RymonConnect() {
                         <span style={styles.navIcon}>🧹</span>
                         <span>Clean & Purge Keys</span>
                       </button>
-                      {isRootOwner && (
-                        <button
-                          onClick={() => handleSelectTab('sql-setup')}
-                          style={{
-                            ...styles.navItem,
-                            ...(activeTab === 'sql-setup' ? styles.navItemActive : {})
-                          }}
-                        >
-                          <span style={styles.navIcon}>🛠️</span>
-                          <span>SQL Setup</span>
-                          <span style={styles.cyanMiniBadge}>ROOT</span>
-                        </button>
-                      )}
                     </>
                   )}
                 </>
@@ -4358,20 +4400,6 @@ export default function RymonConnect() {
 
               {/* Bottom Drawer Actions */}
               <div style={{ marginTop: '20px', paddingTop: '14px', borderTop: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                <a
-                  href="https://t.me/Rymon007bot"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    ...styles.navItem,
-                    textDecoration: 'none',
-                    color: '#38bdf8',
-                    marginBottom: '8px'
-                  }}
-                >
-                  <span style={styles.navIcon}>✈️</span>
-                  <span>Telegram Support</span>
-                </a>
                 <button
                   type="button"
                   onClick={() => {
@@ -4686,18 +4714,24 @@ export default function RymonConnect() {
                       <span style={styles.cyanMiniBadge}>AUDIT</span>
                     </div>
                     <div style={styles.activityFeed}>
-                      {activities.slice(0, 5).map((act) => (
-                        <div key={act.id} style={styles.activityRow}>
-                          <div style={styles.activityIcon}>✓</div>
-                          <div style={{ flex: 1 }}>
-                            <div style={styles.activityTitle}>{act.title}</div>
-                            <div style={styles.activityDetails}>{act.details}</div>
-                          </div>
-                          <div style={styles.activityTime}>
-                            {new Date(act.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </div>
+                      {activities.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '24px 12px', color: '#64748b', fontSize: '12px' }}>
+                          ℹ️ No recent activity recorded for your account.
                         </div>
-                      ))}
+                      ) : (
+                        activities.slice(0, 5).map((act) => (
+                          <div key={act.id} style={styles.activityRow}>
+                            <div style={styles.activityIcon}>✓</div>
+                            <div style={{ flex: 1 }}>
+                              <div style={styles.activityTitle}>{act.title}</div>
+                              <div style={styles.activityDetails}>{act.details}</div>
+                            </div>
+                            <div style={styles.activityTime}>
+                              {new Date(act.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>
@@ -7999,16 +8033,19 @@ export default function RymonConnect() {
               <div className="sg-view-container" style={styles.viewContainer}>
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Database SQL & Schema Engine</h2>
+                    <h2 style={styles.pageTitle}>Database SQL &amp; Schema Engine</h2>
                     <p style={styles.pageSubtitle}>
-                      Manage your live RYMON database engine and security policies.
+                      Manage your live RYMON database engine, RPC functions, and wallet security policies.
                     </p>
+                  </div>
+                  <div style={styles.badgeCluster}>
+                    <span style={styles.cyanMiniBadge}>SOVEREIGN POSTGRES ENGINE</span>
                   </div>
                 </div>
 
                 <div className="sg-card-box" style={styles.cardBox}>
                   <div style={styles.cardHeader}>
-                    <h4>⚡ RYMON Schema Status</h4>
+                    <h4>⚡ RYMON Schema &amp; RPC Health Status</h4>
                     <span
                       style={{
                         ...styles.cyanMiniBadge,
@@ -8021,28 +8058,204 @@ export default function RymonConnect() {
                   </div>
 
                   <p style={styles.settingDesc}>
-                    To activate or update all RYMON RPCs, accounts, licenses, and Realtime publications:
+                    To activate or update all RYMON tables, Realtime publications, and <strong>12 atomic wallet RPCs</strong> (such as key generation, key extension, bulk extend, balance transfer, and subscription renew):
                     <br />
-                    1. Open your <strong>RYMON Cloud Console</strong>.
+                    1. Open your <strong>Supabase / Postgres Cloud Console</strong>.
                     <br />
-                    2. Go to <strong>SQL Editor</strong> ➔ <strong>New Query</strong>.
+                    2. Navigate to <strong>SQL Editor</strong> ➔ <strong>New Query</strong>.
                     <br />
-                    3. Copy and paste <code>MASTER_RYMON_BACKEND.sql</code> and click <strong>Run</strong>.
+                    3. Copy and paste the complete <code>MASTER_RYMON_BACKEND.sql</code> script below and click <strong>Run</strong>.
                   </p>
 
-                  <div style={{ marginTop: '20px' }}>
+                  {/* Quick Action Buttons */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '20px' }}>
                     <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(
-                          `-- View MASTER_RYMON_BACKEND.sql in database console`
-                        )
-                        setCopiedSql(true)
-                        setTimeout(() => setCopiedSql(false), 2500)
+                      type="button"
+                      onClick={handleCopySqlScript}
+                      disabled={sqlLoading}
+                      style={{
+                        ...styles.submitBtn,
+                        flex: '1 1 240px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        background: copiedSql
+                          ? 'linear-gradient(135deg, #05df72 0%, #047857 100%)'
+                          : 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)'
                       }}
-                      style={styles.submitBtn}
                     >
-                      {copiedSql ? '✓ COPIED SQL PATH TO CLIPBOARD' : '📋 MASTER_RYMON_BACKEND.SQL READY'}
+                      {copiedSql ? '✓ COPIED ALL SQL (1,230+ LINES)' : sqlLoading ? '⏳ LOADING SCRIPT...' : '📋 COPY COMPLETE SQL SCRIPT'}
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadSql}
+                      style={{
+                        ...styles.submitBtn,
+                        flex: '1 1 180px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        border: '1px solid rgba(168, 85, 247, 0.4)',
+                        color: '#c084fc',
+                        background: 'rgba(168, 85, 247, 0.12)',
+                        boxShadow: 'none'
+                      }}
+                    >
+                      📥 DOWNLOAD .SQL FILE
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleSqlPreview}
+                      style={{
+                        ...styles.submitBtn,
+                        flex: '1 1 180px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: '#f8fafc',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        boxShadow: 'none'
+                      }}
+                    >
+                      {showSqlPreview ? '👁️ HIDE SQL PREVIEW' : '👁️ PREVIEW SCRIPT'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleRecheckDbStatus}
+                      disabled={dbChecking}
+                      style={{
+                        ...styles.submitBtn,
+                        flex: '1 1 150px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        border: '1px solid rgba(6, 182, 212, 0.3)',
+                        color: '#22d3ee',
+                        background: 'rgba(6, 182, 212, 0.1)',
+                        boxShadow: 'none'
+                      }}
+                    >
+                      {dbChecking ? '⏳ CHECKING...' : '🔄 RE-CHECK DB'}
+                    </button>
+                  </div>
+
+                  {/* Expandable SQL Code Preview */}
+                  {showSqlPreview && (
+                    <div
+                      style={{
+                        marginTop: '20px',
+                        background: '#090d16',
+                        border: '1px solid rgba(168, 85, 247, 0.25)',
+                        borderRadius: '12px',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: '10px 16px',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '8px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#c084fc', fontWeight: 'bold' }}>
+                            MASTER_RYMON_BACKEND.sql
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                            (~1,230 lines • 12 Atomic RPCs • Seed Data Included)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCopySqlScript}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(168, 85, 247, 0.4)',
+                            background: copiedSql ? '#05df72' : 'rgba(168, 85, 247, 0.2)',
+                            color: copiedSql ? '#000' : '#c084fc',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {copiedSql ? '✓ COPIED!' : '📋 COPY CODE'}
+                        </button>
+                      </div>
+
+                      <pre
+                        style={{
+                          margin: 0,
+                          padding: '16px',
+                          fontSize: '12px',
+                          lineHeight: 1.5,
+                          fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                          color: '#e2e8f0',
+                          maxHeight: '420px',
+                          overflowY: 'auto',
+                          overflowX: 'auto',
+                          whiteSpace: 'pre',
+                          WebkitOverflowScrolling: 'touch'
+                        }}
+                      >
+                        {sqlLoading ? 'Loading full SQL script...' : sqlContent || '-- Click "Copy Complete SQL Script" or download above'}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* 12 Sovereign RPCs breakdown chips */}
+                  <div style={{ marginTop: '24px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#cbd5e1', marginBottom: '10px' }}>
+                      📦 Included Atomic Functions &amp; Sovereign Capabilities:
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {[
+                        { name: 'rpc_rymon_verify_license', desc: 'Hardware & plan validator' },
+                        { name: 'rpc_rymon_generate_key', desc: 'Atomic wallet deduction (1-50 keys)' },
+                        { name: 'rpc_rymon_extend_key', desc: 'Atomic duration × devices deduction' },
+                        { name: 'rpc_rymon_bulk_extend_keys', desc: 'Atomic batch wallet deduction' },
+                        { name: 'rpc_rymon_transfer_balance', desc: 'Atomic wallet-to-wallet transfer' },
+                        { name: 'rpc_rymon_renew_subscription', desc: 'Atomic subscription renew & fee' },
+                        { name: 'rpc_rymon_create_referral', desc: 'Atomic prefunded invite codes' },
+                        { name: 'rpc_rymon_reset_hwid', desc: 'HWID instant unbind' },
+                        { name: 'rpc_rymon_toggle_pause_key', desc: 'Instant key pause/resume' },
+                        { name: 'rpc_rymon_get_accounts', desc: 'Downline hierarchy filter' },
+                        { name: 'rpc_rymon_update_password', desc: 'Secure credential update' },
+                        { name: 'rpc_rymon_ban_unban', desc: 'Instant ban toggle' }
+                      ].map((fn) => (
+                        <div
+                          key={fn.name}
+                          style={{
+                            padding: '6px 12px',
+                            background: 'rgba(168, 85, 247, 0.08)',
+                            border: '1px solid rgba(168, 85, 247, 0.2)',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px'
+                          }}
+                        >
+                          <span style={{ fontFamily: 'monospace', color: '#c084fc', fontWeight: 'bold' }}>
+                            {fn.name}
+                          </span>
+                          <span style={{ color: '#94a3b8', fontSize: '10px' }}>{fn.desc}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

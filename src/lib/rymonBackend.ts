@@ -1558,125 +1558,74 @@ export async function generateLicenseKeyBackend(params: {
   // A. Direct Supabase Database Transaction (Respects Dynamic Default & Individual User Pricing)
   if (supabase) {
     try {
-      const { data: accRow } = await supabase
-        .from('rymon_accounts')
-        .select('*')
-        .ilike('username', creator.username)
-        .maybeSingle()
-
-      const liveRole = accRow?.role || creator.role
-      const liveBal = accRow ? Number(accRow.balance || 0) : creator.balance
-
-      if (accRow && accRow.status === 'BANNED') {
-        return { success: false, error: 'Your account is suspended and cannot generate keys.' }
-      }
-
-      if (liveRole !== 'owner' && accRow?.expires_at && new Date(accRow.expires_at).getTime() < Date.now()) {
-        return {
-          success: false,
-          error: `Your ${String(liveRole).toUpperCase()} subscription expired on ${new Date(accRow.expires_at).toLocaleDateString()}. Contact your Admin/Owner to renew (30 Days / 60 Days).`
-        }
-      }
-
-      if (liveRole !== 'owner' && liveBal < totalCost) {
-        return {
-          success: false,
-          error: `Insufficient wallet balance! ${safeQuantity} key${safeQuantity > 1 ? 's' : ''} require ₹${totalCost.toLocaleString('en-IN')} (₹${unitPrice} × ${safeDevices} dev × ${safeQuantity} qty), but current balance is ₹${liveBal.toLocaleString('en-IN')}.`
-        }
-      }
-
-      const nextBalance = liveRole === 'owner' ? liveBal : Math.max(0, liveBal - totalCost)
-
-      const creatorPass = localStorage.getItem(`rymon_pw_${creator.username}`) || 'rymon@2026'
-      if (accRow && liveRole !== 'owner') {
-        await supabase.rpc('rpc_rymon_topup_balance', {
-          p_target_username: accRow.username,
-          p_amount: nextBalance,
-          p_mode: 'set',
-          p_actor_username: creator.username,
-          p_actor_password: creatorPass
-        })
-      }
-
-      const creatorName = accRow?.username || creator.username
       const isRealtime = params.isVipRealtime !== false
       const effectivePlanDuration = isRealtime ? `${duration} [VIP]` : duration
-      const effectiveStreamerName = isRealtime ? 'VIP_REALTIME' : 'VIP Streamer'
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_generate_key', {
+        p_creator_username: creator.username,
+        p_game: game,
+        p_plan: effectivePlanDuration,
+        p_custom_prefix: prefix,
+        p_devices_max: safeDevices,
+        p_quantity: safeQuantity
+      })
 
-      const licPayloads = generatedKeys.map((k) => ({
-        license_key: k,
-        game,
-        plan_duration: effectivePlanDuration,
-        creator_username: creatorName,
-        devices_used: 0,
-        devices_max: safeDevices,
-        device_hwid: '',
-        status: 'WAITING',
-        is_paused: false,
-        expires_at: null
-      }))
+      if (rpcErr) {
+        return { success: false, error: rpcErr.message || 'Database error generating key.' }
+      }
 
-      const { data: insertedLics, error: licErr } = await supabase
-        .from('rymon_licenses')
-        .insert(licPayloads)
-        .select('*')
-
-      if (!licErr && insertedLics && insertedLics.length > 0) {
-        // ONLY Free Fire MAX keys with VIP Web Remote enabled have Streamer Remote Controls (ESP / Aimbot / Telemetry).
-        // Standard APK keys and custom apps are PURE KEYAUTH ONLY!
-        const isFfOnly = !game || game.toLowerCase().includes('free fire')
-        if (isFfOnly && isRealtime) {
-          const ctrlPayloads = generatedKeys.map((k) =>
-            buildDefaultStreamerControlPayload({
-              license_key: k,
-              streamer_name: effectiveStreamerName,
-              game_name: game || 'Free Fire MAX',
-              plan_duration: effectivePlanDuration,
-              creator: creatorName,
-              devices_max: safeDevices,
-              devices_used: 0,
-              is_active: true,
-              is_paused: false
-            })
-          )
-          await supabase.from('rymon_streamer_controls').upsert(ctrlPayloads, { onConflict: 'license_key' })
+      if (rpcRes) {
+        if (!rpcRes.success) {
+          return { success: false, error: rpcRes.error || 'Failed to generate key.' }
         }
 
-        await supabase.from('rymon_activities').insert({
-          title:
-            safeQuantity > 1
-              ? `Bulk Generated ${safeQuantity} Keys`
-              : `Key Generated #${insertedLics[0].id}`,
-          event_type: 'KEY_GENERATED',
-          game,
-          details: `${safeQuantity}x ${effectivePlanDuration} (${isRealtime ? '👑 VIP Web Remote' : '📱 Standard APK'}) • ${safeDevices} Device(s) • Cost: ${liveRole === 'owner' ? 'FREE (Owner)' : `₹${totalCost}`}`,
-          actor_username: creatorName,
-          status: 'SUCCESS'
-        })
+        const remainingBalance = rpcRes.remaining_balance !== undefined ? Number(rpcRes.remaining_balance) : undefined
+        if (remainingBalance !== undefined) {
+          const accounts = getStoredAccounts()
+          const aIdx = accounts.findIndex((a) => (a.username || '').toLowerCase() === creator.username.toLowerCase())
+          if (aIdx !== -1) {
+            accounts[aIdx].balance = remainingBalance
+            saveStoredAccounts(accounts)
+          }
+          try {
+            const rawSession = localStorage.getItem('rymon_session_user')
+            if (rawSession) {
+              const u = JSON.parse(rawSession)
+              if ((u.username || '').toLowerCase() === creator.username.toLowerCase()) {
+                u.balance = remainingBalance
+                localStorage.setItem('rymon_session_user', JSON.stringify(u))
+              }
+            }
+          } catch {}
+        }
+
+        const outKeys: string[] = rpcRes.keys || [rpcRes.key]
+        const firstKey: string = rpcRes.key || outKeys[0]
 
         // Dispatch instant Telegram Owner Alert
         void notifyOwnerTelegram([
           `🔑 <b>LICENSE KEY GENERATED</b>`,
           ``,
           safeQuantity === 1
-            ? `• <b>Key:</b> <code>${newKey}</code>`
-            : `• <b>Batch (${safeQuantity} Keys):</b>\n${generatedKeys.slice(0, 5).map((k) => `<code>${k}</code>`).join('\n')}${safeQuantity > 5 ? `\n...and ${safeQuantity - 5} more` : ''}`,
-          `• <b>Creator:</b> @${creatorName} (${liveRole.toUpperCase()})`,
+            ? `• <b>Key:</b> <code>${firstKey}</code>`
+            : `• <b>Batch (${safeQuantity} Keys):</b>\n${outKeys.slice(0, 5).map((k) => `<code>${k}</code>`).join('\n')}${safeQuantity > 5 ? `\n...and ${safeQuantity - 5} more` : ''}`,
+          `• <b>Creator:</b> @${creator.username} (${creator.role.toUpperCase()})`,
           `• <b>Game:</b> ${game || 'Free Fire MAX'}`,
           `• <b>Plan:</b> ${effectivePlanDuration}`,
-          `• <b>Cost:</b> ${liveRole === 'owner' ? 'FREE (Owner)' : `₹${totalCost.toLocaleString('en-IN')}`}`,
+          `• <b>Cost:</b> ${creator.role === 'owner' ? 'FREE (Owner)' : `₹${Number(rpcRes.total_cost || totalCost).toLocaleString('en-IN')}`}`,
           `• <b>Devices:</b> ${safeDevices} Max Device(s)`
         ].join('\n'))
 
         return {
           success: true,
-          key: newKey,
-          keys: generatedKeys,
-          remainingBalance: nextBalance,
-          license: insertedLics[0] as RymonLicense
+          key: firstKey,
+          keys: outKeys,
+          remainingBalance,
+          license: rpcRes.license as RymonLicense
         }
       }
-    } catch {}
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Unexpected error generating key.' }
+    }
   }
 
   // B. Local Fallback Check
@@ -1771,23 +1720,11 @@ export async function topUpUserBalanceBackend(
         return { success: false, error: `User @${cleanTarget} not found in database.` }
       }
 
-      let actorRemainingBalance: number | undefined = undefined
-      const storedActorPass = localStorage.getItem(`rymon_pw_${cleanActor}`) || 'rymon@2026'
+      if (amount <= 0) {
+        return { success: false, error: 'Transfer amount must be greater than ₹0.' }
+      }
 
       if (!isRootOwner) {
-        // Partner Owner / Admin Wallet-to-Downline Transfer Mode
-        if (amount <= 0) {
-          return { success: false, error: 'Transfer amount must be greater than ₹0.' }
-        }
-        const { data: actorResp } = await supabase.rpc('rpc_rymon_get_account', {
-          p_username: cleanActor
-        })
-        const actorAcc = actorResp?.found ? actorResp : null
-
-        if (!actorAcc || (actorAcc.role !== 'admin' && actorAcc.role !== 'owner')) {
-          return { success: false, error: 'Power restriction: Only Owner or Admin can fund accounts.' }
-        }
-
         const allowedDownlines = await getDownlineUsernames(cleanActor, false)
         if (!allowedDownlines.has(String(targetUser?.username || '').toLowerCase())) {
           return {
@@ -1795,49 +1732,47 @@ export async function topUpUserBalanceBackend(
             error: `Power restriction: @${targetUser.username} is outside your downline.`
           }
         }
-
-        const actorBal = Number(actorAcc.balance || 0)
-        if (actorBal < amount) {
-          return {
-            success: false,
-            error: `Insufficient wallet balance! You need ₹${amount.toLocaleString('en-IN')} to fund @${targetUser.username}, but your wallet has ₹${actorBal.toLocaleString('en-IN')}.`
-          }
-        }
-
-        actorRemainingBalance = Math.max(0, actorBal - amount)
-        const { error: decErr } = await supabase.rpc('rpc_rymon_topup_balance', {
-          p_target_username: actorAcc.username,
-          p_amount: actorRemainingBalance,
-          p_mode: 'set',
-          p_actor_username: cleanActor,
-          p_actor_password: storedActorPass
-        })
-
-        if (decErr) {
-          return { success: false, error: 'Failed to deduct balance from wallet.' }
-        }
       }
 
-      const nextBal = !isRootOwner || mode === 'add' ? Number(targetUser.balance || 0) + amount : amount
-      const { error: updErr } = await supabase.rpc('rpc_rymon_topup_balance', {
-        p_target_username: targetUser.username,
-        p_amount: nextBal,
-        p_mode: 'set',
-        p_actor_username: cleanActor,
-        p_actor_password: storedActorPass
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_transfer_balance', {
+        p_sender_username: cleanActor,
+        p_target_username: cleanTarget,
+        p_amount: amount
       })
 
-      if (!updErr) {
-        await supabase.from('rymon_activities').insert({
-          title: isRootOwner ? 'Owner Balance Credit' : 'Downline Wallet Transfer',
-          event_type: 'BALANCE_CREDIT',
-          details: isRootOwner
-            ? `Updated balance for @${targetUser.username} to ₹${nextBal.toLocaleString('en-IN')} (FREE Owner Mint)`
-            : `@${cleanActor} transferred ₹${amount.toLocaleString('en-IN')} from wallet to @${targetUser.username} (New Bal: ₹${nextBal.toLocaleString('en-IN')})`,
-          actor_username: cleanActor,
-          status: 'SUCCESS'
-        })
-        return { success: true, newBalance: nextBal, actorRemainingBalance }
+      if (rpcErr) {
+        return { success: false, error: rpcErr.message || 'Transfer failed.' }
+      }
+
+      if (rpcRes) {
+        if (!rpcRes.success) {
+          return { success: false, error: rpcRes.error || 'Transfer failed.' }
+        }
+
+        if (rpcRes.sender_balance !== undefined) {
+          const accounts = getStoredAccounts()
+          const aIdx = accounts.findIndex((a) => (a.username || '').toLowerCase() === cleanActor.toLowerCase())
+          if (aIdx !== -1) {
+            accounts[aIdx].balance = Number(rpcRes.sender_balance)
+            saveStoredAccounts(accounts)
+          }
+          try {
+            const rawSession = localStorage.getItem('rymon_session_user')
+            if (rawSession) {
+              const u = JSON.parse(rawSession)
+              if ((u.username || '').toLowerCase() === cleanActor.toLowerCase()) {
+                u.balance = Number(rpcRes.sender_balance)
+                localStorage.setItem('rymon_session_user', JSON.stringify(u))
+              }
+            }
+          } catch {}
+        }
+
+        return {
+          success: true,
+          newBalance: Number(rpcRes.target_balance),
+          actorRemainingBalance: rpcRes.sender_balance !== undefined ? Number(rpcRes.sender_balance) : undefined
+        }
       }
     } catch {}
   }
@@ -2179,83 +2114,52 @@ export async function renewUserSubscriptionBackend(
 
   if (supabase) {
     try {
-      const { data: targetAcc } = await supabase
-        .from('rymon_accounts')
-        .select('*')
-        .ilike('username', cleanTarget)
-        .maybeSingle()
-
-      if (!targetAcc) {
-        return { success: false, message: `User @${cleanTarget} not found.` }
-      }
-
-      if (!isRootOwner) {
-        const allowedDownlines = await getDownlineUsernames(cleanActor, false)
-        if (!allowedDownlines.has(String(targetAcc?.username || '').toLowerCase())) {
-          return {
-            success: false,
-            message: 'Power restriction: You can only renew subscriptions for accounts in your downline.'
-          }
-        }
-
-        if (adminFee > 0) {
-          const { data: adminAcc } = await supabase
-            .from('rymon_accounts')
-            .select('*')
-            .ilike('username', cleanActor)
-            .maybeSingle()
-
-          const adminBal = adminAcc ? Number(adminAcc.balance || 0) : 0
-          if (adminBal < adminFee) {
-            return {
-              success: false,
-              message: `Insufficient Admin wallet balance! Renewing @${targetAcc.username} for ${safeDays} Days costs ₹${adminFee}, but your wallet has ₹${adminBal}.`
-            }
-          }
-          remainingBalance = Math.max(0, adminBal - adminFee)
-          if (adminAcc) {
-            await supabase
-              .from('rymon_accounts')
-              .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
-              .eq('id', adminAcc.id)
-          }
-        }
-      }
-
-      await supabase
-        .from('rymon_accounts')
-        .update({ expires_at: newExpIso, status: 'ACTIVE', updated_at: new Date().toISOString() })
-        .eq('id', targetAcc.id)
-
-      // Automatically resume any paused keys belonging to this renewed Reseller
-      const nowIso = new Date().toISOString()
-      await supabase
-        .from('rymon_licenses')
-        .update({ is_paused: false, status: 'ACTIVE', updated_at: nowIso })
-        .ilike('creator_username', targetAcc.username)
-        .eq('status', 'PAUSED')
-
-      await supabase
-        .from('rymon_streamer_controls')
-        .update({ is_paused: false, updated_at: nowIso })
-        .ilike('creator', targetAcc.username)
-        .eq('is_paused', true)
-
-      await supabase.from('rymon_activities').insert({
-        title: `Subscription Set (${safeDays} Days)`,
-        event_type: 'SUBSCRIPTION_RENEW',
-        details: `@${targetAcc.username} (${String(targetAcc.role).toUpperCase()}) subscription set to ${safeDays} Days by @${cleanActor}${adminFee > 0 ? ` (₹${adminFee} deducted)` : ''}`,
-        actor_username: cleanActor,
-        status: 'SUCCESS'
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_renew_subscription', {
+        p_target_username: cleanTarget,
+        p_days: safeDays,
+        p_actor_username: cleanActor,
+        p_fee: adminFee
       })
 
-      return {
-        success: true,
-        newExpiresAt: newExpIso,
-        remainingBalance,
-        message: `@${targetAcc.username} subscription renewed for ${safeDays} Days (active keys resumed)!`
+      if (rpcErr) {
+        return { success: false, message: rpcErr.message || 'Database error renewing subscription.' }
       }
-    } catch {}
+
+      if (rpcRes) {
+        if (!rpcRes.success) {
+          return { success: false, message: rpcRes.error || 'Failed to renew subscription.' }
+        }
+
+        const remainingBalance = rpcRes.remaining_balance !== undefined ? Number(rpcRes.remaining_balance) : undefined
+        if (remainingBalance !== undefined) {
+          const accounts = getStoredAccounts()
+          const aIdx = accounts.findIndex((a) => (a.username || '').toLowerCase() === cleanActor.toLowerCase())
+          if (aIdx !== -1) {
+            accounts[aIdx].balance = remainingBalance
+            saveStoredAccounts(accounts)
+          }
+          try {
+            const rawSession = localStorage.getItem('rymon_session_user')
+            if (rawSession) {
+              const u = JSON.parse(rawSession)
+              if ((u.username || '').toLowerCase() === cleanActor.toLowerCase()) {
+                u.balance = remainingBalance
+                localStorage.setItem('rymon_session_user', JSON.stringify(u))
+              }
+            }
+          } catch {}
+        }
+
+        return {
+          success: true,
+          newExpiresAt: rpcRes.expires_at,
+          remainingBalance,
+          message: `@${cleanTarget} subscription renewed for ${safeDays} Days (active keys resumed)!`
+        }
+      }
+    } catch (e: any) {
+      return { success: false, message: e?.message || 'Error executing subscription renewal.' }
+    }
   }
 
   const accounts = getStoredAccounts()
@@ -2777,113 +2681,60 @@ export async function extendLicenseBackend(
 
   if (supabase) {
     try {
-      const { data: licRow } = await supabase
-        .from('rymon_licenses')
-        .select('*')
-        .eq('license_key', cleanKey)
-        .maybeSingle()
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_extend_key', {
+        p_license_key: cleanKey,
+        p_days: days,
+        p_actor_username: cleanActor
+      })
 
-      if (licRow) {
-        if (!isRootOwner) {
-          const creator = (licRow.creator_username || '').toLowerCase()
-          const allowedDownlines = await getDownlineUsernames(cleanActor, true)
-          if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
-            return {
-              success: false,
-              error: 'Permission Denied: Cannot extend keys outside your downline.'
-            }
+      if (rpcErr) {
+        return {
+          success: false,
+          error: rpcErr.message || 'Database error extending key.'
+        }
+      }
+
+      if (rpcRes) {
+        if (!rpcRes.success) {
+          return {
+            success: false,
+            error: rpcRes.error || 'Failed to extend license.'
           }
         }
 
-        const cost = isRootOwner
-          ? 0
-          : calculateExtensionCost(days, cleanActor, Number(licRow.devices_max || 1))
-        let remainingBalance: number | undefined = undefined
-
-        if (!isRootOwner && cost > 0) {
-          let liveBal = 0
-          let actorFound = false
-
-          try {
-            const { data: actorResp } = await supabase.rpc('rpc_rymon_get_account', {
-              p_username: cleanActor
-            })
-            if (actorResp && actorResp.found) {
-              liveBal = Number(actorResp.balance || 0)
-              actorFound = true
-            }
-          } catch {}
-
-          if (!actorFound) {
-            const { data: actorAcc } = await supabase
-              .from('rymon_accounts')
-              .select('*')
-              .ilike('username', cleanActor)
-              .maybeSingle()
-            if (actorAcc) {
-              liveBal = Number(actorAcc.balance || 0)
-              actorFound = true
-            }
-          }
-
-          if (liveBal < cost) {
-            return {
-              success: false,
-              error: `Insufficient wallet balance! Extending ${cleanKey} by +${days} Day(s) costs ₹${cost}, but your balance is ₹${liveBal}.`
-            }
-          }
-          remainingBalance = Math.max(0, liveBal - cost)
-
-          const actorPass = localStorage.getItem(`rymon_pw_${cleanActor}`) || 'rymon@2026'
-          try {
-            await supabase.rpc('rpc_rymon_topup_balance', {
-              p_target_username: cleanActor,
-              p_amount: remainingBalance,
-              p_mode: 'set',
-              p_actor_username: cleanActor,
-              p_actor_password: actorPass
-            })
-          } catch {}
-
-          try {
-            await supabase
-              .from('rymon_accounts')
-              .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
-              .ilike('username', cleanActor)
-          } catch {}
-
-          // Synchronize local cache immediately
+        const remainingBalance = rpcRes.remaining_balance !== undefined ? Number(rpcRes.remaining_balance) : undefined
+        if (remainingBalance !== undefined) {
           const accounts = getStoredAccounts()
           const aIdx = accounts.findIndex((a) => (a.username || '').toLowerCase() === cleanActor.toLowerCase())
           if (aIdx !== -1) {
             accounts[aIdx].balance = remainingBalance
             saveStoredAccounts(accounts)
           }
+          try {
+            const rawSession = localStorage.getItem('rymon_session_user')
+            if (rawSession) {
+              const u = JSON.parse(rawSession)
+              if ((u.username || '').toLowerCase() === cleanActor.toLowerCase()) {
+                u.balance = remainingBalance
+                localStorage.setItem('rymon_session_user', JSON.stringify(u))
+              }
+            }
+          } catch {}
         }
 
-        const base = licRow.expires_at ? new Date(licRow.expires_at).getTime() : Date.now()
-        const newExp = new Date(
-          Math.min(Math.max(base, Date.now()) + days * 86400000, max30DaysMs)
-        ).toISOString()
-        const nextStatus = licRow.is_paused ? 'PAUSED' : 'ACTIVE'
-        await supabase
-          .from('rymon_licenses')
-          .update({ expires_at: newExp, status: nextStatus, updated_at: new Date().toISOString() })
-          .eq('license_key', cleanKey)
-        await supabase
-          .from('rymon_streamer_controls')
-          .update({ expires_at: newExp, is_active: true, updated_at: new Date().toISOString() })
-          .eq('license_key', cleanKey)
-        await supabase.from('rymon_activities').insert({
-          title: `Key Extended (+${days}d)`,
-          event_type: 'EXTEND_KEY',
-          details: `License ${cleanKey} extended by +${days} Day(s) (Max 30d Cap) • Cost: ${isRootOwner ? 'FREE' : `₹${cost}`}`,
-          actor_username: cleanActor,
-          status: 'SUCCESS'
-        })
-        return { success: true, newExpiresAt: newExp, remainingBalance, cost }
+        return {
+          success: true,
+          newExpiresAt: rpcRes.new_expires_at,
+          remainingBalance,
+          cost: Number(rpcRes.cost || 0)
+        }
       }
-    } catch {}
+    } catch (e: any) {
+      return {
+        success: false,
+        error: e?.message || 'Unexpected error extending license.'
+      }
+    }
   }
 
   const lics = getStoredLicenses()
@@ -3311,105 +3162,51 @@ export async function bulkExtendAllKeysBackend(
 
   if (supabase) {
     try {
-      let fetchQuery = supabase.from('rymon_licenses').select('*').neq('status', 'BANNED')
-      if (creatorFilter) {
-        fetchQuery = fetchQuery.ilike('creator_username', creatorFilter)
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_bulk_extend_keys', {
+        p_days: days,
+        p_actor_username: cleanActor,
+        p_creator_filter: creatorFilter || null
+      })
+
+      if (rpcErr) {
+        return { success: false, count: 0, message: rpcErr.message || 'Database error during bulk extension.' }
       }
-      const { data: rawRows } = await fetchQuery
-      if (rawRows && rawRows.length > 0) {
-        let allowedCreators: Set<string> | null = null
-        if (!isRootOwner) {
-          allowedCreators = await getDownlineUsernames(cleanActor, true)
-          allowedCreators.delete('debajoyti')
-        }
-        const rows = rawRows.filter((r) => {
-          const creator = (r.creator_username || '').toLowerCase()
-          return !allowedCreators || allowedCreators.has(creator)
-        })
 
-        if (rows.length === 0) {
-          return { success: true, count: 0, message: 'No active keys in your downline to extend.' }
+      if (rpcRes) {
+        if (!rpcRes.success) {
+          return { success: false, count: 0, message: rpcRes.message || 'Failed to bulk extend keys.' }
         }
 
-        if (!isRootOwner) {
-          let totalCost = 0
-          for (const r of rows) {
-            totalCost += calculateExtensionCost(days, cleanActor, Number(r.devices_max || 1))
-          }
-
-          let liveBal = 0
-          let actorFound = false
-          try {
-            const { data: actorResp } = await supabase.rpc('rpc_rymon_get_account', {
-              p_username: cleanActor
-            })
-            if (actorResp && actorResp.found) {
-              liveBal = Number(actorResp.balance || 0)
-              actorFound = true
-            }
-          } catch {}
-
-          if (!actorFound) {
-            const { data: actorAcc } = await supabase
-              .from('rymon_accounts')
-              .select('*')
-              .ilike('username', cleanActor)
-              .maybeSingle()
-            if (actorAcc) {
-              liveBal = Number(actorAcc.balance || 0)
-              actorFound = true
-            }
-          }
-
-          if (liveBal < totalCost) {
-            return {
-              success: false,
-              count: 0,
-              message: `Insufficient wallet balance! Bulk extending ${rows.length} key(s) by +${days} Day(s) costs ₹${totalCost}, but your balance is ₹${liveBal}.`
-            }
-          }
-          remainingBalance = Math.max(0, liveBal - totalCost)
-
-          const actorPass = localStorage.getItem(`rymon_pw_${cleanActor}`) || 'rymon@2026'
-          try {
-            await supabase.rpc('rpc_rymon_topup_balance', {
-              p_target_username: cleanActor,
-              p_amount: remainingBalance,
-              p_mode: 'set',
-              p_actor_username: cleanActor,
-              p_actor_password: actorPass
-            })
-          } catch {}
-
-          try {
-            await supabase
-              .from('rymon_accounts')
-              .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
-              .ilike('username', cleanActor)
-          } catch {}
-
-          // Synchronize local cache immediately
+        const remainingBalance = rpcRes.remaining_balance !== undefined ? Number(rpcRes.remaining_balance) : undefined
+        if (remainingBalance !== undefined) {
           const accounts = getStoredAccounts()
           const aIdx = accounts.findIndex((a) => (a.username || '').toLowerCase() === cleanActor.toLowerCase())
           if (aIdx !== -1) {
             accounts[aIdx].balance = remainingBalance
             saveStoredAccounts(accounts)
           }
+          try {
+            const rawSession = localStorage.getItem('rymon_session_user')
+            if (rawSession) {
+              const u = JSON.parse(rawSession)
+              if ((u.username || '').toLowerCase() === cleanActor.toLowerCase()) {
+                u.balance = remainingBalance
+                localStorage.setItem('rymon_session_user', JSON.stringify(u))
+              }
+            }
+          } catch {}
         }
 
-        for (const r of rows) {
-          const base = r.expires_at ? new Date(r.expires_at).getTime() : Date.now()
-          const nextExp = new Date(
-            Math.min(Math.max(base, Date.now()) + msToAdd, max30DaysMs)
-          ).toISOString()
-          await supabase
-            .from('rymon_licenses')
-            .update({ expires_at: nextExp, status: r.is_paused ? 'PAUSED' : 'ACTIVE' })
-            .eq('license_key', r.license_key)
-          count++
+        return {
+          success: true,
+          count: Number(rpcRes.count || 0),
+          remainingBalance,
+          message: rpcRes.message || `Successfully extended ${rpcRes.count} keys by +${days} days!`
         }
       }
-    } catch {}
+    } catch (e: any) {
+      return { success: false, count: 0, message: e?.message || 'Error executing bulk extend.' }
+    }
   }
 
   const rawLicenses = getStoredLicenses()
@@ -5691,29 +5488,6 @@ export async function createReferralCode(
         return { success: false, message: `Referral code ${code} already exists` }
       }
 
-      if (!isOwnerUser && totalFundingRequired > 0) {
-        const { data: adminAcc } = await supabase
-          .from('rymon_accounts')
-          .select('*')
-          .ilike('username', cleanOwner)
-          .maybeSingle()
-
-        const adminBal = adminAcc ? Number(adminAcc.balance || 0) : 0
-        if (adminBal < totalFundingRequired) {
-          return {
-            success: false,
-            message: `Insufficient wallet balance! Creating this invite code requires ₹${totalFundingRequired.toLocaleString('en-IN')} (₹${safeBalance} × ${safeMaxUses} uses), but your wallet has ₹${adminBal.toLocaleString('en-IN')}.`
-          }
-        }
-        remainingBalance = Math.max(0, adminBal - totalFundingRequired)
-        if (adminAcc) {
-          await supabase
-            .from('rymon_accounts')
-            .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
-            .eq('id', adminAcc.id)
-        }
-      }
-
       const storedPass = localStorage.getItem(`rymon_pw_${cleanOwner}`) || 'rymon@2026'
       const { data: rpcRes, error: insErr } = await supabase.rpc('rpc_rymon_create_referral', {
         p_code: code,
@@ -5725,7 +5499,31 @@ export async function createReferralCode(
         p_actor_password: storedPass
       })
 
-      if (!insErr && rpcRes?.success) {
+      if (insErr) {
+        return { success: false, message: insErr.message || 'Database error creating referral code.' }
+      }
+
+      if (rpcRes?.success) {
+        if (rpcRes.remaining_balance !== undefined) {
+          remainingBalance = Number(rpcRes.remaining_balance)
+          const accounts = getStoredAccounts()
+          const aIdx = accounts.findIndex((a) => (a.username || '').toLowerCase() === cleanOwner.toLowerCase())
+          if (aIdx !== -1) {
+            accounts[aIdx].balance = remainingBalance
+            saveStoredAccounts(accounts)
+          }
+          try {
+            const rawSession = localStorage.getItem('rymon_session_user')
+            if (rawSession) {
+              const u = JSON.parse(rawSession)
+              if ((u.username || '').toLowerCase() === cleanOwner.toLowerCase()) {
+                u.balance = remainingBalance
+                localStorage.setItem('rymon_session_user', JSON.stringify(u))
+              }
+            }
+          } catch {}
+        }
+
         const enrichedInserted: RymonReferral = {
           id: Date.now(),
           code,
