@@ -3000,30 +3000,52 @@ export default function RymonConnect() {
           }
           .sg-app-shell {
             overflow-x: hidden !important;
-            width: 100vw !important;
+            width: 100% !important;
             max-width: 100vw !important;
+          }
+
+          /* Global touch optimization */
+          button, a, input, select {
+            touch-action: manipulation !important;
+            -webkit-tap-highlight-color: transparent !important;
+          }
+
+          /* Prevent iOS Safari auto-zoom on inputs */
+          input[type="text"],
+          input[type="password"],
+          input[type="email"],
+          input[type="number"],
+          select {
+            font-size: 16px !important;
+          }
+
+          /* Mobile range slider enhancement */
+          input[type="range"] {
+            height: 28px !important;
+            touch-action: pan-x !important;
+            cursor: pointer !important;
           }
 
           /* 1. Header Optimization (Zero-Overlap Architectural Shield) */
           .sg-top-header {
-            padding: 8px 10px !important;
+            padding: 8px 12px !important;
             gap: 6px !important;
             position: sticky !important;
             top: 0 !important;
             z-index: 100 !important;
-            width: 100vw !important;
+            width: 100% !important;
             max-width: 100vw !important;
             box-sizing: border-box !important;
             display: flex !important;
             align-items: center !important;
             justify-content: space-between !important;
-            overflow: hidden !important;
+            overflow: visible !important;
           }
           .sg-header-left {
             gap: 6px !important;
             flex: 0 1 auto !important;
             min-width: 0 !important;
-            max-width: 44% !important;
+            max-width: none !important;
             overflow: hidden !important;
             display: flex !important;
             align-items: center !important;
@@ -3032,9 +3054,9 @@ export default function RymonConnect() {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 34px !important;
-            height: 34px !important;
-            min-width: 34px !important;
+            width: 36px !important;
+            height: 36px !important;
+            min-width: 36px !important;
             border-radius: 9px !important;
             background: rgba(168, 85, 247, 0.16) !important;
             border: 1px solid rgba(168, 85, 247, 0.35) !important;
@@ -3073,7 +3095,7 @@ export default function RymonConnect() {
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
-            max-width: 90px !important;
+            max-width: 105px !important;
             line-height: 1.15 !important;
           }
           .sg-brand-corp-text {
@@ -3083,27 +3105,28 @@ export default function RymonConnect() {
             display: none !important;
           }
           .sg-header-right {
-            gap: 4px !important;
-            flex: 0 0 auto !important;
+            gap: 5px !important;
+            flex: 1 0 auto !important;
             margin-left: auto !important;
-            max-width: 56% !important;
+            max-width: none !important;
             display: flex !important;
             align-items: center !important;
             justify-content: flex-end !important;
           }
           .sg-balance-pill {
-            padding: 3px 7px !important;
+            padding: 3px 8px !important;
             font-size: 10.5px !important;
             border-radius: 12px !important;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
             touch-action: manipulation !important;
+            cursor: pointer !important;
           }
           .sg-telemetry-pill {
-            padding: 3px 6px !important;
+            padding: 3px 7px !important;
             font-size: 9.5px !important;
             border-radius: 12px !important;
-            gap: 3px !important;
+            gap: 4px !important;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
             touch-action: manipulation !important;
@@ -3125,6 +3148,18 @@ export default function RymonConnect() {
           .sg-user-name-block {
             display: none !important;
           }
+          .sg-header-logout-btn {
+            min-width: 30px !important;
+            min-height: 30px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 13px !important;
+            border-radius: 7px !important;
+            background: rgba(239, 68, 68, 0.15) !important;
+            border: 1px solid rgba(239, 68, 68, 0.35) !important;
+            color: #fca5a5 !important;
+          }
 
           /* 2. Main Layout & Sidebar Drawer */
           .sg-main-layout {
@@ -3141,13 +3176,14 @@ export default function RymonConnect() {
             top: 0 !important;
             left: 0 !important;
             bottom: 0 !important;
-            width: 290px !important;
+            width: 300px !important;
             max-width: 86vw !important;
             z-index: 1001 !important;
             background: #0d0a18 !important;
             box-shadow: 0 0 60px rgba(0, 0, 0, 0.95), 0 0 30px rgba(168, 85, 247, 0.3) !important;
             overflow-y: auto !important;
-            padding: 16px 14px 70px !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding: 16px 14px calc(70px + env(safe-area-inset-bottom, 20px)) !important;
             border-right: 1px solid rgba(168, 85, 247, 0.35) !important;
             animation: sgSlideDrawer 0.24s cubic-bezier(0.16, 1, 0.3, 1) both !important;
           }
@@ -3173,14 +3209,15 @@ export default function RymonConnect() {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 32px !important;
-            height: 32px !important;
+            width: 36px !important;
+            height: 36px !important;
             border-radius: 8px !important;
             background: rgba(255, 255, 255, 0.08) !important;
             border: 1px solid rgba(255, 255, 255, 0.15) !important;
             color: #f8fafc !important;
-            font-size: 15px !important;
+            font-size: 16px !important;
             cursor: pointer !important;
+            touch-action: manipulation !important;
           }
           .sg-mobile-close-btn:active {
             transform: scale(0.92) !important;
@@ -3188,7 +3225,7 @@ export default function RymonConnect() {
 
           /* 3. Content Pane & Containers */
           .sg-content-pane {
-            padding: 12px 10px 85px !important;
+            padding: 12px 10px calc(85px + env(safe-area-inset-bottom, 16px)) !important;
             width: 100% !important;
             max-width: 100% !important;
             box-sizing: border-box !important;
@@ -3197,15 +3234,17 @@ export default function RymonConnect() {
           .sg-view-container {
             width: 100% !important;
             max-width: 100% !important;
+            box-sizing: border-box !important;
           }
 
           /* 4. Auth Gateway */
           .sg-auth-gate-box {
             width: 94% !important;
             max-width: 440px !important;
-            margin: 14px auto 35px !important;
-            padding: 18px 14px !important;
+            margin: 14px auto calc(40px + env(safe-area-inset-bottom, 20px)) !important;
+            padding: 20px 14px !important;
             border-radius: 14px !important;
+            box-sizing: border-box !important;
           }
           .sg-auth-tab-selector {
             gap: 4px !important;
@@ -3213,8 +3252,9 @@ export default function RymonConnect() {
             margin-bottom: 16px !important;
           }
           .sg-auth-tab-btn {
-            padding: 8px 6px !important;
-            font-size: 11px !important;
+            padding: 10px 8px !important;
+            font-size: 12px !important;
+            touch-action: manipulation !important;
           }
           .sg-auth-head {
             font-size: 18px !important;
@@ -3238,7 +3278,7 @@ export default function RymonConnect() {
           }
           .sg-remote-actions > * {
             flex: 1 1 calc(50% - 6px) !important;
-            min-height: 36px !important;
+            min-height: 38px !important;
             font-size: 11px !important;
             text-align: center !important;
             display: inline-flex !important;
@@ -3246,6 +3286,7 @@ export default function RymonConnect() {
             justify-content: center !important;
             padding: 6px 10px !important;
             box-sizing: border-box !important;
+            touch-action: manipulation !important;
           }
           .sg-telemetry-bar {
             flex-direction: column !important;
@@ -3276,6 +3317,15 @@ export default function RymonConnect() {
           .sg-column-card {
             padding: 14px 12px !important;
             border-radius: 12px !important;
+          }
+          .sg-player-status-bar {
+            padding: 12px 10px !important;
+            gap: 10px !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .sg-player-status-bar > div {
+            width: 100% !important;
           }
 
           /* 6. Form Grids (Key Gen, Settings, Top-Up) */
@@ -3340,6 +3390,7 @@ export default function RymonConnect() {
             border-radius: 12px !important;
             width: 100% !important;
             overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
           }
           .sg-data-table {
             min-width: 680px !important;
@@ -3369,14 +3420,29 @@ export default function RymonConnect() {
           }
 
           /* 9. Modals (Responsive & Scrollable) */
+          .sg-modal-overlay {
+            position: fixed !important;
+            inset: 0 !important;
+            z-index: 1200 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 16px !important;
+            background-color: rgba(0, 0, 0, 0.88) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+          }
           .sg-modal-card {
             width: 94% !important;
-            max-width: 94vw !important;
-            max-height: 88vh !important;
+            max-width: 480px !important;
+            max-height: 85vh !important;
+            max-height: 85dvh !important;
             overflow-y: auto !important;
-            padding: 20px 14px !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding: 20px 16px !important;
             border-radius: 14px !important;
             margin: auto !important;
+            box-sizing: border-box !important;
           }
 
           /* 10. Mobile Bottom Quick Bar */
@@ -3387,7 +3453,7 @@ export default function RymonConnect() {
             left: 0 !important;
             right: 0 !important;
             z-index: 990 !important;
-            background: rgba(11, 9, 20, 0.96) !important;
+            background: rgba(11, 9, 20, 0.97) !important;
             backdrop-filter: blur(20px) !important;
             -webkit-backdrop-filter: blur(20px) !important;
             border-top: 1px solid rgba(168, 85, 247, 0.3) !important;
@@ -3400,17 +3466,20 @@ export default function RymonConnect() {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
+            justify-content: center !important;
             gap: 2px !important;
             background: transparent !important;
             border: none !important;
             color: #94a3b8 !important;
             font-size: 10px !important;
             font-weight: 700 !important;
-            padding: 4px 8px !important;
+            padding: 4px 6px !important;
             border-radius: 8px !important;
             cursor: pointer !important;
             transition: all 0.18s ease !important;
-            min-width: 52px !important;
+            min-width: 48px !important;
+            touch-action: manipulation !important;
+            user-select: none !important;
           }
           .sg-mobile-bottom-tab:active {
             transform: scale(0.92) !important;
@@ -3418,6 +3487,44 @@ export default function RymonConnect() {
           .sg-mobile-bottom-tab.active {
             color: #c084fc !important;
             background: rgba(168, 85, 247, 0.16) !important;
+          }
+        }
+
+        /* ── ULTRA-COMPACT MOBILE BREAKPOINT (Narrow phones e.g. iPhone SE / Galaxy A) ── */
+        @media (max-width: 400px) {
+          .sg-top-header {
+            padding: 6px 8px !important;
+            gap: 4px !important;
+          }
+          .sg-header-left {
+            gap: 4px !important;
+          }
+          .sg-brand-title {
+            max-width: 70px !important;
+            font-size: 11.5px !important;
+          }
+          .sg-header-right {
+            gap: 3px !important;
+          }
+          .sg-balance-pill {
+            padding: 3px 5px !important;
+            font-size: 10px !important;
+          }
+          .sg-telemetry-pill {
+            padding: 3px 5px !important;
+            font-size: 9px !important;
+          }
+          .sg-telemetry-text {
+            font-size: 8.5px !important;
+          }
+          .sg-user-profile-pill {
+            padding: 2px 3px !important;
+            gap: 3px !important;
+          }
+          .sg-mobile-bottom-tab {
+            min-width: 44px !important;
+            padding: 4px 3px !important;
+            font-size: 9.5px !important;
           }
         }
 
@@ -3465,7 +3572,7 @@ export default function RymonConnect() {
             <div
               className="sg-balance-pill"
               style={styles.balancePill}
-              onClick={() => (isOwner || isAdmin) && setActiveTab('add-balance')}
+              onClick={() => (isOwner || isAdmin) && handleSelectTab('add-balance')}
               title={isOwner || isAdmin ? 'Click to manage balances' : 'Wallet balance'}
             >
               <span style={{ color: '#00d9ff', fontSize: '13px' }}>💳</span>
@@ -3507,7 +3614,13 @@ export default function RymonConnect() {
                     : (currentUser?.role ? currentUser.role.toUpperCase() : 'VIP')}
                 </span>
               </div>
-              <button onClick={handleLogout} style={styles.headerLogoutBtn} title="Logout">
+              <button
+                onClick={handleLogout}
+                style={styles.headerLogoutBtn}
+                className="sg-header-logout-btn"
+                title="Logout"
+                aria-label="Logout"
+              >
                 🚪
               </button>
             </div>
@@ -3959,14 +4072,12 @@ export default function RymonConnect() {
             </div>
 
             {/* Nav Categories */}
+            {/* Nav Categories */}
             <nav style={styles.navStack}>
               {/* Telemetry Remote */}
               <div style={styles.navCategoryHeader}>TELEMETRY & HARDWARE</div>
               <button
-                onClick={() => {
-                  setActiveTab('remote')
-                  setMobileMenuOpen(false)
-                }}
+                onClick={() => handleSelectTab('remote')}
                 style={{
                   ...styles.navItem,
                   ...(activeTab === 'remote' ? styles.navItemActive : {})
@@ -3977,20 +4088,42 @@ export default function RymonConnect() {
                 <span style={styles.cyanMiniBadge}>LIVE</span>
               </button>
 
+              {/* Streamer-Specific Utilities */}
+              {isStreamer && (
+                <>
+                  <div style={styles.navCategoryHeader}>STREAMER UTILITIES</div>
+                  <a
+                    href="https://t.me/Rymon007bot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ ...styles.navItem, textDecoration: 'none' }}
+                  >
+                    <span style={styles.navIcon}>✈️</span>
+                    <span>Telegram Bot</span>
+                    <span style={{ ...styles.cyanMiniBadge, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>SUPPORT</span>
+                  </a>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      window.dispatchEvent(new CustomEvent('replay_rymon_intro'))
+                    }}
+                    style={styles.navItem}
+                  >
+                    <span style={styles.navIcon}>🎬</span>
+                    <span>Replay Rymon Intro</span>
+                  </button>
+                </>
+              )}
 
               {/* Staff-Only Navigation Sections (Hidden from key-login Streamers) */}
               {!isStreamer && (
                 <>
-
                   {/* Reseller — Focused simplified view */}
                   {isReseller && (
                     <>
                       <div style={styles.navCategoryHeader}>DASHBOARDS</div>
                       <button
-                        onClick={() => {
-                          setActiveTab('overview')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('overview')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'overview' ? styles.navItemActive : {})
@@ -4002,10 +4135,7 @@ export default function RymonConnect() {
 
                       <div style={styles.navCategoryHeader}>LICENSE ENGINE</div>
                       <button
-                        onClick={() => {
-                          setActiveTab('generate')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('generate')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'generate' ? styles.navItemActive : {})
@@ -4015,10 +4145,7 @@ export default function RymonConnect() {
                         <span>Generate Key</span>
                       </button>
                       <button
-                        onClick={() => {
-                          setActiveTab('keys')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('keys')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'keys' ? styles.navItemActive : {})
@@ -4030,10 +4157,7 @@ export default function RymonConnect() {
 
                       <div style={styles.navCategoryHeader}>MY WALLET</div>
                       <button
-                        onClick={() => {
-                          setActiveTab('add-balance')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('add-balance')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'add-balance' ? styles.navItemActive : {})
@@ -4044,10 +4168,7 @@ export default function RymonConnect() {
                         <span style={styles.cyanMiniBadge}>WALLET</span>
                       </button>
                       <button
-                        onClick={() => {
-                          setActiveTab('advance')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('advance')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'advance' ? styles.navItemActive : {})
@@ -4064,10 +4185,7 @@ export default function RymonConnect() {
                     <>
                       <div style={styles.navCategoryHeader}>DASHBOARDS</div>
                       <button
-                        onClick={() => {
-                          setActiveTab('overview')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('overview')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'overview' ? styles.navItemActive : {})
@@ -4079,10 +4197,7 @@ export default function RymonConnect() {
 
                       <div style={styles.navCategoryHeader}>LICENSE ENGINE</div>
                       <button
-                        onClick={() => {
-                          setActiveTab('generate')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('generate')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'generate' ? styles.navItemActive : {})
@@ -4092,10 +4207,7 @@ export default function RymonConnect() {
                         <span>Generate Key</span>
                       </button>
                       <button
-                        onClick={() => {
-                          setActiveTab('keys')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('keys')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'keys' ? styles.navItemActive : {})
@@ -4106,10 +4218,7 @@ export default function RymonConnect() {
                       </button>
                       {isRootOwner && (
                         <button
-                          onClick={() => {
-                            setActiveTab('telegram')
-                            setMobileMenuOpen(false)
-                          }}
+                          onClick={() => handleSelectTab('telegram')}
                           style={{
                             ...styles.navItem,
                             ...(activeTab === 'telegram' ? styles.navItemActive : {})
@@ -4122,10 +4231,7 @@ export default function RymonConnect() {
                       )}
                       {isRootOwner && (
                         <button
-                          onClick={() => {
-                            setActiveTab('connect-api')
-                            setMobileMenuOpen(false)
-                          }}
+                          onClick={() => handleSelectTab('connect-api')}
                           style={{
                             ...styles.navItem,
                             ...(activeTab === 'connect-api' ? styles.navItemActive : {})
@@ -4136,18 +4242,10 @@ export default function RymonConnect() {
                           <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>ROOT</span>
                         </button>
                       )}
-                    </>
-                  )}
 
-                  {/* Management (Owner & Admin) */}
-                  {(isOwner || isAdmin) && (
-                    <>
                       <div style={styles.navCategoryHeader}>MANAGEMENT</div>
                       <button
-                        onClick={() => {
-                          setActiveTab('referrals')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('referrals')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'referrals' ? styles.navItemActive : {})
@@ -4158,10 +4256,7 @@ export default function RymonConnect() {
                         <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER' : 'ADMIN'}</span>
                       </button>
                       <button
-                        onClick={() => {
-                          setActiveTab('users')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('users')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'users' ? styles.navItemActive : {})
@@ -4171,10 +4266,7 @@ export default function RymonConnect() {
                         <span>{isOwner ? 'Users (All)' : 'My Resellers'}</span>
                       </button>
                       <button
-                        onClick={() => {
-                          setActiveTab('add-balance')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('add-balance')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'add-balance' ? styles.navItemActive : {})
@@ -4186,10 +4278,7 @@ export default function RymonConnect() {
                       </button>
 
                       <button
-                        onClick={() => {
-                          setActiveTab('advance')
-                          setMobileMenuOpen(false)
-                        }}
+                        onClick={() => handleSelectTab('advance')}
                         style={{
                           ...styles.navItem,
                           ...(activeTab === 'advance' ? styles.navItemActive : {})
@@ -4198,10 +4287,84 @@ export default function RymonConnect() {
                         <span style={styles.navIcon}>💰</span>
                         <span>{isOwner ? 'Pricing & Rates' : 'Reseller Pricing'}</span>
                       </button>
+
+                      <div style={styles.navCategoryHeader}>SYSTEM UTILITIES</div>
+                      {isOwner && (
+                        <button
+                          onClick={() => handleSelectTab('apps')}
+                          style={{
+                            ...styles.navItem,
+                            ...(activeTab === 'apps' ? styles.navItemActive : {})
+                          }}
+                        >
+                          <span style={styles.navIcon}>📱</span>
+                          <span>App Manager</span>
+                          <span style={styles.cyanMiniBadge}>OWNER</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleSelectTab('delete')}
+                        style={{
+                          ...styles.navItem,
+                          ...(activeTab === 'delete' ? styles.navItemActive : {})
+                        }}
+                      >
+                        <span style={styles.navIcon}>🧹</span>
+                        <span>Clean & Purge Keys</span>
+                      </button>
+                      {isRootOwner && (
+                        <button
+                          onClick={() => handleSelectTab('sql-setup')}
+                          style={{
+                            ...styles.navItem,
+                            ...(activeTab === 'sql-setup' ? styles.navItemActive : {})
+                          }}
+                        >
+                          <span style={styles.navIcon}>🛠️</span>
+                          <span>SQL Setup</span>
+                          <span style={styles.cyanMiniBadge}>ROOT</span>
+                        </button>
+                      )}
                     </>
                   )}
                 </>
               )}
+
+              {/* Bottom Drawer Actions */}
+              <div style={{ marginTop: '20px', paddingTop: '14px', borderTop: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                <a
+                  href="https://t.me/Rymon007bot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    ...styles.navItem,
+                    textDecoration: 'none',
+                    color: '#38bdf8',
+                    marginBottom: '8px'
+                  }}
+                >
+                  <span style={styles.navIcon}>✈️</span>
+                  <span>Telegram Support</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    handleLogout()
+                  }}
+                  style={{
+                    ...styles.navItem,
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    color: '#fca5a5',
+                    fontWeight: 800,
+                    justifyContent: 'center'
+                  }}
+                >
+                  <span style={styles.navIcon}>🚪</span>
+                  <span>Log Out</span>
+                </button>
+              </div>
             </nav>
           </aside>
 
@@ -4225,7 +4388,7 @@ export default function RymonConnect() {
                   <div
                     onClick={() => {
                       setKeyStatusFilter('PLAYING')
-                      setActiveTab('keys')
+                      handleSelectTab('keys')
                     }}
                     style={{
                       ...styles.statCard,
@@ -4244,7 +4407,7 @@ export default function RymonConnect() {
                   <div
                     onClick={() => {
                       setKeyStatusFilter('ALL')
-                      setActiveTab('keys')
+                      handleSelectTab('keys')
                     }}
                     style={{ ...styles.statCard, cursor: 'pointer' }}
                     title="Click to view all keys"
@@ -4258,7 +4421,7 @@ export default function RymonConnect() {
                   <div
                     onClick={() => {
                       setKeyStatusFilter('ACTIVE')
-                      setActiveTab('keys')
+                      handleSelectTab('keys')
                     }}
                     style={{ ...styles.statCard, cursor: 'pointer' }}
                     title="Click to view active keys"
@@ -4272,7 +4435,7 @@ export default function RymonConnect() {
                   <div
                     onClick={() => {
                       setKeyStatusFilter('WAITING')
-                      setActiveTab('keys')
+                      handleSelectTab('keys')
                     }}
                     style={{
                       ...styles.statCard,
@@ -4290,7 +4453,7 @@ export default function RymonConnect() {
                   <div
                     onClick={() => {
                       setKeyStatusFilter('PAUSED')
-                      setActiveTab('keys')
+                      handleSelectTab('keys')
                     }}
                     style={{ ...styles.statCard, cursor: 'pointer' }}
                     title="Click to view Paused keys"
@@ -4304,7 +4467,7 @@ export default function RymonConnect() {
                   <div
                     onClick={() => {
                       setKeyStatusFilter('EXPIRED')
-                      setActiveTab('keys')
+                      handleSelectTab('keys')
                     }}
                     style={{
                       ...styles.statCard,
@@ -4323,6 +4486,7 @@ export default function RymonConnect() {
 
                 {/* Live Player Status Bar (Playing Now vs Not Playing Breakdown) */}
                 <div
+                  className="sg-player-status-bar"
                   style={{
                     backgroundColor: 'rgba(13, 17, 26, 0.88)',
                     border: '1px solid rgba(0, 217, 255, 0.28)',
@@ -4385,7 +4549,7 @@ export default function RymonConnect() {
                           key={k.license_key}
                           onClick={() => {
                             if (handleSelectRemoteKey(k.license_key)) {
-                              setActiveTab('remote')
+                              handleSelectTab('remote')
                             }
                           }}
                           style={{
@@ -4415,7 +4579,7 @@ export default function RymonConnect() {
                     </div>
                     <div className="sg-quick-grid" style={styles.quickGrid}>
                       <button
-                        onClick={() => setActiveTab('remote')}
+                        onClick={() => handleSelectTab('remote')}
                         style={styles.quickActionCard}
                       >
                         <div style={styles.quickActionIcon}>⚡</div>
@@ -4423,7 +4587,7 @@ export default function RymonConnect() {
                         <div style={styles.quickActionSub}>Direct Android Controller</div>
                       </button>
                       <button
-                        onClick={() => setActiveTab('generate')}
+                        onClick={() => handleSelectTab('generate')}
                         style={styles.quickActionCard}
                       >
                         <div style={styles.quickActionIcon}>🔑</div>
@@ -4464,7 +4628,7 @@ export default function RymonConnect() {
                         <div style={styles.quickActionSub}>Unbind All Devices Instantly</div>
                       </button>
                       <button
-                        onClick={() => setActiveTab('keys')}
+                        onClick={() => handleSelectTab('keys')}
                         style={styles.quickActionCard}
                       >
                         <div style={styles.quickActionIcon}>🗂️</div>
@@ -5869,7 +6033,7 @@ export default function RymonConnect() {
                                   <button
                                     onClick={() => {
                                       if (handleSelectRemoteKey(k.license_key)) {
-                                        setActiveTab('remote')
+                                        handleSelectTab('remote')
                                       }
                                     }}
                                     style={{ ...styles.actionIconBtn, color: '#00d9ff' }}
@@ -5897,7 +6061,7 @@ export default function RymonConnect() {
                                   <button
                                     onClick={() => {
                                       setTargetExtendKey(k.license_key)
-                                      setActiveTab('extend')
+                                      handleSelectTab('extend')
                                     }}
                                     style={{ ...styles.actionIconBtn, color: '#a855f7' }}
                                     title="Extend License Duration"
@@ -6115,7 +6279,7 @@ export default function RymonConnect() {
                                     <button
                                       onClick={() => {
                                         setTopUpTargetUser(u.username)
-                                        setActiveTab('add-balance')
+                                        handleSelectTab('add-balance')
                                       }}
                                       style={styles.actionIconBtn}
                                       title={isOwner ? 'Top up balance (Free Mint)' : 'Transfer balance from your wallet'}
@@ -6125,7 +6289,7 @@ export default function RymonConnect() {
                                     <button
                                       onClick={() => {
                                         handleSelectTargetPriceUser(u.username)
-                                        setActiveTab('advance')
+                                        handleSelectTab('advance')
                                       }}
                                       style={{ ...styles.actionIconBtn, color: '#fde047' }}
                                       title="Set Individual Key Prices for this User"
@@ -9230,7 +9394,7 @@ else:
                                   onClick={() => {
                                     setGenGame(app.name)
                                     setIsCustomAppMode(false)
-                                    setActiveTab('generate')
+                                    handleSelectTab('generate')
                                   }}
                                   style={{
                                     padding: '6px 14px',
