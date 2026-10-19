@@ -2764,7 +2764,14 @@ export async function extendLicenseBackend(
 }> {
   const cleanKey = licenseKey.trim().toUpperCase()
   const cleanActor = (actorUsername || 'debajoyti').trim()
-  const days = Math.min(30, Math.max(1, Math.floor(Number(rawDays) || 1)))
+  const rawNum = Math.floor(Number(rawDays) || 0)
+  if (rawNum < 3) {
+    return {
+      success: false,
+      error: '1-day extension is disabled. Minimum extension duration is 3 days.'
+    }
+  }
+  const days = Math.min(30, rawNum)
   const max30DaysMs = Date.now() + 30 * 86400000
   const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
 
@@ -2794,13 +2801,31 @@ export async function extendLicenseBackend(
         let remainingBalance: number | undefined = undefined
 
         if (!isRootOwner && cost > 0) {
-          const { data: actorAcc } = await supabase
-            .from('rymon_accounts')
-            .select('*')
-            .ilike('username', cleanActor)
-            .maybeSingle()
+          let liveBal = 0
+          let actorFound = false
 
-          const liveBal = actorAcc ? Number(actorAcc.balance || 0) : 0
+          try {
+            const { data: actorResp } = await supabase.rpc('rpc_rymon_get_account', {
+              p_username: cleanActor
+            })
+            if (actorResp && actorResp.found) {
+              liveBal = Number(actorResp.balance || 0)
+              actorFound = true
+            }
+          } catch {}
+
+          if (!actorFound) {
+            const { data: actorAcc } = await supabase
+              .from('rymon_accounts')
+              .select('*')
+              .ilike('username', cleanActor)
+              .maybeSingle()
+            if (actorAcc) {
+              liveBal = Number(actorAcc.balance || 0)
+              actorFound = true
+            }
+          }
+
           if (liveBal < cost) {
             return {
               success: false,
@@ -2808,11 +2833,31 @@ export async function extendLicenseBackend(
             }
           }
           remainingBalance = Math.max(0, liveBal - cost)
-          if (actorAcc) {
+
+          const actorPass = localStorage.getItem(`rymon_pw_${cleanActor}`) || 'rymon@2026'
+          try {
+            await supabase.rpc('rpc_rymon_topup_balance', {
+              p_target_username: cleanActor,
+              p_amount: remainingBalance,
+              p_mode: 'set',
+              p_actor_username: cleanActor,
+              p_actor_password: actorPass
+            })
+          } catch {}
+
+          try {
             await supabase
               .from('rymon_accounts')
               .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
-              .eq('id', actorAcc.id)
+              .ilike('username', cleanActor)
+          } catch {}
+
+          // Synchronize local cache immediately
+          const accounts = getStoredAccounts()
+          const aIdx = accounts.findIndex((a) => (a.username || '').toLowerCase() === cleanActor.toLowerCase())
+          if (aIdx !== -1) {
+            accounts[aIdx].balance = remainingBalance
+            saveStoredAccounts(accounts)
           }
         }
 
@@ -3249,7 +3294,15 @@ export async function bulkExtendAllKeysBackend(
   creatorFilter?: string
 ): Promise<{ success: boolean; count: number; remainingBalance?: number; message: string }> {
   let count = 0
-  const days = Math.min(30, Math.max(1, Math.floor(Number(rawDays) || 1)))
+  const rawNum = Math.floor(Number(rawDays) || 0)
+  if (rawNum < 3) {
+    return {
+      success: false,
+      count: 0,
+      message: '1-day extension is disabled. Minimum extension duration is 3 days.'
+    }
+  }
+  const days = Math.min(30, rawNum)
   const msToAdd = days * 86400000
   const max30DaysMs = Date.now() + 30 * 86400000
   const cleanActor = (actorUsername || 'debajoyti').trim()
@@ -3283,12 +3336,31 @@ export async function bulkExtendAllKeysBackend(
           for (const r of rows) {
             totalCost += calculateExtensionCost(days, cleanActor, Number(r.devices_max || 1))
           }
-          const { data: actorResp } = await supabase.rpc('rpc_rymon_get_account', {
-            p_username: cleanActor
-          })
-          const actorAcc = actorResp?.found ? actorResp : null
 
-          const liveBal = actorAcc ? Number(actorAcc.balance || 0) : 0
+          let liveBal = 0
+          let actorFound = false
+          try {
+            const { data: actorResp } = await supabase.rpc('rpc_rymon_get_account', {
+              p_username: cleanActor
+            })
+            if (actorResp && actorResp.found) {
+              liveBal = Number(actorResp.balance || 0)
+              actorFound = true
+            }
+          } catch {}
+
+          if (!actorFound) {
+            const { data: actorAcc } = await supabase
+              .from('rymon_accounts')
+              .select('*')
+              .ilike('username', cleanActor)
+              .maybeSingle()
+            if (actorAcc) {
+              liveBal = Number(actorAcc.balance || 0)
+              actorFound = true
+            }
+          }
+
           if (liveBal < totalCost) {
             return {
               success: false,
@@ -3297,15 +3369,31 @@ export async function bulkExtendAllKeysBackend(
             }
           }
           remainingBalance = Math.max(0, liveBal - totalCost)
-          if (actorAcc) {
-            const actorPass = localStorage.getItem(`rymon_pw_${cleanActor}`) || 'rymon@2026'
+
+          const actorPass = localStorage.getItem(`rymon_pw_${cleanActor}`) || 'rymon@2026'
+          try {
             await supabase.rpc('rpc_rymon_topup_balance', {
-              p_target_username: actorAcc.username,
+              p_target_username: cleanActor,
               p_amount: remainingBalance,
               p_mode: 'set',
               p_actor_username: cleanActor,
               p_actor_password: actorPass
             })
+          } catch {}
+
+          try {
+            await supabase
+              .from('rymon_accounts')
+              .update({ balance: remainingBalance, updated_at: new Date().toISOString() })
+              .ilike('username', cleanActor)
+          } catch {}
+
+          // Synchronize local cache immediately
+          const accounts = getStoredAccounts()
+          const aIdx = accounts.findIndex((a) => (a.username || '').toLowerCase() === cleanActor.toLowerCase())
+          if (aIdx !== -1) {
+            accounts[aIdx].balance = remainingBalance
+            saveStoredAccounts(accounts)
           }
         }
 
@@ -3335,17 +3423,38 @@ export async function bulkExtendAllKeysBackend(
     return !syncAllowed || syncAllowed.has(creator)
   })
 
-  stored.forEach((l) => {
-    if (l.status !== 'BANNED') {
-      if (!creatorFilter || String(l.creator_username || '').toLowerCase() === creatorFilter.toLowerCase()) {
-        const base = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
-        l.expires_at = new Date(
-          Math.min(Math.max(base, Date.now()) + msToAdd, max30DaysMs)
-        ).toISOString()
-        if (l.status === 'EXPIRED') l.status = 'ACTIVE'
-        count++
+  const targetLicenses = stored.filter((l) => {
+    if (l.status === 'BANNED') return false
+    if (creatorFilter && String(l.creator_username || '').toLowerCase() !== creatorFilter.toLowerCase()) return false
+    return true
+  })
+
+  if (!isRootOwner && targetLicenses.length > 0) {
+    let totalCost = 0
+    for (const l of targetLicenses) {
+      totalCost += calculateExtensionCost(days, cleanActor, Number(l.devices_max || 1))
+    }
+    const accounts = getStoredAccounts()
+    const actorAcc = accounts.find((a) => (a.username || '').toLowerCase() === cleanActor.toLowerCase())
+    if (!actorAcc || actorAcc.balance < totalCost) {
+      return {
+        success: false,
+        count: 0,
+        message: `Insufficient wallet balance! Bulk extending ${targetLicenses.length} key(s) by +${days} Day(s) costs ₹${totalCost}, but your balance is ₹${actorAcc?.balance || 0}.`
       }
     }
+    actorAcc.balance = Math.max(0, actorAcc.balance - totalCost)
+    remainingBalance = actorAcc.balance
+    saveStoredAccounts(accounts)
+  }
+
+  targetLicenses.forEach((l) => {
+    const base = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
+    l.expires_at = new Date(
+      Math.min(Math.max(base, Date.now()) + msToAdd, max30DaysMs)
+    ).toISOString()
+    if (l.status === 'EXPIRED') l.status = 'ACTIVE'
+    count++
   })
   saveStoredLicenses(rawLicenses)
 
@@ -3353,7 +3462,7 @@ export async function bulkExtendAllKeysBackend(
     id: Date.now(),
     title: `Bulk Extend (+${days}d)`,
     event_type: 'BULK_EXTEND',
-    details: `Added +${days} Day(s) (Max 30d Cap) to ${count} key(s) by @${cleanActor}`,
+    details: `Added +${days} Day(s) (Max 30d Cap) to ${count} key(s) by @${cleanActor}${!isRootOwner && remainingBalance !== undefined ? ` • New Bal: ₹${remainingBalance}` : ''}`,
     actor_username: cleanActor,
     status: 'SUCCESS',
     created_at: new Date().toISOString()

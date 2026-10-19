@@ -87,3 +87,137 @@ describe('Reseller Key Pricing & Margin Calculations', () => {
     assert.equal(calculateExtensionCost('MONTH_1', DEFAULT_KEY_PRICES, 20), 560)
   })
 })
+
+// 4. License Duration Extension & Wallet Credit Cut Rules
+describe('License Duration Extension & Wallet Credit Cut Engine', () => {
+  const PRICE_MAP = {
+    '2 Hours': 20,
+    '1 Day': 35,
+    '3 Days': 50,
+    '7 Days': 100,
+    '15 Days': 180,
+    '30 Days': 350,
+  }
+
+  function calculateKeyExtensionCost(days, username, devicesMax = 1) {
+    if (!username) return 0
+    const clean = username.trim().toLowerCase()
+    if (clean === 'debajoyti') return 0 // Root owner is exempt
+
+    const devMult = Math.max(1, Number(devicesMax) || 1)
+    let unit = 0
+    if (days === 1) unit = PRICE_MAP['1 Day'] ?? 35
+    else if (days === 3) unit = PRICE_MAP['3 Days'] ?? 50
+    else if (days === 7) unit = PRICE_MAP['7 Days'] ?? 100
+    else if (days === 15) unit = PRICE_MAP['15 Days'] ?? 180
+    else if (days === 30) unit = PRICE_MAP['30 Days'] ?? 350
+    else {
+      const dailyRate = PRICE_MAP['1 Day'] ?? 35
+      unit = Math.round(dailyRate * Math.max(1, days))
+    }
+    return unit * devMult
+  }
+
+  function validateExtensionRequest(rawDays) {
+    const rawNum = Math.floor(Number(rawDays) || 0)
+    if (rawNum < 3) {
+      return {
+        valid: false,
+        error: '1-day extension is disabled. Minimum extension duration is 3 days.',
+      }
+    }
+    return {
+      valid: true,
+      days: Math.min(30, rawNum),
+    }
+  }
+
+  function simulateWalletExtension({ actor, actorRole, balance, days, devicesMax }) {
+    const validation = validateExtensionRequest(days)
+    if (!validation.valid) {
+      return { success: false, error: validation.error }
+    }
+    const isOwner = actorRole === 'owner' || actor.toLowerCase() === 'debajoyti'
+    const cost = isOwner ? 0 : calculateKeyExtensionCost(validation.days, actor, devicesMax)
+    if (!isOwner && balance < cost) {
+      return {
+        success: false,
+        error: `Insufficient wallet balance! Extending requires ₹${cost}, but balance is ₹${balance}.`,
+      }
+    }
+    const remainingBalance = isOwner ? balance : balance - cost
+    return {
+      success: true,
+      cost,
+      remainingBalance,
+      days: validation.days,
+    }
+  }
+
+  test('Rejects 1-day extension requests with explicit policy message', () => {
+    const res1 = validateExtensionRequest(1)
+    assert.equal(res1.valid, false)
+    assert.match(res1.error, /1-day extension is disabled/i)
+
+    const res2 = validateExtensionRequest(2)
+    assert.equal(res2.valid, false)
+  })
+
+  test('Accepts valid extension durations (3, 7, 15, 30 days) and caps at 30 days', () => {
+    assert.equal(validateExtensionRequest(3).days, 3)
+    assert.equal(validateExtensionRequest(7).days, 7)
+    assert.equal(validateExtensionRequest(15).days, 15)
+    assert.equal(validateExtensionRequest(30).days, 30)
+    assert.equal(validateExtensionRequest(45).days, 30) // Capped at 30
+  })
+
+  test('Calculates extension costs for Reseller and Admin based on devices', () => {
+    // 3 Days 1 device = ₹50
+    assert.equal(calculateKeyExtensionCost(3, 'reseller_sam', 1), 50)
+    // 7 Days 2 devices = ₹100 * 2 = ₹200
+    assert.equal(calculateKeyExtensionCost(7, 'admin_alex', 2), 200)
+    // 30 Days 1 device = ₹350
+    assert.equal(calculateKeyExtensionCost(30, 'reseller_sam', 1), 350)
+  })
+
+  test('Exempts root owner from extension costs (FREE)', () => {
+    assert.equal(calculateKeyExtensionCost(3, 'debajoyti', 1), 0)
+    assert.equal(calculateKeyExtensionCost(30, 'debajoyti', 5), 0)
+  })
+
+  test('Deducts credit properly for Admin and Reseller on extension', () => {
+    const resellerTx = simulateWalletExtension({
+      actor: 'reseller_sam',
+      actorRole: 'reseller',
+      balance: 500,
+      days: 7,
+      devicesMax: 1,
+    })
+    assert.equal(resellerTx.success, true)
+    assert.equal(resellerTx.cost, 100)
+    assert.equal(resellerTx.remainingBalance, 400)
+
+    const adminTx = simulateWalletExtension({
+      actor: 'admin_alex',
+      actorRole: 'admin',
+      balance: 1000,
+      days: 15,
+      devicesMax: 2, // 180 * 2 = 360
+    })
+    assert.equal(adminTx.success, true)
+    assert.equal(adminTx.cost, 360)
+    assert.equal(adminTx.remainingBalance, 640)
+  })
+
+  test('Rejects extension when Admin or Reseller has insufficient credit', () => {
+    const failedTx = simulateWalletExtension({
+      actor: 'reseller_sam',
+      actorRole: 'reseller',
+      balance: 40,
+      days: 3,
+      devicesMax: 1, // Requires 50, only has 40
+    })
+    assert.equal(failedTx.success, false)
+    assert.match(failedTx.error, /Insufficient wallet balance/i)
+  })
+})

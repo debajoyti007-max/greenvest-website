@@ -165,6 +165,14 @@ export default function RymonConnect() {
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
+  const handleSelectTab = (tab: TabType) => {
+    setActiveTab(tab)
+    setMobileMenuOpen(false)
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'instant' })
+    }
+  }
+
   // Auth Gateway State (Dual Mode: Staff Username/Password vs Streamer Key)
   const [authMode, setAuthMode] = useState<'staff' | 'key'>('staff')
   const [staffUsername, setStaffUsername] = useState('')
@@ -276,7 +284,7 @@ export default function RymonConnect() {
   const [targetDeleteUser, setTargetDeleteUser] = useState('__ALL__')
   const [deleteKeyType, setDeleteKeyType] = useState<'expired' | 'unused' | 'all'>('expired')
   const [targetExtendKey, setTargetExtendKey] = useState('')
-  const [extendAmount, setExtendAmount] = useState(30)
+  const [extendAmount, setExtendAmount] = useState(3)
   const [actionSuccessMsg, setActionSuccessMsg] = useState('')
 
   // Advanced System Toggles & Sovereign Security Policy
@@ -2176,8 +2184,19 @@ export default function RymonConnect() {
       alert('Please select a target key.')
       return
     }
+    if (extendAmount < 3) {
+      alert('1-day extension is disabled. Minimum extension duration is 3 days.')
+      return
+    }
     if (targetExtendKey === '__ALL__') {
       await handleBulkExtendAllKeys(extendAmount)
+      return
+    }
+    const selectedKey = keysList.find((k) => k.license_key === targetExtendKey)
+    const cost = isOwner ? 0 : calculateExtensionCost(extendAmount, currentUser?.username, selectedKey?.devices_max || 1)
+    const currentBal = walletBalance ?? currentUser?.balance ?? 0
+    if (!isOwner && currentBal < cost) {
+      alert(`Insufficient wallet balance! Extending this key by +${extendAmount} days costs ₹${cost}, but your balance is ₹${currentBal}.`)
       return
     }
     const res = await extendLicenseBackend(
@@ -2508,7 +2527,35 @@ export default function RymonConnect() {
   }
 
   const handleBulkExtendAllKeys = async (days: number) => {
+    if (days < 3) {
+      alert('1-day extension is disabled. Minimum extension duration is 3 days.')
+      return
+    }
     const creatorFilter = currentUser?.role === 'reseller' ? currentUser.username : undefined
+    const activeTargets = keysList.filter((k) => {
+      if (k.status === 'BANNED') return false
+      if (creatorFilter && (k.creator_username || '').toLowerCase() !== creatorFilter.toLowerCase()) return false
+      return true
+    })
+    if (activeTargets.length === 0) {
+      showToast('⚠️ No active keys found in your downline to extend.')
+      return
+    }
+    const totalCost = isOwner
+      ? 0
+      : activeTargets.reduce(
+          (sum, k) => sum + calculateExtensionCost(days, currentUser?.username, k.devices_max || 1),
+          0
+        )
+    const currentBal = walletBalance ?? currentUser?.balance ?? 0
+    if (!isOwner && currentBal < totalCost) {
+      alert(`Insufficient wallet balance! Bulk extending ${activeTargets.length} key(s) by +${days} days costs ₹${totalCost.toLocaleString('en-IN')}, but your balance is ₹${currentBal.toLocaleString('en-IN')}.`)
+      return
+    }
+    const costNotice = isOwner ? 'FREE (Owner)' : `₹${totalCost.toLocaleString('en-IN')} (Bal: ₹${currentBal.toLocaleString('en-IN')})`
+    if (!confirm(`Confirm bulk extending ${activeTargets.length} key(s) by +${days} Days?\nWallet Deduction: ${costNotice}`)) {
+      return
+    }
     const res = await bulkExtendAllKeysBackend(days, currentUser?.username || 'debajoyti', creatorFilter)
     if (res.success) {
       if (res.remainingBalance !== undefined && currentUser) {
@@ -5518,7 +5565,7 @@ export default function RymonConnect() {
                       <span>🔄</span> RESET ALL HWID
                     </button>
                     <button
-                      onClick={() => handleBulkExtendAllKeys(1)}
+                      onClick={() => handleBulkExtendAllKeys(3)}
                       style={{
                         padding: '6px 12px',
                         borderRadius: '8px',
@@ -5533,7 +5580,7 @@ export default function RymonConnect() {
                         gap: '5px'
                       }}
                     >
-                      <span>➕</span> +1 DAY ALL
+                      <span>➕</span> +3 DAYS ALL
                     </button>
                     <button
                       onClick={() => handleQuickBulkDelete('expired')}
@@ -6375,10 +6422,9 @@ export default function RymonConnect() {
                       </label>
                       <select
                         value={extendAmount}
-                        onChange={(e) => setExtendAmount(Math.min(30, parseInt(e.target.value) || 30))}
+                        onChange={(e) => setExtendAmount(Math.min(30, Math.max(3, parseInt(e.target.value) || 3)))}
                         style={styles.selectInput}
                       >
-                        <option value="1">1 Day</option>
                         <option value="3">3 Days</option>
                         <option value="7">7 Days</option>
                         <option value="15">15 Days</option>
@@ -6403,7 +6449,8 @@ export default function RymonConnect() {
                         0
                       )
                       const finalCost = isOwner ? 0 : isBulkAll ? bulkCost : targetExtendKey ? singleCost : 0
-                      const actorWallet = currentUser?.balance ?? 0
+                      const actorWallet = walletBalance ?? currentUser?.balance ?? 0
+                      const isInsufficient = !isOwner && finalCost > actorWallet
 
                       return (
                         <div
@@ -6425,7 +6472,7 @@ export default function RymonConnect() {
                             style={{
                               fontSize: '14px',
                               fontWeight: 800,
-                              color: isOwner ? '#fde047' : finalCost > actorWallet ? '#ef4444' : '#05df72'
+                              color: isOwner ? '#fde047' : isInsufficient ? '#ef4444' : '#05df72'
                             }}
                           >
                             {isOwner
