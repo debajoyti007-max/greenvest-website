@@ -284,7 +284,7 @@ export default function RymonConnect() {
   const [targetDeleteUser, setTargetDeleteUser] = useState('__ALL__')
   const [deleteKeyType, setDeleteKeyType] = useState<'expired' | 'unused' | 'all'>('expired')
   const [targetExtendKey, setTargetExtendKey] = useState('')
-  const [extendAmount, setExtendAmount] = useState(3)
+  const [extendAmount, setExtendAmount] = useState(7)
   const [actionSuccessMsg, setActionSuccessMsg] = useState('')
 
   // Advanced System Toggles & Sovereign Security Policy
@@ -893,12 +893,7 @@ export default function RymonConnect() {
         if (vipState && isMounted) {
           const pingCalc = Math.max(1, Math.round(performance.now() - t0))
           setVipPingMs(pingCalc)
-          if (pingCalc > 1200) {
-            // Cold boot detected on container wakeup - keep steady-state indicator warm
-            setPing(Math.min(90, Math.floor(40 + Math.random() * 20)))
-          } else {
-            setPing(pingCalc)
-          }
+          setPing(pingCalc)
           const mergedVip: StreamerControlRecord = {
             ...baseRecord,
             aim_silent: vipState.aim_silent ?? baseRecord.aim_silent,
@@ -1051,13 +1046,44 @@ export default function RymonConnect() {
     return () => clearInterval(interval)
   }, [expiryDate])
 
-  // 5. Dynamic Ping Telemetry & Cold-Boot Warmer
+  // 5. Dynamic Ping Telemetry & Real Live Network Latency Probe
   useEffect(() => {
     warmRenderVipBridge()
-    const interval = setInterval(() => {
-      setPing(Math.floor(22 + Math.random() * 14))
-    }, 5000)
-    return () => clearInterval(interval)
+    let isCancelled = false
+
+    const probeLivePing = async () => {
+      const t0 = performance.now()
+      try {
+        await fetch('https://rymon-telegram-bot.onrender.com/', {
+          method: 'GET',
+          mode: 'no-cors',
+          cache: 'no-store'
+        })
+        const measured = Math.max(1, Math.round(performance.now() - t0))
+        if (!isCancelled) {
+          setPing(measured)
+        }
+      } catch {
+        try {
+          const t1 = performance.now()
+          await fetch(window.location.origin + '/favicon.svg?t=' + Date.now(), {
+            method: 'HEAD',
+            cache: 'no-store'
+          })
+          const fallbackMeasured = Math.max(1, Math.round(performance.now() - t1))
+          if (!isCancelled) {
+            setPing(fallbackMeasured)
+          }
+        } catch {}
+      }
+    }
+
+    probeLivePing()
+    const interval = setInterval(probeLivePing, 8000)
+    return () => {
+      isCancelled = true
+      clearInterval(interval)
+    }
   }, [])
 
   // 6. REAL AUTHENTICATION HANDLERS
@@ -2184,8 +2210,8 @@ export default function RymonConnect() {
       alert('Please select a target key.')
       return
     }
-    if (extendAmount < 3) {
-      alert('1-day extension is disabled. Minimum extension duration is 3 days.')
+    if (extendAmount < 7) {
+      alert('Extension under 7 days is disabled. Minimum extension duration is 7 days.')
       return
     }
     if (targetExtendKey === '__ALL__') {
@@ -2527,8 +2553,8 @@ export default function RymonConnect() {
   }
 
   const handleBulkExtendAllKeys = async (days: number) => {
-    if (days < 3) {
-      alert('1-day extension is disabled. Minimum extension duration is 3 days.')
+    if (days < 7) {
+      alert('Extension under 7 days is disabled. Minimum extension duration is 7 days.')
       return
     }
     const creatorFilter = currentUser?.role === 'reseller' ? currentUser.username : undefined
@@ -5729,7 +5755,7 @@ export default function RymonConnect() {
                       <span>🔄</span> RESET ALL HWID
                     </button>
                     <button
-                      onClick={() => handleBulkExtendAllKeys(3)}
+                      onClick={() => handleBulkExtendAllKeys(7)}
                       style={{
                         padding: '6px 12px',
                         borderRadius: '8px',
@@ -5744,7 +5770,7 @@ export default function RymonConnect() {
                         gap: '5px'
                       }}
                     >
-                      <span>➕</span> +3 DAYS ALL
+                      <span>➕</span> +7 DAYS ALL
                     </button>
                     <button
                       onClick={() => handleQuickBulkDelete('expired')}
@@ -6586,10 +6612,9 @@ export default function RymonConnect() {
                       </label>
                       <select
                         value={extendAmount}
-                        onChange={(e) => setExtendAmount(Math.min(30, Math.max(3, parseInt(e.target.value) || 3)))}
+                        onChange={(e) => setExtendAmount(Math.min(30, Math.max(7, parseInt(e.target.value) || 7)))}
                         style={styles.selectInput}
                       >
-                        <option value="3">3 Days</option>
                         <option value="7">7 Days</option>
                         <option value="15">15 Days</option>
                         <option value="30">30 Days (Max Cap)</option>

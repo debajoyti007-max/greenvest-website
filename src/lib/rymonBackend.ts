@@ -2765,10 +2765,10 @@ export async function extendLicenseBackend(
   const cleanKey = licenseKey.trim().toUpperCase()
   const cleanActor = (actorUsername || 'debajoyti').trim()
   const rawNum = Math.floor(Number(rawDays) || 0)
-  if (rawNum < 3) {
+  if (rawNum < 7) {
     return {
       success: false,
-      error: '1-day extension is disabled. Minimum extension duration is 3 days.'
+      error: 'Extension duration under 7 days is disabled. Minimum extension duration is 7 days.'
     }
   }
   const days = Math.min(30, rawNum)
@@ -3295,11 +3295,11 @@ export async function bulkExtendAllKeysBackend(
 ): Promise<{ success: boolean; count: number; remainingBalance?: number; message: string }> {
   let count = 0
   const rawNum = Math.floor(Number(rawDays) || 0)
-  if (rawNum < 3) {
+  if (rawNum < 7) {
     return {
       success: false,
       count: 0,
-      message: '1-day extension is disabled. Minimum extension duration is 3 days.'
+      message: 'Extension duration under 7 days is disabled. Minimum extension duration is 7 days.'
     }
   }
   const days = Math.min(30, rawNum)
@@ -4928,7 +4928,7 @@ export async function pollAndReplyTelegramBotCommands(
         } else if (lowerText.startsWith('/extend')) {
           const parts = text.split(/\s+/)
           const targetKey = (parts[1] || '').trim().toUpperCase()
-          const days = Math.min(30, Math.max(1, parseInt(parts[2] || '1') || 1))
+          const days = Math.min(30, Math.max(1, parseInt(parts[2] || '7') || 7))
           if (!targetKey) {
             await dispatchTelegramMessage(
               OFFICIAL_TELEGRAM_BOT_TOKEN,
