@@ -5,7 +5,6 @@ import {
   type RymonLicense,
   type RymonActivity,
   type StreamerControlRecord,
-  type TelegramConfig,
   loginWithCredentials,
   verifyLicenseKey,
   fetchAllLicenses,
@@ -19,21 +18,7 @@ import {
   bulkDeleteKeysBackend,
   toggleBanStatusBackend,
   extendLicenseBackend,
-  checkSupabaseSchemaStatus,
-  fetchTelegramConfigBackend,
-  saveTelegramConfigBackend,
-  dispatchTelegramMessage,
-  OFFICIAL_TELEGRAM_BOT_NAME,
-  OFFICIAL_TELEGRAM_BOT_USERNAME,
-  OFFICIAL_TELEGRAM_BOT_TOKEN,
-  OFFICIAL_OWNER_CHAT_ID,
   selfServiceResetKeyHwidBackend,
-  type TelegramResellerBinding,
-  fetchTelegramResellerBindings,
-  grantTelegramResellerBackend,
-  unlinkTelegramResellerBackend,
-  autoDetectTelegramChatId,
-  pollAndReplyTelegramBotCommands,
   SOVEREIGN_CONNECT_CONFIG,
   type RymonReferral,
   fetchReferralCodes,
@@ -89,8 +74,6 @@ type TabType =
   | 'delete'
   | 'extend'
   | 'advance'
-  | 'telegram'
-  | 'sql-setup'
 
 const THEME_NAMES = ['Cyber Blue', 'Neon Pink', 'Emerald', 'Violet', 'Amber']
 
@@ -198,16 +181,7 @@ export default function RymonConnect() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
 
-  // Database Health & Sync
-  const [dbStatus, setDbStatus] = useState<{ isOnline: boolean; tablesCreated: boolean; errorMsg?: string }>({
-    isOnline: true,
-    tablesCreated: true
-  })
-  const [dbChecking, setDbChecking] = useState(false)
-  const [copiedSql, setCopiedSql] = useState(false)
-  const [showSqlPreview, setShowSqlPreview] = useState(false)
-  const [sqlContent, setSqlContent] = useState<string>('')
-  const [sqlLoading, setSqlLoading] = useState(false)
+
 
   // Streamer Telemetry State
   const [record, setRecord] = useState<StreamerControlRecord | null>(null)
@@ -303,27 +277,8 @@ export default function RymonConnect() {
   const [pwdNewValue, setPwdNewValue] = useState('')
   const [pwdLoading, setPwdLoading] = useState(false)
 
-  // Telegram Bot Integration State (Pre-configured with RYMON OFFICIAL @Rymon007bot)
-  const [telegramConfig, setTelegramConfig] = useState<TelegramConfig>({
-    bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
-    chat_id: OFFICIAL_OWNER_CHAT_ID,
-    channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
-    is_active: true
-  })
-  const [telegramSaving, setTelegramSaving] = useState(false)
-  const [telegramTestMsg, setTelegramTestMsg] = useState('')
-  const [telegramTesting, setTelegramTesting] = useState(false)
-  const [telegramStatusMsg, setTelegramStatusMsg] = useState('')
   const [selfResetMsg, setSelfResetMsg] = useState('')
   const [selfResetBusy, setSelfResetBusy] = useState(false)
-  const [tgResellerBindings, setTgResellerBindings] = useState<
-    Record<string, TelegramResellerBinding>
-  >({})
-  const [grantChatIdInput, setGrantChatIdInput] = useState('')
-  const [grantSubDaysInput, setGrantSubDaysInput] = useState<30 | 60>(30)
-  const [grantBalInput, setGrantBalInput] = useState<number | ''>('')
-  const [grantUserInput, setGrantUserInput] = useState('')
-  const [grantBusy, setGrantBusy] = useState(false)
 
   // User Registration with Referral Code State
   const [isRegisterMode, setIsRegisterMode] = useState(false)
@@ -386,82 +341,10 @@ export default function RymonConnect() {
     return () => clearInterval(timer)
   }, [staffLockSeconds, keyLockSeconds])
 
-  const handleCopySqlScript = async () => {
-    try {
-      setSqlLoading(true)
-      let text = sqlContent
-      if (!text) {
-        const res = await fetch('/MASTER_RYMON_BACKEND.sql')
-        if (res.ok) {
-          text = await res.text()
-          setSqlContent(text)
-        }
-      }
-      if (text) {
-        await navigator.clipboard.writeText(text)
-        setCopiedSql(true)
-        setTimeout(() => setCopiedSql(false), 3000)
-      } else {
-        alert('Could not load SQL file from server. Please try downloading it.')
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setSqlLoading(false)
-    }
-  }
-
-  const handleDownloadSql = async () => {
-    try {
-      const res = await fetch('/MASTER_RYMON_BACKEND.sql')
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'MASTER_RYMON_BACKEND.sql'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  const handleToggleSqlPreview = async () => {
-    if (!showSqlPreview && !sqlContent) {
-      try {
-        setSqlLoading(true)
-        const res = await fetch('/MASTER_RYMON_BACKEND.sql')
-        if (res.ok) {
-          const text = await res.text()
-          setSqlContent(text)
-        }
-      } catch (e) {
-        console.error(e)
-      } finally {
-        setSqlLoading(false)
-      }
-    }
-    setShowSqlPreview((prev) => !prev)
-  }
-
-  const handleRecheckDbStatus = async () => {
-    setDbChecking(true)
-    try {
-      const status = await checkSupabaseSchemaStatus()
-      setDbStatus(status)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setDbChecking(false)
-    }
-  }
 
   // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
-    // Check Supabase Database health
-    checkSupabaseSchemaStatus().then(setDbStatus)
+
 
     // Check if key is provided via query parameter (?key=... or ?k=...)
     let queryKey = ''
@@ -550,31 +433,7 @@ export default function RymonConnect() {
     }
   }, [])
 
-  // 1B. Global 30-Second @Rymon007bot Responder (Services Customer 2/Day Key Resets & Owner Commands)
-  useEffect(() => {
-    let active = true
-    const runTgPoll = () => {
-      if (!active) return
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
-      const playingSet = new Set<string>()
-      streamerControlsRef.current.forEach((ctrl) => {
-        if (isStreamerKeyActivelyPlaying(ctrl)) {
-          playingSet.add(ctrl.license_key.toUpperCase())
-        }
-      })
-      pollAndReplyTelegramBotCommands(keysListRef.current, usersListRef.current, playingSet, (discoveredId) => {
-        if (active) {
-          setTelegramConfig((prev) => ({ ...prev, chat_id: discoveredId }))
-        }
-      })
-    }
-    runTgPoll()
-    const tgFastTimer = setInterval(runTgPoll, 30000)
-    return () => {
-      active = false
-      clearInterval(tgFastTimer)
-    }
-  }, [])
+
 
   // 2. Fetch Live Supabase Data when Authenticated
   useEffect(() => {
@@ -585,20 +444,11 @@ export default function RymonConnect() {
     async function loadLiveData() {
       const isStreamerRole = currentUser?.role === 'streamer'
       await Promise.all([syncPricingFromSupabase(), syncSecurityPolicyFromSupabase()])
-      const [lcs, usrs, acts, tgCfg, ctrls, tgBindings, refs] = await Promise.all([
+      const [lcs, usrs, acts, ctrls, refs] = await Promise.all([
         fetchAllLicenses(currentUser),
         fetchAllAccounts(currentUser),
-        isStreamerRole ? Promise.resolve([]) : fetchAllActivities(),
-        currentUser?.role === 'owner'
-          ? fetchTelegramConfigBackend()
-          : Promise.resolve({
-              bot_token: OFFICIAL_TELEGRAM_BOT_TOKEN,
-              chat_id: OFFICIAL_OWNER_CHAT_ID,
-              channel_username: OFFICIAL_TELEGRAM_BOT_USERNAME,
-              is_active: true
-            }),
+        isStreamerRole ? Promise.resolve([]) : fetchAllActivities(currentUser),
         fetchAllStreamerControls(currentUser),
-        fetchTelegramResellerBindings(),
         fetchReferralCodes(currentUser)
       ])
 
@@ -609,9 +459,7 @@ export default function RymonConnect() {
         setKeysList(lcs)
         setUsersList(usrs)
         setActivities(acts)
-        setTelegramConfig(tgCfg)
         setStreamerControls(ctrls)
-        setTgResellerBindings(tgBindings)
         setReferralList(refs)
         fetchRegisteredApps().then((a) => isMounted && setRegisteredApps(a))
 
@@ -1612,26 +1460,6 @@ export default function RymonConnect() {
           ? `⚡ Generated ${createdCount} keys (${genDuration}${isVipSelected ? ' • VIP Web Remote' : ' • Standard APK'})! Wallet updated.`
           : `Key ${res.key} generated! Wallet balance updated.`
       )
-      if (telegramConfig.is_active && telegramConfig.bot_token) {
-        const tgKeyMsg = [
-          `⚡ <b>RYMON OFFICIAL — NEW KEY${createdCount > 1 ? 'S' : ''} GENERATED</b>`,
-          `👤 <b>Seller:</b> @${currentUser?.username || 'admin'} (${String(currentUser?.role || 'user').toUpperCase()})`,
-          `🎮 <b>Game:</b> ${targetGameName} • <b>Edition:</b> ${isVipSelected ? '👑 VIP Web Remote (+50%)' : '📱 Standard APK'} • <b>Plan:</b> ${genDuration}`,
-          `📱 <b>Max Devices:</b> ${genDevicesMax} • <b>Qty:</b> ${createdCount}`,
-          ``,
-          ...mintedKeys.slice(0, 25).map((k, idx) => `${idx + 1}. <code>${k}</code>`),
-          mintedKeys.length > 25 ? `<i>...and ${mintedKeys.length - 25} more</i>` : '',
-          ``,
-          `⏳ <i>Starts on 1st APK Login • https://greenvest.shop/</i>`
-        ]
-          .filter(Boolean)
-          .join('\n')
-        dispatchTelegramMessage(telegramConfig.bot_token, telegramConfig.chat_id, tgKeyMsg).then((tgRes) => {
-          if (tgRes.detectedChatId && !telegramConfig.chat_id) {
-            setTelegramConfig((prev) => ({ ...prev, chat_id: tgRes.detectedChatId || '' }))
-          }
-        })
-      }
       // Refresh list
       fetchAllLicenses(currentUser).then(setKeysList)
       fetchAllAccounts(currentUser).then(setUsersList)
@@ -2074,42 +1902,6 @@ export default function RymonConnect() {
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
   }
 
-  const handleShareKeysTelegram = (keys: string[], label: string) => {
-    if (!keys.length) {
-      showToast(`No ${label} keys available to share.`)
-      return
-    }
-    if (telegramConfig.bot_token) {
-      const htmlMsg = [
-        `⚡ <b>${OFFICIAL_TELEGRAM_BOT_NAME} — VIP KEYS (${label.toUpperCase()})</b>`,
-        `👤 <b>Seller:</b> @${currentUser?.username || 'debajoyti'}`,
-        `📦 <b>Total Keys:</b> ${keys.length}`,
-        ``,
-        ...keys.slice(0, 30).map((k, idx) => `${idx + 1}. <code>${k}</code>`)
-      ].join('\n')
-      dispatchTelegramMessage(telegramConfig.bot_token, telegramConfig.chat_id, htmlMsg).then((res) => {
-        if (res.success) {
-          showToast(`✈️ Also dispatched directly via ${OFFICIAL_TELEGRAM_BOT_USERNAME}!`)
-          if (res.detectedChatId && !telegramConfig.chat_id) {
-            setTelegramConfig((prev) => ({ ...prev, chat_id: res.detectedChatId || '' }))
-          }
-        }
-      })
-    }
-    const msg = [
-      `⚡ RYMON GHOST STREAMER VIP KEYS (${label.toUpperCase()})`,
-      `👤 Seller: @${currentUser?.username || 'debajoyti'}`,
-      `📦 Total Keys: ${keys.length}`,
-      '',
-      ...keys.map((k, idx) => `${idx + 1}. ${k}`)
-    ].join('\n')
-    window.open(
-      `https://t.me/share/url?url=${encodeURIComponent('https://greenvest.shop/')}&text=${encodeURIComponent(msg)}`,
-      '_blank',
-      'noopener,noreferrer'
-    )
-  }
-
   const formatRemainingTime = (expiresAt?: string | null, status?: string, isPaused?: boolean) => {
     if (status === 'BANNED') return '🚫 BANNED'
     if (status === 'WAITING' || !expiresAt) return '🟡 Starts on 1st Login'
@@ -2356,60 +2148,6 @@ export default function RymonConnect() {
     }
   }
 
-  // 11. TELEGRAM BOT HANDLERS
-
-  const handleSaveTelegram = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setTelegramSaving(true)
-    setTelegramStatusMsg('')
-    const ok = await saveTelegramConfigBackend(telegramConfig)
-    setTelegramSaving(false)
-    if (ok) {
-      setTelegramStatusMsg(`✅ ${OFFICIAL_TELEGRAM_BOT_NAME} (${OFFICIAL_TELEGRAM_BOT_USERNAME}) configuration saved to RYMON Cloud!`)
-      showToast('Telegram settings updated!')
-    } else {
-      setTelegramStatusMsg('Failed to save Telegram settings.')
-    }
-  }
-
-  const handleAutoDetectTelegramChatId = async () => {
-    setTelegramTesting(true)
-    setTelegramStatusMsg(`🔍 Scanning ${OFFICIAL_TELEGRAM_BOT_USERNAME} updates for your Chat / Channel ID...`)
-    const res = await autoDetectTelegramChatId(telegramConfig.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN)
-    setTelegramTesting(false)
-    setTelegramStatusMsg(res.message)
-    if (res.success && res.chatId) {
-      setTelegramConfig((prev) => ({
-        ...prev,
-        bot_token: prev.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN,
-        chat_id: res.chatId || '',
-        channel_username: res.chatUsername || prev.channel_username || OFFICIAL_TELEGRAM_BOT_USERNAME
-      }))
-      showToast(res.message)
-    }
-  }
-
-  const handleTestTelegram = async () => {
-    setTelegramTesting(true)
-    setTelegramStatusMsg('')
-    const txt =
-      telegramTestMsg.trim() ||
-      `⚡ <b>${OFFICIAL_TELEGRAM_BOT_NAME} (${OFFICIAL_TELEGRAM_BOT_USERNAME}) — LIVE TEST</b>\nRYMON Broadcast &amp; Key Automation active on greenvest.shop!\nDispatched by: @${currentUser?.username || 'debajoyti'}\nTimestamp: ${new Date().toLocaleTimeString()}`
-    const res = await dispatchTelegramMessage(
-      telegramConfig.bot_token || OFFICIAL_TELEGRAM_BOT_TOKEN,
-      telegramConfig.chat_id,
-      txt
-    )
-    setTelegramTesting(false)
-    setTelegramStatusMsg(res.message)
-    if (res.success) {
-      if (res.detectedChatId && !telegramConfig.chat_id) {
-        setTelegramConfig((prev) => ({ ...prev, chat_id: res.detectedChatId || '' }))
-      }
-      showToast(`✈️ Telegram message sent via ${OFFICIAL_TELEGRAM_BOT_USERNAME}!`)
-    }
-  }
-
   const handleCustomerSelfResetHwid = async (targetKey: string) => {
     const clean = (targetKey || '').trim().toUpperCase()
     if (!clean) {
@@ -2442,44 +2180,6 @@ export default function RymonConnect() {
         )
       )
     }
-  }
-
-  const handleGrantTelegramReseller = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!grantChatIdInput.trim()) {
-      showToast('Please enter the user Telegram Chat ID!')
-      return
-    }
-    setGrantBusy(true)
-    const res = await grantTelegramResellerBackend({
-      chatId: grantChatIdInput.trim(),
-      subDays: grantSubDaysInput,
-      initialBalance: typeof grantBalInput === 'number' ? grantBalInput : 0,
-      customUsername: grantUserInput.trim() || undefined
-    })
-    setGrantBusy(false)
-    if (res.success) {
-      showToast(res.message)
-      setTelegramStatusMsg(res.message)
-      setGrantChatIdInput('')
-      setGrantBalInput('')
-      setGrantUserInput('')
-      const [freshBindings, freshUsers] = await Promise.all([
-        fetchTelegramResellerBindings(),
-        fetchAllAccounts(currentUser)
-      ])
-      setTgResellerBindings(freshBindings)
-      setUsersList(freshUsers)
-    } else {
-      alert(res.message)
-    }
-  }
-
-  const handleUnlinkTelegramReseller = async (chatId: string) => {
-    await unlinkTelegramResellerBackend(chatId)
-    const freshBindings = await fetchTelegramResellerBindings()
-    setTgResellerBindings(freshBindings)
-    showToast(`Unlinked Telegram Chat ID ${chatId}`)
   }
 
   // 12. REFERRAL ONBOARDING & CONNECT API HANDLERS
@@ -5398,19 +5098,6 @@ export default function RymonConnect() {
                             >
                               📲 WHATSAPP
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleShareKeysTelegram(genCreatedKeysList, `${genDuration} (${genCreatedGame})`)}
-                              style={{
-                                ...styles.copyKeyBtn,
-                                background: 'rgba(56, 189, 248, 0.2)',
-                                border: '1px solid #38bdf8',
-                                color: '#38bdf8',
-                                fontWeight: 800
-                              }}
-                            >
-                              ✈️ TELEGRAM
-                            </button>
                           </div>
                         </div>
                         <div
@@ -6726,495 +6413,6 @@ export default function RymonConnect() {
 
 
 
-            {/* 8C. TELEGRAM BOT DISPATCH GATEWAY */}
-            {activeTab === 'telegram' && isRootOwner && (
-              <div className="sg-view-container" style={styles.viewContainer}>
-                <div className="sg-banner-row" style={styles.bannerRow}>
-                  <div>
-                    <h2 style={styles.pageTitle}>
-                      Telegram Bot Automation — {OFFICIAL_TELEGRAM_BOT_NAME} ({OFFICIAL_TELEGRAM_BOT_USERNAME})
-                    </h2>
-                    <p style={styles.pageSubtitle}>
-                      Official HTTP API Token pre-linked. Deliver live keys, server broadcasts, and use interactive slash commands (<code>/status</code>, <code>/unused</code>, <code>/playing</code>, <code>/check</code>) directly inside Telegram.
-                    </p>
-                  </div>
-                  <div style={styles.badgeCluster}>
-                    <span style={styles.greenPulseBadge}>● {OFFICIAL_TELEGRAM_BOT_NAME} ACTIVE</span>
-                    <a
-                      href="https://t.me/Rymon007bot"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        ...styles.timeTag,
-                        textDecoration: 'none',
-                        color: '#00d9ff',
-                        border: '1px solid rgba(0, 217, 255, 0.4)',
-                        background: 'rgba(0, 217, 255, 0.14)',
-                        fontWeight: 800
-                      }}
-                    >
-                      ✈️ OPEN {OFFICIAL_TELEGRAM_BOT_USERNAME}
-                    </a>
-                  </div>
-                </div>
-
-                <div className="sg-dual-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
-                  {/* Configuration Card */}
-                  <div className="sg-card-box" style={styles.cardBox}>
-                    <div style={styles.cardHeader}>
-                      <h4>🤖 {OFFICIAL_TELEGRAM_BOT_NAME} ({OFFICIAL_TELEGRAM_BOT_USERNAME})</h4>
-                      <span style={styles.cyanMiniBadge}>VERIFIED BOT API</span>
-                    </div>
-
-                    {/* 2-Click Instant Link Banner */}
-                    <div
-                      style={{
-                        marginTop: '14px',
-                        padding: '12px 14px',
-                        borderRadius: '10px',
-                        background: 'rgba(0, 217, 255, 0.08)',
-                        border: '1px solid rgba(0, 217, 255, 0.28)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px'
-                      }}
-                    >
-                      <div style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 700 }}>
-                        ⚡ Instant 2-Click Chat ID Binding:
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <a
-                          href="https://t.me/Rymon007bot"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            flex: 1,
-                            padding: '9px 12px',
-                            borderRadius: '8px',
-                            background: 'rgba(0, 217, 255, 0.2)',
-                            border: '1px solid #00d9ff',
-                            color: '#00d9ff',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            textDecoration: 'none',
-                            textAlign: 'center',
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          🚀 1. OPEN @Rymon007bot &amp; TAP START
-                        </a>
-                        <button
-                          type="button"
-                          onClick={handleAutoDetectTelegramChatId}
-                          disabled={telegramTesting}
-                          style={{
-                            flex: 1,
-                            padding: '9px 12px',
-                            borderRadius: '8px',
-                            background: 'rgba(5, 223, 114, 0.2)',
-                            border: '1px solid #05df72',
-                            color: '#05df72',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          🔍 2. AUTO-DETECT MY CHAT ID
-                        </button>
-                      </div>
-                    </div>
-
-                    <form onSubmit={handleSaveTelegram} style={{ marginTop: '16px' }}>
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>
-                          BOT TOKEN ({OFFICIAL_TELEGRAM_BOT_NAME}) <span style={{ color: '#05df72' }}>✓ PRE-LINKED</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={telegramConfig.bot_token}
-                          onChange={(e) => setTelegramConfig({ ...telegramConfig, bot_token: e.target.value })}
-                          placeholder={telegramConfig.bot_token ? "••••••••:•••••••••••••••••••••••••••••••••••" : "Using Pre-Linked Server Bot (@Rymon007bot)"}
-                          style={{ ...styles.keyInput, fontFamily: 'monospace', fontSize: '12px' }}
-                        />
-                        <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                          Connected to <strong>{OFFICIAL_TELEGRAM_BOT_NAME}</strong> (<code>{OFFICIAL_TELEGRAM_BOT_USERNAME}</code>).
-                        </span>
-                      </div>
-
-                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
-                        <label style={styles.formLabel}>
-                          YOUR TELEGRAM CHAT ID OR CHANNEL @USERNAME <span style={{ color: '#00d9ff' }}>*</span>
-                        </label>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <input
-                            type="text"
-                            value={telegramConfig.chat_id}
-                            onChange={(e) => setTelegramConfig({ ...telegramConfig, chat_id: e.target.value })}
-                            placeholder="Tap 'Auto-Detect My Chat ID' above or enter @Channel"
-                            style={{ ...styles.keyInput, flex: 1 }}
-                          />
-                          <button
-                            type="button"
-                            onClick={handleAutoDetectTelegramChatId}
-                            style={{
-                              ...styles.chipBtn,
-                              background: 'rgba(5, 223, 114, 0.18)',
-                              border: '1px solid #05df72',
-                              color: '#05df72',
-                              fontWeight: 800,
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            🔍 Auto-Detect
-                          </button>
-                        </div>
-                        <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                          Open <strong>@Rymon007bot</strong> in Telegram, press <strong>START</strong>, then click <strong>Auto-Detect</strong>!
-                        </span>
-                      </div>
-
-                      <div style={{ ...styles.formGroup, marginTop: '16px' }}>
-                        <label style={styles.formLabel}>BOT / CHANNEL HANDLE</label>
-                        <input
-                          type="text"
-                          value={telegramConfig.channel_username}
-                          onChange={(e) => setTelegramConfig({ ...telegramConfig, channel_username: e.target.value })}
-                          placeholder="@Rymon007bot"
-                          style={styles.keyInput}
-                        />
-                      </div>
-
-                      <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <input
-                          type="checkbox"
-                          id="tgActive"
-                          checked={telegramConfig.is_active}
-                          onChange={(e) => setTelegramConfig({ ...telegramConfig, is_active: e.target.checked })}
-                          style={{ accentColor: '#00d9ff' }}
-                        />
-                        <label htmlFor="tgActive" style={{ fontSize: '12px', color: '#cbd5e1', cursor: 'pointer' }}>
-                          Automatically send newly generated keys &amp; alerts to my Telegram via {OFFICIAL_TELEGRAM_BOT_USERNAME}
-                        </label>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={telegramSaving}
-                        style={{
-                          ...styles.submitBtn,
-                          marginTop: '20px',
-                          background: '#00d9ff',
-                          color: '#07090e'
-                        }}
-                      >
-                        {telegramSaving ? 'SAVING CONFIGURATION...' : '💾 SAVE TELEGRAM CONFIGURATION'}
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* Dispatcher & Interactive Bot Commands */}
-                  <div style={styles.cardBox}>
-                    <div style={styles.cardHeader}>
-                      <h4>✈️ Instant Telegram Dispatcher &amp; Live Commands</h4>
-                      <span style={styles.cyanMiniBadge}>{OFFICIAL_TELEGRAM_BOT_USERNAME}</span>
-                    </div>
-
-                    <p style={styles.settingDesc}>
-                      Send an instant test broadcast to your linked Telegram chat or channel via <strong>{OFFICIAL_TELEGRAM_BOT_NAME}</strong>:
-                    </p>
-
-                    <div style={{ ...styles.formGroup, marginTop: '12px' }}>
-                      <label style={styles.formLabel}>TEST MESSAGE / ANNOUNCEMENT</label>
-                      <textarea
-                        rows={3}
-                        value={telegramTestMsg}
-                        onChange={(e) => setTelegramTestMsg(e.target.value)}
-                        placeholder="Write message to dispatch via @Rymon007bot..."
-                        style={{
-                          ...styles.keyInput,
-                          height: 'auto',
-                          resize: 'vertical',
-                          fontFamily: 'inherit'
-                        }}
-                      />
-                    </div>
-
-                    <button
-                      onClick={handleTestTelegram}
-                      disabled={telegramTesting}
-                      style={{
-                        ...styles.submitBtn,
-                        marginTop: '14px',
-                        background: 'rgba(0, 217, 255, 0.15)',
-                        border: '1px solid #00d9ff',
-                        color: '#00d9ff'
-                      }}
-                    >
-                      {telegramTesting ? 'DISPATCHING VIA @Rymon007bot...' : '✈️ TEST DISPATCH VIA @Rymon007bot'}
-                    </button>
-
-                    {telegramStatusMsg && (
-                      <div
-                        style={{
-                          marginTop: '14px',
-                          padding: '10px 14px',
-                          borderRadius: '8px',
-                          background: 'rgba(15, 23, 42, 0.8)',
-                          border: '1px solid rgba(0, 217, 255, 0.3)',
-                          fontSize: '12px',
-                          color: '#e2e8f0'
-                        }}
-                      >
-                        {telegramStatusMsg}
-                      </div>
-                    )}
-
-                    <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
-                      <h5 style={{ fontSize: '13px', color: '#05df72', marginBottom: '6px', fontWeight: 800 }}>
-                        🔄 Normal User Self-Service (Max 2 Resets / Day):
-                      </h5>
-                      <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.7, marginBottom: '10px' }}>
-                        <div>• <b>Paste Key Directly</b> (e.g. <code>RYMON-FF-XXXX-XXXX</code>) — Instant HWID Reset (Max 2/Day)</div>
-                        <div>• <code>/reset KEY</code> | <code>/check KEY</code> | <code>/apk</code> | <code>/apply</code> (Apply for Reseller)</div>
-                      </div>
-                      <h5 style={{ fontSize: '13px', color: '#c084fc', marginBottom: '6px', fontWeight: 800 }}>
-                        💼 Reseller Bot Store (Recognized Automatically by Chat ID):
-                      </h5>
-                      <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.7, marginBottom: '10px' }}>
-                        <div>• <b>Tap-to-Buy Buttons:</b> <code>🛒 Buy 2H / 1D / 3D / 7D / 15D / 30D</code> inside Telegram</div>
-                        <div>• <code>/wallet</code> — View live ₹ Balance, Custom Price List &amp; 30D/60D Sub</div>
-                        <div>• <code>/mykeys</code> — Copy Unused/Active keys | <code>/topup 500</code> — Request Balance</div>
-                      </div>
-                      <h5 style={{ fontSize: '13px', color: '#00d9ff', marginBottom: '6px', fontWeight: 800 }}>
-                        👑 Root Owner Commands (@montage007pc • ID {OFFICIAL_OWNER_CHAT_ID}):
-                      </h5>
-                      <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.7 }}>
-                        <div>• <code>/givereseller CHAT_ID 30d 500</code> — Grant Reseller by Chat ID + ₹500 Wallet</div>
-                        <div>• <code>/addbal CHAT_ID 1000</code> — Credit ₹1000 to Reseller &amp; notify on Telegram</div>
-                        <div>• <code>/renew CHAT_ID 30d</code> | <code>/resellers</code> | <code>/status</code> | <code>/unused</code> | <code>/playing</code> | <code>/gen 7d</code></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Grant & Manage Telegram Resellers by Chat ID */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-                    gap: '24px',
-                    marginTop: '24px'
-                  }}
-                >
-                  <div style={styles.cardBox}>
-                    <div style={styles.cardHeader}>
-                      <h4>💼 Grant Reseller in Bot by Telegram Chat ID</h4>
-                      <span style={styles.cyanMiniBadge}>INSTANT BOT STORE</span>
-                    </div>
-                    <p style={styles.settingDesc}>
-                      Enter a user&apos;s Telegram Chat ID (they can get it by sending <code>/id</code> or tapping <b>Apply for Reseller</b> in {OFFICIAL_TELEGRAM_BOT_USERNAME}). They will immediately unlock the Tap-to-Buy Reseller Store inside Telegram AND receive a synced website account!
-                    </p>
-
-                    <form onSubmit={handleGrantTelegramReseller} style={{ marginTop: '14px' }}>
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>
-                          USER TELEGRAM CHAT ID <span style={{ color: '#05df72' }}>*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={grantChatIdInput}
-                          onChange={(e) => setGrantChatIdInput(e.target.value)}
-                          placeholder="e.g. 987654321 (User sends /id in @Rymon007bot)"
-                          style={{ ...styles.keyInput, fontFamily: 'monospace' }}
-                          required
-                        />
-                      </div>
-
-                      <div style={{ ...styles.formGroup, marginTop: '14px' }}>
-                        <label style={styles.formLabel}>RESELLER SUBSCRIPTION DURATION</label>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setGrantSubDaysInput(30)}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              borderRadius: '8px',
-                              border:
-                                grantSubDaysInput === 30
-                                  ? '1px solid #00d9ff'
-                                  : '1px solid rgba(255,255,255,0.1)',
-                              background:
-                                grantSubDaysInput === 30
-                                  ? 'rgba(0, 217, 255, 0.18)'
-                                  : 'rgba(15, 23, 42, 0.7)',
-                              color: grantSubDaysInput === 30 ? '#00d9ff' : '#94a3b8',
-                              fontWeight: 800,
-                              fontSize: '12px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            ⚡ 30 DAYS SUB
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setGrantSubDaysInput(60)}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              borderRadius: '8px',
-                              border:
-                                grantSubDaysInput === 60
-                                  ? '1px solid #a855f7'
-                                  : '1px solid rgba(255,255,255,0.1)',
-                              background:
-                                grantSubDaysInput === 60
-                                  ? 'rgba(168, 85, 247, 0.2)'
-                                  : 'rgba(15, 23, 42, 0.7)',
-                              color: grantSubDaysInput === 60 ? '#c084fc' : '#94a3b8',
-                              fontWeight: 800,
-                              fontSize: '12px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            💎 60 DAYS SUB
-                          </button>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '14px' }}>
-                        <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>STARTING WALLET (₹ INR)</label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="50"
-                            value={grantBalInput}
-                            onChange={(e) =>
-                              setGrantBalInput(e.target.value === '' ? '' : Number(e.target.value))
-                            }
-                            placeholder="e.g. 500"
-                            style={styles.keyInput}
-                          />
-                        </div>
-                        <div style={styles.formGroup}>
-                          <label style={styles.formLabel}>USERNAME (OPTIONAL)</label>
-                          <input
-                            type="text"
-                            value={grantUserInput}
-                            onChange={(e) => setGrantUserInput(e.target.value)}
-                            placeholder="Auto if blank"
-                            style={styles.keyInput}
-                          />
-                        </div>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={grantBusy}
-                        style={{
-                          ...styles.submitBtn,
-                          marginTop: '18px',
-                          background: '#05df72',
-                          color: '#04090d'
-                        }}
-                      >
-                        {grantBusy
-                          ? 'GRANTING RESELLER & MESSAGING BOT...'
-                          : `⚡ GRANT ${grantSubDaysInput}D RESELLER BY CHAT ID`}
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* Active Telegram-Linked Resellers Table */}
-                  <div style={styles.cardBox}>
-                    <div style={styles.cardHeader}>
-                      <h4>
-                        🔗 Linked Telegram Bot Resellers ({Object.keys(tgResellerBindings).length})
-                      </h4>
-                      <button
-                        type="button"
-                        onClick={() => fetchTelegramResellerBindings().then(setTgResellerBindings)}
-                        style={{ ...styles.chipBtn, fontSize: '11px' }}
-                      >
-                        🔄 Refresh
-                      </button>
-                    </div>
-                    <p style={styles.settingDesc}>
-                      Resellers listed below can buy &amp; generate keys directly inside <strong>{OFFICIAL_TELEGRAM_BOT_USERNAME}</strong> using their wallet balance.
-                    </p>
-
-                    <div style={{ marginTop: '14px', maxHeight: '300px', overflowY: 'auto' }}>
-                      {Object.values(tgResellerBindings).length === 0 ? (
-                        <div
-                          style={{
-                            padding: '24px',
-                            textAlign: 'center',
-                            color: '#64748b',
-                            fontSize: '12px',
-                            border: '1px dashed rgba(255,255,255,0.1)',
-                            borderRadius: '10px'
-                          }}
-                        >
-                          No Telegram Chat IDs linked to Resellers yet. Use the form on the left or send <code>/givereseller CHAT_ID 30d 500</code> in @Rymon007bot!
-                        </div>
-                      ) : (
-                        Object.values(tgResellerBindings).map((b) => {
-                          const acc = usersList.find(
-                            (u) => (u.username || '').toLowerCase() === (b.username || '').toLowerCase()
-                          )
-                          return (
-                            <div
-                              key={b.chat_id}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '10px 12px',
-                                borderRadius: '8px',
-                                background: 'rgba(15, 23, 42, 0.75)',
-                                border: '1px solid rgba(255,255,255,0.07)',
-                                marginBottom: '8px'
-                              }}
-                            >
-                              <div>
-                                <div style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc' }}>
-                                  @{b.username}{' '}
-                                  <span style={{ color: '#05df72', fontSize: '11px' }}>
-                                    • ₹{Number(acc?.balance ?? 0).toLocaleString('en-IN')}
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
-                                  Chat ID: <strong style={{ color: '#00d9ff' }}>{b.chat_id}</strong> • Sub:{' '}
-                                  {acc?.expires_at
-                                    ? new Date(acc.expires_at).toLocaleDateString('en-IN')
-                                    : '30D'}
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleUnlinkTelegramReseller(b.chat_id)}
-                                style={{
-                                  ...styles.chipBtn,
-                                  color: '#ef4444',
-                                  border: '1px solid rgba(239,68,68,0.35)',
-                                  background: 'rgba(239,68,68,0.1)',
-                                  fontSize: '11px'
-                                }}
-                              >
-                                Unlink
-                              </button>
-                            </div>
-                          )
-                        })
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* 9. PRICING & ADVANCE SYSTEM */}
             {activeTab === 'advance' && (
               <div className="sg-view-container" style={styles.viewContainer}>
@@ -7301,14 +6499,16 @@ export default function RymonConnect() {
                       </form>
                     </div>
                   ) : (
-                    /* Card 1 (Admin): Read-only view of Admin's own Wholesale Rates */
+                    /* Card 1 (Admin/Reseller): Read-only view of Wholesale/Reseller Rates */
                     <div className="sg-card-box" style={styles.cardBox}>
                       <div style={styles.cardHeader}>
-                        <h4>🛡️ Your Admin Wholesale Key Rates</h4>
+                        <h4>{isAdmin ? '🛡️ Your Admin Wholesale Key Rates' : '💼 Your Reseller Key Rates'}</h4>
                         <span style={styles.cyanMiniBadge}>YOUR BASE COST</span>
                       </div>
                       <p style={styles.settingDesc}>
-                        These are your current key generation rates set by the Owner. You can assign custom rates for your downline Resellers on the right.
+                        {isAdmin
+                          ? 'These are your current key generation rates set by the Owner. You can assign custom rates for your downline Resellers on the right.'
+                          : 'These are your active key generation rates assigned to your account.'}
                       </p>
                       <div className="sg-form-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '14px' }}>
                         {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
@@ -7334,8 +6534,9 @@ export default function RymonConnect() {
                     </div>
                   )}
 
-                  {/* Card 2: Target Individual Custom Price Override */}
-                  <div className="sg-card-box" style={styles.cardBox}>
+                  {/* Card 2: Target Individual Custom Price Override (Owner & Admin only) */}
+                  {(isOwner || isAdmin) && (
+                    <div className="sg-card-box" style={styles.cardBox}>
                     <div style={styles.cardHeader}>
                       <h4>🎯 Target Individual Price Override</h4>
                       <span
@@ -7481,7 +6682,8 @@ export default function RymonConnect() {
                       </div>
                     )}
                   </div>
-                </div>
+                )}
+              </div>
 
                 {isOwner && (
                   <>
@@ -8028,240 +7230,6 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {/* 10. DATABASE SQL SETUP HELPER */}
-            {activeTab === 'sql-setup' && (
-              <div className="sg-view-container" style={styles.viewContainer}>
-                <div className="sg-banner-row" style={styles.bannerRow}>
-                  <div>
-                    <h2 style={styles.pageTitle}>Database SQL &amp; Schema Engine</h2>
-                    <p style={styles.pageSubtitle}>
-                      Manage your live RYMON database engine, RPC functions, and wallet security policies.
-                    </p>
-                  </div>
-                  <div style={styles.badgeCluster}>
-                    <span style={styles.cyanMiniBadge}>SOVEREIGN POSTGRES ENGINE</span>
-                  </div>
-                </div>
-
-                <div className="sg-card-box" style={styles.cardBox}>
-                  <div style={styles.cardHeader}>
-                    <h4>⚡ RYMON Schema &amp; RPC Health Status</h4>
-                    <span
-                      style={{
-                        ...styles.cyanMiniBadge,
-                        background: dbStatus.tablesCreated ? 'rgba(5,223,114,0.15)' : 'rgba(234,179,8,0.15)',
-                        color: dbStatus.tablesCreated ? '#05df72' : '#eab308'
-                      }}
-                    >
-                      {dbStatus.tablesCreated ? 'ONLINE & SYNCED' : 'PENDING SQL RUN'}
-                    </span>
-                  </div>
-
-                  <p style={styles.settingDesc}>
-                    To activate or update all RYMON tables, Realtime publications, and <strong>12 atomic wallet RPCs</strong> (such as key generation, key extension, bulk extend, balance transfer, and subscription renew):
-                    <br />
-                    1. Open your <strong>Supabase / Postgres Cloud Console</strong>.
-                    <br />
-                    2. Navigate to <strong>SQL Editor</strong> ➔ <strong>New Query</strong>.
-                    <br />
-                    3. Copy and paste the complete <code>MASTER_RYMON_BACKEND.sql</code> script below and click <strong>Run</strong>.
-                  </p>
-
-                  {/* Quick Action Buttons */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '20px' }}>
-                    <button
-                      type="button"
-                      onClick={handleCopySqlScript}
-                      disabled={sqlLoading}
-                      style={{
-                        ...styles.submitBtn,
-                        flex: '1 1 240px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        background: copiedSql
-                          ? 'linear-gradient(135deg, #05df72 0%, #047857 100%)'
-                          : 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)'
-                      }}
-                    >
-                      {copiedSql ? '✓ COPIED ALL SQL (1,230+ LINES)' : sqlLoading ? '⏳ LOADING SCRIPT...' : '📋 COPY COMPLETE SQL SCRIPT'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleDownloadSql}
-                      style={{
-                        ...styles.submitBtn,
-                        flex: '1 1 180px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        border: '1px solid rgba(168, 85, 247, 0.4)',
-                        color: '#c084fc',
-                        background: 'rgba(168, 85, 247, 0.12)',
-                        boxShadow: 'none'
-                      }}
-                    >
-                      📥 DOWNLOAD .SQL FILE
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleToggleSqlPreview}
-                      style={{
-                        ...styles.submitBtn,
-                        flex: '1 1 180px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                        color: '#f8fafc',
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        boxShadow: 'none'
-                      }}
-                    >
-                      {showSqlPreview ? '👁️ HIDE SQL PREVIEW' : '👁️ PREVIEW SCRIPT'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleRecheckDbStatus}
-                      disabled={dbChecking}
-                      style={{
-                        ...styles.submitBtn,
-                        flex: '1 1 150px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        border: '1px solid rgba(6, 182, 212, 0.3)',
-                        color: '#22d3ee',
-                        background: 'rgba(6, 182, 212, 0.1)',
-                        boxShadow: 'none'
-                      }}
-                    >
-                      {dbChecking ? '⏳ CHECKING...' : '🔄 RE-CHECK DB'}
-                    </button>
-                  </div>
-
-                  {/* Expandable SQL Code Preview */}
-                  {showSqlPreview && (
-                    <div
-                      style={{
-                        marginTop: '20px',
-                        background: '#090d16',
-                        border: '1px solid rgba(168, 85, 247, 0.25)',
-                        borderRadius: '12px',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      <div
-                        style={{
-                          padding: '10px 16px',
-                          background: 'rgba(255, 255, 255, 0.03)',
-                          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          flexWrap: 'wrap',
-                          gap: '8px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#c084fc', fontWeight: 'bold' }}>
-                            MASTER_RYMON_BACKEND.sql
-                          </span>
-                          <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                            (~1,230 lines • 12 Atomic RPCs • Seed Data Included)
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleCopySqlScript}
-                          style={{
-                            padding: '4px 10px',
-                            fontSize: '11px',
-                            fontWeight: 'bold',
-                            borderRadius: '6px',
-                            border: '1px solid rgba(168, 85, 247, 0.4)',
-                            background: copiedSql ? '#05df72' : 'rgba(168, 85, 247, 0.2)',
-                            color: copiedSql ? '#000' : '#c084fc',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {copiedSql ? '✓ COPIED!' : '📋 COPY CODE'}
-                        </button>
-                      </div>
-
-                      <pre
-                        style={{
-                          margin: 0,
-                          padding: '16px',
-                          fontSize: '12px',
-                          lineHeight: 1.5,
-                          fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                          color: '#e2e8f0',
-                          maxHeight: '420px',
-                          overflowY: 'auto',
-                          overflowX: 'auto',
-                          whiteSpace: 'pre',
-                          WebkitOverflowScrolling: 'touch'
-                        }}
-                      >
-                        {sqlLoading ? 'Loading full SQL script...' : sqlContent || '-- Click "Copy Complete SQL Script" or download above'}
-                      </pre>
-                    </div>
-                  )}
-
-                  {/* 12 Sovereign RPCs breakdown chips */}
-                  <div style={{ marginTop: '24px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#cbd5e1', marginBottom: '10px' }}>
-                      📦 Included Atomic Functions &amp; Sovereign Capabilities:
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {[
-                        { name: 'rpc_rymon_verify_license', desc: 'Hardware & plan validator' },
-                        { name: 'rpc_rymon_generate_key', desc: 'Atomic wallet deduction (1-50 keys)' },
-                        { name: 'rpc_rymon_extend_key', desc: 'Atomic duration × devices deduction' },
-                        { name: 'rpc_rymon_bulk_extend_keys', desc: 'Atomic batch wallet deduction' },
-                        { name: 'rpc_rymon_transfer_balance', desc: 'Atomic wallet-to-wallet transfer' },
-                        { name: 'rpc_rymon_renew_subscription', desc: 'Atomic subscription renew & fee' },
-                        { name: 'rpc_rymon_create_referral', desc: 'Atomic prefunded invite codes' },
-                        { name: 'rpc_rymon_reset_hwid', desc: 'HWID instant unbind' },
-                        { name: 'rpc_rymon_toggle_pause_key', desc: 'Instant key pause/resume' },
-                        { name: 'rpc_rymon_get_accounts', desc: 'Downline hierarchy filter' },
-                        { name: 'rpc_rymon_update_password', desc: 'Secure credential update' },
-                        { name: 'rpc_rymon_ban_unban', desc: 'Instant ban toggle' }
-                      ].map((fn) => (
-                        <div
-                          key={fn.name}
-                          style={{
-                            padding: '6px 12px',
-                            background: 'rgba(168, 85, 247, 0.08)',
-                            border: '1px solid rgba(168, 85, 247, 0.2)',
-                            borderRadius: '8px',
-                            fontSize: '11px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '2px'
-                          }}
-                        >
-                          <span style={{ fontFamily: 'monospace', color: '#c084fc', fontWeight: 'bold' }}>
-                            {fn.name}
-                          </span>
-                          <span style={{ color: '#94a3b8', fontSize: '10px' }}>{fn.desc}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 12. SOVEREIGN CONNECT URL & APK ENGINE (OWNER ONLY) */}
             {/* 11. REFERRAL / INVITE CODE ENGINE (OWNER & ADMIN) */}
             {activeTab === 'referrals' && (
               <div className="sg-view-container" style={styles.viewContainer}>
@@ -8318,32 +7286,26 @@ export default function RymonConnect() {
                           >
                             💼 RESELLER
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!isOwner) {
-                                alert('Power restriction: Only the Supreme Owner (debajoyti) can issue Administrator invite codes. Admins can only invite downline Resellers.')
-                                return
-                              }
-                              setRefTargetRole('admin')
-                            }}
-                            disabled={!isOwner}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              borderRadius: '8px',
-                              border: refTargetRole === 'admin' ? '1px solid #05df72' : '1px solid rgba(255,255,255,0.08)',
-                              background: refTargetRole === 'admin' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                              color: !isOwner ? '#475569' : refTargetRole === 'admin' ? '#05df72' : '#94a3b8',
-                              fontWeight: 700,
-                              fontSize: '12px',
-                              cursor: !isOwner ? 'not-allowed' : 'pointer',
-                              opacity: !isOwner ? 0.5 : 1
-                            }}
-                            title={!isOwner ? 'Supreme Owner only' : 'Create Administrator invite code'}
-                          >
-                            🛡️ ADMINISTRATOR {!isOwner && '(OWNER ONLY)'}
-                          </button>
+                          {isOwner && (
+                            <button
+                              type="button"
+                              onClick={() => setRefTargetRole('admin')}
+                              style={{
+                                flex: 1,
+                                padding: '10px',
+                                borderRadius: '8px',
+                                border: refTargetRole === 'admin' ? '1px solid #05df72' : '1px solid rgba(255,255,255,0.08)',
+                                background: refTargetRole === 'admin' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                                color: refTargetRole === 'admin' ? '#05df72' : '#94a3b8',
+                                fontWeight: 700,
+                                fontSize: '12px',
+                                cursor: 'pointer'
+                              }}
+                              title="Create Administrator invite code"
+                            >
+                              🛡️ ADMINISTRATOR
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -10309,26 +9271,6 @@ else:
                         </button>
                       </>
                     )}
-                    <a
-                      href="https://t.me/Rymon007bot"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        backgroundColor: 'rgba(56, 189, 248, 0.14)',
-                        border: '1px solid rgba(56, 189, 248, 0.45)',
-                        color: '#38bdf8',
-                        borderRadius: '8px',
-                        padding: '6px 11px',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        textDecoration: 'none',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <span>✈️</span> BOT
-                    </a>
                     <button
                       onClick={() => setShowPurgeModal(true)}
                       style={{ ...styles.emergencyPurgeBtn, padding: '6px 11px', fontSize: '11px' }}
@@ -11196,16 +10138,6 @@ else:
                 <span style={{ fontSize: '18px' }}>⚡</span>
                 <span>Remote</span>
               </button>
-              <a
-                href="https://t.me/Rymon007bot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="sg-mobile-bottom-tab"
-                style={{ textDecoration: 'none' }}
-              >
-                <span style={{ fontSize: '18px' }}>✈️</span>
-                <span>Bot</span>
-              </a>
               <button
                 type="button"
                 className={`sg-mobile-bottom-tab ${mobileMenuOpen ? 'active' : ''}`}

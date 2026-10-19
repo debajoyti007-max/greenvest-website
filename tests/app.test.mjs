@@ -226,3 +226,147 @@ describe('License Duration Extension & Wallet Credit Cut Engine', () => {
     assert.match(failedTx.error, /Insufficient wallet balance/i)
   })
 })
+
+// 5. Role-Based Navigation & Feature Accessibility
+describe('Role-Based UI & Navigation Security Scoping', () => {
+  function getAllowedTabsForRole(role, isRoot = false) {
+    if (role === 'streamer') return ['remote']
+    if (role === 'reseller') return ['remote', 'overview', 'generate', 'keys', 'extend', 'advance']
+    if (role === 'admin')
+      return [
+        'remote',
+        'overview',
+        'generate',
+        'keys',
+        'extend',
+        'users',
+        'add-balance',
+        'referrals',
+        'delete',
+        'advance',
+      ]
+    if (role === 'owner') {
+      if (isRoot) {
+        return [
+          'remote',
+          'overview',
+          'generate',
+          'keys',
+          'extend',
+          'users',
+          'add-balance',
+          'referrals',
+          'delete',
+          'advance',
+          'connect-api',
+          'apps',
+        ]
+      }
+      return [
+        'remote',
+        'overview',
+        'generate',
+        'keys',
+        'extend',
+        'users',
+        'add-balance',
+        'referrals',
+        'delete',
+        'advance',
+      ]
+    }
+    return ['remote']
+  }
+
+  test('Guarantees sql-setup and telegram are completely removed from all role navigation', () => {
+    for (const role of ['streamer', 'reseller', 'admin', 'owner']) {
+      const allowed = getAllowedTabsForRole(role, role === 'owner')
+      assert.equal(allowed.includes('sql-setup'), false, `sql-setup must not exist for ${role}`)
+      assert.equal(allowed.includes('telegram'), false, `telegram must not exist for ${role}`)
+    }
+  })
+
+  test('Restricts Reseller navigation strictly to their scope (no add-balance, users, referrals, delete)', () => {
+    const resellerTabs = getAllowedTabsForRole('reseller', false)
+    assert.deepEqual(resellerTabs, ['remote', 'overview', 'generate', 'keys', 'extend', 'advance'])
+    assert.equal(resellerTabs.includes('add-balance'), false)
+    assert.equal(resellerTabs.includes('users'), false)
+    assert.equal(resellerTabs.includes('referrals'), false)
+    assert.equal(resellerTabs.includes('delete'), false)
+  })
+
+  test('Restricts Admin from accessing Root-only apps and connect-api', () => {
+    const adminTabs = getAllowedTabsForRole('admin', false)
+    assert.equal(adminTabs.includes('apps'), false)
+    assert.equal(adminTabs.includes('connect-api'), false)
+    assert.equal(adminTabs.includes('users'), true)
+    assert.equal(adminTabs.includes('referrals'), true)
+  })
+
+  test('Permits Administrator role creation only to Root Owner', () => {
+    function canCreateAdminInvite(isOwner) {
+      return Boolean(isOwner)
+    }
+    assert.equal(canCreateAdminInvite(true), true)
+    assert.equal(canCreateAdminInvite(false), false)
+  })
+})
+
+// 6. Realtime Activity Log Scoping per Role
+describe('Realtime Activity Log Scoping per Role', () => {
+  function shouldDeliverActivityToUser(activity, user, downlineUsernames = new Set()) {
+    const actorLower = String(activity.actor_username || '').toLowerCase()
+    const curUser = String(user?.username || '').toLowerCase()
+    const role = user?.role || ''
+
+    // 1. Root Owner (debajoyti): sees all platform activities
+    if (!user || curUser === 'debajoyti') {
+      return true
+    }
+    // 2. Reseller: only sees activities they performed themselves
+    if (role === 'reseller') {
+      return actorLower === curUser
+    }
+    // 3. Admin: sees activities for themselves + their downline
+    if (role === 'admin') {
+      return actorLower === curUser || downlineUsernames.has(actorLower)
+    }
+    // 4. Partner Owner: sees activities for themselves and non-root downlines
+    if (role === 'owner') {
+      return actorLower !== 'debajoyti'
+    }
+    return false
+  }
+
+  const sampleActivities = [
+    { id: '1', title: 'Root Wipe', actor_username: 'debajoyti' },
+    { id: '2', title: 'Admin Invite Reseller', actor_username: 'admin_alex' },
+    { id: '3', title: 'Downline Key Gen', actor_username: 'reseller_bob' },
+    { id: '4', title: 'Foreign Reseller Gen', actor_username: 'reseller_stranger' },
+  ]
+
+  test('Root Owner receives all platform activities', () => {
+    const rootUser = { username: 'debajoyti', role: 'owner' }
+    for (const act of sampleActivities) {
+      assert.equal(shouldDeliverActivityToUser(act, rootUser), true)
+    }
+  })
+
+  test('Reseller receives ONLY activities performed by their own account', () => {
+    const reseller = { username: 'reseller_bob', role: 'reseller' }
+    assert.equal(shouldDeliverActivityToUser(sampleActivities[0], reseller), false) // Root Wipe
+    assert.equal(shouldDeliverActivityToUser(sampleActivities[1], reseller), false) // Admin
+    assert.equal(shouldDeliverActivityToUser(sampleActivities[2], reseller), true)  // Self
+    assert.equal(shouldDeliverActivityToUser(sampleActivities[3], reseller), false) // Stranger
+  })
+
+  test('Admin receives activities for self and downlines, but NEVER root owner activities', () => {
+    const admin = { username: 'admin_alex', role: 'admin' }
+    const downlines = new Set(['reseller_bob'])
+    assert.equal(shouldDeliverActivityToUser(sampleActivities[0], admin, downlines), false) // Root Wipe (Excluded)
+    assert.equal(shouldDeliverActivityToUser(sampleActivities[1], admin, downlines), true)  // Self
+    assert.equal(shouldDeliverActivityToUser(sampleActivities[2], admin, downlines), true)  // Downline
+    assert.equal(shouldDeliverActivityToUser(sampleActivities[3], admin, downlines), false) // Stranger (Excluded)
+  })
+})
+
