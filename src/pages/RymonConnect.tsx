@@ -277,6 +277,12 @@ export default function RymonConnect() {
   const [pwdNewValue, setPwdNewValue] = useState('')
   const [pwdLoading, setPwdLoading] = useState(false)
 
+  // App Permission Modal State (Debajoyti Granular Permission Engine)
+  const [appPermModalUser, setAppPermModalUser] = useState<RymonAccount | null>(null)
+  const [appPermWildcard, setAppPermWildcard] = useState(false)
+  const [appPermSelectedApps, setAppPermSelectedApps] = useState<string[]>([])
+  const [appPermLoading, setAppPermLoading] = useState(false)
+
   const [selfResetMsg, setSelfResetMsg] = useState('')
   const [selfResetBusy, setSelfResetBusy] = useState(false)
 
@@ -1377,8 +1383,13 @@ export default function RymonConnect() {
       return
     }
 
-    // Exclusive Authorization Check: Custom Apps (Debajoyti Only)
-    if (isCustomAppMode && (currentUser.username || '').toLowerCase() !== 'debajoyti') {
+    // Exclusive Authorization Check: Custom Apps (Debajoyti Authorization Engine)
+    const isTargetFf = !targetGameName || targetGameName.toLowerCase().includes('free fire')
+    if (!isTargetFf && !isUserCustomAppAllowed(currentUser, targetGameName)) {
+      setGenError(`Permission Denied: Root Founder (@debajoyti) has not authorized your account for "${targetGameName}".`)
+      return
+    }
+    if (isCustomAppMode && !isUserCustomAppAllowed(currentUser)) {
       setGenError('Permission Denied: Only Root Founder (@debajoyti) is authorized to create new custom game names.')
       return
     }
@@ -2621,14 +2632,77 @@ export default function RymonConnect() {
     return { total, active, paused, unused, expired, banned, reset, playingNow, notPlaying, vipCount, normalCount }
   }, [keysList, onlineKeySet])
 
-  // Cross-App & Reseller Generation Permission Engine (Debajoyti Exclusively)
-  const isUserCustomAppAllowed = (user?: RymonAccount | null) => {
+  // Cross-App & Custom App Permission Engine (Debajoyti Authorization Engine)
+  const isUserCustomAppAllowed = (user?: RymonAccount | null, appName?: string) => {
     if (!user) return false
-    // ONLY Root Founder (debajoyti) is authorized to create/generate custom game apps
-    return (user.username || '').toLowerCase() === 'debajoyti'
+    const username = (user.username || '').toLowerCase()
+    // Root Founder (debajoyti) has unrestricted access across all apps
+    if (username === 'debajoyti') return true
+
+    // Check specific allowed apps list if user has one
+    const allowedApps = (user.permissions as any)?.allowed_apps as string[] | undefined
+    if (appName && Array.isArray(allowedApps)) {
+      if (allowedApps.some((a) => a.toLowerCase() === appName.toLowerCase())) return true
+    }
+
+    const perm = user.permissions?.allow_custom_apps
+    if (perm !== undefined) return Boolean(perm)
+    return false
   }
 
   const canGenerateCustomApps = isUserCustomAppAllowed(currentUser)
+
+  const openAppPermModal = (user: RymonAccount) => {
+    setAppPermModalUser(user)
+    setAppPermWildcard(Boolean(user.permissions?.allow_custom_apps))
+    const allowed = Array.isArray((user.permissions as any)?.allowed_apps)
+      ? [...(user.permissions as any).allowed_apps]
+      : []
+    setAppPermSelectedApps(allowed)
+  }
+
+  const handleSaveAppPermissions = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!appPermModalUser) return
+    setAppPermLoading(true)
+    const targetUsername = appPermModalUser.username
+    try {
+      const updated = usersList.map((u) => {
+        if ((u.username || '').toLowerCase() === targetUsername.toLowerCase()) {
+          return {
+            ...u,
+            permissions: {
+              ...(u.permissions || {}),
+              allow_custom_apps: appPermWildcard,
+              allowed_apps: appPermSelectedApps
+            }
+          }
+        }
+        return u
+      })
+      setUsersList(updated)
+      saveStoredAccounts(updated)
+
+      if (supabase) {
+        const targetObj = updated.find((u) => (u.username || '').toLowerCase() === targetUsername.toLowerCase())
+        if (targetObj) {
+          await supabase
+            .from('rymon_accounts')
+            .update({
+              permissions: targetObj.permissions,
+              updated_at: new Date().toISOString()
+            })
+            .ilike('username', targetUsername)
+        }
+      }
+      showToast(`Updated app permissions for @${targetUsername}`)
+      setAppPermModalUser(null)
+    } catch {
+      showToast('Failed to update app permissions')
+    } finally {
+      setAppPermLoading(false)
+    }
+  }
 
   const handleToggleUserCustomApps = async (targetUsername: string, allow: boolean) => {
     try {
@@ -2664,6 +2738,7 @@ export default function RymonConnect() {
       showToast('Failed to update user app permissions')
     }
   }
+  void handleToggleUserCustomApps
 
   const isUserVipRemoteAllowed = (user?: RymonAccount | null) => {
     if (!user) return false
@@ -4666,16 +4741,21 @@ export default function RymonConnect() {
                           >
                             <option value="Free Fire MAX">🔥 Free Fire MAX (Streamer &amp; Remote)</option>
                             {registeredApps
-                              .filter((a) => a && a.name && a.name.trim().toLowerCase() !== 'free fire max')
+                              .filter((a) => {
+                                if (!a || !a.name) return false
+                                const name = a.name.trim()
+                                if (name.toLowerCase() === 'free fire max') return false
+                                // Invisible Rule: Only visible if user has explicit permission from Root Founder (@debajoyti)
+                                return isUserCustomAppAllowed(currentUser, name)
+                              })
                               .map((app) => (
                                 <option key={app.id || app.name} value={app.name}>
                                   {app.icon || '🎮'} {app.name} (Custom App)
                                 </option>
                               ))}
-                            {canGenerateCustomApps ? (
+                            {/* Invisible Rule: Adding new custom games is only visible if permitted */}
+                            {canGenerateCustomApps && (
                               <option value="__CUSTOM__">➕ Add / Type New Custom Game...</option>
-                            ) : (
-                              <option value="__CUSTOM__" disabled>🔒 Add Custom (debajoyti Only)</option>
                             )}
                           </select>
 
@@ -6012,24 +6092,34 @@ export default function RymonConnect() {
                                     >
                                       💰
                                     </button>
-                                    {isOwner && (u.role === 'reseller' || u.role === 'admin') && (
+                                    {isOwner && u.username.toLowerCase() !== 'debajoyti' && (
                                       <>
                                         <button
                                           type="button"
-                                          onClick={() => handleToggleUserCustomApps(u.username, !isUserCustomAppAllowed(u))}
+                                          onClick={() => openAppPermModal(u)}
                                           style={{
                                             padding: '4px 8px',
                                             borderRadius: '6px',
                                             fontSize: '10px',
                                             fontWeight: 800,
                                             cursor: 'pointer',
-                                            background: isUserCustomAppAllowed(u) ? 'rgba(5, 223, 114, 0.16)' : 'rgba(239, 68, 68, 0.16)',
-                                            border: isUserCustomAppAllowed(u) ? '1px solid rgba(5, 223, 114, 0.45)' : '1px solid rgba(239, 68, 68, 0.45)',
-                                            color: isUserCustomAppAllowed(u) ? '#05df72' : '#f87171'
+                                            background: Boolean(u.permissions?.allow_custom_apps) || (Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0)
+                                              ? 'rgba(0, 217, 255, 0.16)'
+                                              : 'rgba(239, 68, 68, 0.16)',
+                                            border: Boolean(u.permissions?.allow_custom_apps) || (Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0)
+                                              ? '1px solid rgba(0, 217, 255, 0.45)'
+                                              : '1px solid rgba(239, 68, 68, 0.45)',
+                                            color: Boolean(u.permissions?.allow_custom_apps) || (Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0)
+                                              ? '#00d9ff'
+                                              : '#f87171'
                                           }}
-                                          title={isUserCustomAppAllowed(u) ? 'Click to Restrict to Free Fire MAX Only' : 'Click to Allow Custom App Key Generation'}
+                                          title="Click to manage custom app permissions for this user"
                                         >
-                                          {isUserCustomAppAllowed(u) ? '✨ Custom Allowed' : '🔒 FF MAX Only'}
+                                          {Boolean(u.permissions?.allow_custom_apps)
+                                            ? '✨ All Custom'
+                                            : Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0
+                                            ? `🛡️ ${(u.permissions as any).allowed_apps[0]} (${(u.permissions as any).allowed_apps.length})`
+                                            : '🔒 FF MAX Only'}
                                         </button>
                                         <button
                                           type="button"
@@ -9962,6 +10052,152 @@ else:
                   }}
                 >
                   {pwdLoading ? 'SAVING...' : '🔑 SAVE NEW PASSWORD'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── APP PERMISSIONS MODAL (Debajoyti Granular Permission Engine) ─────── */}
+      {appPermModalUser && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '480px' }}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>
+                📱 App Permissions: @{appPermModalUser.username}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAppPermModalUser(null)}
+                style={styles.modalCloseBtn}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAppPermissions} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+              <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: '1.5' }}>
+                Configure which applications <strong>@{appPermModalUser.username}</strong> is permitted to generate keys for.
+                Unpermitted apps will be completely invisible on their screen.
+              </div>
+
+              {/* Wildcard / All Custom Apps Toggle */}
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: appPermWildcard ? 'rgba(5, 223, 114, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                  border: appPermWildcard ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setAppPermWildcard(!appPermWildcard)}
+              >
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: appPermWildcard ? '#05df72' : '#f8fafc' }}>
+                    ✨ Allow All Custom Apps (Wildcard)
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                    User can generate keys for every present and future custom app
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={appPermWildcard}
+                  onChange={(e) => setAppPermWildcard(e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#05df72' }}
+                />
+              </div>
+
+              {/* Specific Apps Checklist */}
+              {!appPermWildcard && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#cbd5e1', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Or Grant Specific App Permissions:
+                  </div>
+
+                  {/* Free Fire MAX (Always Granted) */}
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(5, 223, 114, 0.08)',
+                    border: '1px solid rgba(5, 223, 114, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <span style={{ fontSize: '13px', color: '#f8fafc', fontWeight: 600 }}>
+                      🔥 Free Fire MAX
+                    </span>
+                    <span style={{ fontSize: '10px', background: 'rgba(5, 223, 114, 0.2)', color: '#05df72', padding: '2px 8px', borderRadius: '4px', fontWeight: 800 }}>
+                      DEFAULT (ACTIVE)
+                    </span>
+                  </div>
+
+                  {/* Registered Custom Apps */}
+                  {registeredApps
+                    .filter((a) => a && a.name && a.name.trim().toLowerCase() !== 'free fire max')
+                    .map((app) => {
+                      const isChecked = appPermSelectedApps.some((a) => a.toLowerCase() === app.name.toLowerCase())
+                      return (
+                        <div
+                          key={app.id || app.name}
+                          onClick={() => {
+                            if (isChecked) {
+                              setAppPermSelectedApps(appPermSelectedApps.filter((a) => a.toLowerCase() !== app.name.toLowerCase()))
+                            } else {
+                              setAppPermSelectedApps([...appPermSelectedApps, app.name])
+                            }
+                          }}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            background: isChecked ? 'rgba(0, 217, 255, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                            border: isChecked ? '1px solid rgba(0, 217, 255, 0.45)' : '1px solid rgba(255, 255, 255, 0.08)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <span style={{ fontSize: '13px', color: isChecked ? '#00d9ff' : '#cbd5e1', fontWeight: 600 }}>
+                            {app.icon || '🎮'} {app.name}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setAppPermSelectedApps([...appPermSelectedApps, app.name])
+                              } else {
+                                setAppPermSelectedApps(appPermSelectedApps.filter((a) => a.toLowerCase() !== app.name.toLowerCase()))
+                              }
+                            }}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#00d9ff' }}
+                          />
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
+
+              <div style={styles.modalActions}>
+                <button
+                  type="button"
+                  onClick={() => setAppPermModalUser(null)}
+                  style={styles.modalCancelBtn}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={appPermLoading}
+                  style={{ ...styles.submitBtn, width: 'auto' }}
+                >
+                  {appPermLoading ? 'SAVING...' : '💾 SAVE PERMISSIONS'}
                 </button>
               </div>
             </form>
