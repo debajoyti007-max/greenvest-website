@@ -24,6 +24,7 @@ export interface RymonAccount {
     account_settings?: boolean
     security?: boolean
     allow_custom_apps?: boolean
+    allowed_apps?: string[]
     allow_multi_device?: boolean
     allow_web_remote?: boolean
   }
@@ -632,6 +633,16 @@ export async function verifyLicenseKey(
             return { valid: false, error: `License key expired on ${new Date(licRow.expires_at).toLocaleDateString()}` }
           }
 
+          // Strict Cross-App Enforcement: Web Streamer Remote is exclusively for Free Fire MAX!
+          const licGame = (licRow.game || 'Free Fire MAX').trim()
+          const isFf = licGame.toLowerCase().includes('free fire') || ['universal', 'all', 'any', 'global'].includes(licGame.toLowerCase())
+          if (!isFf) {
+            return {
+              valid: false,
+              error: `App Mismatch: This key is registered for "${licGame}" (Pure KeyAuth). The Streamer Remote HUD is exclusively available for Free Fire MAX.`
+            }
+          }
+
           // Check if a streamer controls record already exists so we don't wipe toggle columns
           const { data: existingCtrl } = await supabase
             .from('rymon_streamer_controls')
@@ -693,6 +704,14 @@ export async function verifyLicenseKey(
       }
       if (matched.expires_at && new Date(matched.expires_at).getTime() < Date.now()) {
         return { valid: false, error: 'License key has expired.' }
+      }
+      const matchedGame = (matched.game || 'Free Fire MAX').trim()
+      const isFf = matchedGame.toLowerCase().includes('free fire') || ['universal', 'all', 'any', 'global'].includes(matchedGame.toLowerCase())
+      if (!isFf) {
+        return {
+          valid: false,
+          error: `App Mismatch: This key is registered for "${matchedGame}" (Pure KeyAuth). The Streamer Remote HUD is exclusively available for Free Fire MAX.`
+        }
       }
       return {
         valid: true,
@@ -1478,11 +1497,20 @@ export async function generateLicenseKeyBackend(params: {
   const isRealtime = isFf && params.isVipRealtime !== false
   const policy = getSovereignSecurityPolicy()
 
-  // 1A. Exclusive Permission Enforcement: Custom App Generation (Debajoyti Exclusively)
-  if (!isFf && (creator.username || '').toLowerCase() !== 'debajoyti') {
-    return {
-      success: false,
-      error: `Permission Denied: Custom App creation and key generation are exclusively reserved for Root Founder (@debajoyti).`
+  // 1A. Exclusive Permission Enforcement: Custom App Generation (Debajoyti Authorization Engine)
+  if (!isFf) {
+    const isDebajoyti = (creator.username || '').toLowerCase() === 'debajoyti'
+    const allowedApps = (creator.permissions as any)?.allowed_apps as string[] | undefined
+    const isSpecificallyAllowed = Array.isArray(allowedApps) && allowedApps.some((a) => a.toLowerCase() === (game || '').toLowerCase())
+    const hasGlobalCustomPerm = Boolean(creator.permissions?.allow_custom_apps)
+
+    const isPermitted = isDebajoyti || isSpecificallyAllowed || hasGlobalCustomPerm
+
+    if (!isPermitted) {
+      return {
+        success: false,
+        error: `Permission Denied: Root Founder (@debajoyti) has not authorized your account for "${game}". Contact @debajoyti for access.`
+      }
     }
   }
 

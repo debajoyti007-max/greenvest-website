@@ -2864,7 +2864,7 @@ export default function RymonConnect() {
           /* 1. Header Optimization (Zero-Overlap Architectural Shield) */
           .sg-top-header {
             padding: 8px 12px !important;
-            gap: 6px !important;
+            gap: 8px !important;
             position: sticky !important;
             top: 0 !important;
             z-index: 100 !important;
@@ -2874,13 +2874,14 @@ export default function RymonConnect() {
             display: flex !important;
             align-items: center !important;
             justify-content: space-between !important;
-            overflow: visible !important;
+            overflow: hidden !important;
+            min-height: 52px !important;
           }
           .sg-header-left {
-            gap: 6px !important;
+            gap: 8px !important;
             flex: 0 1 auto !important;
             min-width: 0 !important;
-            max-width: none !important;
+            max-width: calc(100% - 150px) !important;
             overflow: hidden !important;
             display: flex !important;
             align-items: center !important;
@@ -2889,9 +2890,9 @@ export default function RymonConnect() {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 36px !important;
-            height: 36px !important;
-            min-width: 36px !important;
+            width: 34px !important;
+            height: 34px !important;
+            min-width: 34px !important;
             border-radius: 9px !important;
             background: rgba(168, 85, 247, 0.16) !important;
             border: 1px solid rgba(168, 85, 247, 0.35) !important;
@@ -2909,9 +2910,8 @@ export default function RymonConnect() {
             background: rgba(168, 85, 247, 0.3) !important;
           }
           .sg-brand-cluster {
-            gap: 6px !important;
+            gap: 8px !important;
             min-width: 0 !important;
-            max-width: calc(100% - 40px) !important;
             overflow: hidden !important;
             display: flex !important;
             align-items: center !important;
@@ -2924,13 +2924,13 @@ export default function RymonConnect() {
             flex-direction: column !important;
           }
           .sg-brand-title {
-            font-size: 13px !important;
+            font-size: 14px !important;
             font-weight: 900 !important;
             letter-spacing: 0.05em !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
-            max-width: 105px !important;
+            max-width: 120px !important;
             line-height: 1.15 !important;
           }
           .sg-brand-corp-text {
@@ -2940,42 +2940,29 @@ export default function RymonConnect() {
             display: none !important;
           }
           .sg-header-right {
-            gap: 5px !important;
-            flex: 1 0 auto !important;
+            gap: 6px !important;
+            flex: 0 0 auto !important;
             margin-left: auto !important;
-            max-width: none !important;
             display: flex !important;
             align-items: center !important;
             justify-content: flex-end !important;
           }
           .sg-balance-pill {
-            padding: 3px 8px !important;
-            font-size: 10.5px !important;
+            padding: 4px 9px !important;
+            font-size: 11px !important;
             border-radius: 12px !important;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
             touch-action: manipulation !important;
             cursor: pointer !important;
+            font-weight: 800 !important;
           }
           .sg-telemetry-pill {
-            padding: 3px 7px !important;
-            font-size: 9.5px !important;
-            border-radius: 12px !important;
-            gap: 4px !important;
-            white-space: nowrap !important;
-            flex-shrink: 0 !important;
-            touch-action: manipulation !important;
-          }
-          .sg-telemetry-text {
-            font-size: 9.5px !important;
-            font-weight: 700 !important;
-          }
-          .sg-ping-text {
             display: none !important;
           }
           .sg-user-profile-pill {
-            padding: 2px 4px !important;
-            gap: 4px !important;
+            padding: 3px 6px !important;
+            gap: 5px !important;
             border-radius: 12px !important;
             flex-shrink: 0 !important;
             touch-action: manipulation !important;
@@ -2984,22 +2971,23 @@ export default function RymonConnect() {
             display: none !important;
           }
           .sg-header-logout-btn {
-            min-width: 30px !important;
-            min-height: 30px !important;
+            min-width: 28px !important;
+            min-height: 28px !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            font-size: 13px !important;
+            font-size: 12px !important;
             border-radius: 7px !important;
             background: rgba(239, 68, 68, 0.15) !important;
             border: 1px solid rgba(239, 68, 68, 0.35) !important;
             color: #fca5a5 !important;
+            padding: 0 !important;
           }
 
           /* 2. Main Layout & Sidebar Drawer */
           .sg-main-layout {
             flex-direction: column !important;
-            min-height: calc(100vh - 50px) !important;
+            min-height: calc(100vh - 52px) !important;
             width: 100% !important;
           }
           .sg-sidebar {
@@ -3011,14 +2999,14 @@ export default function RymonConnect() {
             top: 0 !important;
             left: 0 !important;
             bottom: 0 !important;
-            width: 300px !important;
-            max-width: 86vw !important;
+            width: 280px !important;
+            max-width: 84vw !important;
             z-index: 1001 !important;
             background: #0d0a18 !important;
             box-shadow: 0 0 60px rgba(0, 0, 0, 0.95), 0 0 30px rgba(168, 85, 247, 0.3) !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
-            padding: 16px 14px calc(70px + env(safe-area-inset-bottom, 20px)) !important;
+            padding: 16px 14px calc(76px + env(safe-area-inset-bottom, 20px)) !important;
             border-right: 1px solid rgba(168, 85, 247, 0.35) !important;
             animation: sgSlideDrawer 0.24s cubic-bezier(0.16, 1, 0.3, 1) both !important;
           }
@@ -3060,9 +3048,9 @@ export default function RymonConnect() {
 
           /* 3. Content Pane & Containers */
           .sg-content-pane {
-            padding: 12px 10px calc(85px + env(safe-area-inset-bottom, 16px)) !important;
+            padding: 14px 12px calc(76px + env(safe-area-inset-bottom, 16px)) !important;
             width: 100% !important;
-            max-width: 100% !important;
+            max-width: 100vw !important;
             box-sizing: border-box !important;
             overflow-x: hidden !important;
           }
@@ -3074,11 +3062,11 @@ export default function RymonConnect() {
 
           /* 4. Auth Gateway */
           .sg-auth-gate-box {
-            width: 94% !important;
-            max-width: 440px !important;
-            margin: 14px auto calc(40px + env(safe-area-inset-bottom, 20px)) !important;
-            padding: 20px 14px !important;
-            border-radius: 14px !important;
+            width: 92% !important;
+            max-width: 420px !important;
+            margin: 16px auto calc(40px + env(safe-area-inset-bottom, 20px)) !important;
+            padding: 22px 16px !important;
+            border-radius: 16px !important;
             box-sizing: border-box !important;
           }
           .sg-auth-tab-selector {
@@ -3093,33 +3081,45 @@ export default function RymonConnect() {
           }
           .sg-auth-head {
             font-size: 18px !important;
-          }
-          .sg-auth-desc {
-            font-size: 12px !important;
-            margin-bottom: 16px !important;
+            margin-bottom: 12px !important;
           }
 
           /* 5. Streamer Remote HUD & Controls */
           .sg-banner-row {
             flex-direction: column !important;
             align-items: flex-start !important;
-            gap: 8px !important;
+            gap: 6px !important;
+            margin-bottom: 12px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .sg-remote-actions {
             display: flex !important;
             flex-wrap: wrap !important;
             gap: 6px !important;
             width: 100% !important;
+            box-sizing: border-box !important;
           }
-          .sg-remote-actions > * {
-            flex: 1 1 calc(50% - 6px) !important;
+          .sg-remote-actions > span {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            text-align: center !important;
+            justify-content: center !important;
+            min-height: 32px !important;
+            box-sizing: border-box !important;
+            display: inline-flex !important;
+            align-items: center !important;
+          }
+          .sg-remote-actions > button {
+            flex: 1 1 calc(50% - 4px) !important;
             min-height: 38px !important;
-            font-size: 11px !important;
+            font-size: 11.5px !important;
+            font-weight: 800 !important;
             text-align: center !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            padding: 6px 10px !important;
+            padding: 6px 8px !important;
             box-sizing: border-box !important;
             touch-action: manipulation !important;
           }
@@ -3127,7 +3127,8 @@ export default function RymonConnect() {
             flex-direction: column !important;
             align-items: stretch !important;
             gap: 10px !important;
-            padding: 10px !important;
+            padding: 12px 10px !important;
+            box-sizing: border-box !important;
           }
           .sg-key-select-box {
             width: 100% !important;
@@ -3139,25 +3140,35 @@ export default function RymonConnect() {
           }
           .sg-telemetry-meta-row {
             display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
+            grid-template-columns: repeat(2, 1fr) !important;
             gap: 8px !important;
             width: 100% !important;
+            box-sizing: border-box !important;
             border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
             padding-top: 8px !important;
+          }
+          .sg-telemetry-meta-row > div:first-child {
+            grid-column: span 2 !important;
+            word-break: break-all !important;
           }
           .sg-control-grid {
             grid-template-columns: 1fr !important;
             gap: 12px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .sg-column-card {
             padding: 14px 12px !important;
             border-radius: 12px !important;
+            box-sizing: border-box !important;
           }
           .sg-player-status-bar {
             padding: 12px 10px !important;
             gap: 10px !important;
             flex-direction: column !important;
             align-items: stretch !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .sg-player-status-bar > div {
             width: 100% !important;
@@ -3166,66 +3177,73 @@ export default function RymonConnect() {
           /* 6. Form Grids (Key Gen, Settings, Top-Up) */
           .sg-form-grid-2col {
             grid-template-columns: 1fr !important;
-            gap: 12px !important;
+            gap: 10px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .sg-management-card {
             padding: 16px 12px !important;
             border-radius: 14px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
 
           /* 7. Overview Dashboard Cards */
           .sg-stat-grid {
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 8px !important;
-            margin-bottom: 16px !important;
+            margin-bottom: 14px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .sg-stat-card {
             padding: 12px 10px !important;
             gap: 10px !important;
             border-radius: 12px !important;
             touch-action: manipulation !important;
-            -webkit-tap-highlight-color: rgba(168, 85, 247, 0.25) !important;
             cursor: pointer !important;
-            position: relative !important;
-            z-index: 10 !important;
             user-select: none !important;
-            transition: transform 0.12s ease, opacity 0.12s ease !important;
-          }
-          .sg-stat-card:active {
-            transform: scale(0.96) !important;
-            opacity: 0.85 !important;
+            box-sizing: border-box !important;
           }
           .sg-stat-num {
-            font-size: 20px !important;
+            font-size: 19px !important;
           }
           .sg-stat-label {
             font-size: 11px !important;
           }
           .sg-stat-icon-frame {
-            width: 32px !important;
-            height: 32px !important;
-            font-size: 16px !important;
+            width: 30px !important;
+            height: 30px !important;
+            font-size: 15px !important;
             border-radius: 8px !important;
           }
           .sg-dual-grid {
             grid-template-columns: 1fr !important;
             gap: 14px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .sg-card-box {
-            padding: 16px 14px !important;
+            padding: 14px 12px !important;
             border-radius: 14px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
           .sg-quick-grid {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: repeat(2, 1fr) !important;
             gap: 8px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
 
           /* 8. Tables & Horizontal Scroll Container */
           .sg-table-card {
             border-radius: 12px !important;
             width: 100% !important;
+            max-width: 100vw !important;
             overflow-x: auto !important;
             -webkit-overflow-scrolling: touch !important;
+            box-sizing: border-box !important;
           }
           .sg-data-table {
             min-width: 680px !important;
@@ -3242,6 +3260,9 @@ export default function RymonConnect() {
             flex-wrap: nowrap !important;
             -webkit-overflow-scrolling: touch !important;
             scrollbar-width: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
           }
           .sg-filter-scroll-row::-webkit-scrollbar {
             display: none !important;
@@ -3252,6 +3273,7 @@ export default function RymonConnect() {
           .sg-search-box {
             width: 100% !important;
             min-width: 0 !important;
+            box-sizing: border-box !important;
           }
 
           /* 9. Modals (Responsive & Scrollable) */
@@ -3262,19 +3284,20 @@ export default function RymonConnect() {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            padding: 16px !important;
+            padding: 14px !important;
             background-color: rgba(0, 0, 0, 0.88) !important;
             backdrop-filter: blur(10px) !important;
             -webkit-backdrop-filter: blur(10px) !important;
+            box-sizing: border-box !important;
           }
           .sg-modal-card {
             width: 94% !important;
-            max-width: 480px !important;
+            max-width: 440px !important;
             max-height: 85vh !important;
             max-height: 85dvh !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
-            padding: 20px 16px !important;
+            padding: 18px 14px !important;
             border-radius: 14px !important;
             margin: auto !important;
             box-sizing: border-box !important;
@@ -3296,6 +3319,7 @@ export default function RymonConnect() {
             justify-content: space-around !important;
             align-items: center !important;
             box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.6) !important;
+            box-sizing: border-box !important;
           }
           .sg-mobile-bottom-tab {
             display: flex !important;
@@ -3329,37 +3353,30 @@ export default function RymonConnect() {
         @media (max-width: 400px) {
           .sg-top-header {
             padding: 6px 8px !important;
-            gap: 4px !important;
+            gap: 6px !important;
           }
           .sg-header-left {
-            gap: 4px !important;
+            gap: 6px !important;
           }
           .sg-brand-title {
-            max-width: 70px !important;
-            font-size: 11.5px !important;
+            max-width: 90px !important;
+            font-size: 13px !important;
           }
           .sg-header-right {
-            gap: 3px !important;
+            gap: 4px !important;
           }
           .sg-balance-pill {
-            padding: 3px 5px !important;
+            padding: 3px 6px !important;
             font-size: 10px !important;
           }
-          .sg-telemetry-pill {
-            padding: 3px 5px !important;
-            font-size: 9px !important;
-          }
-          .sg-telemetry-text {
-            font-size: 8.5px !important;
-          }
           .sg-user-profile-pill {
-            padding: 2px 3px !important;
+            padding: 2px 4px !important;
             gap: 3px !important;
           }
           .sg-mobile-bottom-tab {
-            min-width: 44px !important;
-            padding: 4px 3px !important;
-            font-size: 9.5px !important;
+            min-width: 42px !important;
+            padding: 4px 2px !important;
+            font-size: 9px !important;
           }
         }
 
@@ -3576,10 +3593,7 @@ export default function RymonConnect() {
 
               {!isRegisterMode ? (
                 <div>
-                  <h2 style={styles.authHead}>Staff Control Login</h2>
-                  <p style={styles.authDesc}>
-                    Authenticate with your RYMON account to manage licenses, generate keys, and oversee user balances.
-                  </p>
+                  <h2 style={styles.authHead}>Staff Login</h2>
 
                   <form onSubmit={handleStaffLogin} style={styles.authForm}>
                     <div style={styles.formGroup}>
@@ -3656,10 +3670,7 @@ export default function RymonConnect() {
                 </div>
               ) : (
                 <div>
-                  <h2 style={styles.authHead}>Register with Referral Code</h2>
-                  <p style={styles.authDesc}>
-                    Enter an invitation code issued by the owner to create your genuine RYMON Reseller or Admin account.
-                  </p>
+                  <h2 style={styles.authHead}>Create Account</h2>
 
                   <form onSubmit={handleRegister} style={styles.authForm}>
                     <div style={styles.formGroup}>
@@ -3709,9 +3720,6 @@ export default function RymonConnect() {
                         style={{ ...styles.keyInput, textTransform: 'uppercase' }}
                         required
                       />
-                      <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                        Each code automatically assigns your role and pre-loaded wallet credit.
-                      </span>
                     </div>
 
                     <button type="submit" disabled={regLoading} style={styles.submitBtn}>
@@ -3725,10 +3733,7 @@ export default function RymonConnect() {
             </div>
           ) : (
             <div>
-              <h2 style={styles.authHead}>Connect Streamer Remote</h2>
-              <p style={styles.authDesc}>
-                Enter your registered Rymon license key to synchronize hardware telemetry and aim assistance in real-time.
-              </p>
+              <h2 style={styles.authHead}>Streamer Key</h2>
 
               <form onSubmit={handleKeyAuth} style={styles.authForm}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: '#94a3b8' }}>
@@ -4129,11 +4134,10 @@ export default function RymonConnect() {
               <div className="sg-view-container" style={styles.viewContainer}>
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Operational Matrix</h2>
+                    <h2 style={styles.pageTitle}>Overview</h2>
                   </div>
                   <div style={styles.badgeCluster}>
-                    <span style={styles.greenPulseBadge}>● RYMON CLOUD ACTIVE</span>
-                    <span style={styles.timeTag}>greenvest.shop</span>
+                    <span style={styles.greenPulseBadge}>● CLOUD ACTIVE</span>
                   </div>
                 </div>
 
@@ -4285,13 +4289,8 @@ export default function RymonConnect() {
                         gap: '8px'
                       }}
                     >
-                      <span>⚪ NOT PLAYING / OFFLINE: {stats.notPlaying}</span>
+                      <span>⚪ OFFLINE: {stats.notPlaying}</span>
                     </div>
-                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      {stats.playingNow > 0
-                        ? `Live in-game daemon connected (${stats.playingNow} active match session${stats.playingNow > 1 ? 's' : ''})`
-                        : 'All licensed devices are currently offline / not in a match'}
-                    </span>
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -4338,7 +4337,6 @@ export default function RymonConnect() {
                       >
                         <div style={styles.quickActionIcon}>⚡</div>
                         <div style={styles.quickActionTitle}>Streamer Remote</div>
-                        <div style={styles.quickActionSub}>Direct Android Controller</div>
                       </button>
                       <button
                         onClick={() => handleSelectTab('generate')}
@@ -4346,7 +4344,6 @@ export default function RymonConnect() {
                       >
                         <div style={styles.quickActionIcon}>🔑</div>
                         <div style={styles.quickActionTitle}>Generate License</div>
-                        <div style={styles.quickActionSub}>Single or Bulk Keys (1–50)</div>
                       </button>
                       <button
                         onClick={() =>
@@ -4361,7 +4358,6 @@ export default function RymonConnect() {
                         <div style={{ ...styles.quickActionTitle, color: '#eab308' }}>
                           Copy Unused ({stats.unused})
                         </div>
-                        <div style={styles.quickActionSub}>1-Click Copy Waiting Keys</div>
                       </button>
                       <button
                         onClick={() => handleQuickBulkDelete('expired')}
@@ -4371,7 +4367,6 @@ export default function RymonConnect() {
                         <div style={{ ...styles.quickActionTitle, color: '#ef4444' }}>
                           Purge Expired ({stats.expired})
                         </div>
-                        <div style={styles.quickActionSub}>1-Click Delete Expired Keys</div>
                       </button>
                       <button
                         onClick={handleBulkResetAllHwid}
@@ -4379,7 +4374,6 @@ export default function RymonConnect() {
                       >
                         <div style={styles.quickActionIcon}>🔄</div>
                         <div style={{ ...styles.quickActionTitle, color: '#00d9ff' }}>Reset All HWID</div>
-                        <div style={styles.quickActionSub}>Unbind All Devices Instantly</div>
                       </button>
                       <button
                         onClick={() => handleSelectTab('keys')}
@@ -4387,7 +4381,6 @@ export default function RymonConnect() {
                       >
                         <div style={styles.quickActionIcon}>🗂️</div>
                         <div style={styles.quickActionTitle}>Manage All Keys</div>
-                        <div style={styles.quickActionSub}>Filter, Pause, Delete, Extend</div>
                       </button>
                       <button
                         onClick={() => handleBulkPauseAllKeys(true)}
@@ -4395,7 +4388,6 @@ export default function RymonConnect() {
                       >
                         <div style={styles.quickActionIcon}>⏸️</div>
                         <div style={{ ...styles.quickActionTitle, color: '#ffb700' }}>Pause All Keys</div>
-                        <div style={styles.quickActionSub}>Global Maintenance Freeze</div>
                       </button>
                       <button
                         onClick={() => handleBulkPauseAllKeys(false)}
@@ -4403,7 +4395,6 @@ export default function RymonConnect() {
                       >
                         <div style={styles.quickActionIcon}>▶️</div>
                         <div style={{ ...styles.quickActionTitle, color: '#05df72' }}>Resume All Keys</div>
-                        <div style={styles.quickActionSub}>Unfreeze All Licenses</div>
                       </button>
                     </div>
                   </div>
@@ -4444,17 +4435,9 @@ export default function RymonConnect() {
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
-                      {isOwner ? 'Top Up User Balance (Free Owner Mint)' : 'Transfer Balance to Reseller'}
+                      {isOwner ? 'Top Up Balance' : 'Transfer Balance'}
                     </h2>
-                    <p style={styles.pageSubtitle}>
-                      {isOwner
-                        ? 'Create and credit unlimited balance into any Admin or Reseller account for ₹0 cost.'
-                        : 'Transfer balance from your own Admin wallet directly to your invited Resellers.'}
-                    </p>
                   </div>
-                  <span style={styles.cyanMiniBadge}>
-                    {isOwner ? '👑 OWNER FREE MINT' : `🛡️ ADMIN WALLET: ₹${walletBalance.toLocaleString('en-IN')}`}
-                  </span>
                 </div>
 
                 <div style={styles.centerCardWrapper}>
@@ -4466,13 +4449,8 @@ export default function RymonConnect() {
                         </div>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
-                            {isOwner ? 'Top Up User Balance' : 'Transfer Wallet Balance to Reseller'}
+                            {isOwner ? 'Top Up Balance' : 'Transfer Balance'}
                           </h3>
-                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            {isOwner
-                              ? 'Set or add balance to any Admin or Reseller'
-                              : 'Amount transferred is deducted directly from your Admin wallet'}
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -4597,10 +4575,7 @@ export default function RymonConnect() {
               <div className="sg-view-container" style={styles.viewContainer}>
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Generate License Key (Single & Bulk)</h2>
-                    <p style={styles.pageSubtitle}>
-                      Seller username <strong>@{currentUser?.username}</strong> will be displayed as a glowing VIP badge inside the APK. New keys start in <strong>WAITING (Unused)</strong> status and only begin their countdown on 1st APK login.
-                    </p>
+                    <h2 style={styles.pageTitle}>Generate Keys</h2>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     {hasCustomPricingForCurrentUser && (
@@ -5152,13 +5127,8 @@ export default function RymonConnect() {
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
-                      License Keys Command Center ({filteredKeys.length} / {stats.total})
+                      License Keys ({filteredKeys.length})
                     </h2>
-                    <p style={styles.pageSubtitle}>
-                      {currentUser?.role === 'reseller'
-                        ? `Showing licenses issued by @${currentUser.username} • Auto-detects Expired & Unused keys in real time.`
-                        : 'Complete directory of all registered keys across all games with 1-click bulk operations.'}
-                    </p>
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
 
@@ -5266,12 +5236,14 @@ export default function RymonConnect() {
                     ))}
                   </div>
 
-                  {/* Row 1B: Edition Filter Pills (Standard Mobile APK vs VIP Streamer Remote) */}
+                  {/* Row 1B: Edition Filter Pills */}
                   <div
+                    className="sg-filter-scroll-row"
                     style={{
                       display: 'flex',
                       gap: '8px',
-                      flexWrap: 'wrap',
+                      flexWrap: 'nowrap',
+                      overflowX: 'auto',
                       alignItems: 'center',
                       paddingTop: '8px',
                       borderTop: '1px solid rgba(30, 41, 59, 0.5)'
@@ -5314,12 +5286,14 @@ export default function RymonConnect() {
                     ))}
                   </div>
 
-                  {/* Row 2: Senior Dev 1-Click Bulk Operations Toolbar */}
+                  {/* Row 2: Bulk Operations Toolbar */}
                   <div
+                    className="sg-filter-scroll-row"
                     style={{
                       display: 'flex',
                       gap: '8px',
-                      flexWrap: 'wrap',
+                      flexWrap: 'nowrap',
+                      overflowX: 'auto',
                       paddingTop: '10px',
                       borderTop: '1px solid rgba(30, 41, 59, 0.7)'
                     }}
@@ -5854,13 +5828,8 @@ export default function RymonConnect() {
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
-                      {isOwner ? `Registered Users (${usersList.length})` : `My Downline Resellers & Team (${usersList.length})`}
+                      {isOwner ? `Users (${usersList.length})` : `My Resellers (${usersList.length})`}
                     </h2>
-                    <p style={styles.pageSubtitle}>
-                      {isOwner
-                        ? 'Manage all administrative roles, uplinks, and global wallet authorizations in RYMON Cloud.'
-                        : 'Manage your invited downline Resellers, transfer wallet balance, and set custom Reseller key prices.'}
-                    </p>
                   </div>
                   <div className="sg-search-box" style={styles.searchBox}>
                     <input
@@ -6157,16 +6126,11 @@ export default function RymonConnect() {
                   <div>
                     <h2 style={styles.pageTitle}>
                       {isOwner
-                        ? 'Delete & Purge License Keys'
+                        ? 'Purge License Keys'
                         : isAdmin
-                        ? 'Clean Team Expired & Unused Keys'
-                        : 'Clean My Expired & Unused Keys'}
+                        ? 'Clean Team Expired Keys'
+                        : 'Clean Expired Keys'}
                     </h2>
-                    <p style={styles.pageSubtitle}>
-                      {isOwner
-                        ? '1-click global purge or targeted deletion of Expired, Unused (Waiting), or ALL keys across the platform.'
-                        : '1-click cleanup of Expired or Unused (Waiting) keys across your account and downline.'}
-                    </p>
                   </div>
                 </div>
 
@@ -6295,12 +6259,7 @@ export default function RymonConnect() {
               <div className="sg-view-container" style={styles.viewContainer}>
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Extend License Duration (Max 30 Days)</h2>
-                    <p style={styles.pageSubtitle}>
-                      {isOwner
-                        ? 'Add operational days to any key or all active keys globally (capped at 30 days max validity).'
-                        : 'Extend your keys by adding days (max 30 days validity). Extension cost is deducted from your wallet.'}
-                    </p>
+                    <h2 style={styles.pageTitle}>Extend License Duration</h2>
                   </div>
                 </div>
 
@@ -6419,15 +6378,10 @@ export default function RymonConnect() {
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>
-                      {isOwner ? 'Key Pricing & Advance System' : 'Downline Reseller Custom Pricing'}
+                      {isOwner ? 'Pricing & Policies' : 'Reseller Pricing'}
                     </h2>
-                    <p style={styles.pageSubtitle}>
-                      {isOwner
-                        ? 'Update default key prices for all users or set custom discounted rates for specific Admins & Resellers.'
-                        : 'Assign custom key generation rates for your invited downline Resellers.'}
-                    </p>
                   </div>
-                  <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER PRICING ENGINE' : 'ADMIN RESELLER PRICING'}</span>
+                  <span style={styles.cyanMiniBadge}>{isOwner ? 'PRICING' : 'RESELLER'}</span>
                 </div>
 
                 {/* Pricing Grid: Global Default (Owner) / Wholesale Rates (Admin) vs Target Individual */}
@@ -6439,9 +6393,6 @@ export default function RymonConnect() {
                         <h4>🌐 Default Key Prices (All Users)</h4>
                         <span style={styles.cyanMiniBadge}>GLOBAL RATE</span>
                       </div>
-                      <p style={styles.settingDesc}>
-                        Applies to all Admins and Resellers unless they have an individual custom rate on the right.
-                      </p>
 
                       <form onSubmit={handleSaveGlobalDefaultPrices} style={{ marginTop: '14px' }}>
                         <div className="sg-form-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
@@ -6505,11 +6456,6 @@ export default function RymonConnect() {
                         <h4>{isAdmin ? '🛡️ Your Admin Wholesale Key Rates' : '💼 Your Reseller Key Rates'}</h4>
                         <span style={styles.cyanMiniBadge}>YOUR BASE COST</span>
                       </div>
-                      <p style={styles.settingDesc}>
-                        {isAdmin
-                          ? 'These are your current key generation rates set by the Owner. You can assign custom rates for your downline Resellers on the right.'
-                          : 'These are your active key generation rates assigned to your account.'}
-                      </p>
                       <div className="sg-form-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '14px' }}>
                         {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
                           <div
@@ -6549,11 +6495,6 @@ export default function RymonConnect() {
                         {isOwner ? 'PER RESELLER / ADMIN' : 'MY DOWNLINE RESELLERS'}
                       </span>
                     </div>
-                    <p style={styles.settingDesc}>
-                      {isOwner
-                        ? 'Assign custom key prices for a specific Reseller or Admin account.'
-                        : 'Assign custom key prices for any Reseller in your downline team.'}
-                    </p>
 
                     <form onSubmit={handleSaveIndividualUserPrices} style={{ marginTop: '14px' }}>
                       <div style={styles.formGroup}>
@@ -6692,9 +6633,6 @@ export default function RymonConnect() {
                         <h4>📱 Single Device Login</h4>
                         <span style={styles.cyanMiniBadge}>SECURITY POLICY</span>
                       </div>
-                      <p style={styles.settingDesc}>
-                        When enabled, keys generated by that role will only allow 1 device at a time, regardless of the max_devices setting.
-                      </p>
 
                       <div style={styles.settingToggleRow}>
                         <div>
@@ -6744,9 +6682,6 @@ export default function RymonConnect() {
                         <h4>🔑 Trial Key Settings</h4>
                         <span style={styles.cyanMiniBadge}>ROLE PERMISSIONS</span>
                       </div>
-                      <p style={styles.settingDesc}>
-                        Control which administrative tiers are allowed to generate temporary trial keys.
-                      </p>
 
                       <div style={styles.settingToggleRow}>
                         <div>
@@ -6805,9 +6740,6 @@ export default function RymonConnect() {
                           APP ACCESS POLICY
                         </span>
                       </div>
-                      <p style={styles.settingDesc}>
-                        Owner controls for key generation privileges across administrative tiers. Keep Resellers locked strictly to <strong>Free Fire MAX</strong> (streamer controls) or allow them to mint keys for custom third-party apps (pure KeyAuth).
-                      </p>
 
                       <div style={styles.settingToggleRow}>
                         <div>
@@ -7054,9 +6986,6 @@ export default function RymonConnect() {
                           ENTERPRISE POLICY
                         </span>
                       </div>
-                      <p style={styles.settingDesc}>
-                        Configure daily HWID reset limits for Resellers (anti-sharing protection), automatic customer key pause when a Reseller&apos;s 30D/60D subscription expires, Admin renewal fees, and APK force-update requirements.
-                      </p>
 
                       <div style={styles.settingToggleRow}>
                         <div>
@@ -7235,16 +7164,10 @@ export default function RymonConnect() {
               <div className="sg-view-container" style={styles.viewContainer}>
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>Role Invite Codes Engine</h2>
-                    <p style={styles.pageSubtitle}>
-                      {isOwner
-                        ? 'Generate role-bound invitation codes for prospective Resellers and Admins. Users self-register with their own username and password.'
-                        : 'Generate role-bound invitation codes for prospective downline Resellers. Users self-register with their own username and password.'}
-                    </p>
+                    <h2 style={styles.pageTitle}>Invite Codes</h2>
                   </div>
                   <div style={styles.badgeCluster}>
-                    <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER CONSOLE' : 'ADMIN CONSOLE'}</span>
-                    <span style={styles.greenPulseBadge}>● RYMON PROTOCOL</span>
+                    <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER' : 'ADMIN'}</span>
                   </div>
                 </div>
 
@@ -7258,9 +7181,6 @@ export default function RymonConnect() {
                         </div>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Create Role Invite Code</h3>
-                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            Binds role & initial balance atomically upon user registration
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -7797,15 +7717,10 @@ else:
                   {/* Top Header */}
                   <div className="sg-banner-row" style={styles.bannerRow}>
                     <div>
-                      <h2 style={styles.pageTitle}>KeyAuth Connect Engine &amp; Client APK Integration</h2>
-                      <p style={styles.pageSubtitle}>
-                        Drop-in KeyAuth SDK client verification for Android APKs, C++ native daemons, and custom mod menus. Configure Free Fire MAX (KeyAuth + Streamer Remote) or any Custom Application (Pure KeyAuth only).
-                      </p>
+                      <h2 style={styles.pageTitle}>KeyAuth Connect &amp; SDK</h2>
                     </div>
                     <div style={styles.badgeCluster}>
-                      <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>👑 OWNER EXCLUSIVE</span>
-                      <span style={styles.greenPulseBadge}>● EDGE GATEWAY LIVE</span>
-                      <span style={{ ...styles.cyanMiniBadge, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff', border: '1px solid rgba(0, 217, 255, 0.4)' }}>🔒 ISOLATION STRICT</span>
+                      <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>ROOT OWNER</span>
                     </div>
                   </div>
 
@@ -7818,11 +7733,8 @@ else:
                         </div>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc', fontWeight: 800 }}>
-                            KeyAuth Application Credentials &amp; Target Setup
+                            KeyAuth Application Credentials
                           </h3>
-                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            Select target app to generate your exact drop-in <code>KeyAuth::Api(...)</code> initialization block
-                          </div>
                         </div>
                       </div>
 
@@ -8432,19 +8344,7 @@ else:
                 {/* Header Banner */}
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
-                    <h2 style={styles.pageTitle}>App Manager &amp; Cross-App Isolation Hub</h2>
-                    <p style={styles.pageSubtitle}>
-                      Manage applications in your KeyAuth ecosystem. Enforce strict cross-app license isolation (keys for Free Fire MAX cannot be used in custom apps like Tool X, Private Mod, Custom App, etc.). Only Free Fire MAX connects to the Streamer Remote; all other apps are <strong>pure KeyAuth only</strong>.
-                    </p>
-                  </div>
-                  <div style={styles.badgeCluster}>
-                    <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>
-                      👑 OWNER EXCLUSIVE
-                    </span>
-                    <span style={styles.greenPulseBadge}>● ISOLATION STRICT</span>
-                    <span style={{ ...styles.cyanMiniBadge, background: 'rgba(0, 217, 255, 0.15)', color: '#00d9ff', border: '1px solid rgba(0, 217, 255, 0.4)' }}>
-                      📱 {registeredApps.length} APPS REGISTERED
-                    </span>
+                    <h2 style={styles.pageTitle}>Applications ({registeredApps.length})</h2>
                   </div>
                 </div>
 
@@ -8514,11 +8414,8 @@ else:
                       <div style={styles.cardHeader}>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
-                            Configured Applications in Ecosystem
+                            Configured Applications
                           </h3>
-                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            Keys generated for an app are strictly locked to it. Click any app to generate keys or view licenses.
-                          </div>
                         </div>
                       </div>
 
@@ -9382,10 +9279,10 @@ else:
                   >
                     <div style={{ fontSize: '32px', marginBottom: '12px' }}>🎯</div>
                     <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc', marginBottom: '6px' }}>
-                      No Target License Key Selected
+                      No License Key Selected
                     </h3>
                     <p style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '420px', margin: '0 auto' }}>
-                      Please select a license key from the dropdown above to view device status or access live streamer telemetry.
+                      Select a license key from the dropdown above to view device status.
                     </p>
                   </div>
                 ) : !isCurrentVip ? (
@@ -9422,78 +9319,25 @@ else:
 
                     <h3
                       style={{
-                        fontSize: '22px',
+                        fontSize: '18px',
                         fontWeight: 800,
                         color: '#f8fafc',
-                        marginBottom: '10px',
-                        letterSpacing: '-0.5px'
+                        marginBottom: '8px'
                       }}
                     >
-                      Web Remote Controls Are Locked
+                      Standard Mobile APK Key
                     </h3>
 
                     <p
                       style={{
-                        maxWidth: '620px',
-                        margin: '0 auto 24px auto',
-                        fontSize: '13px',
-                        color: '#94a3b8',
-                        lineHeight: 1.6
+                        maxWidth: '520px',
+                        margin: '0 auto 20px auto',
+                        fontSize: '12.5px',
+                        color: '#94a3b8'
                       }}
                     >
-                      License Key <code style={{ color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>{currentKey}</code> is a <strong style={{ color: '#f8fafc' }}>Standard Mobile APK Key</strong>.
-                      It operates directly inside the Android Game Overlay with zero web remote sync, saving database egress and network bandwidth.
+                      Key <code style={{ color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>{currentKey}</code> operates directly via in-game floating menu. Web remote is exclusive to VIP edition.
                     </p>
-
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                        gap: '14px',
-                        maxWidth: '720px',
-                        margin: '0 auto 28px auto',
-                        textAlign: 'left'
-                      }}
-                    >
-                      <div
-                        style={{
-                          background: 'rgba(15, 23, 42, 0.7)',
-                          border: '1px solid rgba(255, 255, 255, 0.08)',
-                          borderRadius: '12px',
-                          padding: '16px'
-                        }}
-                      >
-                        <div style={{ fontSize: '20px', marginBottom: '8px' }}>📱</div>
-                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#f8fafc', marginBottom: '4px' }}>In-Game Floating Menu</div>
-                        <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.45 }}>All floating overlay controls and features are fully operational directly on the phone.</div>
-                      </div>
-
-                      <div
-                        style={{
-                          background: 'rgba(15, 23, 42, 0.7)',
-                          border: '1px solid rgba(255, 255, 255, 0.08)',
-                          borderRadius: '12px',
-                          padding: '16px'
-                        }}
-                      >
-                        <div style={{ fontSize: '20px', marginBottom: '8px' }}>🛡️</div>
-                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#f8fafc', marginBottom: '4px' }}>Zero Web Telemetry</div>
-                        <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.45 }}>Remote daemon is inactive to ensure 0% network lag, zero battery drain, and zero server egress.</div>
-                      </div>
-
-                      <div
-                        style={{
-                          background: 'rgba(15, 23, 42, 0.7)',
-                          border: '1px solid rgba(255, 255, 255, 0.08)',
-                          borderRadius: '12px',
-                          padding: '16px'
-                        }}
-                      >
-                        <div style={{ fontSize: '20px', marginBottom: '8px' }}>👑</div>
-                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#f8fafc', marginBottom: '4px' }}>Need Live Web Control?</div>
-                        <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.45 }}>Upgrade this license to VIP Web Remote (+50%) for live browser matrix sliders & stealth freeze.</div>
-                      </div>
-                    </div>
 
                     {(isOwner || isAdmin) ? (
                       <button
