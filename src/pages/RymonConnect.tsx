@@ -157,8 +157,23 @@ export default function RymonConnect() {
     }
   }
 
-  // Auth Gateway State (Dual Mode: Staff Username/Password vs Streamer Key)
-  const [authMode, setAuthMode] = useState<'staff' | 'key'>('staff')
+  // Auth Gateway State (Tri-Mode: Staff Login vs Streamer Remote vs Dedicated HWID Key Reset Portal)
+  const [authMode, setAuthMode] = useState<'staff' | 'key' | 'keyreset'>(() => {
+    if (typeof window !== 'undefined') {
+      const p = (window.location.pathname || '').toLowerCase()
+      const s = (window.location.search || '').toLowerCase()
+      if (
+        p.includes('keyreset') ||
+        p.includes('key-reset') ||
+        p.replace(/\/$/, '') === '/reset' ||
+        s.includes('keyreset') ||
+        s.includes('action=reset')
+      ) {
+        return 'keyreset'
+      }
+    }
+    return 'staff'
+  })
   const [staffUsername, setStaffUsername] = useState('')
   const [staffPassword, setStaffPassword] = useState('')
   const [keyInput, setKeyInput] = useState('')
@@ -379,19 +394,29 @@ export default function RymonConnect() {
     }
 
     // Restore saved session
-    const savedUserJson = localStorage.getItem('rymon_session_user')
+    const isResetRoute = typeof window !== 'undefined' && (
+      window.location.pathname.toLowerCase().includes('keyreset') ||
+      window.location.pathname.toLowerCase().includes('key-reset') ||
+      window.location.pathname.toLowerCase().replace(/\/$/, '') === '/reset'
+    )
+
+    const savedUserJson = isResetRoute ? null : localStorage.getItem('rymon_session_user')
     const savedKey = queryKey || localStorage.getItem('rymon_remote_key')
     const savedExp = localStorage.getItem('rymon_remote_expiry')
 
     if (queryKey) {
-      try {
-        localStorage.setItem('rymon_remote_key', queryKey)
-      } catch {}
-      setCurrentKey(queryKey)
-      setIsAuthenticated(true)
-      setActiveTab('remote')
-      if (!savedUserJson) {
-        setCurrentUser(DEFAULT_ANON_STREAMER)
+      if (isResetRoute) {
+        setKeyInput(queryKey)
+      } else {
+        try {
+          localStorage.setItem('rymon_remote_key', queryKey)
+        } catch {}
+        setCurrentKey(queryKey)
+        setIsAuthenticated(true)
+        setActiveTab('remote')
+        if (!savedUserJson) {
+          setCurrentUser(DEFAULT_ANON_STREAMER)
+        }
       }
     }
 
@@ -3683,12 +3708,13 @@ export default function RymonConnect() {
             <span style={{ fontSize: '10px', marginRight: '6px' }}>🔒</span> SECURE RYMON GATEWAY
           </div>
 
-          {/* Dual Gateway Tabs: Staff Portal vs Streamer Key */}
+          {/* Tri-Gateway Tabs: Staff Portal vs Streamer Key vs Dedicated Key Reset */}
           <div className="sg-auth-tab-selector" style={styles.authTabSelector}>
             <button
               onClick={() => {
                 setAuthMode('staff')
                 setAuthError('')
+                if (typeof window !== 'undefined') window.history.pushState({}, '', '/')
               }}
               className="sg-auth-tab-btn"
               style={{
@@ -3696,12 +3722,13 @@ export default function RymonConnect() {
                 ...(authMode === 'staff' ? styles.authTabBtnActive : {})
               }}
             >
-              👤 Staff Portal
+              👤 Staff
             </button>
             <button
               onClick={() => {
                 setAuthMode('key')
                 setAuthError('')
+                if (typeof window !== 'undefined') window.history.pushState({}, '', '/')
               }}
               className="sg-auth-tab-btn"
               style={{
@@ -3709,7 +3736,29 @@ export default function RymonConnect() {
                 ...(authMode === 'key' ? styles.authTabBtnActive : {})
               }}
             >
-              ⚡ Streamer Key
+              ⚡ Streamer
+            </button>
+            <button
+              onClick={() => {
+                setAuthMode('keyreset')
+                setAuthError('')
+                setSelfResetMsg('')
+                if (typeof window !== 'undefined') window.history.pushState({}, '', '/keyreset')
+              }}
+              className="sg-auth-tab-btn"
+              style={{
+                ...styles.authTabBtn,
+                ...(authMode === 'keyreset'
+                  ? {
+                      ...styles.authTabBtnActive,
+                      background: 'rgba(5, 223, 114, 0.22)',
+                      borderColor: '#05df72',
+                      color: '#05df72'
+                    }
+                  : {})
+              }}
+            >
+              🔄 Reset HWID
             </button>
           </div>
 
@@ -3901,7 +3950,7 @@ export default function RymonConnect() {
                 </div>
               )}
             </div>
-          ) : (
+          ) : authMode === 'key' ? (
             <div>
               <h2 style={styles.authHead}>Streamer Key</h2>
 
@@ -4002,6 +4051,192 @@ export default function RymonConnect() {
 
                 {authError && <div style={styles.errorBox}>{authError}</div>}
               </form>
+            </div>
+          ) : (
+            <div className="sg-keyreset-portal" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '5px 12px',
+                    borderRadius: '20px',
+                    backgroundColor: 'rgba(5, 223, 114, 0.12)',
+                    border: '1px solid rgba(5, 223, 114, 0.35)',
+                    color: '#05df72',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    marginBottom: '10px'
+                  }}
+                >
+                  <span>🔄</span> SELF-SERVICE HWID RESET PORTAL
+                </div>
+                <h2 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: 900, color: '#f8fafc', letterSpacing: '-0.02em' }}>
+                  Reset License Key HWID
+                </h2>
+                <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8', lineHeight: '1.5' }}>
+                  Unbind your license key from your old phone or emulator to activate on a new device.
+                </p>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  handleCustomerSelfResetHwid(keyInput)
+                }}
+                style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+              >
+                <div style={styles.formGroup}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={styles.formLabel}>ENTER LICENSE KEY</label>
+                    <span style={{ color: '#05df72', fontSize: '11px', fontWeight: 700 }}>2 RESETS / DAY</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={keyInput}
+                    onChange={(e) => {
+                      setKeyInput(e.target.value.toUpperCase())
+                      setSelfResetMsg('')
+                    }}
+                    placeholder="RYMON-XXXX-XXXX-XXXX"
+                    style={{
+                      ...styles.inputField,
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      letterSpacing: '1px',
+                      fontSize: '14px',
+                      textTransform: 'uppercase',
+                      borderColor: 'rgba(5, 223, 114, 0.4)'
+                    }}
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={selfResetBusy}
+                  style={{
+                    ...styles.submitBtn,
+                    background: 'linear-gradient(135deg, #05df72 0%, #00b853 100%)',
+                    color: '#000',
+                    fontWeight: 900,
+                    fontSize: '13px',
+                    letterSpacing: '0.05em',
+                    boxShadow: '0 0 25px rgba(5, 223, 114, 0.3)',
+                    cursor: selfResetBusy ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {selfResetBusy ? 'RESETTING ON RYMON CORE...' : '🔄 RESET DEVICE HWID NOW'}
+                </button>
+              </form>
+
+              {selfResetMsg && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    background:
+                      selfResetMsg.toLowerCase().includes('fail') ||
+                      selfResetMsg.toLowerCase().includes('exceeded') ||
+                      selfResetMsg.toLowerCase().includes('not found') ||
+                      selfResetMsg.toLowerCase().includes('error')
+                        ? 'rgba(239, 68, 68, 0.12)'
+                        : 'rgba(5, 223, 114, 0.12)',
+                    border:
+                      selfResetMsg.toLowerCase().includes('fail') ||
+                      selfResetMsg.toLowerCase().includes('exceeded') ||
+                      selfResetMsg.toLowerCase().includes('not found') ||
+                      selfResetMsg.toLowerCase().includes('error')
+                        ? '1px solid rgba(239, 68, 68, 0.4)'
+                        : '1px solid rgba(5, 223, 114, 0.4)',
+                    color: '#f8fafc',
+                    fontSize: '12.5px',
+                    lineHeight: '1.5',
+                    textAlign: 'center'
+                  }}
+                >
+                  {selfResetMsg}
+                </div>
+              )}
+
+              {/* Instructions Card */}
+              <div
+                style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  background: 'rgba(15, 23, 42, 0.65)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  fontSize: '11.5px',
+                  color: '#94a3b8',
+                  lineHeight: '1.5'
+                }}
+              >
+                <div style={{ color: '#05df72', fontWeight: 800, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📌</span> HOW TO USE:
+                </div>
+                <div>1. Paste your license key above and click <strong>RESET DEVICE HWID NOW</strong>.</div>
+                <div>2. Once reset, open <strong>RYMON STREAMER APK</strong> on your new device and log in.</div>
+                <div>3. Your key will automatically pair to your new phone hardware.</div>
+              </div>
+
+              {/* Bottom Quick Links */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '4px',
+                  paddingTop: '12px',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('key')
+                    if (typeof window !== 'undefined') window.history.pushState({}, '', '/')
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#00f5ff',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: 0
+                  }}
+                >
+                  <span>⚡</span> Go to Streamer Remote
+                </button>
+
+                <a
+                  href="/RYMON%20STREAMER.apk"
+                  download
+                  style={{
+                    color: '#c084fc',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <span>📥</span> Download APK
+                </a>
+              </div>
             </div>
           )}
         </div>
