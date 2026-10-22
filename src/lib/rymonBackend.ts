@@ -2114,6 +2114,44 @@ export async function resetUserPasswordBackend(
   }
 }
 
+export async function updateUserPermissionsBackend(
+  targetUsername: string,
+  permissions: RymonAccount['permissions'],
+  actorUsername: string = 'debajoyti'
+): Promise<{ success: boolean; message?: string }> {
+  const cleanTarget = targetUsername.trim()
+  const cleanActor = (actorUsername || 'debajoyti').trim()
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_rymon_update_permissions', {
+        p_username: cleanTarget,
+        p_permissions: permissions || {},
+        p_actor_username: cleanActor
+      })
+      if (!error && data?.success) {
+        return { success: true }
+      }
+      if (error || (data && !data.success)) {
+        console.error('rpc_rymon_update_permissions error:', error || data?.error)
+        return { success: false, message: error?.message || data?.error || 'Database error updating permissions' }
+      }
+    } catch (err) {
+      console.error('updateUserPermissionsBackend exception:', err)
+    }
+  }
+
+  // Update in local storage accounts fallback
+  const accounts = getStoredAccounts()
+  const idx = accounts.findIndex((a) => (a.username || '').toLowerCase() === cleanTarget.toLowerCase())
+  if (idx !== -1) {
+    accounts[idx].permissions = permissions
+    saveStoredAccounts(accounts)
+    return { success: true }
+  }
+  return { success: false, message: 'User not found in local store' }
+}
+
 export async function renewUserSubscriptionBackend(
   targetUsername: string,
   days: 30 | 60,

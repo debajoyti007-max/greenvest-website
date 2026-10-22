@@ -28,7 +28,11 @@ function resolveSecret(key, fallback = '') {
 }
 
 const BOT_TOKEN = resolveSecret('TELEGRAM_BOT_TOKEN') || resolveSecret('BOT_TOKEN')
-if (!BOT_TOKEN) {
+// Controlled mode: default to false to save Render free tier usage & focus 100% on Website RAM Bridge
+const ENABLE_TELEGRAM_BOT = (resolveSecret('ENABLE_TELEGRAM_BOT', 'false').toLowerCase() === 'true')
+const ENABLE_BLIND_KEEP_ALIVE = (resolveSecret('ENABLE_BLIND_KEEP_ALIVE', 'false').toLowerCase() === 'true')
+
+if (!BOT_TOKEN && ENABLE_TELEGRAM_BOT) {
   console.error('❌ [CRITICAL] Neither TELEGRAM_BOT_TOKEN nor BOT_TOKEN found in environment!')
 }
 const OWNER_CHAT_ID = resolveSecret('OWNER_CHAT_ID', '5831800759') // @montage007pc (Montage)
@@ -247,9 +251,9 @@ const healthServer = http.createServer(async (req, res) => {
   res.end(
     JSON.stringify({
       status: 'online',
-      service: 'RYMON OFFICIAL TELEGRAM BOT & VIP REALTIME BRIDGE',
-      bot: '@Rymon007bot',
-      owner: '@montage007pc',
+      service: 'RYMON HIGH-SPEED VIP REALTIME BRIDGE (WEBSITE DEDICATED)',
+      telegram_bot_responder: ENABLE_TELEGRAM_BOT ? 'active' : 'disabled',
+      mode: 'website_streamer_bridge',
       active_vip_sessions: vipStates.size,
       uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString()
@@ -309,13 +313,30 @@ setInterval(async () => {
   }
 }, 60000)
 
-// Auto Self-Ping to prevent Render free instance from sleeping
+// Smart Adaptive Keep-Alive to preserve Render free tier usage
+// Blind pinging 24/7 wastes all 750 free hours. We ping ONLY when a streamer is actively online.
 if (process.env.RENDER_EXTERNAL_URL) {
   const pingUrl = `${process.env.RENDER_EXTERNAL_URL.replace(/\/$/, '')}/health`
-  console.log(`⏱️ [Render Keep-Alive] Scheduled 10-minute self-ping: ${pingUrl}`)
-  setInterval(() => {
-    fetch(pingUrl).catch(() => {})
-  }, 10 * 60 * 1000)
+  if (ENABLE_BLIND_KEEP_ALIVE) {
+    console.log(`⏱️ [Render Keep-Alive] Scheduled 10-minute blind self-ping: ${pingUrl}`)
+    setInterval(() => {
+      fetch(pingUrl).catch(() => {})
+    }, 10 * 60 * 1000)
+  } else {
+    console.log(`🌿 [Render Eco Mode] Adaptive Keep-Alive enabled. Pings only during active streamer gameplay.`)
+    setInterval(() => {
+      let hasActiveStreamer = false
+      for (const [, state] of vipStates.entries()) {
+        if (state.is_online) {
+          hasActiveStreamer = true
+          break
+        }
+      }
+      if (hasActiveStreamer) {
+        fetch(pingUrl).catch(() => {})
+      }
+    }, 10 * 60 * 1000)
+  }
 }
 
 const DEFAULT_PRICES = {
@@ -1822,6 +1843,13 @@ async function registerBotCommands() {
 }
 
 async function startDaemon() {
+  if (!ENABLE_TELEGRAM_BOT) {
+    console.log('⚡ [Senior Dev Optimization] Telegram Bot responder is OFF (ENABLE_TELEGRAM_BOT=false).')
+    console.log('🌐 [Render Web Service] Dedicated 100% to Website & Android Streamer VIP Realtime RAM Bridge.')
+    console.log('💡 Render hours preserved! DB polling loops halted.')
+    return
+  }
+
   console.log('🚀 [@Rymon007bot Daemon] Starting 24/7 Reseller Store & 2/Day Reset Responder...')
   await registerBotCommands()
 

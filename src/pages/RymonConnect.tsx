@@ -26,6 +26,7 @@ import {
   deleteReferralCode,
   registerWithReferral,
   renewUserSubscriptionBackend,
+  updateUserPermissionsBackend,
   togglePauseLicenseBackend,
   bulkTogglePauseAllKeysBackend,
   bulkResetAllHwidBackend,
@@ -395,11 +396,20 @@ export default function RymonConnect() {
         if (supabase && u.username) {
           ;(async () => {
             try {
-              const { data: liveAcc } = await supabase
-                .from('rymon_accounts')
-                .select('*')
-                .ilike('username', u.username)
-                .maybeSingle()
+              let liveAcc: any = null
+              const { data: rpcAcc, error: rpcErr } = await supabase.rpc('rpc_rymon_get_account', {
+                p_username: u.username
+              })
+              if (!rpcErr && rpcAcc && rpcAcc.found) {
+                liveAcc = rpcAcc
+              } else {
+                const { data } = await supabase
+                  .from('rymon_accounts')
+                  .select('*')
+                  .ilike('username', u.username)
+                  .maybeSingle()
+                liveAcc = data
+              }
 
               if (liveAcc) {
                 const isSovereignOwner =
@@ -483,7 +493,7 @@ export default function RymonConnect() {
           return anyActive ? anyActive.license_key : lcs[0].license_key
         })
 
-        // Sync fresh balance if currentUser in list
+        // Sync fresh balance & permissions if currentUser in list
         if (currentUser && currentUser.username) {
           const freshMe = usrs.find(
             (u) => (u.username || '').toLowerCase() === currentUser.username.toLowerCase()
@@ -498,15 +508,50 @@ export default function RymonConnect() {
                 prev.status !== freshMe.status ||
                 prev.expires_at !== freshMe.expires_at ||
                 prev.uplink !== freshMe.uplink ||
-                prev.permissions?.allow_custom_apps !== freshMe.permissions?.allow_custom_apps ||
-                prev.permissions?.allow_multi_device !== freshMe.permissions?.allow_multi_device ||
-                prev.permissions?.allow_web_remote !== freshMe.permissions?.allow_web_remote
+                JSON.stringify(prev.permissions || {}) !== JSON.stringify(freshMe.permissions || {})
               ) {
                 localStorage.setItem('rymon_session_user', JSON.stringify(freshMe))
                 return freshMe
               }
               return prev
             })
+          } else if (supabase) {
+            // Reseller or Streamer account: fetchAllAccounts is intentionally empty for privacy.
+            // Sync live account & permissions directly from rpc_rymon_get_account
+            try {
+              const { data: myAcc } = await supabase.rpc('rpc_rymon_get_account', {
+                p_username: currentUser.username
+              })
+              if (myAcc && myAcc.found) {
+                setWalletBalance(Number(myAcc.balance) || 0)
+                setCurrentUser((prev) => {
+                  if (!prev) return null
+                  if (
+                    prev.balance !== Number(myAcc.balance) ||
+                    prev.role !== myAcc.role ||
+                    prev.status !== myAcc.status ||
+                    prev.expires_at !== myAcc.expires_at ||
+                    JSON.stringify(prev.permissions || {}) !== JSON.stringify(myAcc.permissions || {})
+                  ) {
+                    const updatedUser: RymonAccount = {
+                      id: myAcc.id || prev.id,
+                      username: myAcc.username || prev.username,
+                      email: myAcc.email || prev.email,
+                      uplink: myAcc.uplink || prev.uplink,
+                      referral_code: myAcc.referral_code || prev.referral_code,
+                      balance: Number(myAcc.balance) || 0,
+                      role: myAcc.role || prev.role,
+                      status: myAcc.status || prev.status,
+                      expires_at: myAcc.expires_at || prev.expires_at,
+                      permissions: myAcc.permissions || prev.permissions
+                    }
+                    localStorage.setItem('rymon_session_user', JSON.stringify(updatedUser))
+                    return updatedUser
+                  }
+                  return prev
+                })
+              }
+            } catch {}
           }
         }
       }
@@ -2686,13 +2731,7 @@ export default function RymonConnect() {
       if (supabase) {
         const targetObj = updated.find((u) => (u.username || '').toLowerCase() === targetUsername.toLowerCase())
         if (targetObj) {
-          await supabase
-            .from('rymon_accounts')
-            .update({
-              permissions: targetObj.permissions,
-              updated_at: new Date().toISOString()
-            })
-            .ilike('username', targetUsername)
+          await updateUserPermissionsBackend(targetUsername, targetObj.permissions, currentUser?.username || 'debajoyti')
         }
       }
       showToast(`Updated app permissions for @${targetUsername}`)
@@ -2724,13 +2763,7 @@ export default function RymonConnect() {
       if (supabase) {
         const targetObj = updated.find((u) => (u.username || '').toLowerCase() === (targetUsername || '').toLowerCase())
         if (targetObj) {
-          await supabase
-            .from('rymon_accounts')
-            .update({
-              permissions: targetObj.permissions,
-              updated_at: new Date().toISOString()
-            })
-            .ilike('username', targetUsername)
+          await updateUserPermissionsBackend(targetUsername, targetObj.permissions, currentUser?.username || 'debajoyti')
         }
       }
       showToast(`Updated @${targetUsername}: ${allow ? '✨ Custom Allowed' : '🔒 FF MAX Only'}`)
@@ -2770,13 +2803,7 @@ export default function RymonConnect() {
       if (supabase) {
         const targetObj = updated.find((u) => (u.username || '').toLowerCase() === (targetUsername || '').toLowerCase())
         if (targetObj) {
-          await supabase
-            .from('rymon_accounts')
-            .update({
-              permissions: targetObj.permissions,
-              updated_at: new Date().toISOString()
-            })
-            .ilike('username', targetUsername)
+          await updateUserPermissionsBackend(targetUsername, targetObj.permissions, currentUser?.username || 'debajoyti')
         }
       }
       showToast(`Updated @${targetUsername}: ${allow ? '👑 VIP Web Remote Permitted' : '🔒 APK Only'}`)
