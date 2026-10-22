@@ -4227,7 +4227,7 @@ export default function RymonConnect() {
                       </button>
 
                       <div style={styles.navCategoryHeader}>SYSTEM UTILITIES</div>
-                      {isOwner && (
+                      {isRootOwner && (
                         <button
                           onClick={() => handleSelectTab('apps')}
                           style={{
@@ -4237,7 +4237,7 @@ export default function RymonConnect() {
                         >
                           <span style={styles.navIcon}>📱</span>
                           <span>App Manager</span>
-                          <span style={styles.cyanMiniBadge}>OWNER</span>
+                          <span style={styles.cyanMiniBadge}>FOUNDER</span>
                         </button>
                       )}
                       <button
@@ -6169,7 +6169,7 @@ export default function RymonConnect() {
                                     >
                                       💰
                                     </button>
-                                    {isOwner && u.username.toLowerCase() !== 'debajoyti' && (
+                                    {isRootOwner && u.username.toLowerCase() !== 'debajoyti' && (
                                       <>
                                         <button
                                           type="button"
@@ -6192,7 +6192,7 @@ export default function RymonConnect() {
                                           }}
                                           title="Click to manage custom app permissions for this user"
                                         >
-                                          {Boolean(u.permissions?.allow_custom_apps)
+                                          {u.permissions?.allow_custom_apps
                                             ? '✨ All Custom'
                                             : Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0
                                             ? `🛡️ ${(u.permissions as any).allowed_apps[0]} (${(u.permissions as any).allowed_apps.length})`
@@ -8246,10 +8246,10 @@ else:
                   </div>
 
                   {/* 3. Main Two-Column Layout: Drop-in Code & Test Sandbox */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
+                  <div className="sg-dual-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
                     {/* Left Column: Drop-in KeyAuth Client Code */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                      <div style={styles.managementCard}>
+                      <div className="sg-management-card" style={styles.managementCard}>
                         <div style={styles.cardHeader}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{ ...styles.actionIconCircle, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72' }}>
@@ -8374,7 +8374,7 @@ else:
 
                     {/* Right Column: Live KeyAuth Test Sandbox */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                      <div style={styles.managementCard}>
+                      <div className="sg-management-card" style={styles.managementCard}>
                         <div style={styles.cardHeader}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{ ...styles.actionIconCircle, background: 'rgba(255, 183, 0, 0.15)', color: '#ffb700' }}>
@@ -8507,7 +8507,7 @@ else:
                 </div>
               );
             })()}            {/* 12B. APP MANAGER (MULTI-APP ECOSYSTEM & PURE KEYAUTH) */}
-            {activeTab === 'apps' && isOwner && (
+            {activeTab === 'apps' && isRootOwner && (
               <div className="sg-view-container" style={styles.viewContainer}>
                 {/* Header Banner */}
                 <div className="sg-banner-row" style={styles.bannerRow}>
@@ -10298,7 +10298,7 @@ else:
               </button>
               <button
                 type="button"
-                className={`sg-mobile-bottom-tab ${mobileMenuOpen ? 'active' : ''}`}
+                className={`sg-mobile-bottom-tab ${mobileMenuOpen || ['referrals', 'users', 'add-balance', 'advance', 'apps', 'connect-api', 'delete', 'extend'].includes(activeTab) ? 'active' : ''}`}
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               >
                 <span style={{ fontSize: '18px' }}>☰</span>
@@ -10341,7 +10341,7 @@ else:
               </button>
               <button
                 type="button"
-                className={`sg-mobile-bottom-tab ${mobileMenuOpen ? 'active' : ''}`}
+                className={`sg-mobile-bottom-tab ${mobileMenuOpen || ['referrals', 'users', 'add-balance', 'advance', 'apps', 'connect-api', 'delete', 'extend'].includes(activeTab) ? 'active' : ''}`}
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               >
                 <span style={{ fontSize: '18px' }}>☰</span>
