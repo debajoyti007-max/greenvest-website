@@ -2838,7 +2838,7 @@ export default function RymonConnect() {
       ].includes(activeTab)
     ) {
       setActiveTab('overview')
-    } else if (!isOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
+    } else if (!isRootOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
       setActiveTab('overview')
     }
   }, [isStreamer, isReseller, isAdmin, isOwner, isRootOwner, activeTab])
@@ -8756,7 +8756,7 @@ else:
                   {/* Right Column: Register New Application & Rules */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                     {/* Register New Application Card */}
-                    <div style={styles.managementCard}>
+                    <div className="sg-management-card" style={styles.managementCard}>
                       <div style={styles.cardHeader}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <span style={{ fontSize: '22px' }}>➕</span>
@@ -8893,7 +8893,7 @@ else:
                 </div>
 
                 {/* Integration Code Generator Card */}
-                <div style={{ ...styles.managementCard, marginTop: '24px' }}>
+                <div className="sg-management-card" style={{ ...styles.managementCard, marginTop: '24px' }}>
                   <div style={styles.cardHeader}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '12px' }}>
                       <div>
