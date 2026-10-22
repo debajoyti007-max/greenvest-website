@@ -2838,7 +2838,7 @@ export default function RymonConnect() {
       ].includes(activeTab)
     ) {
       setActiveTab('overview')
-    } else if (!isRootOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
+    } else if (!isOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
       setActiveTab('overview')
     }
   }, [isStreamer, isReseller, isAdmin, isOwner, isRootOwner, activeTab])
@@ -3283,11 +3283,43 @@ export default function RymonConnect() {
             width: 100% !important;
             box-sizing: border-box !important;
           }
-          .sg-management-card {
-            padding: 16px 12px !important;
-            border-radius: 14px !important;
+          .sg-form-stack {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 16px !important;
             width: 100% !important;
             box-sizing: border-box !important;
+          }
+          .sg-form-group {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 6px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          .sg-btn-choice-group {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important;
+            gap: 8px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          .sg-btn-choice-group > button {
+            width: 100% !important;
+            min-height: 40px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
+          }
+          .sg-management-card {
+            padding: 16px 14px !important;
+            border-radius: 14px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
           }
 
           /* 7. Overview Dashboard Cards */
@@ -3320,8 +3352,16 @@ export default function RymonConnect() {
             border-radius: 8px !important;
           }
           .sg-dual-grid {
-            grid-template-columns: 1fr !important;
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) !important;
             gap: 14px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          .sg-dual-grid > * {
+            min-width: 0 !important;
+            max-width: 100% !important;
             width: 100% !important;
             box-sizing: border-box !important;
           }
@@ -3342,13 +3382,23 @@ export default function RymonConnect() {
           .sg-table-card {
             border-radius: 12px !important;
             width: 100% !important;
-            max-width: 100vw !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
             overflow-x: auto !important;
             -webkit-overflow-scrolling: touch !important;
             box-sizing: border-box !important;
           }
           .sg-data-table {
-            min-width: 680px !important;
+            min-width: 600px !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          pre {
+            max-width: 100% !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            box-sizing: border-box !important;
+            font-size: 11px !important;
           }
           .sg-data-table th, .sg-data-table td {
             padding: 10px 12px !important;
@@ -4117,7 +4167,7 @@ export default function RymonConnect() {
                         <span style={styles.navIcon}>🔑</span>
                         <span>License Keys</span>
                       </button>
-                      {isRootOwner && (
+                      {isOwner && (
                         <button
                           onClick={() => handleSelectTab('connect-api')}
                           style={{
@@ -4127,7 +4177,7 @@ export default function RymonConnect() {
                         >
                           <span style={styles.navIcon}>🔌</span>
                           <span>Connect & API</span>
-                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>ROOT</span>
+                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>OWNER</span>
                         </button>
                       )}
 
@@ -7288,7 +7338,7 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                <div className="sg-dual-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '24px', alignItems: 'start' }}>
+                <div className="sg-dual-grid" style={styles.dualGrid}>
                   {/* Card 1: Generate Code */}
                   <div className="sg-management-card" style={styles.managementCard}>
                     <div style={styles.cardHeader}>
@@ -7302,23 +7352,24 @@ export default function RymonConnect() {
                       </div>
                     </div>
 
-                    <form onSubmit={handleCreateReferral} style={{ marginTop: '20px' }}>
-                      <div style={styles.formGroup}>
+                    <form onSubmit={handleCreateReferral} className="sg-form-stack" style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', boxSizing: 'border-box' }}>
+                      <div className="sg-form-group" style={styles.formGroup}>
                         <label style={styles.formLabel}>TARGET USER ROLE</label>
-                        <div style={{ display: 'flex', gap: '10px' }}>
+                        <div className="sg-btn-choice-group" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', width: '100%' }}>
                           <button
                             type="button"
                             onClick={() => setRefTargetRole('reseller')}
                             style={{
-                              flex: 1,
-                              padding: '10px',
+                              padding: '10px 8px',
                               borderRadius: '8px',
-                              border: refTargetRole === 'reseller' ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
+                              border: refTargetRole === 'reseller' ? '1.5px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
                               background: refTargetRole === 'reseller' ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
                               color: refTargetRole === 'reseller' ? '#00d9ff' : '#94a3b8',
-                              fontWeight: 700,
-                              fontSize: '12px',
-                              cursor: 'pointer'
+                              fontWeight: 800,
+                              fontSize: '11.5px',
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap'
                             }}
                           >
                             💼 RESELLER
@@ -7328,15 +7379,16 @@ export default function RymonConnect() {
                               type="button"
                               onClick={() => setRefTargetRole('admin')}
                               style={{
-                                flex: 1,
-                                padding: '10px',
+                                padding: '10px 8px',
                                 borderRadius: '8px',
-                                border: refTargetRole === 'admin' ? '1px solid #05df72' : '1px solid rgba(255,255,255,0.08)',
+                                border: refTargetRole === 'admin' ? '1.5px solid #05df72' : '1px solid rgba(255,255,255,0.08)',
                                 background: refTargetRole === 'admin' ? 'rgba(5, 223, 114, 0.2)' : 'rgba(15, 23, 42, 0.6)',
                                 color: refTargetRole === 'admin' ? '#05df72' : '#94a3b8',
-                                fontWeight: 700,
-                                fontSize: '12px',
-                                cursor: 'pointer'
+                                fontWeight: 800,
+                                fontSize: '11.5px',
+                                cursor: 'pointer',
+                                textAlign: 'center',
+                                whiteSpace: 'nowrap'
                               }}
                               title="Create Administrator invite code"
                             >
@@ -7346,50 +7398,52 @@ export default function RymonConnect() {
                         </div>
                       </div>
 
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>RESELLER / ROLE SUBSCRIPTION VALIDITY (NO LIFETIME)</label>
-                        <div style={{ display: 'flex', gap: '10px' }}>
+                      <div className="sg-form-group" style={styles.formGroup}>
+                        <label style={styles.formLabel}>RESELLER / ROLE SUBSCRIPTION VALIDITY</label>
+                        <div className="sg-btn-choice-group" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', width: '100%' }}>
                           <button
                             type="button"
                             onClick={() => setRefSubDays(30)}
                             style={{
-                              flex: 1,
-                              padding: '10px',
+                              padding: '10px 8px',
                               borderRadius: '8px',
-                              border: refSubDays === 30 ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
+                              border: refSubDays === 30 ? '1.5px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
                               background: refSubDays === 30 ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
                               color: refSubDays === 30 ? '#00d9ff' : '#94a3b8',
                               fontWeight: 800,
-                              fontSize: '12px',
-                              cursor: 'pointer'
+                              fontSize: '11.5px',
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap'
                             }}
                           >
-                            ⏳ 30 DAYS SUBSCRIPTION
+                            ⏳ 30 DAYS
                           </button>
                           <button
                             type="button"
                             onClick={() => setRefSubDays(60)}
                             style={{
-                              flex: 1,
-                              padding: '10px',
+                              padding: '10px 8px',
                               borderRadius: '8px',
-                              border: refSubDays === 60 ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.08)',
+                              border: refSubDays === 60 ? '1.5px solid #a855f7' : '1px solid rgba(255,255,255,0.08)',
                               background: refSubDays === 60 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(15, 23, 42, 0.6)',
                               color: refSubDays === 60 ? '#c084fc' : '#94a3b8',
                               fontWeight: 800,
-                              fontSize: '12px',
-                              cursor: 'pointer'
+                              fontSize: '11.5px',
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap'
                             }}
                           >
-                            💎 60 DAYS SUBSCRIPTION
+                            💎 60 DAYS
                           </button>
                         </div>
                         <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
-                          Reseller account expires automatically after {refSubDays} days unless renewed by Owner/Admin.
+                          Account expires automatically after {refSubDays} days unless renewed by Owner/Admin.
                         </div>
                       </div>
 
-                      <div style={styles.formGroup}>
+                      <div className="sg-form-group" style={styles.formGroup}>
                         <label style={styles.formLabel}>STARTING WALLET BALANCE (₹ INR)</label>
                         <input
                           type="number"
@@ -7407,7 +7461,7 @@ export default function RymonConnect() {
                         </div>
                       </div>
 
-                      <div style={styles.formGroup}>
+                      <div className="sg-form-group" style={styles.formGroup}>
                         <label style={styles.formLabel}>CUSTOM CODE (OPTIONAL)</label>
                         <input
                           type="text"
@@ -7418,7 +7472,7 @@ export default function RymonConnect() {
                         />
                       </div>
 
-                      <div style={styles.formGroup}>
+                      <div className="sg-form-group" style={styles.formGroup}>
                         <label style={styles.formLabel}>MAX USES / REDEMPTIONS</label>
                         <input
                           type="number"
@@ -7450,9 +7504,6 @@ export default function RymonConnect() {
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Active Referral Codes ({referralList.length})</h3>
-                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
-                            Encrypted vouchers stored on RYMON Cloud Core
-                          </div>
                         </div>
                         <button
                           onClick={() => fetchReferralCodes(currentUser).then(setReferralList)}
@@ -7463,7 +7514,7 @@ export default function RymonConnect() {
                       </div>
                     </div>
 
-                    <div style={{ marginTop: '16px', overflowX: 'auto' }}>
+                    <div className="sg-table-card" style={{ marginTop: '16px', overflowX: 'auto', width: '100%', maxWidth: '100%', minWidth: 0 }}>
                       <table className="sg-data-table" style={styles.dataTable}>
                         <thead>
                           <tr>
@@ -8524,10 +8575,10 @@ else:
                 </div>
 
                 {/* Main 2-Column Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '24px', alignItems: 'start' }}>
+                <div className="sg-dual-grid" style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '24px', alignItems: 'start' }}>
                   {/* Left Column: Configured Apps List */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={styles.managementCard}>
+                    <div className="sg-management-card" style={styles.managementCard}>
                       <div style={styles.cardHeader}>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
