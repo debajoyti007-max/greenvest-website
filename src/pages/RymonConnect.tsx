@@ -353,12 +353,30 @@ export default function RymonConnect() {
   useEffect(() => {
 
 
-    // Check if key is provided via query parameter (?key=... or ?k=...)
+    // Check if key or auto-reset is provided via query parameter (?key=..., ?k=..., or ?reset=...)
     let queryKey = ''
+    let queryResetKey = ''
     try {
       const urlParams = new URLSearchParams(window.location.search)
-      queryKey = (urlParams.get('key') || urlParams.get('k') || '').trim()
+      queryResetKey = (urlParams.get('reset') || urlParams.get('reset_key') || (urlParams.get('action') === 'reset' ? urlParams.get('key') : '') || '').trim()
+      if (!queryResetKey) {
+        queryKey = (urlParams.get('key') || urlParams.get('k') || '').trim()
+      }
     } catch {}
+
+    if (queryResetKey) {
+      setKeyInput(queryResetKey)
+      setSelfResetBusy(true)
+      selfServiceResetKeyHwidBackend(queryResetKey, false, 'AutoResetLink')
+        .then((res) => {
+          setSelfResetBusy(false)
+          setSelfResetMsg(res.message)
+        })
+        .catch(() => {
+          setSelfResetBusy(false)
+          setSelfResetMsg('Failed to process automatic HWID reset.')
+        })
+    }
 
     // Restore saved session
     const savedUserJson = localStorage.getItem('rymon_session_user')
@@ -2838,7 +2856,7 @@ export default function RymonConnect() {
       ].includes(activeTab)
     ) {
       setActiveTab('overview')
-    } else if (!isOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
+    } else if (!isRootOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
       setActiveTab('overview')
     }
   }, [isStreamer, isReseller, isAdmin, isOwner, isRootOwner, activeTab])
@@ -4167,7 +4185,7 @@ export default function RymonConnect() {
                         <span style={styles.navIcon}>🔑</span>
                         <span>License Keys</span>
                       </button>
-                      {isOwner && (
+                      {isRootOwner && (
                         <button
                           onClick={() => handleSelectTab('connect-api')}
                           style={{
@@ -4177,7 +4195,7 @@ export default function RymonConnect() {
                         >
                           <span style={styles.navIcon}>🔌</span>
                           <span>Connect & API</span>
-                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>OWNER</span>
+                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>ROOT</span>
                         </button>
                       )}
 
@@ -4227,7 +4245,7 @@ export default function RymonConnect() {
                       </button>
 
                       <div style={styles.navCategoryHeader}>SYSTEM UTILITIES</div>
-                      {isOwner && (
+                      {isRootOwner && (
                         <button
                           onClick={() => handleSelectTab('apps')}
                           style={{
@@ -4237,7 +4255,7 @@ export default function RymonConnect() {
                         >
                           <span style={styles.navIcon}>📱</span>
                           <span>App Manager</span>
-                          <span style={styles.cyanMiniBadge}>OWNER</span>
+                          <span style={styles.cyanMiniBadge}>FOUNDER</span>
                         </button>
                       )}
                       <button
@@ -6169,7 +6187,7 @@ export default function RymonConnect() {
                                     >
                                       💰
                                     </button>
-                                    {isOwner && u.username.toLowerCase() !== 'debajoyti' && (
+                                    {isRootOwner && u.username.toLowerCase() !== 'debajoyti' && (
                                       <>
                                         <button
                                           type="button"
@@ -7615,7 +7633,7 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {activeTab === 'connect-api' && isOwner && (() => {
+            {activeTab === 'connect-api' && isRootOwner && (() => {
               const isCustomTypeMode = connectSelectedApp === 'Custom' || connectSelectedApp === '__CUSTOM__';
               const effectiveConnectAppName = isCustomTypeMode ? (connectCustomAppName.trim() || 'Tool X') : (connectSelectedApp || 'Free Fire MAX');
               const getAppSecret = (appName: string): string => {
@@ -8507,7 +8525,7 @@ else:
                 </div>
               );
             })()}            {/* 12B. APP MANAGER (MULTI-APP ECOSYSTEM & PURE KEYAUTH) */}
-            {activeTab === 'apps' && isOwner && (
+            {activeTab === 'apps' && isRootOwner && (
               <div className="sg-view-container" style={styles.viewContainer}>
                 {/* Header Banner */}
                 <div className="sg-banner-row" style={styles.bannerRow}>
