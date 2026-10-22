@@ -2838,7 +2838,7 @@ export default function RymonConnect() {
       ].includes(activeTab)
     ) {
       setActiveTab('overview')
-    } else if (!isRootOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
+    } else if (!isOwner && (activeTab === 'connect-api' || activeTab === 'apps')) {
       setActiveTab('overview')
     }
   }, [isStreamer, isReseller, isAdmin, isOwner, isRootOwner, activeTab])
@@ -4227,7 +4227,7 @@ export default function RymonConnect() {
                       </button>
 
                       <div style={styles.navCategoryHeader}>SYSTEM UTILITIES</div>
-                      {isRootOwner && (
+                      {isOwner && (
                         <button
                           onClick={() => handleSelectTab('apps')}
                           style={{
@@ -4237,7 +4237,7 @@ export default function RymonConnect() {
                         >
                           <span style={styles.navIcon}>📱</span>
                           <span>App Manager</span>
-                          <span style={styles.cyanMiniBadge}>FOUNDER</span>
+                          <span style={styles.cyanMiniBadge}>OWNER</span>
                         </button>
                       )}
                       <button
@@ -6169,7 +6169,7 @@ export default function RymonConnect() {
                                     >
                                       💰
                                     </button>
-                                    {isRootOwner && u.username.toLowerCase() !== 'debajoyti' && (
+                                    {isOwner && u.username.toLowerCase() !== 'debajoyti' && (
                                       <>
                                         <button
                                           type="button"
@@ -8507,7 +8507,7 @@ else:
                 </div>
               );
             })()}            {/* 12B. APP MANAGER (MULTI-APP ECOSYSTEM & PURE KEYAUTH) */}
-            {activeTab === 'apps' && isRootOwner && (
+            {activeTab === 'apps' && isOwner && (
               <div className="sg-view-container" style={styles.viewContainer}>
                 {/* Header Banner */}
                 <div className="sg-banner-row" style={styles.bannerRow}>
