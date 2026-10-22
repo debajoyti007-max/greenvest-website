@@ -2209,8 +2209,8 @@ export default function RymonConnect() {
       alert('Please select a target key.')
       return
     }
-    if (extendAmount < 7) {
-      alert('Extension under 7 days is disabled. Minimum extension duration is 7 days.')
+    if (extendAmount < 1) {
+      alert('Please select a valid extension duration (minimum 1 day).')
       return
     }
     if (targetExtendKey === '__ALL__') {
@@ -2460,8 +2460,8 @@ export default function RymonConnect() {
   }
 
   const handleBulkExtendAllKeys = async (days: number) => {
-    if (days < 7) {
-      alert('Extension under 7 days is disabled. Minimum extension duration is 7 days.')
+    if (days < 1) {
+      alert('Please select a valid extension duration (minimum 1 day).')
       return
     }
     const creatorFilter = currentUser?.role === 'reseller' ? currentUser.username : undefined
@@ -4190,13 +4190,11 @@ export default function RymonConnect() {
               <div
                 style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
+                  justifyContent: 'center',
                   alignItems: 'center',
                   marginTop: '4px',
                   paddingTop: '12px',
-                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-                  flexWrap: 'wrap',
-                  gap: '10px'
+                  borderTop: '1px solid rgba(255, 255, 255, 0.08)'
                 }}
               >
                 <button
@@ -4214,28 +4212,12 @@ export default function RymonConnect() {
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    padding: 0
+                    gap: '6px',
+                    padding: '4px 8px'
                   }}
                 >
                   <span>⚡</span> Go to Streamer Remote
                 </button>
-
-                <a
-                  href="/RYMON%20STREAMER.apk"
-                  download
-                  style={{
-                    color: '#c084fc',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <span>📥</span> Download APK
-                </a>
               </div>
             </div>
           )}
@@ -6712,9 +6694,11 @@ export default function RymonConnect() {
                       </label>
                       <select
                         value={extendAmount}
-                        onChange={(e) => setExtendAmount(Math.min(30, Math.max(7, parseInt(e.target.value) || 7)))}
+                        onChange={(e) => setExtendAmount(Math.min(30, Math.max(1, parseInt(e.target.value) || 1)))}
                         style={styles.selectInput}
                       >
+                        <option value="1">1 Day</option>
+                        <option value="3">3 Days</option>
                         <option value="7">7 Days</option>
                         <option value="15">15 Days</option>
                         <option value="30">30 Days (Max Cap)</option>

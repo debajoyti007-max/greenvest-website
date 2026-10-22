@@ -2735,10 +2735,10 @@ export async function extendLicenseBackend(
   const cleanKey = licenseKey.trim().toUpperCase()
   const cleanActor = (actorUsername || 'debajoyti').trim()
   const rawNum = Math.floor(Number(rawDays) || 0)
-  if (rawNum < 7) {
+  if (rawNum < 1) {
     return {
       success: false,
-      error: 'Extension duration under 7 days is disabled. Minimum extension duration is 7 days.'
+      error: 'Invalid extension duration. Minimum extension duration is 1 day.'
     }
   }
   const days = Math.min(30, rawNum)
@@ -3212,11 +3212,11 @@ export async function bulkExtendAllKeysBackend(
 ): Promise<{ success: boolean; count: number; remainingBalance?: number; message: string }> {
   let count = 0
   const rawNum = Math.floor(Number(rawDays) || 0)
-  if (rawNum < 7) {
+  if (rawNum < 1) {
     return {
       success: false,
       count: 0,
-      message: 'Extension duration under 7 days is disabled. Minimum extension duration is 7 days.'
+      message: 'Invalid extension duration. Minimum extension duration is 1 day.'
     }
   }
   const days = Math.min(30, rawNum)

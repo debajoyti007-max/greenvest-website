@@ -120,10 +120,10 @@ describe('License Duration Extension & Wallet Credit Cut Engine', () => {
 
   function validateExtensionRequest(rawDays) {
     const rawNum = Math.floor(Number(rawDays) || 0)
-    if (rawNum < 7) {
+    if (rawNum < 1) {
       return {
         valid: false,
-        error: 'Extension duration under 7 days is disabled. Minimum extension duration is 7 days.',
+        error: 'Invalid extension duration. Minimum is 1 day.',
       }
     }
     return {
@@ -154,27 +154,33 @@ describe('License Duration Extension & Wallet Credit Cut Engine', () => {
     }
   }
 
-  test('Rejects extension requests under 7 days (1 day and 3 days disallowed)', () => {
-    const res1 = validateExtensionRequest(1)
-    assert.equal(res1.valid, false)
-    assert.match(res1.error, /Minimum extension duration is 7 days/i)
-
-    const res2 = validateExtensionRequest(3)
-    assert.equal(res2.valid, false)
-    assert.match(res2.error, /Minimum extension duration is 7 days/i)
-
-    const res3 = validateExtensionRequest(5)
-    assert.equal(res3.valid, false)
-  })
-
-  test('Accepts valid extension durations (7, 15, 30 days) and caps at 30 days', () => {
+  test('Accepts 1 day, 3 days, 7 days, 15 days, 30 days and caps at 30 days', () => {
+    assert.equal(validateExtensionRequest(1).days, 1)
+    assert.equal(validateExtensionRequest(3).days, 3)
     assert.equal(validateExtensionRequest(7).days, 7)
     assert.equal(validateExtensionRequest(15).days, 15)
     assert.equal(validateExtensionRequest(30).days, 30)
     assert.equal(validateExtensionRequest(45).days, 30) // Capped at 30
   })
 
+  test('Rejects extension requests under 1 day (0 or negative)', () => {
+    const res1 = validateExtensionRequest(0)
+    assert.equal(res1.valid, false)
+    assert.match(res1.error, /Minimum is 1 day/i)
+
+    const res2 = validateExtensionRequest(-5)
+    assert.equal(res2.valid, false)
+  })
+
   test('Calculates extension costs for Reseller and Admin based on devices', () => {
+    // 1 Day 1 device = ₹35
+    assert.equal(calculateKeyExtensionCost(1, 'reseller_sam', 1), 35)
+    // 1 Day 2 devices = ₹35 * 2 = ₹70
+    assert.equal(calculateKeyExtensionCost(1, 'admin_alex', 2), 70)
+    // 3 Days 1 device = ₹50
+    assert.equal(calculateKeyExtensionCost(3, 'reseller_sam', 1), 50)
+    // 3 Days 3 devices = ₹50 * 3 = ₹150
+    assert.equal(calculateKeyExtensionCost(3, 'reseller_sam', 3), 150)
     // 7 Days 1 device = ₹100
     assert.equal(calculateKeyExtensionCost(7, 'reseller_sam', 1), 100)
     // 7 Days 2 devices = ₹100 * 2 = ₹200
@@ -186,11 +192,35 @@ describe('License Duration Extension & Wallet Credit Cut Engine', () => {
   })
 
   test('Exempts root owner from extension costs (FREE)', () => {
+    assert.equal(calculateKeyExtensionCost(1, 'debajoyti', 1), 0)
+    assert.equal(calculateKeyExtensionCost(3, 'debajoyti', 2), 0)
     assert.equal(calculateKeyExtensionCost(7, 'debajoyti', 1), 0)
     assert.equal(calculateKeyExtensionCost(30, 'debajoyti', 5), 0)
   })
 
   test('Deducts credit properly for Admin and Reseller on extension', () => {
+    const reseller1Day = simulateWalletExtension({
+      actor: 'reseller_sam',
+      actorRole: 'reseller',
+      balance: 500,
+      days: 1,
+      devicesMax: 1,
+    })
+    assert.equal(reseller1Day.success, true)
+    assert.equal(reseller1Day.cost, 35)
+    assert.equal(reseller1Day.remainingBalance, 465)
+
+    const reseller3Day = simulateWalletExtension({
+      actor: 'reseller_sam',
+      actorRole: 'reseller',
+      balance: 500,
+      days: 3,
+      devicesMax: 2,
+    })
+    assert.equal(reseller3Day.success, true)
+    assert.equal(reseller3Day.cost, 100)
+    assert.equal(reseller3Day.remainingBalance, 400)
+
     const resellerTx = simulateWalletExtension({
       actor: 'reseller_sam',
       actorRole: 'reseller',
