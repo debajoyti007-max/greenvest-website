@@ -10850,12 +10850,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '8px',
     color: '#f8fafc'
   },
-  authDesc: {
-    fontSize: '13px',
-    color: '#94a3b8',
-    lineHeight: 1.5,
-    marginBottom: '24px'
-  },
   authForm: {
     display: 'flex',
     flexDirection: 'column',
@@ -11072,9 +11066,6 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     color: '#f8fafc'
   },
-  pageSubtitle: {
-    display: 'none'
-  },
   badgeCluster: {
     display: 'flex',
     alignItems: 'center',
@@ -11088,11 +11079,6 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'rgba(5, 223, 114, 0.15)',
     color: '#05df72',
     border: '1px solid rgba(5, 223, 114, 0.3)'
-  },
-  timeTag: {
-    fontSize: '11px',
-    color: '#64748b',
-    fontWeight: 600
   },
   statGrid: {
     display: 'grid',
@@ -11179,11 +11165,6 @@ const styles: Record<string, React.CSSProperties> = {
   quickActionTitle: {
     fontSize: '13px',
     fontWeight: 700
-  },
-  quickActionSub: {
-    fontSize: '11px',
-    color: '#64748b',
-    marginTop: '2px'
   },
   activityFeed: {
     display: 'flex',
@@ -11413,12 +11394,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '18px'
-  },
-  settingDesc: {
-    fontSize: '13px',
-    color: '#94a3b8',
-    lineHeight: 1.6,
-    margin: '0 0 16px 0'
   },
   settingToggleRow: {
     display: 'flex',
