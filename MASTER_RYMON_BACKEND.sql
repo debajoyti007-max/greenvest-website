@@ -315,8 +315,9 @@ BEGIN
     ELSE v_duration_interval := INTERVAL '30 days';
     END IF;
 
-    -- First Time Activation (WAITING -> ACTIVE)
-    IF v_lic.status = 'WAITING' OR v_lic.expires_at IS NULL THEN
+    -- First Time Activation: Only trigger when expires_at is NULL (key never activated)
+    -- Do NOT re-activate based on status='WAITING' alone, as HWID reset sets WAITING on active keys
+    IF v_lic.expires_at IS NULL THEN
         v_calc_expiry := now() + v_duration_interval;
         UPDATE public.rymon_licenses
         SET status = 'ACTIVE',
@@ -358,11 +359,15 @@ BEGIN
             );
         END IF;
 
-        -- Update heartbeat
+        -- Update heartbeat; increment devices_used for a new device binding (up to devices_max)
         UPDATE public.rymon_licenses
         SET last_heartbeat = now(),
             device_hwid = CASE WHEN v_lic.device_hwid = '' THEN p_hwid ELSE v_lic.device_hwid END,
-            devices_used = GREATEST(v_lic.devices_used, 1),
+            devices_used = CASE
+                WHEN p_hwid != '' AND v_lic.device_hwid != p_hwid AND v_lic.device_hwid != ''
+                    THEN LEAST(v_lic.devices_used + 1, v_lic.devices_max)
+                ELSE GREATEST(v_lic.devices_used, 1)
+            END,
             updated_at = now()
         WHERE id = v_lic.id;
 
@@ -623,10 +628,15 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+    -- Preserve ACTIVE/PAUSED status when the key still has a valid expiry (never activated keys get WAITING)
     UPDATE public.rymon_licenses
     SET device_hwid = '',
         devices_used = 0,
-        status = 'WAITING',
+        status = CASE
+            WHEN is_paused THEN 'PAUSED'
+            WHEN expires_at IS NOT NULL AND expires_at > now() THEN 'ACTIVE'
+            ELSE 'WAITING'
+        END,
         updated_at = now()
     WHERE license_key = UPPER(TRIM(p_license_key));
 
@@ -1157,7 +1167,8 @@ BEGIN
         v_actor.balance := v_actor.balance - v_fee;
     END IF;
 
-    v_new_exp := now() + (p_days || ' days')::INTERVAL;
+    -- Stack renewal on remaining expiry (don't lose unused days)
+    v_new_exp := GREATEST(now(), COALESCE(v_target.expires_at, now())) + (p_days || ' days')::INTERVAL;
 
     UPDATE public.rymon_accounts
     SET expires_at = v_new_exp,
@@ -1240,6 +1251,11 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Only Owners (debajoyti & ryzen) can create Admin invite codes');
     END IF;
 
+    -- Guard: Reject duplicate codes BEFORE any wallet deduction
+    IF EXISTS (SELECT 1 FROM public.rymon_referrals WHERE code = v_clean_code) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Referral code already exists: ' || v_clean_code);
+    END IF;
+
     -- Calculate total funding cost for non-owners
     IF NOT v_is_owner AND v_init_bal > 0 THEN
         v_total_cost := v_init_bal * v_uses;
@@ -1255,10 +1271,6 @@ BEGIN
         WHERE id = v_actor.id;
 
         v_actor.balance := v_actor.balance - v_total_cost;
-    END IF;
-
-    IF EXISTS (SELECT 1 FROM public.rymon_referrals WHERE code = v_clean_code) THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Referral code already exists: ' || v_clean_code);
     END IF;
 
     INSERT INTO public.rymon_referrals (

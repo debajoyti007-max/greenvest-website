@@ -515,6 +515,11 @@ export default function RymonConnect() {
   const [refCreating, setRefCreating] = useState(false)
   const [copiedRefCode, setCopiedRefCode] = useState<string | null>(null)
 
+  // Subscription Renew Confirmation Modal State
+  const [renewConfirmTarget, setRenewConfirmTarget] = useState<string | null>(null)
+  const [renewConfirmDays, setRenewConfirmDays] = useState<30 | 60>(30)
+  const [renewConfirmLoading, setRenewConfirmLoading] = useState(false)
+
   // Sovereign Connect URL & APK Test Sandbox State
   const [testConnectKey, setTestConnectKey] = useState('')
   const [testConnectHwid, setTestConnectHwid] = useState('DEVICE-SIM-ANDROID-9981')
@@ -2549,12 +2554,21 @@ export default function RymonConnect() {
     setTimeout(() => setCopiedRefCode(null), 2500)
   }
 
-  const handleRenewUserSubscription = async (targetUsername: string, days: 30 | 60) => {
+  const openRenewConfirmModal = (targetUsername: string, days: 30 | 60) => {
+    setRenewConfirmTarget(targetUsername)
+    setRenewConfirmDays(days)
+  }
+
+  const handleRenewUserSubscription = async () => {
+    if (!renewConfirmTarget) return
+    setRenewConfirmLoading(true)
     const res = await renewUserSubscriptionBackend(
-      targetUsername,
-      days,
+      renewConfirmTarget,
+      renewConfirmDays,
       currentUser?.username || 'debajoyti'
     )
+    setRenewConfirmLoading(false)
+    setRenewConfirmTarget(null)
     if (res.success) {
       if (res.remainingBalance !== undefined && currentUser) {
         setWalletBalance(res.remainingBalance)
@@ -6771,7 +6785,7 @@ export default function RymonConnect() {
                                 {canManageRow ? (
                                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                                     <button
-                                      onClick={() => handleRenewUserSubscription(u.username, 30)}
+                                      onClick={() => openRenewConfirmModal(u.username, 30)}
                                       style={{
                                         padding: '4px 8px',
                                         borderRadius: '6px',
@@ -6787,7 +6801,7 @@ export default function RymonConnect() {
                                       30D Sub
                                     </button>
                                     <button
-                                      onClick={() => handleRenewUserSubscription(u.username, 60)}
+                                      onClick={() => openRenewConfirmModal(u.username, 60)}
                                       style={{
                                         padding: '4px 8px',
                                         borderRadius: '6px',
@@ -10823,6 +10837,81 @@ else:
 
 
       {/* ── RESET USER PASSWORD MODAL ───────────────────────────────────────── */}
+      {renewConfirmTarget && (
+        <div className="sg-modal-overlay" style={styles.modalOverlay} onClick={() => setRenewConfirmTarget(null)}>
+          <div
+            className="sg-modal-card"
+            style={{
+              ...styles.modalCard,
+              maxWidth: '420px',
+              width: '92%',
+              textAlign: 'left',
+              padding: '24px',
+              border: '1px solid rgba(0, 217, 255, 0.35)',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.85), 0 0 28px rgba(0, 217, 255, 0.12)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '24px' }}>🔄</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#f8fafc' }}>
+                    Confirm Subscription Renewal
+                  </h3>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    This will deduct credits from your wallet
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setRenewConfirmTarget(null)}
+                style={{ background: 'transparent', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '6px', color: '#94a3b8', padding: '4px 10px', cursor: 'pointer', fontSize: '14px' }}
+              >✕</button>
+            </div>
+
+            <div style={{ background: 'rgba(0,217,255,0.07)', border: '1px solid rgba(0,217,255,0.2)', borderRadius: '10px', padding: '14px 16px', marginBottom: '18px' }}>
+              <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>Renewal Details</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontSize: '13px', color: '#cbd5e1' }}>Target Account</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#00d9ff' }}>@{renewConfirmTarget}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontSize: '13px', color: '#cbd5e1' }}>Duration</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#a78bfa' }}>{renewConfirmDays} Days</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '13px', color: '#cbd5e1' }}>Wallet Deduction</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: isOwner ? '#05df72' : '#f59e0b' }}>
+                  {isOwner ? '₹0 (Owner Free)' : `₹${renewConfirmDays === 30 ? (securityPolicy.admin_sub_renew_fee_30d ?? 500) : (securityPolicy.admin_sub_renew_fee_60d ?? 900)}`}
+                </span>
+              </div>
+            </div>
+
+            {!isOwner && (
+              <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '14px', padding: '8px 10px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '8px' }}>
+                ⚠️ Your current wallet: <strong style={{ color: '#f8fafc' }}>₹{walletBalance.toLocaleString('en-IN')}</strong>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setRenewConfirmTarget(null)}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.25)', background: 'rgba(148,163,184,0.08)', color: '#94a3b8', fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRenewUserSubscription}
+                disabled={renewConfirmLoading}
+                style={{ flex: 2, padding: '10px', borderRadius: '8px', border: '1px solid rgba(0,217,255,0.4)', background: renewConfirmLoading ? 'rgba(0,217,255,0.08)' : 'rgba(0,217,255,0.16)', color: '#00d9ff', fontWeight: 800, cursor: renewConfirmLoading ? 'not-allowed' : 'pointer', fontSize: '13px' }}
+              >
+                {renewConfirmLoading ? '⏳ Renewing...' : `✅ Confirm Renew ${renewConfirmDays}D`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {pwdModalUser && (
         <div className="sg-modal-overlay" style={styles.modalOverlay} onClick={() => setPwdModalUser(null)}>
           <div

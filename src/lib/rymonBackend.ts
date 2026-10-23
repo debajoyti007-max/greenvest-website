@@ -732,7 +732,17 @@ export async function verifyLicenseKey(
           return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.' }
         }
 
-        const exp = licRow.expires_at || new Date(Date.now() + 30 * 86400000).toISOString()
+        // Parse plan_duration to compute proper fallback expiry (not a hard-coded 30 days)
+        let fallbackMs = 30 * 86400000 // safe default
+        const pd = (licRow.plan_duration || '').toLowerCase()
+        if (pd.includes('2 hour')) fallbackMs = 2 * 3600000
+        else if (pd.includes('1 day')) fallbackMs = 1 * 86400000
+        else if (pd.includes('3 day')) fallbackMs = 3 * 86400000
+        else if (pd.includes('7 day')) fallbackMs = 7 * 86400000
+        else if (pd.includes('15 day')) fallbackMs = 15 * 86400000
+        else if (pd.includes('30 day')) fallbackMs = 30 * 86400000
+
+        const exp = licRow.expires_at || new Date(Date.now() + fallbackMs).toISOString()
         await supabase
           .from('rymon_licenses')
           .update({
