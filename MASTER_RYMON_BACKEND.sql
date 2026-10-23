@@ -241,11 +241,14 @@ $$;
 GRANT EXECUTE ON FUNCTION public.rpc_rymon_login(TEXT, TEXT) TO anon, authenticated;
 
 -- ------------------------------------------------------------------------------
--- RPC 2: PER-KEY VERIFICATION & DEVICE HWID BINDING
+-- RPC 2: PER-KEY VERIFICATION & DEVICE HWID BINDING (UNIVERSAL & CROSS-APP)
 -- ------------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.rpc_rymon_verify_license(text, text);
+
 CREATE OR REPLACE FUNCTION public.rpc_rymon_verify_license(
     p_license_key TEXT,
-    p_hwid TEXT DEFAULT ''
+    p_hwid TEXT DEFAULT ''::TEXT,
+    p_game TEXT DEFAULT ''::TEXT
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -254,50 +257,80 @@ SET search_path = public
 AS $$
 DECLARE
     v_clean_key TEXT;
+    v_clean_hwid TEXT;
     v_lic public.rymon_licenses%ROWTYPE;
     v_calc_expiry TIMESTAMPTZ;
     v_duration_interval INTERVAL := INTERVAL '30 days';
+    v_req_game TEXT;
+    v_lic_game TEXT;
 BEGIN
-    v_clean_key := UPPER(TRIM(p_license_key));
+    v_clean_key := UPPER(TRIM(COALESCE(p_license_key, '')));
+    v_clean_hwid := TRIM(COALESCE(p_hwid, ''));
+    v_req_game  := TRIM(COALESCE(p_game, ''));
 
-    -- Master owner key bypass
-    IF v_clean_key = 'RYMON-MASTER-KEY' OR v_clean_key LIKE '%MASTER%' OR v_clean_key LIKE '%OWNER%' THEN
+    IF v_clean_key = '' THEN
         RETURN jsonb_build_object(
-            'valid', true,
-            'key', v_clean_key,
-            'game', 'Free Fire MAX',
-            'plan', 'Lifetime',
-            'creator', 'rymon',
-            'status', 'ACTIVE',
-            'is_master', true,
-            'expires_at', (now() + INTERVAL '10 years')
+            'valid', false,
+            'error', 'License key cannot be empty.'
         );
     END IF;
 
+    -- 1. Exact Master Key Verification (No substring wildcard bypass)
+    IF v_clean_key = 'RYMON-MASTER-KEY' THEN
+        RETURN jsonb_build_object(
+            'valid', true,
+            'key', v_clean_key,
+            'game', CASE WHEN v_req_game != '' THEN v_req_game ELSE 'Universal' END,
+            'plan', 'Lifetime',
+            'creator', 'debajoyti',
+            'status', 'ACTIVE',
+            'is_master', true,
+            'is_paused', false,
+            'expires_at', (now() + INTERVAL '10 years'),
+            'devices_used', 1,
+            'devices_max', 999
+        );
+    END IF;
+
+    -- 2. Lookup License Record (with Self-Healing from Streamer Controls)
     SELECT * INTO v_lic
     FROM public.rymon_licenses
     WHERE license_key = v_clean_key;
 
     IF NOT FOUND THEN
-        -- Also check streamer controls table fallback
+        -- Check Streamer Controls table fallback: self-heal into rymon_licenses
         IF EXISTS (SELECT 1 FROM public.rymon_streamer_controls WHERE license_key = v_clean_key) THEN
+            INSERT INTO public.rymon_licenses (
+                license_key, game, plan_duration, creator_username,
+                devices_used, devices_max, device_hwid, status, expires_at, created_at, updated_at, is_paused
+            )
+            SELECT
+                sc.license_key,
+                COALESCE(NULLIF(sc.game_name, ''), 'Free Fire MAX'),
+                COALESCE(NULLIF(sc.plan_duration, ''), '30 Days [VIP]'),
+                COALESCE(NULLIF(sc.creator, ''), 'debajoyti'),
+                0,
+                GREATEST(COALESCE(sc.devices_max, 1), 1),
+                COALESCE(sc.device_hwid, ''),
+                CASE WHEN sc.is_active THEN 'ACTIVE' ELSE 'BANNED' END,
+                COALESCE(sc.expires_at, now() + INTERVAL '30 days'),
+                now(),
+                now(),
+                COALESCE(sc.is_paused, false)
+            FROM public.rymon_streamer_controls sc
+            WHERE sc.license_key = v_clean_key
+            ON CONFLICT (license_key) DO UPDATE
+                SET updated_at = now()
+            RETURNING * INTO v_lic;
+        ELSE
             RETURN jsonb_build_object(
-                'valid', true,
-                'key', v_clean_key,
-                'game', 'Free Fire MAX',
-                'plan', '30 Days',
-                'status', 'ACTIVE',
-                'expires_at', (now() + INTERVAL '30 days')
+                'valid', false,
+                'error', 'License key not found. Check key string or generate a new key.'
             );
         END IF;
-
-        RETURN jsonb_build_object(
-            'valid', false,
-            'error', 'License key not found. Check key string or generate a new key.'
-        );
     END IF;
 
-    -- Check if Banned
+    -- 3. Check Banned / Revoked Status
     IF v_lic.status = 'BANNED' THEN
         RETURN jsonb_build_object(
             'valid', false,
@@ -305,7 +338,39 @@ BEGIN
         );
     END IF;
 
-    -- Parse Duration Interval
+    -- 4. Check Paused Status
+    IF COALESCE(v_lic.is_paused, false) THEN
+        RETURN jsonb_build_object(
+            'valid', false,
+            'is_paused', true,
+            'error', 'License key is paused by administrator.'
+        );
+    END IF;
+
+    -- 5. Cross-App Isolation Enforcement (Two-Way Strict Enforcement)
+    v_lic_game := TRIM(COALESCE(v_lic.game, 'Free Fire MAX'));
+    IF v_lic_game = '' THEN v_lic_game := 'Free Fire MAX'; END IF;
+
+    IF v_req_game = '' THEN
+        IF UPPER(v_lic_game) NOT IN ('UNIVERSAL', 'ALL', 'ANY', 'GLOBAL') 
+           AND NOT (v_lic_game ILIKE '%Free Fire%') THEN
+            RETURN jsonb_build_object(
+                'valid', false,
+                'error', 'App Mismatch! This key is reserved for "' || v_lic_game || '" (Pure KeyAuth) and cannot be used in Free Fire MAX.'
+            );
+        END IF;
+    ELSE
+        IF UPPER(v_lic_game) NOT IN ('UNIVERSAL', 'ALL', 'ANY', 'GLOBAL') 
+           AND NOT (v_lic_game ILIKE '%Free Fire%' AND v_req_game ILIKE '%Free Fire%')
+           AND LOWER(v_lic_game) != LOWER(v_req_game) THEN
+            RETURN jsonb_build_object(
+                'valid', false,
+                'error', 'App Mismatch! This key is only valid for "' || v_lic_game || '", not "' || v_req_game || '". Contact administrator for access.'
+            );
+        END IF;
+    END IF;
+
+    -- 6. Parse Duration Interval
     IF v_lic.plan_duration ILIKE '%2 Hour%' THEN v_duration_interval := INTERVAL '2 hours';
     ELSIF v_lic.plan_duration ILIKE '%1 Day%' THEN v_duration_interval := INTERVAL '1 day';
     ELSIF v_lic.plan_duration ILIKE '%3 Day%' THEN v_duration_interval := INTERVAL '3 days';
@@ -315,65 +380,89 @@ BEGIN
     ELSE v_duration_interval := INTERVAL '30 days';
     END IF;
 
-    -- First Time Activation: Only trigger when expires_at is NULL (key never activated)
-    -- Do NOT re-activate based on status='WAITING' alone, as HWID reset sets WAITING on active keys
-    IF v_lic.expires_at IS NULL THEN
+    -- 7. First-time Activation (WAITING -> ACTIVE)
+    IF v_lic.status = 'WAITING' OR v_lic.expires_at IS NULL THEN
         v_calc_expiry := now() + v_duration_interval;
+        IF v_clean_hwid = '' THEN
+            v_clean_hwid := 'ANDROID-DEVICE-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 8));
+        END IF;
+
         UPDATE public.rymon_licenses
         SET status = 'ACTIVE',
             expires_at = v_calc_expiry,
             devices_used = 1,
-            device_hwid = COALESCE(NULLIF(p_hwid, ''), 'DEFAULT-DEVICE'),
+            device_hwid = v_clean_hwid,
             last_heartbeat = now(),
             updated_at = now()
         WHERE id = v_lic.id;
 
-        -- Update controls
         UPDATE public.rymon_streamer_controls
         SET is_active = true,
             is_online = true,
             expires_at = v_calc_expiry,
-            device_hwid = COALESCE(NULLIF(p_hwid, ''), 'DEFAULT-DEVICE'),
+            device_hwid = v_clean_hwid,
             devices_used = 1,
-            last_heartbeat = now()
+            last_heartbeat = now(),
+            updated_at = now()
         WHERE license_key = v_clean_key;
 
         v_lic.status := 'ACTIVE';
         v_lic.expires_at := v_calc_expiry;
         v_lic.devices_used := 1;
+        v_lic.device_hwid := v_clean_hwid;
     ELSE
-        -- Check Expiration
+        -- 8. Check Expiration
         IF v_lic.expires_at < now() THEN
-            UPDATE public.rymon_licenses SET status = 'EXPIRED' WHERE id = v_lic.id;
+            UPDATE public.rymon_licenses SET status = 'EXPIRED', updated_at = now() WHERE id = v_lic.id;
+            UPDATE public.rymon_streamer_controls SET is_active = false, is_online = false, updated_at = now() WHERE license_key = v_clean_key;
             RETURN jsonb_build_object(
                 'valid', false,
                 'error', 'License key expired on ' || to_char(v_lic.expires_at, 'DD/MM/YYYY HH24:MI')
             );
         END IF;
 
-        -- HWID check (if HWID provided and already bound)
-        IF p_hwid != '' AND v_lic.device_hwid != '' AND v_lic.device_hwid != p_hwid AND v_lic.devices_used >= v_lic.devices_max THEN
-            RETURN jsonb_build_object(
-                'valid', false,
-                'error', 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.'
-            );
+        -- 9. Strict Single Device / HWID Lock Check
+        IF COALESCE(v_lic.device_hwid, '') != '' THEN
+            IF v_clean_hwid = '' OR v_lic.device_hwid != v_clean_hwid THEN
+                IF v_lic.devices_used >= v_lic.devices_max THEN
+                    RETURN jsonb_build_object(
+                        'valid', false,
+                        'error', 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.'
+                    );
+                END IF;
+            END IF;
+        ELSIF v_clean_hwid != '' THEN
+            UPDATE public.rymon_licenses
+            SET device_hwid = v_clean_hwid,
+                devices_used = 1,
+                last_heartbeat = now(),
+                updated_at = now()
+            WHERE id = v_lic.id;
+
+            UPDATE public.rymon_streamer_controls
+            SET device_hwid = v_clean_hwid,
+                devices_used = 1,
+                last_heartbeat = now(),
+                is_online = true,
+                updated_at = now()
+            WHERE license_key = v_clean_key;
+
+            v_lic.device_hwid := v_clean_hwid;
+            v_lic.devices_used := 1;
         END IF;
 
-        -- Update heartbeat; increment devices_used for a new device binding (up to devices_max)
+        -- 10. Update Heartbeat & Online State
         UPDATE public.rymon_licenses
         SET last_heartbeat = now(),
-            device_hwid = CASE WHEN v_lic.device_hwid = '' THEN p_hwid ELSE v_lic.device_hwid END,
-            devices_used = CASE
-                WHEN p_hwid != '' AND v_lic.device_hwid != p_hwid AND v_lic.device_hwid != ''
-                    THEN LEAST(v_lic.devices_used + 1, v_lic.devices_max)
-                ELSE GREATEST(v_lic.devices_used, 1)
-            END,
+            devices_used = GREATEST(v_lic.devices_used, 1),
             updated_at = now()
         WHERE id = v_lic.id;
 
         UPDATE public.rymon_streamer_controls
         SET last_heartbeat = now(),
-            is_online = true
+            is_online = true,
+            devices_used = GREATEST(devices_used, 1),
+            updated_at = now()
         WHERE license_key = v_clean_key;
     END IF;
 
@@ -381,9 +470,11 @@ BEGIN
         'valid', true,
         'key', v_lic.license_key,
         'game', v_lic.game,
+        'app', v_lic.game,
         'plan', v_lic.plan_duration,
         'creator', v_lic.creator_username,
         'status', v_lic.status,
+        'is_paused', COALESCE(v_lic.is_paused, false),
         'expires_at', v_lic.expires_at,
         'devices_used', v_lic.devices_used,
         'devices_max', v_lic.devices_max
@@ -391,7 +482,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.rpc_rymon_verify_license(TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_verify_license(TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
 
 -- ------------------------------------------------------------------------------
 -- RPC 3: ATOMIC KEY GENERATION WITH WALLET BALANCE DEDUCTION
