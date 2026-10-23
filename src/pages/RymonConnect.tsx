@@ -470,6 +470,9 @@ export default function RymonConnect() {
   const [deleteKeyType, setDeleteKeyType] = useState<'expired' | 'unused' | 'all'>('expired')
   const [targetExtendKey, setTargetExtendKey] = useState('')
   const [extendAmount, setExtendAmount] = useState(7)
+  const [showBulkExtendModal, setShowBulkExtendModal] = useState(false)
+  const [bulkExtendDays, setBulkExtendDays] = useState<number>(1)
+  const [bulkExtendBusy, setBulkExtendBusy] = useState(false)
   const [actionSuccessMsg, setActionSuccessMsg] = useState('')
 
   // Advanced System Toggles & Sovereign Security Policy
@@ -1795,8 +1798,9 @@ export default function RymonConnect() {
       alert('Please select a target user.')
       return
     }
-    if (topUpAmount === '' || topUpAmount <= 0) {
-      alert('Please enter a valid amount greater than ₹0.')
+    const isOwnerSetMode = isOwner && topUpMode === 'set'
+    if (topUpAmount === '' || (isOwnerSetMode ? Number(topUpAmount) < 0 : Number(topUpAmount) <= 0)) {
+      alert(isOwnerSetMode ? 'Please enter a valid balance (₹0 or greater).' : 'Please enter a valid amount greater than ₹0.')
       return
     }
 
@@ -1819,7 +1823,9 @@ export default function RymonConnect() {
       }
       showToast(
         isOwner
-          ? `Success! Balance for @${topUpTargetUser} updated to ₹${res.newBalance.toLocaleString('en-IN')}`
+          ? (topUpMode === 'set'
+              ? `Success! Exact balance for @${topUpTargetUser} set to ₹${res.newBalance.toLocaleString('en-IN')}`
+              : `Success! Credited ₹${Number(topUpAmount).toLocaleString('en-IN')} to @${topUpTargetUser} (New Bal: ₹${res.newBalance.toLocaleString('en-IN')})`)
           : `Transferred ₹${Number(topUpAmount).toLocaleString('en-IN')} from your wallet to @${topUpTargetUser}!`
       )
       setTopUpAmount('')
@@ -2650,14 +2656,14 @@ export default function RymonConnect() {
     }
   }
 
-  const handleBulkExtendAllKeys = async (days: number) => {
+  const handleBulkExtendAllKeys = async (days: number, skipConfirm: boolean = false) => {
     if (days < 1) {
       alert('Please select a valid extension duration (minimum 1 day).')
       return
     }
     const creatorFilter = currentUser?.role === 'reseller' ? currentUser.username : undefined
     const activeTargets = keysList.filter((k) => {
-      if (k.status === 'BANNED') return false
+      if (k.status === 'BANNED' || k.status === 'EXPIRED') return false
       if (creatorFilter && (k.creator_username || '').toLowerCase() !== creatorFilter.toLowerCase()) return false
       return true
     })
@@ -2677,10 +2683,12 @@ export default function RymonConnect() {
       return
     }
     const costNotice = isOwner ? 'FREE (Owner)' : `₹${totalCost.toLocaleString('en-IN')} (Bal: ₹${currentBal.toLocaleString('en-IN')})`
-    if (!confirm(`Confirm bulk extending ${activeTargets.length} key(s) by +${days} Days?\nWallet Deduction: ${costNotice}`)) {
+    if (!skipConfirm && !confirm(`Confirm bulk extending ${activeTargets.length} key(s) by +${days} Days?\nWallet Deduction: ${costNotice}`)) {
       return
     }
+    setBulkExtendBusy(true)
     const res = await bulkExtendAllKeysBackend(days, currentUser?.username || 'debajoyti', creatorFilter)
+    setBulkExtendBusy(false)
     if (res.success) {
       if (res.remainingBalance !== undefined && currentUser) {
         setWalletBalance(res.remainingBalance)
@@ -2688,8 +2696,10 @@ export default function RymonConnect() {
         setCurrentUser(updatedMe)
         localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
       }
+      setShowBulkExtendModal(false)
       showToast(`➕ ${res.message}`)
       fetchAllLicenses(currentUser).then(setKeysList)
+      fetchAllActivities(currentUser).then(setActivities)
     } else {
       alert(res.message)
     }
@@ -3082,8 +3092,12 @@ export default function RymonConnect() {
       {/* Premium Minimal Charcoal Responsive Engine */}
       <style>{`
         @keyframes sgLivePulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.45; }
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.45; transform: scale(0.92); }
+        }
+        @keyframes sgAuraPulse {
+          0%, 100% { box-shadow: 0 0 16px rgba(139, 92, 246, 0.25); }
+          50% { box-shadow: 0 0 32px rgba(139, 92, 246, 0.5); }
         }
         @keyframes sgSlideDrawer {
           from { transform: translateX(-100%); }
@@ -3094,31 +3108,81 @@ export default function RymonConnect() {
           to { opacity: 1; }
         }
 
-        /* Clean Charcoal Scrollbar */
+        /* Glassmorphic Translucent Scrollbars */
         ::-webkit-scrollbar {
           width: 6px;
           height: 6px;
         }
         ::-webkit-scrollbar-track {
-          background: #090d16;
+          background: rgba(7, 11, 20, 0.6);
+          backdrop-filter: blur(8px);
         }
         ::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.12);
+          background: rgba(255, 255, 255, 0.16);
           border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.22);
+          background: rgba(167, 139, 250, 0.45);
         }
 
-        /* Subtle interactive card transition */
+        /* Desktop & Global Glass Surface Classes */
         .sg-glass-card {
-          transition: border-color 0.15s ease;
+          background: rgba(15, 23, 42, 0.65) !important;
+          backdrop-filter: blur(16px) saturate(180%) !important;
+          -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+          border: 1px solid rgba(255, 255, 255, 0.1) !important;
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36), inset 0 1px 0 0 rgba(255, 255, 255, 0.14) !important;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
         }
         .sg-glass-card:hover {
-          border-color: rgba(139, 92, 246, 0.35) !important;
+          border-color: rgba(167, 139, 250, 0.5) !important;
+          box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.45), 0 0 24px rgba(139, 92, 246, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.25) !important;
+          transform: translateY(-2px);
         }
         .sg-live-beacon {
           animation: sgLivePulse 2s infinite ease-in-out;
+        }
+
+        /* Desktop Card & Action Glass Micro-Interactions */
+        .sg-stat-card {
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .sg-stat-card:hover {
+          border-color: rgba(167, 139, 250, 0.45) !important;
+          transform: translateY(-2px);
+          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 0 20px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+        }
+        .sg-quick-grid > button {
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .sg-quick-grid > button:hover {
+          border-color: rgba(167, 139, 250, 0.45) !important;
+          background: rgba(139, 92, 246, 0.14) !important;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 16px rgba(139, 92, 246, 0.2) !important;
+        }
+        .sg-card-box, .sg-management-card, .sg-column-card, .sg-table-card {
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease !important;
+        }
+        .sg-card-box:hover, .sg-management-card:hover, .sg-column-card:hover {
+          border-color: rgba(255, 255, 255, 0.16) !important;
+          box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.45), 0 0 20px rgba(139, 92, 246, 0.12), inset 0 1px 0 0 rgba(255, 255, 255, 0.18) !important;
+        }
+        .sg-data-table tbody tr {
+          transition: background-color 0.15s ease !important;
+        }
+        .sg-data-table tbody tr:hover {
+          background-color: rgba(255, 255, 255, 0.04) !important;
+        }
+        button[type="submit"]:hover {
+          filter: brightness(1.1);
+          box-shadow: 0 6px 24px rgba(139, 92, 246, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+        }
+
+        /* Interactive Focus Ring & Glow */
+        input:focus, select:focus, textarea:focus {
+          border-color: rgba(167, 139, 250, 0.65) !important;
+          box-shadow: 0 0 16px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
         }
 
         /* Desktop defaults for mobile-only elements */
@@ -3164,7 +3228,7 @@ export default function RymonConnect() {
             cursor: pointer !important;
           }
 
-          /* 1. Top Header */
+          /* 1. Top Header (Glassmorphic) */
           .sg-top-header {
             padding: 8px 12px !important;
             gap: 8px !important;
@@ -3180,8 +3244,11 @@ export default function RymonConnect() {
             overflow: hidden !important;
             min-height: 52px !important;
             max-height: 56px !important;
-            background-color: #0e131f !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(10, 15, 28, 0.72) !important;
+            backdrop-filter: blur(20px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), inset 0 -1px 0 rgba(255, 255, 255, 0.06) !important;
           }
           .sg-header-left {
             gap: 8px !important;
@@ -3201,18 +3268,20 @@ export default function RymonConnect() {
             min-width: 44px !important;
             min-height: 44px !important;
             border-radius: 8px !important;
-            background: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(255, 255, 255, 0.06) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
             color: #f8fafc !important;
             cursor: pointer !important;
             padding: 0 !important;
             flex-shrink: 0 !important;
-            transition: background 0.15s ease !important;
+            transition: all 0.15s ease !important;
             touch-action: manipulation !important;
-            box-shadow: none !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
           }
           .sg-mobile-menu-toggle:active {
-            background: rgba(255, 255, 255, 0.12) !important;
+            background: rgba(255, 255, 255, 0.14) !important;
             transform: scale(0.96) !important;
           }
           .sg-brand-cluster {
@@ -3259,8 +3328,10 @@ export default function RymonConnect() {
             padding: 6px 10px !important;
             font-size: 11px !important;
             border-radius: 8px !important;
-            background: rgba(255, 255, 255, 0.04) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(255, 255, 255, 0.06) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
             color: #f8fafc !important;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
@@ -3270,7 +3341,7 @@ export default function RymonConnect() {
             display: inline-flex !important;
             align-items: center !important;
             gap: 6px !important;
-            box-shadow: none !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
           }
           .sg-telemetry-pill {
             display: none !important;
@@ -3296,19 +3367,22 @@ export default function RymonConnect() {
             align-items: center !important;
             justify-content: center !important;
             border-radius: 8px !important;
-            background: rgba(239, 68, 68, 0.08) !important;
-            border: 1px solid rgba(239, 68, 68, 0.2) !important;
+            background: rgba(239, 68, 68, 0.1) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            border: 1px solid rgba(239, 68, 68, 0.28) !important;
             color: #f87171 !important;
             padding: 0 !important;
             cursor: pointer !important;
             touch-action: manipulation !important;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15) !important;
           }
           .sg-header-logout-btn:active {
-            background: rgba(239, 68, 68, 0.18) !important;
+            background: rgba(239, 68, 68, 0.2) !important;
             transform: scale(0.96) !important;
           }
 
-          /* 2. Main Layout & Sidebar Drawer */
+          /* 2. Main Layout & Sidebar Drawer (Glassmorphic) */
           .sg-main-layout {
             flex-direction: column !important;
             min-height: calc(100vh - 52px) !important;
@@ -3326,21 +3400,23 @@ export default function RymonConnect() {
             width: 280px !important;
             max-width: 86vw !important;
             z-index: 1001 !important;
-            background: #0e131f !important;
-            box-shadow: 0 0 40px rgba(0, 0, 0, 0.9) !important;
+            background: rgba(10, 15, 28, 0.85) !important;
+            backdrop-filter: blur(24px) saturate(190%) !important;
+            -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.9), inset 1px 0 0 rgba(255, 255, 255, 0.08) !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
             padding: 16px 14px calc(76px + env(safe-area-inset-bottom, 20px)) !important;
-            border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
             animation: sgSlideDrawer 0.22s cubic-bezier(0.16, 1, 0.3, 1) both !important;
           }
           .sg-mobile-backdrop {
             display: block !important;
             position: fixed !important;
             inset: 0 !important;
-            background-color: rgba(0, 0, 0, 0.75) !important;
-            backdrop-filter: blur(4px) !important;
-            -webkit-backdrop-filter: blur(4px) !important;
+            background-color: rgba(3, 7, 18, 0.65) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
             z-index: 1000 !important;
             animation: sgFadeIn 0.18s ease both !important;
           }
@@ -3350,7 +3426,7 @@ export default function RymonConnect() {
             justify-content: space-between !important;
             padding-bottom: 12px !important;
             margin-bottom: 12px !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
           }
           .sg-mobile-close-btn {
             display: flex !important;
@@ -3361,15 +3437,17 @@ export default function RymonConnect() {
             min-width: 44px !important;
             min-height: 44px !important;
             border-radius: 8px !important;
-            background: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(255, 255, 255, 0.06) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
             color: #f8fafc !important;
             cursor: pointer !important;
             touch-action: manipulation !important;
             padding: 0 !important;
           }
           .sg-mobile-close-btn:active {
-            background: rgba(255, 255, 255, 0.12) !important;
+            background: rgba(255, 255, 255, 0.14) !important;
             transform: scale(0.96) !important;
           }
 
@@ -3387,22 +3465,28 @@ export default function RymonConnect() {
             box-sizing: border-box !important;
           }
 
-          /* 4. Auth Gateway */
+          /* 4. Auth Gateway (Glassmorphic) */
           .sg-auth-gate-box {
             width: 94% !important;
             max-width: 420px !important;
             margin: 16px auto calc(40px + env(safe-area-inset-bottom, 20px)) !important;
             padding: 20px 16px !important;
-            border-radius: 12px !important;
-            background: #111827 !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 14px !important;
+            background: rgba(17, 24, 39, 0.75) !important;
+            backdrop-filter: blur(20px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
             box-sizing: border-box !important;
-            box-shadow: none !important;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
           }
           .sg-auth-tab-selector {
             gap: 4px !important;
             padding: 3px !important;
             margin-bottom: 14px !important;
+            background: rgba(10, 15, 28, 0.7) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
           }
           .sg-auth-tab-btn {
             padding: 10px 8px !important;
@@ -3415,7 +3499,7 @@ export default function RymonConnect() {
             margin-bottom: 10px !important;
           }
 
-          /* 5. Streamer Remote HUD & Controls */
+          /* 5. Streamer Remote HUD & Controls (Glassmorphic) */
           .sg-banner-row {
             flex-direction: column !important;
             align-items: flex-start !important;
@@ -3440,6 +3524,8 @@ export default function RymonConnect() {
             box-sizing: border-box !important;
             display: inline-flex !important;
             align-items: center !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
           }
           .sg-remote-actions > button {
             flex: 1 1 calc(50% - 4px) !important;
@@ -3453,6 +3539,8 @@ export default function RymonConnect() {
             padding: 8px !important;
             box-sizing: border-box !important;
             touch-action: manipulation !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
           }
           .sg-telemetry-bar {
             flex-direction: column !important;
@@ -3460,8 +3548,11 @@ export default function RymonConnect() {
             gap: 10px !important;
             padding: 12px 10px !important;
             box-sizing: border-box !important;
-            background: #0e131f !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(10, 15, 28, 0.72) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
           }
           .sg-key-select-box {
             width: 100% !important;
@@ -3493,8 +3584,11 @@ export default function RymonConnect() {
           .sg-column-card {
             padding: 14px 12px !important;
             border-radius: 12px !important;
-            background: #111827 !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(15, 23, 42, 0.65) !important;
+            backdrop-filter: blur(16px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
             box-sizing: border-box !important;
           }
           .sg-player-status-bar {
@@ -3504,8 +3598,11 @@ export default function RymonConnect() {
             align-items: stretch !important;
             width: 100% !important;
             box-sizing: border-box !important;
-            background: #0e131f !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(10, 15, 28, 0.7) !important;
+            backdrop-filter: blur(14px) !important;
+            -webkit-backdrop-filter: blur(14px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
             border-radius: 10px !important;
           }
           .sg-player-status-bar > div {
@@ -3551,17 +3648,19 @@ export default function RymonConnect() {
           .sg-management-card {
             padding: 16px 14px !important;
             border-radius: 12px !important;
-            background: #111827 !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(15, 23, 42, 0.65) !important;
+            backdrop-filter: blur(18px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
             width: 100% !important;
             max-width: 100% !important;
             min-width: 0 !important;
             box-sizing: border-box !important;
             overflow: hidden !important;
-            box-shadow: none !important;
           }
 
-          /* 7. Overview Dashboard Cards */
+          /* 7. Overview Dashboard Cards (Glassmorphic & Micro-Effects) */
           .sg-stat-grid {
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 8px !important;
@@ -3578,13 +3677,18 @@ export default function RymonConnect() {
             user-select: none !important;
             box-sizing: border-box !important;
             min-height: 64px !important;
-            background: #111827 !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
-            box-shadow: none !important;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 100%), rgba(17, 24, 39, 0.6) !important;
+            backdrop-filter: blur(16px) saturate(170%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(170%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
           }
           .sg-stat-card:active {
-            border-color: rgba(139, 92, 246, 0.4) !important;
-            background: #141c2e !important;
+            border-color: rgba(167, 139, 250, 0.5) !important;
+            background: linear-gradient(135deg, rgba(167, 139, 250, 0.12) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(20, 28, 48, 0.75) !important;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+            transform: translateY(-2px) !important;
           }
           .sg-stat-num {
             font-size: 18px !important;
@@ -3602,6 +3706,9 @@ export default function RymonConnect() {
             width: 32px !important;
             height: 32px !important;
             border-radius: 8px !important;
+            background: rgba(255, 255, 255, 0.06) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
             flex-shrink: 0 !important;
           }
           .sg-dual-grid {
@@ -3621,11 +3728,13 @@ export default function RymonConnect() {
           .sg-card-box {
             padding: 14px 12px !important;
             border-radius: 12px !important;
-            background: #111827 !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(15, 23, 42, 0.65) !important;
+            backdrop-filter: blur(16px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
             width: 100% !important;
             box-sizing: border-box !important;
-            box-shadow: none !important;
           }
           .sg-quick-grid {
             grid-template-columns: repeat(2, 1fr) !important;
@@ -3641,28 +3750,36 @@ export default function RymonConnect() {
             gap: 8px !important;
             text-align: left !important;
             border-radius: 8px !important;
-            background: #111827 !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(17, 24, 39, 0.6) !important;
+            backdrop-filter: blur(14px) saturate(160%) !important;
+            -webkit-backdrop-filter: blur(14px) saturate(160%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
             box-sizing: border-box !important;
             touch-action: manipulation !important;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
           }
           .sg-quick-grid > button:active {
-            background: #141c2e !important;
+            border-color: rgba(0, 217, 255, 0.45) !important;
+            background: rgba(20, 30, 52, 0.75) !important;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 18px rgba(0, 217, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
             transform: scale(0.98) !important;
           }
 
-          /* 8. Tables & Horizontal Scroll Container */
+          /* 8. Tables & Horizontal Scroll Container (Glassmorphic) */
           .sg-table-card {
             border-radius: 12px !important;
-            background: #111827 !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(15, 23, 42, 0.6) !important;
+            backdrop-filter: blur(16px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
             width: 100% !important;
             max-width: 100% !important;
             min-width: 0 !important;
             overflow-x: auto !important;
             -webkit-overflow-scrolling: touch !important;
             box-sizing: border-box !important;
-            box-shadow: none !important;
           }
           .sg-data-table {
             min-width: 600px !important;
@@ -3676,9 +3793,23 @@ export default function RymonConnect() {
             box-sizing: border-box !important;
             font-size: 11px !important;
           }
-          .sg-data-table th, .sg-data-table td {
+          .sg-data-table th {
             padding: 10px 12px !important;
             font-size: 12px !important;
+            background: rgba(10, 15, 28, 0.75) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+          }
+          .sg-data-table td {
+            padding: 10px 12px !important;
+            font-size: 12px !important;
+          }
+          .sg-data-table tbody tr {
+            transition: background-color 0.15s ease !important;
+          }
+          .sg-data-table tbody tr:hover {
+            background-color: rgba(255, 255, 255, 0.035) !important;
           }
           .sg-filter-scroll-row {
             display: flex !important;
@@ -3704,7 +3835,7 @@ export default function RymonConnect() {
             box-sizing: border-box !important;
           }
 
-          /* 9. Modals (Responsive & Scrollable) */
+          /* 9. Modals (Responsive & Deep Glassmorphic) */
           .sg-modal-overlay {
             position: fixed !important;
             inset: 0 !important;
@@ -3713,9 +3844,9 @@ export default function RymonConnect() {
             align-items: center !important;
             justify-content: center !important;
             padding: 12px !important;
-            background-color: rgba(0, 0, 0, 0.85) !important;
-            backdrop-filter: blur(8px) !important;
-            -webkit-backdrop-filter: blur(8px) !important;
+            background-color: rgba(5, 8, 16, 0.78) !important;
+            backdrop-filter: blur(16px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
             box-sizing: border-box !important;
           }
           .sg-modal-card {
@@ -3726,15 +3857,17 @@ export default function RymonConnect() {
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
             padding: 18px 14px !important;
-            border-radius: 12px !important;
-            background: #111827 !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 14px !important;
+            background: rgba(17, 24, 39, 0.85) !important;
+            backdrop-filter: blur(28px) saturate(200%) !important;
+            -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7), 0 0 32px rgba(139, 92, 246, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
             margin: auto !important;
             box-sizing: border-box !important;
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7) !important;
           }
 
-          /* 10. Mobile Bottom Quick Bar */
+          /* 10. Mobile Bottom Quick Bar (Floating Glass Dock) */
           .sg-mobile-bottom-bar {
             display: flex !important;
             position: fixed !important;
@@ -3742,14 +3875,14 @@ export default function RymonConnect() {
             left: 0 !important;
             right: 0 !important;
             z-index: 990 !important;
-            background: rgba(14, 19, 31, 0.98) !important;
-            backdrop-filter: blur(12px) !important;
-            -webkit-backdrop-filter: blur(12px) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+            background: rgba(10, 15, 28, 0.8) !important;
+            backdrop-filter: blur(20px) saturate(180%) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
             padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px)) !important;
             justify-content: space-around !important;
             align-items: center !important;
-            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6) !important;
+            box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
             box-sizing: border-box !important;
             min-height: 52px !important;
           }
@@ -3776,11 +3909,12 @@ export default function RymonConnect() {
           }
           .sg-mobile-bottom-tab:active {
             transform: scale(0.94) !important;
-            background: rgba(255, 255, 255, 0.05) !important;
+            background: rgba(255, 255, 255, 0.08) !important;
           }
           .sg-mobile-bottom-tab.active {
             color: #a78bfa !important;
-            background: rgba(139, 92, 246, 0.12) !important;
+            background: rgba(139, 92, 246, 0.18) !important;
+            box-shadow: 0 0 14px rgba(139, 92, 246, 0.3) !important;
           }
         }
 
@@ -5127,15 +5261,16 @@ export default function RymonConnect() {
 
                         <div style={styles.formGroup}>
                           <label style={styles.formLabel}>
-                            Amount (₹) <span style={{ color: '#ef4444' }}>*</span>
+                            {isOwner && topUpMode === 'set' ? 'Exact Balance to Set (₹)' : 'Amount to Credit (₹)'}{' '}
+                            <span style={{ color: '#ef4444' }}>*</span>
                           </label>
                           <input
                             type="number"
-                            min="1"
+                            min={isOwner && topUpMode === 'set' ? "0" : "1"}
                             step="1"
                             value={topUpAmount}
                             onChange={(e) => setTopUpAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                            placeholder="Enter amount..."
+                            placeholder={isOwner && topUpMode === 'set' ? 'Enter exact balance (e.g. 500 or 0)...' : 'Enter amount...'}
                             style={styles.keyInput}
                             required
                           />
@@ -5143,7 +5278,7 @@ export default function RymonConnect() {
                       </div>
 
                       {isOwner ? (
-                        <div style={{ marginTop: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                        <div style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center' }}>
                           <label style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                             <input
                               type="radio"
@@ -5151,7 +5286,9 @@ export default function RymonConnect() {
                               checked={topUpMode === 'set'}
                               onChange={() => setTopUpMode('set')}
                             />
-                            Set Exact Balance
+                            <span style={{ fontWeight: topUpMode === 'set' ? 700 : 400, color: topUpMode === 'set' ? '#00d9ff' : '#94a3b8' }}>
+                              Set Exact Balance (Overwrites account balance)
+                            </span>
                           </label>
                           <label style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                             <input
@@ -5160,7 +5297,9 @@ export default function RymonConnect() {
                               checked={topUpMode === 'add'}
                               onChange={() => setTopUpMode('add')}
                             />
-                            Add (Credit) to Existing Balance
+                            <span style={{ fontWeight: topUpMode === 'add' ? 700 : 400, color: topUpMode === 'add' ? '#05df72' : '#94a3b8' }}>
+                              Add (Credit) to Existing Balance
+                            </span>
                           </label>
                         </div>
                       ) : (
@@ -5201,7 +5340,7 @@ export default function RymonConnect() {
                           {topUpLoading
                             ? 'PROCESSING TRANSACTION...'
                             : isOwner
-                            ? 'Credit Balance (FREE)'
+                            ? (topUpMode === 'set' ? 'Set Exact Balance (FREE)' : 'Credit Balance (FREE)')
                             : 'Transfer from My Wallet'}
                         </button>
                       </div>
@@ -6117,7 +6256,10 @@ export default function RymonConnect() {
                       <IconRefresh size={13} color="#00d9ff" /> RESET ALL HWID
                     </button>
                     <button
-                      onClick={() => handleBulkExtendAllKeys(7)}
+                      onClick={() => {
+                        setBulkExtendDays(1)
+                        setShowBulkExtendModal(true)
+                      }}
                       style={{
                         padding: '6px 12px',
                         borderRadius: '8px',
@@ -6131,8 +6273,9 @@ export default function RymonConnect() {
                         alignItems: 'center',
                         gap: '5px'
                       }}
+                      title="Bulk extend license duration for all your active keys"
                     >
-                      <IconPlus size={13} color="#c084fc" /> +7 DAYS ALL
+                      <IconPlus size={13} color="#c084fc" /> EXTEND ALL KEYS
                     </button>
                     <button
                       onClick={() => handleQuickBulkDelete('expired')}
@@ -10488,6 +10631,166 @@ else:
         </div>
       )}
 
+      {/* ── BULK EXTEND ALL KEYS MODAL ────────────────────────────────────────── */}
+      {showBulkExtendModal && (() => {
+        const creatorFilter = currentUser?.role === 'reseller' ? currentUser.username : undefined
+        const activeTargets = keysList.filter((k) => {
+          if (k.status === 'BANNED' || k.status === 'EXPIRED') return false
+          if (creatorFilter && (k.creator_username || '').toLowerCase() !== creatorFilter.toLowerCase()) return false
+          return true
+        })
+        const totalCost = isOwner
+          ? 0
+          : activeTargets.reduce(
+              (sum, k) => sum + calculateExtensionCost(bulkExtendDays, currentUser?.username, k.devices_max || 1),
+              0
+            )
+        const currentBal = walletBalance ?? currentUser?.balance ?? 0
+        const isInsufficient = !isOwner && currentBal < totalCost
+        const remainingBal = Math.max(0, currentBal - totalCost)
+
+        return (
+          <div className="sg-modal-overlay" style={styles.modalOverlay} onClick={() => !bulkExtendBusy && setShowBulkExtendModal(false)}>
+            <div
+              className="sg-modal-card"
+              style={{
+                ...styles.modalCard,
+                maxWidth: '520px',
+                width: '92%',
+                textAlign: 'left',
+                padding: '24px',
+                border: '1px solid rgba(192, 132, 252, 0.4)',
+                boxShadow: '0 20px 50px rgba(0, 0, 0, 0.85), 0 0 35px rgba(168, 85, 247, 0.2)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ ...styles.actionIconCircle, background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' }}>
+                    <IconPlus size={18} color="#c084fc" />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#f8fafc' }}>
+                      Extend All Active Keys
+                    </h3>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                      Add duration across {activeTargets.length} active key(s) in your scope
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !bulkExtendBusy && setShowBulkExtendModal(false)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(148, 163, 184, 0.2)',
+                    borderRadius: '6px',
+                    color: '#94a3b8',
+                    padding: '4px 10px',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>
+                  SELECT DURATION TO ADD (MAX 30 DAYS CAP) <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <select
+                  value={bulkExtendDays}
+                  onChange={(e) => setBulkExtendDays(Math.min(30, Math.max(1, parseInt(e.target.value) || 1)))}
+                  style={styles.selectInput}
+                  disabled={bulkExtendBusy}
+                >
+                  <option value={1}>1 Day (+1d per key)</option>
+                  <option value={3}>3 Days (+3d per key)</option>
+                  <option value={7}>7 Days (+7d per key)</option>
+                  <option value={15}>15 Days (+15d per key)</option>
+                  <option value={30}>30 Days (Max Cap)</option>
+                </select>
+              </div>
+
+              <div
+                style={{
+                  marginTop: '16px',
+                  padding: '14px',
+                  borderRadius: '10px',
+                  background: isOwner ? 'rgba(250, 204, 21, 0.08)' : 'rgba(15, 23, 42, 0.85)',
+                  border: isOwner
+                    ? '1px solid rgba(250, 204, 21, 0.3)'
+                    : isInsufficient
+                    ? '1px solid rgba(239, 68, 68, 0.4)'
+                    : '1px solid rgba(5, 223, 114, 0.3)'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
+                  <span style={{ color: '#94a3b8' }}>Target Keys:</span>
+                  <span style={{ fontWeight: 700, color: '#f8fafc' }}>{activeTargets.length} active key(s)</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
+                  <span style={{ color: '#94a3b8' }}>Duration per Key:</span>
+                  <span style={{ fontWeight: 700, color: '#c084fc' }}>+{bulkExtendDays} Day(s)</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
+                  <span style={{ color: '#94a3b8' }}>Total Extension Cost:</span>
+                  <span style={{ fontWeight: 800, color: isOwner ? '#fde047' : isInsufficient ? '#ef4444' : '#00d9ff' }}>
+                    {isOwner ? '👑 ₹0 (FREE UNLIMITED)' : `₹${totalCost.toLocaleString('en-IN')}`}
+                  </span>
+                </div>
+                {!isOwner && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
+                      <span style={{ color: '#94a3b8' }}>Your Current Wallet:</span>
+                      <span style={{ fontWeight: 700, color: '#f8fafc' }}>₹{currentBal.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid rgba(148, 163, 184, 0.15)', fontSize: '12px' }}>
+                      <span style={{ color: '#94a3b8' }}>Remaining Wallet Balance:</span>
+                      <span style={{ fontWeight: 800, color: isInsufficient ? '#ef4444' : '#05df72' }}>
+                        {isInsufficient ? `Insufficient by ₹${(totalCost - currentBal).toLocaleString('en-IN')}` : `₹${remainingBal.toLocaleString('en-IN')}`}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '22px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkExtendModal(false)}
+                  disabled={bulkExtendBusy}
+                  style={styles.modalCancelBtn}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkExtendAllKeys(bulkExtendDays, true)}
+                  disabled={bulkExtendBusy || activeTargets.length === 0 || isInsufficient}
+                  style={{
+                    ...styles.primaryActionBtn,
+                    background: isInsufficient ? 'rgba(239, 68, 68, 0.3)' : '#c084fc',
+                    color: isInsufficient ? '#fca5a5' : '#07090e',
+                    fontWeight: 800,
+                    cursor: isInsufficient || activeTargets.length === 0 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {bulkExtendBusy
+                    ? 'EXTENDING KEYS...'
+                    : isInsufficient
+                    ? 'INSUFFICIENT BALANCE'
+                    : isOwner
+                    ? `Extend ${activeTargets.length} Keys Now (FREE)`
+                    : `Confirm & Deduct ₹${totalCost.toLocaleString('en-IN')}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── EMERGENCY REMOTE PURGE MODAL ────────────────────────────────────── */}
       {showPurgeModal && (
         <div className="sg-modal-overlay" style={styles.modalOverlay}>
@@ -10670,16 +10973,38 @@ else:
 
       {/* ── APP PERMISSIONS MODAL (Debajoyti Granular Permission Engine) ─────── */}
       {appPermModalUser && (
-        <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalContent, maxWidth: '480px' }}>
-            <div style={styles.modalHeader}>
-              <h3 style={styles.modalTitle}>
+        <div className="sg-modal-overlay" style={styles.modalOverlay} onClick={() => setAppPermModalUser(null)}>
+          <div
+            className="sg-modal-card"
+            style={{
+              ...styles.modalCard,
+              maxWidth: '480px',
+              textAlign: 'left',
+              border: '1px solid rgba(139, 92, 246, 0.35)',
+              boxShadow: '0 24px 64px rgba(0, 0, 0, 0.75), 0 0 32px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+              <h3 style={{ ...styles.modalTitle, margin: 0, textAlign: 'left' }}>
                 App Permissions: @{appPermModalUser.username}
               </h3>
               <button
                 type="button"
                 onClick={() => setAppPermModalUser(null)}
-                style={styles.modalCloseBtn}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '6px',
+                  color: '#94a3b8',
+                  padding: '6px 8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: '32px',
+                  minHeight: '32px'
+                }}
               >
                 <IconClose size={16} />
               </button>
@@ -10887,11 +11212,11 @@ else:
   )
 }
 
-// ── Premium Minimal Charcoal Design System ──────────────────────────────────
+// ── Premium Dark Glassmorphic Design System ──────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   appShell: {
     minHeight: '100vh',
-    backgroundColor: '#090d16',
+    backgroundColor: '#070b14',
     color: '#f8fafc',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     position: 'relative',
@@ -10903,7 +11228,15 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#090d16',
+    backgroundColor: '#070b14',
+    backgroundImage: `
+      radial-gradient(circle 900px at 50% -10%, rgba(139, 92, 246, 0.18), transparent 70%),
+      radial-gradient(circle 700px at 95% 85%, rgba(6, 182, 212, 0.12), transparent 60%),
+      radial-gradient(circle 600px at 5% 40%, rgba(16, 185, 129, 0.08), transparent 50%),
+      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px)
+    `,
+    backgroundSize: '100% 100%, 100% 100%, 100% 100%, 40px 40px, 40px 40px',
     pointerEvents: 'none',
     zIndex: 0
   },
@@ -10912,8 +11245,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '10px 16px',
-    backgroundColor: '#0e131f',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(10, 15, 28, 0.72)',
+    backdropFilter: 'blur(20px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4), inset 0 -1px 0 rgba(255, 255, 255, 0.06)',
     position: 'sticky',
     top: 0,
     zIndex: 50
@@ -10941,7 +11277,8 @@ const styles: Record<string, React.CSSProperties> = {
     height: '32px',
     borderRadius: '8px',
     overflow: 'hidden',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    boxShadow: '0 0 12px rgba(139, 92, 246, 0.25)',
     flexShrink: 0
   },
   logoImage: {
@@ -10962,8 +11299,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginLeft: '6px',
     padding: '2px 6px',
     borderRadius: '4px',
-    backgroundColor: 'rgba(139, 92, 246, 0.12)',
-    border: '1px solid rgba(139, 92, 246, 0.25)'
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    border: '1px solid rgba(139, 92, 246, 0.3)',
+    boxShadow: '0 0 8px rgba(139, 92, 246, 0.2)'
   },
   brandSubText: {
     display: 'none'
@@ -10979,8 +11317,11 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '6px',
     padding: '6px 12px',
     minHeight: '36px',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
     borderRadius: '8px',
     fontSize: '12px',
     fontWeight: 700,
@@ -10996,8 +11337,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '6px',
     padding: '6px 10px',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
     borderRadius: '8px',
     fontSize: '11px',
     fontWeight: 600
@@ -11019,8 +11363,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '8px',
     padding: '4px 6px 4px 10px',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
     borderRadius: '8px'
   },
   userAvatarSquare: {
@@ -11033,7 +11380,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '12px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    boxShadow: '0 0 8px rgba(139, 92, 246, 0.4)'
   },
   userNameBlock: {
     display: 'flex',
@@ -11063,7 +11411,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   quickLoginBtn: {
     padding: '8px 16px',
-    background: '#8b5cf6',
+    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+    boxShadow: '0 4px 14px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
     color: '#ffffff',
     border: 'none',
     borderRadius: '8px',
@@ -11073,7 +11422,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   toastBanner: {
     backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     border: '1px solid rgba(16, 185, 129, 0.3)',
+    boxShadow: '0 4px 16px rgba(16, 185, 129, 0.15)',
     color: '#10b981',
     padding: '10px 16px',
     textAlign: 'center',
@@ -11084,9 +11436,12 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '440px',
     margin: '40px auto',
     padding: '24px 20px',
-    backgroundColor: '#111827',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: '12px',
+    backgroundColor: 'rgba(17, 24, 39, 0.75)',
+    backdropFilter: 'blur(24px) saturate(190%)',
+    WebkitBackdropFilter: 'blur(24px) saturate(190%)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    boxShadow: '0 16px 48px rgba(0, 0, 0, 0.55), 0 0 32px rgba(139, 92, 246, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.18)',
+    borderRadius: '14px',
     position: 'relative',
     zIndex: 1
   },
@@ -11095,22 +11450,26 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     padding: '4px 10px',
     borderRadius: '6px',
-    backgroundColor: 'rgba(139, 92, 246, 0.12)',
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
     color: '#a78bfa',
     fontSize: '11px',
     fontWeight: 700,
     letterSpacing: '0.04em',
     marginBottom: '14px',
-    border: '1px solid rgba(139, 92, 246, 0.25)'
+    border: '1px solid rgba(139, 92, 246, 0.3)',
+    boxShadow: '0 0 10px rgba(139, 92, 246, 0.2)'
   },
   authTabSelector: {
     display: 'flex',
     gap: '6px',
-    backgroundColor: '#090d16',
+    backgroundColor: 'rgba(10, 15, 28, 0.65)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     padding: '4px',
     borderRadius: '8px',
     marginBottom: '20px',
-    border: '1px solid rgba(255, 255, 255, 0.08)'
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.4)'
   },
   authTabBtn: {
     flex: 1,
@@ -11130,7 +11489,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.15s ease'
   },
   authTabBtnActive: {
-    backgroundColor: 'rgba(139, 92, 246, 0.16)',
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    boxShadow: '0 2px 10px rgba(139, 92, 246, 0.25)',
     color: '#ffffff',
     fontWeight: 700
   },
@@ -11158,33 +11518,44 @@ const styles: Record<string, React.CSSProperties> = {
   },
   keyInput: {
     padding: '12px 14px',
-    backgroundColor: '#0e131f',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(10, 15, 28, 0.65)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.4)',
     borderRadius: '8px',
     color: '#f8fafc',
     fontSize: '14px',
     outline: 'none',
     boxSizing: 'border-box',
     width: '100%',
-    minHeight: '44px'
+    minHeight: '44px',
+    transition: 'all 0.15s ease'
   },
   selectInput: {
     padding: '12px 14px',
-    backgroundColor: '#0e131f',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(10, 15, 28, 0.65)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.4)',
     borderRadius: '8px',
     color: '#f8fafc',
     fontSize: '14px',
     outline: 'none',
     boxSizing: 'border-box',
     width: '100%',
-    minHeight: '44px'
+    minHeight: '44px',
+    transition: 'all 0.15s ease'
   },
   chipBtn: {
     padding: '6px 12px',
     minHeight: '36px',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
     borderRadius: '6px',
     color: '#a78bfa',
     fontSize: '11px',
@@ -11194,28 +11565,36 @@ const styles: Record<string, React.CSSProperties> = {
   submitBtn: {
     padding: '12px 18px',
     minHeight: '44px',
-    background: '#8b5cf6',
+    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+    boxShadow: '0 4px 18px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25)',
     color: '#ffffff',
     border: 'none',
     borderRadius: '8px',
     fontWeight: 700,
     fontSize: '13px',
     cursor: 'pointer',
-    transition: 'background-color 0.15s ease'
+    transition: 'all 0.15s ease'
   },
   primaryActionBtn: {
     padding: '10px 18px',
     minHeight: '44px',
+    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+    boxShadow: '0 4px 18px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25)',
     borderRadius: '8px',
     border: 'none',
+    color: '#ffffff',
     fontSize: '13px',
     fontWeight: 600,
-    cursor: 'pointer'
+    cursor: 'pointer',
+    transition: 'all 0.15s ease'
   },
   errorBox: {
     padding: '10px 12px',
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     border: '1px solid rgba(239, 68, 68, 0.3)',
+    boxShadow: '0 4px 16px rgba(239, 68, 68, 0.15)',
     borderRadius: '8px',
     color: '#f87171',
     fontSize: '12px',
@@ -11229,8 +11608,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sidebar: {
     width: '240px',
-    backgroundColor: '#0e131f',
-    borderRight: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(10, 15, 28, 0.75)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '4px 0 24px rgba(0, 0, 0, 0.3)',
     padding: '16px 12px',
     display: 'flex',
     flexDirection: 'column',
@@ -11244,12 +11626,18 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     bottom: 0,
     zIndex: 100,
-    backgroundColor: '#0e131f'
+    backgroundColor: 'rgba(10, 15, 28, 0.88)',
+    backdropFilter: 'blur(24px) saturate(190%)',
+    WebkitBackdropFilter: 'blur(24px) saturate(190%)',
+    boxShadow: '8px 0 32px rgba(0, 0, 0, 0.6)'
   },
   sidebarUserCard: {
     padding: '10px 12px',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.06)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
     borderRadius: '8px',
     marginBottom: '8px'
   },
@@ -11392,22 +11780,28 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '12px',
     padding: '12px 14px',
-    backgroundColor: '#111827',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(17, 24, 39, 0.65)',
+    backdropFilter: 'blur(16px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14)',
     borderRadius: '10px',
     cursor: 'pointer',
     userSelect: 'none',
     touchAction: 'manipulation',
     minHeight: '64px',
-    transition: 'border-color 0.15s ease'
+    transition: 'all 0.15s ease'
   },
   statIconFrame: {
     width: '32px',
     height: '32px',
     borderRadius: '8px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
     color: '#94a3b8',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.1)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -11432,8 +11826,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardBox: {
     padding: '16px',
-    backgroundColor: '#111827',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backdropFilter: 'blur(18px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(18px) saturate(180%)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.36), inset 0 1px 0 0 rgba(255, 255, 255, 0.14)',
     borderRadius: '12px'
   },
   cardHeader: {
@@ -11449,8 +11846,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   quickActionCard: {
     padding: '10px 12px',
-    backgroundColor: '#0e131f',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(17, 24, 39, 0.65)',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
     borderRadius: '8px',
     display: 'flex',
     alignItems: 'center',
@@ -11526,8 +11926,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   managementCard: {
     padding: '20px 18px',
-    backgroundColor: '#111827',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(15, 23, 42, 0.68)',
+    backdropFilter: 'blur(20px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
     borderRadius: '12px'
   },
   formGrid2Col: {
@@ -11538,8 +11941,11 @@ const styles: Record<string, React.CSSProperties> = {
   invoiceSummaryBox: {
     marginTop: '16px',
     padding: '14px',
-    backgroundColor: '#0e131f',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(10, 15, 28, 0.65)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.08)',
     borderRadius: '8px',
     display: 'flex',
     justifyContent: 'space-between',
@@ -11549,7 +11955,10 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: '20px',
     padding: '14px',
     backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     border: '1px solid rgba(16, 185, 129, 0.25)',
+    boxShadow: '0 4px 16px rgba(16, 185, 129, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
     borderRadius: '8px'
   },
   generatedKeyRow: {
@@ -11584,8 +11993,11 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '10px 14px',
     minHeight: '44px',
-    backgroundColor: '#0e131f',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(10, 15, 28, 0.65)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.4)',
     borderRadius: '8px',
     color: '#f8fafc',
     fontSize: '13px',
@@ -11593,8 +12005,11 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box'
   },
   tableCard: {
-    backgroundColor: '#111827',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backdropFilter: 'blur(18px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(18px) saturate(180%)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 12px 36px 0 rgba(0, 0, 0, 0.36), inset 0 1px 0 0 rgba(255, 255, 255, 0.12)',
     borderRadius: '12px',
     overflow: 'hidden'
   },
@@ -11606,12 +12021,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   th: {
     padding: '10px 12px',
-    backgroundColor: '#0e131f',
+    backgroundColor: 'rgba(10, 15, 28, 0.75)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     color: '#94a3b8',
     fontSize: '11px',
     fontWeight: 700,
     letterSpacing: '0.04em',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
   },
   tr: {
     borderBottom: '1px solid rgba(255, 255, 255, 0.04)'
@@ -11766,8 +12183,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   columnCard: {
     padding: '14px 16px',
-    backgroundColor: '#111827',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12)',
     borderRadius: '12px'
   },
   columnHead: {
@@ -11842,7 +12262,9 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(5, 8, 16, 0.78)',
+    backdropFilter: 'blur(16px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(16px) saturate(180%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -11853,9 +12275,12 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '440px',
     width: '92%',
     padding: '24px 20px',
-    backgroundColor: '#111827',
-    border: '1px solid rgba(239, 68, 68, 0.35)',
-    borderRadius: '12px',
+    backgroundColor: 'rgba(17, 24, 39, 0.85)',
+    backdropFilter: 'blur(28px) saturate(200%)',
+    WebkitBackdropFilter: 'blur(28px) saturate(200%)',
+    border: '1px solid rgba(239, 68, 68, 0.45)',
+    boxShadow: '0 24px 64px rgba(0, 0, 0, 0.7), 0 0 32px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+    borderRadius: '14px',
     textAlign: 'center'
   },
   modalIcon: {

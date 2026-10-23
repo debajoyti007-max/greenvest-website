@@ -400,3 +400,149 @@ describe('Realtime Activity Log Scoping per Role', () => {
   })
 })
 
+// 7. Bulk Extend All Keys Engine
+describe('Bulk Extend All Keys Engine & Credit Cut Calculation', () => {
+  function calculateExtensionCost(days, actor, devicesMax = 1) {
+    const rawNum = Math.floor(Number(days) || 0)
+    let unit = 35
+    if (rawNum === 1) unit = 35
+    else if (rawNum === 3) unit = 50
+    else if (rawNum === 7) unit = 100
+    else if (rawNum === 15) unit = 180
+    else if (rawNum === 30) unit = 350
+    else unit = Math.round(35 * rawNum)
+    return unit * Math.max(1, Number(devicesMax) || 1)
+  }
+
+  function simulateBulkExtend({ actorRole, balance, days, keys }) {
+    const isOwner = actorRole === 'owner'
+    const totalCost = isOwner
+      ? 0
+      : keys.reduce((sum, k) => sum + calculateExtensionCost(days, 'user', k.devices_max || 1), 0)
+
+    if (!isOwner && balance < totalCost) {
+      return {
+        success: false,
+        error: `Insufficient wallet balance! Bulk extending ${keys.length} key(s) costs ₹${totalCost}, but balance is ₹${balance}.`,
+      }
+    }
+
+    return {
+      success: true,
+      count: keys.length,
+      totalCost,
+      remainingBalance: isOwner ? balance : balance - totalCost,
+    }
+  }
+
+  const sampleKeys = [
+    { license_key: 'KEY-1', devices_max: 1 },
+    { license_key: 'KEY-2', devices_max: 2 },
+    { license_key: 'KEY-3', devices_max: 1 },
+  ]
+
+  test('Owner bulk extends all keys with zero wallet deduction (FREE)', () => {
+    const res = simulateBulkExtend({
+      actorRole: 'owner',
+      balance: 999999,
+      days: 7,
+      keys: sampleKeys,
+    })
+    assert.equal(res.success, true)
+    assert.equal(res.totalCost, 0)
+    assert.equal(res.remainingBalance, 999999)
+  })
+
+  test('Reseller correctly cuts credit based on duration and devices', () => {
+    // 3 keys: dev 1, dev 2, dev 1. For 1 day: (35*1) + (35*2) + (35*1) = 35 + 70 + 35 = 140
+    const res1Day = simulateBulkExtend({
+      actorRole: 'reseller',
+      balance: 500,
+      days: 1,
+      keys: sampleKeys,
+    })
+    assert.equal(res1Day.success, true)
+    assert.equal(res1Day.totalCost, 140)
+    assert.equal(res1Day.remainingBalance, 360)
+
+    // For 3 days: (50*1) + (50*2) + (50*1) = 50 + 100 + 50 = 200
+    const res3Day = simulateBulkExtend({
+      actorRole: 'reseller',
+      balance: 500,
+      days: 3,
+      keys: sampleKeys,
+    })
+    assert.equal(res3Day.success, true)
+    assert.equal(res3Day.totalCost, 200)
+    assert.equal(res3Day.remainingBalance, 300)
+  })
+
+  test('Rejects bulk extend when wallet balance is insufficient', () => {
+    const res = simulateBulkExtend({
+      actorRole: 'reseller',
+      balance: 100, // costs 140 for 1 day
+      days: 1,
+      keys: sampleKeys,
+    })
+    assert.equal(res.success, false)
+    assert.match(res.error, /Insufficient wallet balance/i)
+  })
+})
+
+// 8. User Wallet Top-Up: Set Exact Balance vs Add Balance
+describe('Wallet Top-Up: Set Exact Balance vs Add Balance', () => {
+  function simulateTopUpBalance({ isOwner, mode, targetCurrentBalance, amount }) {
+    if (isOwner && mode === 'set') {
+      if (amount < 0) return { success: false, error: 'Target balance cannot be negative.' }
+      return { success: true, newBalance: amount, mode: 'set' }
+    }
+    // Add mode
+    if (amount <= 0) return { success: false, error: 'Transfer amount must be greater than 0.' }
+    return { success: true, newBalance: targetCurrentBalance + amount, mode: 'add' }
+  }
+
+  test('Owner Set Exact Balance directly adjusts target balance to exact figure (even if lower or zero)', () => {
+    // Reseller has 1200, Owner sets exact balance to 500 -> becomes 500 (not 1700!)
+    const res = simulateTopUpBalance({
+      isOwner: true,
+      mode: 'set',
+      targetCurrentBalance: 1200,
+      amount: 500,
+    })
+    assert.equal(res.success, true)
+    assert.equal(res.newBalance, 500)
+
+    // Owner sets balance to 0 -> becomes 0
+    const resZero = simulateTopUpBalance({
+      isOwner: true,
+      mode: 'set',
+      targetCurrentBalance: 1200,
+      amount: 0,
+    })
+    assert.equal(resZero.success, true)
+    assert.equal(resZero.newBalance, 0)
+  })
+
+  test('Owner Add (Credit) mode increments on top of existing balance', () => {
+    const res = simulateTopUpBalance({
+      isOwner: true,
+      mode: 'add',
+      targetCurrentBalance: 1200,
+      amount: 300,
+    })
+    assert.equal(res.success, true)
+    assert.equal(res.newBalance, 1500)
+  })
+
+  test('Admin / Transfer mode rejects negative or 0 credit amount', () => {
+    const resZero = simulateTopUpBalance({
+      isOwner: false,
+      mode: 'add',
+      targetCurrentBalance: 500,
+      amount: 0,
+    })
+    assert.equal(resZero.success, false)
+    assert.match(resZero.error, /greater than 0/i)
+  })
+})
+

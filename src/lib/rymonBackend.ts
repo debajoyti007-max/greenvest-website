@@ -1706,7 +1706,7 @@ export async function topUpUserBalanceBackend(
         return { success: false, error: `User @${cleanTarget} not found in database.` }
       }
 
-      if (amount <= 0) {
+      if (amount < 0 || (!isRootOwner && amount <= 0) || (mode === 'add' && amount <= 0)) {
         return { success: false, error: 'Transfer amount must be greater than ₹0.' }
       }
 
@@ -1723,7 +1723,8 @@ export async function topUpUserBalanceBackend(
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_transfer_balance', {
         p_sender_username: cleanActor,
         p_target_username: cleanTarget,
-        p_amount: amount
+        p_amount: amount,
+        p_mode: isRootOwner ? mode : 'add'
       })
 
       if (rpcErr) {
@@ -1785,15 +1786,17 @@ export async function topUpUserBalanceBackend(
     actorRemainingBalance = actorAcc.balance
   }
 
-  const nextBal = !isRootOwner || mode === 'add' ? matched.balance + amount : amount
+  const nextBal = isRootOwner && mode === 'set' ? amount : matched.balance + amount
   matched.balance = nextBal
   saveStoredAccounts(accounts)
 
   const newAct: RymonActivity = {
     id: Date.now(),
-    title: isRootOwner ? 'Owner Balance Credit' : 'Admin Wallet Transfer',
+    title: isRootOwner ? (mode === 'set' ? 'Owner Balance Set' : 'Owner Balance Credit') : 'Admin Wallet Transfer',
     event_type: 'BALANCE_CREDIT',
-    details: `Updated balance for @${cleanTarget} to ₹${nextBal.toLocaleString('en-IN')}`,
+    details: isRootOwner && mode === 'set'
+      ? `Set exact balance for @${cleanTarget} to ₹${nextBal.toLocaleString('en-IN')}`
+      : `Credited ₹${amount.toLocaleString('en-IN')} to @${cleanTarget} (New Bal: ₹${nextBal.toLocaleString('en-IN')})`,
     actor_username: cleanActor,
     status: 'SUCCESS',
     created_at: new Date().toISOString()

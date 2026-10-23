@@ -1001,7 +1001,8 @@ GRANT EXECUTE ON FUNCTION public.rpc_rymon_bulk_extend_keys(INT, TEXT, TEXT) TO 
 CREATE OR REPLACE FUNCTION public.rpc_rymon_transfer_balance(
     p_sender_username   TEXT,
     p_target_username   TEXT,
-    p_amount            NUMERIC
+    p_amount            NUMERIC,
+    p_mode              TEXT DEFAULT 'add'
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -1013,11 +1014,8 @@ DECLARE
     v_target public.rymon_accounts%ROWTYPE;
     v_amount NUMERIC := COALESCE(p_amount, 0);
     v_is_owner BOOLEAN := FALSE;
+    v_new_target_balance NUMERIC;
 BEGIN
-    IF v_amount <= 0 THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Transfer amount must be greater than 0.');
-    END IF;
-
     SELECT * INTO v_sender FROM public.rymon_accounts WHERE LOWER(username) = LOWER(TRIM(p_sender_username));
     IF NOT FOUND THEN
         RETURN jsonb_build_object('success', false, 'error', 'Sender account not found.');
@@ -1029,6 +1027,39 @@ BEGIN
     END IF;
 
     v_is_owner := (v_sender.role = 'owner' OR LOWER(v_sender.username) IN ('debajoyti', 'ryzen'));
+
+    IF v_is_owner AND LOWER(COALESCE(p_mode, 'add')) = 'set' THEN
+        IF v_amount < 0 THEN
+            RETURN jsonb_build_object('success', false, 'error', 'Target balance cannot be negative.');
+        END IF;
+
+        v_new_target_balance := v_amount;
+
+        UPDATE public.rymon_accounts
+        SET balance = v_new_target_balance, updated_at = now()
+        WHERE id = v_target.id;
+
+        INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+        VALUES (
+            'Owner Balance Adjustment',
+            'BALANCE_CREDIT',
+            '@' || v_sender.username || ' set exact balance for @' || v_target.username || ' to ₹' || v_new_target_balance,
+            v_sender.username,
+            'SUCCESS'
+        );
+
+        RETURN jsonb_build_object(
+            'success', true,
+            'sender_balance', v_sender.balance,
+            'target_balance', v_new_target_balance,
+            'amount', v_amount,
+            'mode', 'set'
+        );
+    END IF;
+
+    IF v_amount <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Transfer amount must be greater than 0.');
+    END IF;
 
     IF NOT v_is_owner THEN
         IF v_sender.balance < v_amount THEN
@@ -1045,15 +1076,17 @@ BEGIN
         v_sender.balance := v_sender.balance - v_amount;
     END IF;
 
+    v_new_target_balance := v_target.balance + v_amount;
+
     UPDATE public.rymon_accounts
-    SET balance = balance + v_amount, updated_at = now()
+    SET balance = v_new_target_balance, updated_at = now()
     WHERE id = v_target.id;
 
     INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
     VALUES (
         'Balance Transfer',
         'BALANCE_CREDIT',
-        '@' || v_sender.username || ' sent ₹' || v_amount || ' to @' || v_target.username || ' (New Target Bal: ₹' || (v_target.balance + v_amount) || ')',
+        '@' || v_sender.username || ' credited ₹' || v_amount || ' to @' || v_target.username || ' (New Target Bal: ₹' || v_new_target_balance || ')',
         v_sender.username,
         'SUCCESS'
     );
@@ -1061,13 +1094,14 @@ BEGIN
     RETURN jsonb_build_object(
         'success', true,
         'sender_balance', v_sender.balance,
-        'target_balance', v_target.balance + v_amount,
-        'amount', v_amount
+        'target_balance', v_new_target_balance,
+        'amount', v_amount,
+        'mode', 'add'
     );
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.rpc_rymon_transfer_balance(TEXT, TEXT, NUMERIC) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_transfer_balance(TEXT, TEXT, NUMERIC, TEXT) TO anon, authenticated, service_role;
 
 -- ------------------------------------------------------------------------------
 -- RPC 11: RENEW USER SUBSCRIPTION (ATOMIC ADMIN FEE DEDUCTION)
