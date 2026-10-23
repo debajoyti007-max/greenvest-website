@@ -88,6 +88,197 @@ const DEFAULT_ANON_STREAMER: RymonAccount = {
   status: 'ACTIVE'
 }
 
+// ── Minimal Vector Icons (Zero-Dependency SVG) ──────────────────────
+interface IconProps {
+  size?: number
+  color?: string
+}
+
+const IconMenu = ({ size = 20, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="3" y1="12" x2="21" y2="12" />
+    <line x1="3" y1="6" x2="21" y2="6" />
+    <line x1="3" y1="18" x2="21" y2="18" />
+  </svg>
+)
+
+const IconClose = ({ size = 20, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+)
+
+const IconOverview = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="14" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+  </svg>
+)
+
+const IconKey = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 2l-2 2m-1.5 1.5L16 7l-2 2-2-2-4 4 2 2-6 6a2.828 2.828 0 1 1-4-4l6-6 2 2 4-4-2-2 1.5-1.5L19 4l2-2z" />
+  </svg>
+)
+
+const IconPlus = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+)
+
+const IconRemote = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  </svg>
+)
+
+const IconUsers = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+)
+
+const IconWallet = ({ size = 16, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <line x1="2" y1="10" x2="22" y2="10" />
+  </svg>
+)
+
+const IconPricing = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+    <line x1="12" y1="6" x2="12" y2="8" />
+    <line x1="12" y1="16" x2="12" y2="18" />
+  </svg>
+)
+
+const IconApi = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+)
+
+const IconApps = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+  </svg>
+)
+
+const IconTrash = ({ size = 16, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+)
+
+const IconCopy = ({ size = 16, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="9" width="13" height="13" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+)
+
+const IconPlay = ({ size = 14, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color || "currentColor"}>
+    <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+)
+
+const IconPause = ({ size = 14, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color || "currentColor"}>
+    <rect x="6" y="4" width="4" height="16" rx="1" />
+    <rect x="14" y="4" width="4" height="16" rx="1" />
+  </svg>
+)
+
+const IconRefresh = ({ size = 16, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 4v6h-6" />
+    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+  </svg>
+)
+
+const IconLogout = ({ size = 16, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+)
+
+const IconCheck = ({ size = 14, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+)
+
+const IconInvite = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+)
+
+const IconGamepad = ({ size = 18, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="6" width="20" height="12" rx="4" />
+    <line x1="6" y1="12" x2="10" y2="12" />
+    <line x1="8" y1="10" x2="8" y2="14" />
+    <circle cx="15" cy="11" r="1" fill={color || "currentColor"} />
+    <circle cx="17" cy="13" r="1" fill={color || "currentColor"} />
+  </svg>
+)
+
+const IconAlert = ({ size = 16, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+)
+
+const IconDownload = ({ size = 16, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+)
+
+const IconShare = ({ size = 16, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+  </svg>
+)
+
+const IconReceipt = ({ size = 14, color }: IconProps = {}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z" />
+    <line x1="8" y1="8" x2="16" y2="8" />
+    <line x1="8" y1="12" x2="16" y2="12" />
+    <line x1="8" y1="16" x2="12" y2="16" />
+  </svg>
+)
+
 // ── Rate Limiting & Brute-Force Lockout Engine (5-Minute Window) ──
 interface RymonThrottleRecord {
   count: number
@@ -2888,80 +3079,46 @@ export default function RymonConnect() {
 
   return (
     <div style={styles.appShell}>
-      {/* Phantom Amethyst Kinetic Micro-Interactions & Ambient FX */}
+      {/* Premium Minimal Charcoal Responsive Engine */}
       <style>{`
-        @keyframes sgRadarPulse {
-          0% {
-            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-          }
-          70% {
-            box-shadow: 0 0 0 9px rgba(16, 185, 129, 0);
-          }
-          100% {
-            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-          }
+        @keyframes sgLivePulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.45; }
         }
-        @keyframes sgAmethystGlow {
-          0%, 100% {
-            box-shadow: 0 0 14px rgba(168, 85, 247, 0.35);
-          }
-          50% {
-            box-shadow: 0 0 26px rgba(168, 85, 247, 0.65), 0 0 40px rgba(244, 63, 94, 0.2);
-          }
+        @keyframes sgSlideDrawer {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0); }
         }
-        @keyframes sgPanicPulse {
-          0%, 100% {
-            box-shadow: 0 0 8px rgba(244, 63, 94, 0.45);
-            border-color: rgba(244, 63, 94, 0.6);
-            transform: scale(1);
-          }
-          50% {
-            box-shadow: 0 0 22px rgba(244, 63, 94, 0.9);
-            border-color: rgba(244, 63, 94, 1);
-            transform: scale(1.02);
-          }
+        @keyframes sgFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
-        @keyframes sgOnlineGlow {
-          0%, 100% {
-            opacity: 1;
-            filter: drop-shadow(0 0 4px #05df72);
-          }
-          50% {
-            opacity: 0.75;
-            filter: drop-shadow(0 0 10px #05df72);
-          }
-        }
-        /* Sleek cyber glass scrollbar */
+
+        /* Clean Charcoal Scrollbar */
         ::-webkit-scrollbar {
-          width: 7px;
-          height: 7px;
+          width: 6px;
+          height: 6px;
         }
         ::-webkit-scrollbar-track {
-          background: rgba(8, 7, 14, 0.7);
+          background: #090d16;
         }
         ::-webkit-scrollbar-thumb {
-          background: rgba(168, 85, 247, 0.35);
-          border-radius: 999px;
-          border: 1px solid rgba(168, 85, 247, 0.2);
+          background: rgba(255, 255, 255, 0.12);
+          border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-          background: rgba(168, 85, 247, 0.65);
-          box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+          background: rgba(255, 255, 255, 0.22);
         }
-        /* Kinetic glass hover */
+
+        /* Subtle interactive card transition */
         .sg-glass-card {
-          transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease, box-shadow 0.22s ease;
+          transition: border-color 0.15s ease;
         }
         .sg-glass-card:hover {
-          transform: translateY(-2px);
-          border-color: rgba(168, 85, 247, 0.45) !important;
-          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6), 0 0 20px rgba(168, 85, 247, 0.18) !important;
-        }
-        .sg-panic-btn {
-          animation: sgPanicPulse 2.4s infinite ease-in-out;
+          border-color: rgba(139, 92, 246, 0.35) !important;
         }
         .sg-live-beacon {
-          animation: sgRadarPulse 2s infinite cubic-bezier(0, 0, 0.2, 1);
+          animation: sgLivePulse 2s infinite ease-in-out;
         }
 
         /* Desktop defaults for mobile-only elements */
@@ -2970,7 +3127,7 @@ export default function RymonConnect() {
         .sg-mobile-backdrop { display: none; }
 
         /* ══════════════════════════════════════════════════════════════════════════
-           PHANTOM AMETHYST MOBILE-FIRST RESPONSIVE ENGINE (GREENVEST STREAMGUARD)
+           MOBILE-FIRST RESPONSIVE ENGINE (GREENVEST STREAMGUARD)
            ══════════════════════════════════════════════════════════════════════════ */
         @media (max-width: 900px) {
           /* Prevent horizontal screen wobbling/overflow */
@@ -2997,16 +3154,17 @@ export default function RymonConnect() {
           input[type="number"],
           select {
             font-size: 16px !important;
+            min-height: 44px !important;
           }
 
-          /* Mobile range slider enhancement */
+          /* Range slider */
           input[type="range"] {
             height: 28px !important;
             touch-action: pan-x !important;
             cursor: pointer !important;
           }
 
-          /* 1. Header Optimization (Zero-Overlap Architectural Shield) */
+          /* 1. Top Header */
           .sg-top-header {
             padding: 8px 12px !important;
             gap: 8px !important;
@@ -3021,12 +3179,15 @@ export default function RymonConnect() {
             justify-content: space-between !important;
             overflow: hidden !important;
             min-height: 52px !important;
+            max-height: 56px !important;
+            background-color: #0e131f !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
           }
           .sg-header-left {
             gap: 8px !important;
             flex: 0 1 auto !important;
             min-width: 0 !important;
-            max-width: calc(100% - 150px) !important;
+            max-width: calc(100% - 130px) !important;
             overflow: hidden !important;
             display: flex !important;
             align-items: center !important;
@@ -3035,24 +3196,24 @@ export default function RymonConnect() {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 34px !important;
-            height: 34px !important;
-            min-width: 34px !important;
-            border-radius: 9px !important;
-            background: rgba(168, 85, 247, 0.16) !important;
-            border: 1px solid rgba(168, 85, 247, 0.35) !important;
-            color: #c084fc !important;
-            font-size: 18px !important;
+            width: 44px !important;
+            height: 44px !important;
+            min-width: 44px !important;
+            min-height: 44px !important;
+            border-radius: 8px !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: #f8fafc !important;
             cursor: pointer !important;
             padding: 0 !important;
             flex-shrink: 0 !important;
-            transition: all 0.2s ease !important;
+            transition: background 0.15s ease !important;
             touch-action: manipulation !important;
-            box-shadow: 0 0 10px rgba(168, 85, 247, 0.2) !important;
+            box-shadow: none !important;
           }
           .sg-mobile-menu-toggle:active {
-            transform: scale(0.92) !important;
-            background: rgba(168, 85, 247, 0.3) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
+            transform: scale(0.96) !important;
           }
           .sg-brand-cluster {
             gap: 8px !important;
@@ -3070,13 +3231,14 @@ export default function RymonConnect() {
           }
           .sg-brand-title {
             font-size: 14px !important;
-            font-weight: 900 !important;
-            letter-spacing: 0.05em !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.03em !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
             max-width: 120px !important;
-            line-height: 1.15 !important;
+            line-height: 1.2 !important;
+            color: #f8fafc !important;
           }
           .sg-brand-corp-text {
             display: none !important;
@@ -3093,22 +3255,32 @@ export default function RymonConnect() {
             justify-content: flex-end !important;
           }
           .sg-balance-pill {
-            padding: 4px 9px !important;
+            min-height: 36px !important;
+            padding: 6px 10px !important;
             font-size: 11px !important;
-            border-radius: 12px !important;
+            border-radius: 8px !important;
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: #f8fafc !important;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
             touch-action: manipulation !important;
             cursor: pointer !important;
-            font-weight: 800 !important;
+            font-weight: 700 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            box-shadow: none !important;
           }
           .sg-telemetry-pill {
             display: none !important;
           }
           .sg-user-profile-pill {
-            padding: 3px 6px !important;
-            gap: 5px !important;
-            border-radius: 12px !important;
+            padding: 2px !important;
+            gap: 4px !important;
+            border-radius: 8px !important;
+            background: transparent !important;
+            border: none !important;
             flex-shrink: 0 !important;
             touch-action: manipulation !important;
           }
@@ -3116,17 +3288,24 @@ export default function RymonConnect() {
             display: none !important;
           }
           .sg-header-logout-btn {
-            min-width: 28px !important;
-            min-height: 28px !important;
+            width: 44px !important;
+            height: 44px !important;
+            min-width: 44px !important;
+            min-height: 44px !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            font-size: 12px !important;
-            border-radius: 7px !important;
-            background: rgba(239, 68, 68, 0.15) !important;
-            border: 1px solid rgba(239, 68, 68, 0.35) !important;
-            color: #fca5a5 !important;
+            border-radius: 8px !important;
+            background: rgba(239, 68, 68, 0.08) !important;
+            border: 1px solid rgba(239, 68, 68, 0.2) !important;
+            color: #f87171 !important;
             padding: 0 !important;
+            cursor: pointer !important;
+            touch-action: manipulation !important;
+          }
+          .sg-header-logout-btn:active {
+            background: rgba(239, 68, 68, 0.18) !important;
+            transform: scale(0.96) !important;
           }
 
           /* 2. Main Layout & Sidebar Drawer */
@@ -3145,55 +3324,58 @@ export default function RymonConnect() {
             left: 0 !important;
             bottom: 0 !important;
             width: 280px !important;
-            max-width: 84vw !important;
+            max-width: 86vw !important;
             z-index: 1001 !important;
-            background: #0d0a18 !important;
-            box-shadow: 0 0 60px rgba(0, 0, 0, 0.95), 0 0 30px rgba(168, 85, 247, 0.3) !important;
+            background: #0e131f !important;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.9) !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
             padding: 16px 14px calc(76px + env(safe-area-inset-bottom, 20px)) !important;
-            border-right: 1px solid rgba(168, 85, 247, 0.35) !important;
-            animation: sgSlideDrawer 0.24s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+            animation: sgSlideDrawer 0.22s cubic-bezier(0.16, 1, 0.3, 1) both !important;
           }
           .sg-mobile-backdrop {
             display: block !important;
             position: fixed !important;
             inset: 0 !important;
-            background-color: rgba(0, 0, 0, 0.8) !important;
-            backdrop-filter: blur(5px) !important;
-            -webkit-backdrop-filter: blur(5px) !important;
+            background-color: rgba(0, 0, 0, 0.75) !important;
+            backdrop-filter: blur(4px) !important;
+            -webkit-backdrop-filter: blur(4px) !important;
             z-index: 1000 !important;
-            animation: sgFadeIn 0.2s ease both !important;
+            animation: sgFadeIn 0.18s ease both !important;
           }
           .sg-mobile-drawer-header {
             display: flex !important;
             align-items: center !important;
             justify-content: space-between !important;
-            padding-bottom: 14px !important;
+            padding-bottom: 12px !important;
             margin-bottom: 12px !important;
-            border-bottom: 1px solid rgba(168, 85, 247, 0.2) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
           }
           .sg-mobile-close-btn {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 36px !important;
-            height: 36px !important;
+            width: 44px !important;
+            height: 44px !important;
+            min-width: 44px !important;
+            min-height: 44px !important;
             border-radius: 8px !important;
-            background: rgba(255, 255, 255, 0.08) !important;
-            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
             color: #f8fafc !important;
-            font-size: 16px !important;
             cursor: pointer !important;
             touch-action: manipulation !important;
+            padding: 0 !important;
           }
           .sg-mobile-close-btn:active {
-            transform: scale(0.92) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
+            transform: scale(0.96) !important;
           }
 
           /* 3. Content Pane & Containers */
           .sg-content-pane {
-            padding: 14px 12px calc(76px + env(safe-area-inset-bottom, 16px)) !important;
+            padding: 12px 10px calc(76px + env(safe-area-inset-bottom, 16px)) !important;
             width: 100% !important;
             max-width: 100vw !important;
             box-sizing: border-box !important;
@@ -3207,26 +3389,30 @@ export default function RymonConnect() {
 
           /* 4. Auth Gateway */
           .sg-auth-gate-box {
-            width: 92% !important;
+            width: 94% !important;
             max-width: 420px !important;
             margin: 16px auto calc(40px + env(safe-area-inset-bottom, 20px)) !important;
-            padding: 22px 16px !important;
-            border-radius: 16px !important;
+            padding: 20px 16px !important;
+            border-radius: 12px !important;
+            background: #111827 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
             box-sizing: border-box !important;
+            box-shadow: none !important;
           }
           .sg-auth-tab-selector {
             gap: 4px !important;
             padding: 3px !important;
-            margin-bottom: 16px !important;
+            margin-bottom: 14px !important;
           }
           .sg-auth-tab-btn {
             padding: 10px 8px !important;
+            min-height: 44px !important;
             font-size: 12px !important;
             touch-action: manipulation !important;
           }
           .sg-auth-head {
             font-size: 18px !important;
-            margin-bottom: 12px !important;
+            margin-bottom: 10px !important;
           }
 
           /* 5. Streamer Remote HUD & Controls */
@@ -3250,21 +3436,21 @@ export default function RymonConnect() {
             width: 100% !important;
             text-align: center !important;
             justify-content: center !important;
-            min-height: 32px !important;
+            min-height: 36px !important;
             box-sizing: border-box !important;
             display: inline-flex !important;
             align-items: center !important;
           }
           .sg-remote-actions > button {
             flex: 1 1 calc(50% - 4px) !important;
-            min-height: 38px !important;
-            font-size: 11.5px !important;
-            font-weight: 800 !important;
+            min-height: 44px !important;
+            font-size: 12px !important;
+            font-weight: 700 !important;
             text-align: center !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            padding: 6px 8px !important;
+            padding: 8px !important;
             box-sizing: border-box !important;
             touch-action: manipulation !important;
           }
@@ -3274,6 +3460,8 @@ export default function RymonConnect() {
             gap: 10px !important;
             padding: 12px 10px !important;
             box-sizing: border-box !important;
+            background: #0e131f !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
           }
           .sg-key-select-box {
             width: 100% !important;
@@ -3305,15 +3493,20 @@ export default function RymonConnect() {
           .sg-column-card {
             padding: 14px 12px !important;
             border-radius: 12px !important;
+            background: #111827 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
             box-sizing: border-box !important;
           }
           .sg-player-status-bar {
-            padding: 12px 10px !important;
+            padding: 10px 12px !important;
             gap: 10px !important;
             flex-direction: column !important;
             align-items: stretch !important;
             width: 100% !important;
             box-sizing: border-box !important;
+            background: #0e131f !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 10px !important;
           }
           .sg-player-status-bar > div {
             width: 100% !important;
@@ -3329,7 +3522,7 @@ export default function RymonConnect() {
           .sg-form-stack {
             display: flex !important;
             flex-direction: column !important;
-            gap: 16px !important;
+            gap: 14px !important;
             width: 100% !important;
             box-sizing: border-box !important;
           }
@@ -3349,7 +3542,7 @@ export default function RymonConnect() {
           }
           .sg-btn-choice-group > button {
             width: 100% !important;
-            min-height: 40px !important;
+            min-height: 44px !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -3357,47 +3550,64 @@ export default function RymonConnect() {
           }
           .sg-management-card {
             padding: 16px 14px !important;
-            border-radius: 14px !important;
+            border-radius: 12px !important;
+            background: #111827 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
             width: 100% !important;
             max-width: 100% !important;
             min-width: 0 !important;
             box-sizing: border-box !important;
             overflow: hidden !important;
+            box-shadow: none !important;
           }
 
           /* 7. Overview Dashboard Cards */
           .sg-stat-grid {
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 8px !important;
-            margin-bottom: 14px !important;
+            margin-bottom: 12px !important;
             width: 100% !important;
             box-sizing: border-box !important;
           }
           .sg-stat-card {
-            padding: 12px 10px !important;
+            padding: 10px 12px !important;
             gap: 10px !important;
-            border-radius: 12px !important;
+            border-radius: 10px !important;
             touch-action: manipulation !important;
             cursor: pointer !important;
             user-select: none !important;
             box-sizing: border-box !important;
+            min-height: 64px !important;
+            background: #111827 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            box-shadow: none !important;
+          }
+          .sg-stat-card:active {
+            border-color: rgba(139, 92, 246, 0.4) !important;
+            background: #141c2e !important;
           }
           .sg-stat-num {
-            font-size: 19px !important;
+            font-size: 18px !important;
+            font-weight: 800 !important;
+            line-height: 1.2 !important;
           }
           .sg-stat-label {
             font-size: 11px !important;
+            color: #94a3b8 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
           }
           .sg-stat-icon-frame {
-            width: 30px !important;
-            height: 30px !important;
-            font-size: 15px !important;
+            width: 32px !important;
+            height: 32px !important;
             border-radius: 8px !important;
+            flex-shrink: 0 !important;
           }
           .sg-dual-grid {
             display: grid !important;
             grid-template-columns: minmax(0, 1fr) !important;
-            gap: 14px !important;
+            gap: 12px !important;
             width: 100% !important;
             max-width: 100% !important;
             box-sizing: border-box !important;
@@ -3410,9 +3620,12 @@ export default function RymonConnect() {
           }
           .sg-card-box {
             padding: 14px 12px !important;
-            border-radius: 14px !important;
+            border-radius: 12px !important;
+            background: #111827 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
             width: 100% !important;
             box-sizing: border-box !important;
+            box-shadow: none !important;
           }
           .sg-quick-grid {
             grid-template-columns: repeat(2, 1fr) !important;
@@ -3420,16 +3633,36 @@ export default function RymonConnect() {
             width: 100% !important;
             box-sizing: border-box !important;
           }
+          .sg-quick-grid > button {
+            min-height: 48px !important;
+            padding: 10px 12px !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            text-align: left !important;
+            border-radius: 8px !important;
+            background: #111827 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            box-sizing: border-box !important;
+            touch-action: manipulation !important;
+          }
+          .sg-quick-grid > button:active {
+            background: #141c2e !important;
+            transform: scale(0.98) !important;
+          }
 
           /* 8. Tables & Horizontal Scroll Container */
           .sg-table-card {
             border-radius: 12px !important;
+            background: #111827 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
             width: 100% !important;
             max-width: 100% !important;
             min-width: 0 !important;
             overflow-x: auto !important;
             -webkit-overflow-scrolling: touch !important;
             box-sizing: border-box !important;
+            box-shadow: none !important;
           }
           .sg-data-table {
             min-width: 600px !important;
@@ -3479,23 +3712,26 @@ export default function RymonConnect() {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            padding: 14px !important;
-            background-color: rgba(0, 0, 0, 0.88) !important;
-            backdrop-filter: blur(10px) !important;
-            -webkit-backdrop-filter: blur(10px) !important;
+            padding: 12px !important;
+            background-color: rgba(0, 0, 0, 0.85) !important;
+            backdrop-filter: blur(8px) !important;
+            -webkit-backdrop-filter: blur(8px) !important;
             box-sizing: border-box !important;
           }
           .sg-modal-card {
-            width: 94% !important;
+            width: 96% !important;
             max-width: 440px !important;
             max-height: 85vh !important;
             max-height: 85dvh !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
             padding: 18px 14px !important;
-            border-radius: 14px !important;
+            border-radius: 12px !important;
+            background: #111827 !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
             margin: auto !important;
             box-sizing: border-box !important;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7) !important;
           }
 
           /* 10. Mobile Bottom Quick Bar */
@@ -3506,82 +3742,99 @@ export default function RymonConnect() {
             left: 0 !important;
             right: 0 !important;
             z-index: 990 !important;
-            background: rgba(11, 9, 20, 0.97) !important;
-            backdrop-filter: blur(20px) !important;
-            -webkit-backdrop-filter: blur(20px) !important;
-            border-top: 1px solid rgba(168, 85, 247, 0.3) !important;
-            padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+            background: rgba(14, 19, 31, 0.98) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+            padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px)) !important;
             justify-content: space-around !important;
             align-items: center !important;
-            box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.6) !important;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6) !important;
             box-sizing: border-box !important;
+            min-height: 52px !important;
           }
           .sg-mobile-bottom-tab {
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
-            gap: 2px !important;
+            gap: 3px !important;
             background: transparent !important;
             border: none !important;
             color: #94a3b8 !important;
             font-size: 10px !important;
-            font-weight: 700 !important;
-            padding: 4px 6px !important;
-            border-radius: 8px !important;
+            font-weight: 600 !important;
+            padding: 6px 4px !important;
+            border-radius: 6px !important;
             cursor: pointer !important;
-            transition: all 0.18s ease !important;
+            transition: all 0.15s ease !important;
             min-width: 48px !important;
+            min-height: 44px !important;
             touch-action: manipulation !important;
             user-select: none !important;
+            flex: 1 !important;
           }
           .sg-mobile-bottom-tab:active {
-            transform: scale(0.92) !important;
+            transform: scale(0.94) !important;
+            background: rgba(255, 255, 255, 0.05) !important;
           }
           .sg-mobile-bottom-tab.active {
-            color: #c084fc !important;
-            background: rgba(168, 85, 247, 0.16) !important;
+            color: #a78bfa !important;
+            background: rgba(139, 92, 246, 0.12) !important;
           }
         }
 
-        /* ── ULTRA-COMPACT MOBILE BREAKPOINT (Narrow phones e.g. iPhone SE / Galaxy A) ── */
+        /* ── ULTRA-COMPACT MOBILE BREAKPOINT (Narrow phones 360px - 390px e.g. Galaxy S / iPhone SE) ── */
         @media (max-width: 400px) {
           .sg-top-header {
             padding: 6px 8px !important;
             gap: 6px !important;
+            min-height: 48px !important;
           }
           .sg-header-left {
             gap: 6px !important;
           }
           .sg-brand-title {
-            max-width: 90px !important;
+            max-width: 80px !important;
             font-size: 13px !important;
           }
           .sg-header-right {
             gap: 4px !important;
           }
           .sg-balance-pill {
-            padding: 3px 6px !important;
+            padding: 4px 6px !important;
             font-size: 10px !important;
+            min-height: 32px !important;
           }
           .sg-user-profile-pill {
-            padding: 2px 4px !important;
-            gap: 3px !important;
+            padding: 2px !important;
+            gap: 2px !important;
           }
           .sg-mobile-bottom-tab {
-            min-width: 42px !important;
+            min-width: 40px !important;
             padding: 4px 2px !important;
             font-size: 9px !important;
           }
-        }
-
-        @keyframes sgSlideDrawer {
-          from { transform: translateX(-100%); }
-          to { transform: translateX(0); }
-        }
-        @keyframes sgFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
+          .sg-stat-card {
+            padding: 8px 8px !important;
+            gap: 6px !important;
+            min-height: 58px !important;
+          }
+          .sg-stat-num {
+            font-size: 16px !important;
+          }
+          .sg-stat-label {
+            font-size: 10px !important;
+          }
+          .sg-stat-icon-frame {
+            width: 28px !important;
+            height: 28px !important;
+          }
+          .sg-quick-grid > button {
+            padding: 8px 10px !important;
+            font-size: 11px !important;
+            min-height: 44px !important;
+          }
         }
       `}</style>
 
@@ -3597,7 +3850,7 @@ export default function RymonConnect() {
             style={styles.mobileMenuToggle}
             aria-label="Toggle menu"
           >
-            ☰
+            <IconMenu />
           </button>
           <div
             className="sg-brand-cluster"
@@ -3606,9 +3859,8 @@ export default function RymonConnect() {
             <RymonAnimatedLogo size="sm" showText={false} />
             <div className="sg-brand-text-block" style={{ minWidth: 0, overflow: 'hidden' }}>
               <div className="sg-brand-title" style={styles.brandTitleText}>
-                RYMON <span className="sg-brand-corp-text" style={styles.brandVioletPill}>CORPORATION</span>
+                RYMON
               </div>
-              <div className="sg-brand-sub" style={styles.brandSubText}>SOVEREIGN DEFENSE • HARDWARE TELEMETRY</div>
             </div>
           </div>
         </div>
@@ -3620,11 +3872,13 @@ export default function RymonConnect() {
               className="sg-balance-pill"
               style={styles.balancePill}
               onClick={() => (isOwner || isAdmin) && handleSelectTab('add-balance')}
-              title={isOwner || isAdmin ? 'Click to manage balances' : 'Wallet balance'}
+              title={isOwner || isAdmin ? 'Manage balances' : 'Wallet balance'}
             >
-              <span style={{ color: '#00d9ff', fontSize: '13px' }}>💳</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', color: '#a78bfa' }}>
+                <IconWallet />
+              </span>
               <span style={styles.balanceAmount}>
-                {isOwner ? '∞ FREE' : `₹${walletBalance.toLocaleString('en-IN')}`}
+                {isOwner ? 'FREE' : `₹${walletBalance.toLocaleString('en-IN')}`}
               </span>
             </div>
           )}
@@ -3634,14 +3888,14 @@ export default function RymonConnect() {
             <span
               style={{
                 ...styles.pulseDot,
-                background: isLiveConnected ? '#05df72' : '#64748b'
+                background: isLiveConnected ? '#10b981' : '#64748b'
               }}
             />
             <span className="sg-telemetry-text" style={styles.telemetryText}>
               {isLiveConnected ? 'LIVE' : 'STANDBY'}
             </span>
             <span className="sg-ping-text" style={styles.pingText}>
-              {ping > 1200 ? 'WARMING...' : `${ping}ms`}
+              {ping > 1200 ? 'CONNECTING' : `${ping}ms`}
             </span>
           </div>
 
@@ -3653,7 +3907,7 @@ export default function RymonConnect() {
               </div>
               <div className="sg-user-name-block" style={styles.userNameBlock}>
                 <span style={styles.userNameText}>
-                  {currentUser?.username || 'VIP Streamer'}
+                  {currentUser?.username || 'Streamer'}
                 </span>
                 <span style={styles.userRoleTag}>
                   {currentUser?.role === 'owner'
@@ -3668,7 +3922,7 @@ export default function RymonConnect() {
                 title="Logout"
                 aria-label="Logout"
               >
-                🚪
+                <IconLogout />
               </button>
             </div>
           ) : (
@@ -4243,9 +4497,8 @@ export default function RymonConnect() {
             {/* Mobile Drawer Header */}
             <div className="sg-mobile-drawer-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>⚡</span>
-                <span style={{ fontWeight: 800, fontSize: '13px', color: '#c084fc', letterSpacing: '0.04em' }}>
-                  STREAMGUARD MENU
+                <span style={{ fontWeight: 700, fontSize: '13px', color: '#f8fafc', letterSpacing: '0.04em' }}>
+                  MENU
                 </span>
               </div>
               <button
@@ -4254,7 +4507,7 @@ export default function RymonConnect() {
                 className="sg-mobile-close-btn"
                 aria-label="Close navigation"
               >
-                ✕
+                <IconClose />
               </button>
             </div>
 
@@ -4266,7 +4519,7 @@ export default function RymonConnect() {
                 </div>
                 <div>
                   <div style={styles.sidebarUserName}>
-                    {currentUser?.username || 'VIP Streamer'}
+                    {currentUser?.username || 'Streamer'}
                   </div>
                   <div style={styles.sidebarUserSub}>
                     <span style={styles.activeDot} />{' '}
@@ -4279,10 +4532,9 @@ export default function RymonConnect() {
             </div>
 
             {/* Nav Categories */}
-            {/* Nav Categories */}
             <nav style={styles.navStack}>
               {/* Telemetry Remote */}
-              <div style={styles.navCategoryHeader}>TELEMETRY & HARDWARE</div>
+              <div style={styles.navCategoryHeader}>REMOTE CONTROL</div>
               <button
                 onClick={() => handleSelectTab('remote')}
                 style={{
@@ -4290,7 +4542,7 @@ export default function RymonConnect() {
                   ...(activeTab === 'remote' ? styles.navItemActive : {})
                 }}
               >
-                <span style={styles.navIcon}>⚡</span>
+                <span style={styles.navIcon}><IconRemote /></span>
                 <span>Streamer Remote</span>
                 <span style={styles.cyanMiniBadge}>LIVE</span>
               </button>
@@ -4298,7 +4550,7 @@ export default function RymonConnect() {
               {/* Streamer-Specific Utilities */}
               {isStreamer && (
                 <>
-                  <div style={styles.navCategoryHeader}>STREAMER UTILITIES</div>
+                  <div style={styles.navCategoryHeader}>STREAMER</div>
                   <button
                     onClick={() => {
                       setMobileMenuOpen(false)
@@ -4306,8 +4558,8 @@ export default function RymonConnect() {
                     }}
                     style={styles.navItem}
                   >
-                    <span style={styles.navIcon}>🎬</span>
-                    <span>Replay Rymon Intro</span>
+                    <span style={styles.navIcon}><IconPlay /></span>
+                    <span>Replay Intro</span>
                   </button>
                 </>
               )}
@@ -4318,7 +4570,7 @@ export default function RymonConnect() {
                   {/* Reseller — Focused simplified view */}
                   {isReseller && (
                     <>
-                      <div style={styles.navCategoryHeader}>DASHBOARDS</div>
+                      <div style={styles.navCategoryHeader}>CORE</div>
                       <button
                         onClick={() => handleSelectTab('overview')}
                         style={{
@@ -4326,11 +4578,11 @@ export default function RymonConnect() {
                           ...(activeTab === 'overview' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>📊</span>
+                        <span style={styles.navIcon}><IconOverview /></span>
                         <span>Overview</span>
                       </button>
 
-                      <div style={styles.navCategoryHeader}>LICENSE ENGINE</div>
+                      <div style={styles.navCategoryHeader}>LICENSES</div>
                       <button
                         onClick={() => handleSelectTab('generate')}
                         style={{
@@ -4338,7 +4590,7 @@ export default function RymonConnect() {
                           ...(activeTab === 'generate' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>⚡</span>
+                        <span style={styles.navIcon}><IconPlus /></span>
                         <span>Generate Key</span>
                       </button>
                       <button
@@ -4348,7 +4600,7 @@ export default function RymonConnect() {
                           ...(activeTab === 'keys' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>🔑</span>
+                        <span style={styles.navIcon}><IconKey /></span>
                         <span>License Keys</span>
                       </button>
 
@@ -4360,7 +4612,7 @@ export default function RymonConnect() {
                           ...(activeTab === 'advance' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>💰</span>
+                        <span style={styles.navIcon}><IconPricing /></span>
                         <span>Reseller Pricing</span>
                       </button>
                     </>
@@ -4369,7 +4621,7 @@ export default function RymonConnect() {
                   {/* Owner & Admin — Full management view */}
                   {(isOwner || isAdmin) && (
                     <>
-                      <div style={styles.navCategoryHeader}>DASHBOARDS</div>
+                      <div style={styles.navCategoryHeader}>CORE</div>
                       <button
                         onClick={() => handleSelectTab('overview')}
                         style={{
@@ -4377,11 +4629,11 @@ export default function RymonConnect() {
                           ...(activeTab === 'overview' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>📊</span>
+                        <span style={styles.navIcon}><IconOverview /></span>
                         <span>Overview</span>
                       </button>
 
-                      <div style={styles.navCategoryHeader}>LICENSE ENGINE</div>
+                      <div style={styles.navCategoryHeader}>LICENSES</div>
                       <button
                         onClick={() => handleSelectTab('generate')}
                         style={{
@@ -4389,7 +4641,7 @@ export default function RymonConnect() {
                           ...(activeTab === 'generate' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>⚡</span>
+                        <span style={styles.navIcon}><IconPlus /></span>
                         <span>Generate Key</span>
                       </button>
                       <button
@@ -4399,7 +4651,7 @@ export default function RymonConnect() {
                           ...(activeTab === 'keys' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>🔑</span>
+                        <span style={styles.navIcon}><IconKey /></span>
                         <span>License Keys</span>
                       </button>
                       {isRootOwner && (
@@ -4410,9 +4662,9 @@ export default function RymonConnect() {
                             ...(activeTab === 'connect-api' ? styles.navItemActive : {})
                           }}
                         >
-                          <span style={styles.navIcon}>🔌</span>
+                          <span style={styles.navIcon}><IconApi /></span>
                           <span>Connect & API</span>
-                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>ROOT</span>
+                          <span style={{ ...styles.cyanMiniBadge, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>ROOT</span>
                         </button>
                       )}
 
@@ -4424,7 +4676,7 @@ export default function RymonConnect() {
                           ...(activeTab === 'referrals' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>🎟️</span>
+                        <span style={styles.navIcon}><IconInvite /></span>
                         <span>Invite Codes</span>
                         <span style={styles.cyanMiniBadge}>{isOwner ? 'OWNER' : 'ADMIN'}</span>
                       </button>
@@ -4435,7 +4687,7 @@ export default function RymonConnect() {
                           ...(activeTab === 'users' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>👥</span>
+                        <span style={styles.navIcon}><IconUsers /></span>
                         <span>{isOwner ? 'Users (All)' : 'My Resellers'}</span>
                       </button>
                       <button
@@ -4445,7 +4697,7 @@ export default function RymonConnect() {
                           ...(activeTab === 'add-balance' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>💼</span>
+                        <span style={styles.navIcon}><IconWallet /></span>
                         <span>{isOwner ? 'Add Balance' : 'Transfer Balance'}</span>
                         <span style={styles.cyanMiniBadge}>{isOwner ? 'FREE' : 'WALLET'}</span>
                       </button>
@@ -4457,11 +4709,11 @@ export default function RymonConnect() {
                           ...(activeTab === 'advance' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>💰</span>
+                        <span style={styles.navIcon}><IconPricing /></span>
                         <span>{isOwner ? 'Pricing & Rates' : 'Reseller Pricing'}</span>
                       </button>
 
-                      <div style={styles.navCategoryHeader}>SYSTEM UTILITIES</div>
+                      <div style={styles.navCategoryHeader}>SYSTEM</div>
                       {isRootOwner && (
                         <button
                           onClick={() => handleSelectTab('apps')}
@@ -4470,7 +4722,7 @@ export default function RymonConnect() {
                             ...(activeTab === 'apps' ? styles.navItemActive : {})
                           }}
                         >
-                          <span style={styles.navIcon}>📱</span>
+                          <span style={styles.navIcon}><IconApps /></span>
                           <span>App Manager</span>
                           <span style={styles.cyanMiniBadge}>FOUNDER</span>
                         </button>
@@ -4482,8 +4734,8 @@ export default function RymonConnect() {
                           ...(activeTab === 'delete' ? styles.navItemActive : {})
                         }}
                       >
-                        <span style={styles.navIcon}>🧹</span>
-                        <span>Clean & Purge Keys</span>
+                        <span style={styles.navIcon}><IconTrash /></span>
+                        <span>Clean & Purge</span>
                       </button>
                     </>
                   )}
@@ -4491,7 +4743,7 @@ export default function RymonConnect() {
               )}
 
               {/* Bottom Drawer Actions */}
-              <div style={{ marginTop: '20px', paddingTop: '14px', borderTop: '1px solid rgba(168, 85, 247, 0.2)' }}>
+              <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -4500,14 +4752,14 @@ export default function RymonConnect() {
                   }}
                   style={{
                     ...styles.navItem,
-                    background: 'rgba(239, 68, 68, 0.12)',
-                    border: '1px solid rgba(239, 68, 68, 0.35)',
-                    color: '#fca5a5',
-                    fontWeight: 800,
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    color: '#f87171',
+                    fontWeight: 700,
                     justifyContent: 'center'
                   }}
                 >
-                  <span style={styles.navIcon}>🚪</span>
+                  <span style={styles.navIcon}><IconLogout /></span>
                   <span>Log Out</span>
                 </button>
               </div>
@@ -4524,7 +4776,7 @@ export default function RymonConnect() {
                     <h2 style={styles.pageTitle}>Overview</h2>
                   </div>
                   <div style={styles.badgeCluster}>
-                    <span style={styles.greenPulseBadge}>● CLOUD ACTIVE</span>
+                    <span style={styles.greenPulseBadge}>● Active</span>
                   </div>
                 </div>
 
@@ -4538,15 +4790,14 @@ export default function RymonConnect() {
                     style={{
                       ...styles.statCard,
                       cursor: 'pointer',
-                      borderColor: 'rgba(5, 223, 114, 0.45)',
-                      background: 'linear-gradient(135deg, rgba(5, 223, 114, 0.12) 0%, rgba(13, 17, 26, 0.9) 100%)'
+                      borderColor: 'rgba(16, 185, 129, 0.35)'
                     }}
-                    title="Click to view keys currently playing in-game"
+                    title="View keys currently playing in-game"
                   >
-                    <div style={{ ...styles.statIconFrame, color: '#05df72' }}>🎮</div>
-                    <div>
-                      <div style={{ ...styles.statNum, color: '#05df72' }}>{stats.playingNow}</div>
-                      <div style={{ ...styles.statLabel, color: '#86efac', fontWeight: 700 }}>Playing Now</div>
+                    <div style={{ ...styles.statIconFrame, color: '#10b981' }}><IconGamepad /></div>
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ ...styles.statNum, color: '#10b981' }}>{stats.playingNow}</div>
+                      <div style={{ ...styles.statLabel, color: '#86efac' }}>Playing Now</div>
                     </div>
                   </div>
                   <div
@@ -4555,10 +4806,10 @@ export default function RymonConnect() {
                       handleSelectTab('keys')
                     }}
                     style={{ ...styles.statCard, cursor: 'pointer' }}
-                    title="Click to view all keys"
+                    title="View all keys"
                   >
-                    <div style={styles.statIconFrame}>🔑</div>
-                    <div>
+                    <div style={styles.statIconFrame}><IconKey /></div>
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
                       <div style={styles.statNum}>{stats.total}</div>
                       <div style={styles.statLabel}>Total Keys</div>
                     </div>
@@ -4569,11 +4820,11 @@ export default function RymonConnect() {
                       handleSelectTab('keys')
                     }}
                     style={{ ...styles.statCard, cursor: 'pointer' }}
-                    title="Click to view active keys"
+                    title="View active keys"
                   >
-                    <div style={{ ...styles.statIconFrame, color: '#00d9ff' }}>✓</div>
-                    <div>
-                      <div style={{ ...styles.statNum, color: '#00d9ff' }}>{stats.active}</div>
+                    <div style={{ ...styles.statIconFrame, color: '#38bdf8' }}><IconCheck /></div>
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ ...styles.statNum, color: '#38bdf8' }}>{stats.active}</div>
                       <div style={styles.statLabel}>Active Keys</div>
                     </div>
                   </div>
@@ -4585,14 +4836,14 @@ export default function RymonConnect() {
                     style={{
                       ...styles.statCard,
                       cursor: 'pointer',
-                      borderColor: 'rgba(234, 179, 8, 0.35)'
+                      borderColor: 'rgba(245, 158, 11, 0.3)'
                     }}
-                    title="Click to view Unused / Waiting keys"
+                    title="View unused keys"
                   >
-                    <div style={{ ...styles.statIconFrame, color: '#eab308' }}>🟡</div>
-                    <div>
-                      <div style={{ ...styles.statNum, color: '#eab308' }}>{stats.unused}</div>
-                      <div style={styles.statLabel}>Unused / Waiting</div>
+                    <div style={{ ...styles.statIconFrame, color: '#f59e0b' }}><IconAlert /></div>
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ ...styles.statNum, color: '#f59e0b' }}>{stats.unused}</div>
+                      <div style={styles.statLabel}>Unused Keys</div>
                     </div>
                   </div>
                   <div
@@ -4601,11 +4852,11 @@ export default function RymonConnect() {
                       handleSelectTab('keys')
                     }}
                     style={{ ...styles.statCard, cursor: 'pointer' }}
-                    title="Click to view Paused keys"
+                    title="View paused keys"
                   >
-                    <div style={{ ...styles.statIconFrame, color: '#ffb700' }}>⏸️</div>
-                    <div>
-                      <div style={{ ...styles.statNum, color: '#ffb700' }}>{stats.paused}</div>
+                    <div style={{ ...styles.statIconFrame, color: '#f59e0b' }}><IconPause /></div>
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ ...styles.statNum, color: '#f59e0b' }}>{stats.paused}</div>
                       <div style={styles.statLabel}>Paused Keys</div>
                     </div>
                   </div>
@@ -4617,12 +4868,12 @@ export default function RymonConnect() {
                     style={{
                       ...styles.statCard,
                       cursor: 'pointer',
-                      borderColor: 'rgba(239, 68, 68, 0.4)'
+                      borderColor: 'rgba(239, 68, 68, 0.35)'
                     }}
-                    title="Click to view Expired keys"
+                    title="View expired keys"
                   >
-                    <div style={{ ...styles.statIconFrame, color: '#ef4444' }}>🔴</div>
-                    <div>
+                    <div style={{ ...styles.statIconFrame, color: '#ef4444' }}><IconTrash /></div>
+                    <div style={{ minWidth: 0, overflow: 'hidden' }}>
                       <div style={{ ...styles.statNum, color: '#ef4444' }}>{stats.expired}</div>
                       <div style={{ ...styles.statLabel, color: '#fca5a5' }}>Expired Keys</div>
                     </div>
@@ -4633,54 +4884,56 @@ export default function RymonConnect() {
                 <div
                   className="sg-player-status-bar"
                   style={{
-                    backgroundColor: 'rgba(13, 17, 26, 0.88)',
-                    border: '1px solid rgba(0, 217, 255, 0.28)',
-                    borderRadius: '14px',
-                    padding: '16px 20px',
-                    marginBottom: '20px',
+                    backgroundColor: '#0e131f',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    marginBottom: '16px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
-                    gap: '16px'
+                    gap: '12px'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <div
                       style={{
-                        padding: '8px 14px',
-                        borderRadius: '10px',
-                        background: 'rgba(5, 223, 114, 0.14)',
-                        border: '1px solid rgba(5, 223, 114, 0.4)',
-                        color: '#05df72',
-                        fontWeight: 800,
-                        fontSize: '12px',
-                        display: 'flex',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        background: 'rgba(16, 185, 129, 0.12)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        color: '#10b981',
+                        fontWeight: 700,
+                        fontSize: '11px',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '8px'
+                        gap: '6px'
                       }}
                     >
-                      <span>🟢 PLAYING NOW: {stats.playingNow}</span>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981' }} />
+                      <span>PLAYING: {stats.playingNow}</span>
                     </div>
                     <div
                       style={{
-                        padding: '8px 14px',
-                        borderRadius: '10px',
-                        background: 'rgba(148, 163, 184, 0.1)',
-                        border: '1px solid rgba(148, 163, 184, 0.28)',
-                        color: '#cbd5e1',
-                        fontWeight: 700,
-                        fontSize: '12px',
-                        display: 'flex',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        color: '#94a3b8',
+                        fontWeight: 600,
+                        fontSize: '11px',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '8px'
+                        gap: '6px'
                       }}
                     >
-                      <span>⚪ OFFLINE: {stats.notPlaying}</span>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#64748b' }} />
+                      <span>OFFLINE: {stats.notPlaying}</span>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {keysList
                       .filter((k) => !k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(k.license_key.toUpperCase()))
                       .slice(0, 4)
@@ -4693,18 +4946,20 @@ export default function RymonConnect() {
                             }
                           }}
                           style={{
-                            padding: '5px 10px',
-                            borderRadius: '8px',
-                            background: 'rgba(0, 217, 255, 0.14)',
-                            border: '1px solid rgba(0, 217, 255, 0.35)',
-                            color: '#00d9ff',
+                            padding: '5px 8px',
+                            borderRadius: '6px',
+                            background: 'rgba(139, 92, 246, 0.1)',
+                            border: '1px solid rgba(139, 92, 246, 0.25)',
+                            color: '#c084fc',
                             fontSize: '11px',
-                            fontWeight: 700,
-                            cursor: 'pointer'
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            touchAction: 'manipulation',
+                            fontFamily: 'monospace'
                           }}
                           title={`Seller: @${k.creator_username}`}
                         >
-                          🟢 {k.license_key} • @{k.creator_username}
+                          {k.license_key.length > 14 ? `${k.license_key.slice(0, 12)}…` : k.license_key}
                         </button>
                       ))}
                   </div>
@@ -4714,22 +4969,21 @@ export default function RymonConnect() {
                 <div className="sg-dual-grid" style={styles.dualGrid}>
                   <div className="sg-card-box" style={styles.cardBox}>
                     <div style={styles.cardHeader}>
-                      <h4>⚡ Fast Actions</h4>
-                      <span style={styles.cyanMiniBadge}>RYMON</span>
+                      <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>Quick Actions</h4>
                     </div>
                     <div className="sg-quick-grid" style={styles.quickGrid}>
                       <button
                         onClick={() => handleSelectTab('remote')}
                         style={styles.quickActionCard}
                       >
-                        <div style={styles.quickActionIcon}>⚡</div>
+                        <div style={styles.quickActionIcon}><IconRemote /></div>
                         <div style={styles.quickActionTitle}>Streamer Remote</div>
                       </button>
                       <button
                         onClick={() => handleSelectTab('generate')}
                         style={styles.quickActionCard}
                       >
-                        <div style={styles.quickActionIcon}>🔑</div>
+                        <div style={styles.quickActionIcon}><IconPlus /></div>
                         <div style={styles.quickActionTitle}>Generate License</div>
                       </button>
                       <button
@@ -4739,68 +4993,68 @@ export default function RymonConnect() {
                             'UNUSED'
                           )
                         }
-                        style={{ ...styles.quickActionCard, borderColor: 'rgba(234, 179, 8, 0.4)' }}
+                        style={{ ...styles.quickActionCard, borderColor: 'rgba(245, 158, 11, 0.3)' }}
                       >
-                        <div style={styles.quickActionIcon}>📋</div>
-                        <div style={{ ...styles.quickActionTitle, color: '#eab308' }}>
+                        <div style={{ ...styles.quickActionIcon, color: '#f59e0b' }}><IconCopy /></div>
+                        <div style={{ ...styles.quickActionTitle, color: '#f59e0b' }}>
                           Copy Unused ({stats.unused})
                         </div>
                       </button>
                       <button
                         onClick={() => handleQuickBulkDelete('expired')}
-                        style={{ ...styles.quickActionCard, borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                        style={{ ...styles.quickActionCard, borderColor: 'rgba(239, 68, 68, 0.3)' }}
                       >
-                        <div style={styles.quickActionIcon}>🧹</div>
+                        <div style={{ ...styles.quickActionIcon, color: '#ef4444' }}><IconTrash /></div>
                         <div style={{ ...styles.quickActionTitle, color: '#ef4444' }}>
                           Purge Expired ({stats.expired})
                         </div>
                       </button>
                       <button
                         onClick={handleBulkResetAllHwid}
-                        style={{ ...styles.quickActionCard, borderColor: 'rgba(0, 217, 255, 0.4)' }}
+                        style={{ ...styles.quickActionCard, borderColor: 'rgba(56, 189, 248, 0.3)' }}
                       >
-                        <div style={styles.quickActionIcon}>🔄</div>
-                        <div style={{ ...styles.quickActionTitle, color: '#00d9ff' }}>Reset All HWID</div>
+                        <div style={{ ...styles.quickActionIcon, color: '#38bdf8' }}><IconRefresh /></div>
+                        <div style={{ ...styles.quickActionTitle, color: '#38bdf8' }}>Reset All HWID</div>
                       </button>
                       <button
                         onClick={() => handleSelectTab('keys')}
                         style={styles.quickActionCard}
                       >
-                        <div style={styles.quickActionIcon}>🗂️</div>
-                        <div style={styles.quickActionTitle}>Manage All Keys</div>
+                        <div style={styles.quickActionIcon}><IconKey /></div>
+                        <div style={styles.quickActionTitle}>All Keys</div>
                       </button>
                       <button
                         onClick={() => handleBulkPauseAllKeys(true)}
-                        style={{ ...styles.quickActionCard, borderColor: 'rgba(255, 183, 0, 0.35)' }}
+                        style={{ ...styles.quickActionCard, borderColor: 'rgba(245, 158, 11, 0.3)' }}
                       >
-                        <div style={styles.quickActionIcon}>⏸️</div>
-                        <div style={{ ...styles.quickActionTitle, color: '#ffb700' }}>Pause All Keys</div>
+                        <div style={{ ...styles.quickActionIcon, color: '#f59e0b' }}><IconPause /></div>
+                        <div style={{ ...styles.quickActionTitle, color: '#f59e0b' }}>Pause All Keys</div>
                       </button>
                       <button
                         onClick={() => handleBulkPauseAllKeys(false)}
-                        style={{ ...styles.quickActionCard, borderColor: 'rgba(5, 223, 114, 0.35)' }}
+                        style={{ ...styles.quickActionCard, borderColor: 'rgba(16, 185, 129, 0.3)' }}
                       >
-                        <div style={styles.quickActionIcon}>▶️</div>
-                        <div style={{ ...styles.quickActionTitle, color: '#05df72' }}>Resume All Keys</div>
+                        <div style={{ ...styles.quickActionIcon, color: '#10b981' }}><IconPlay /></div>
+                        <div style={{ ...styles.quickActionTitle, color: '#10b981' }}>Resume All Keys</div>
                       </button>
                     </div>
                   </div>
 
                   <div className="sg-card-box" style={styles.cardBox}>
                     <div style={styles.cardHeader}>
-                      <h4>📋 Real-time Activity Log</h4>
-                      <span style={styles.cyanMiniBadge}>AUDIT</span>
+                      <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>Recent Activity</h4>
+                      <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>AUDIT</span>
                     </div>
                     <div style={styles.activityFeed}>
                       {activities.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '24px 12px', color: '#64748b', fontSize: '12px' }}>
-                          ℹ️ No recent activity recorded for your account.
+                          No recent activity recorded for your account.
                         </div>
                       ) : (
                         activities.slice(0, 5).map((act) => (
                           <div key={act.id} style={styles.activityRow}>
-                            <div style={styles.activityIcon}>✓</div>
-                            <div style={{ flex: 1 }}>
+                            <div style={styles.activityIcon}><IconCheck /></div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={styles.activityTitle}>{act.title}</div>
                               <div style={styles.activityDetails}>{act.details}</div>
                             </div>
@@ -4832,7 +5086,7 @@ export default function RymonConnect() {
                     <div style={styles.cardHeader}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ ...styles.actionIconCircle, background: 'rgba(5,223,114,0.15)', color: '#05df72' }}>
-                          💼
+                          <IconWallet size={18} color="#05df72" />
                         </div>
                         <div>
                           <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
@@ -5420,10 +5674,13 @@ export default function RymonConnect() {
                                 ...styles.copyKeyBtn,
                                 background: '#05df72',
                                 color: '#07090e',
-                                fontWeight: 800
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
                               }}
                             >
-                              📋 COPY {genCreatedKeysList.length > 1 ? `ALL (${genCreatedKeysList.length})` : 'KEY'}
+                              <IconCopy size={13} color="#07090e" /> COPY {genCreatedKeysList.length > 1 ? `ALL (${genCreatedKeysList.length})` : 'KEY'}
                             </button>
                             <button
                               type="button"
@@ -5433,10 +5690,13 @@ export default function RymonConnect() {
                                 background: 'rgba(0, 217, 255, 0.2)',
                                 border: '1px solid #00d9ff',
                                 color: '#00d9ff',
-                                fontWeight: 800
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
                               }}
                             >
-                              📥 DOWNLOAD .TXT
+                              <IconDownload size={13} color="#00d9ff" /> DOWNLOAD .TXT
                             </button>
                             <button
                               type="button"
@@ -5446,11 +5706,14 @@ export default function RymonConnect() {
                                 background: 'rgba(5, 223, 114, 0.2)',
                                 border: '1px solid #05df72',
                                 color: '#05df72',
-                                fontWeight: 800
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
                               }}
                               title="Copy formatted payment & delivery receipt for customer"
                             >
-                              🧾 COPY SLIP{genCreatedKeysList.length > 1 ? `S (${genCreatedKeysList.length})` : ''}
+                              <IconReceipt size={13} color="#05df72" /> COPY SLIP{genCreatedKeysList.length > 1 ? `S (${genCreatedKeysList.length})` : ''}
                             </button>
                             <button
                               type="button"
@@ -5460,10 +5723,13 @@ export default function RymonConnect() {
                                 background: 'rgba(34, 197, 94, 0.2)',
                                 border: '1px solid #22c55e',
                                 color: '#4ade80',
-                                fontWeight: 800
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
                               }}
                             >
-                              📲 WHATSAPP
+                              <IconShare size={13} color="#4ade80" /> WHATSAPP
                             </button>
                           </div>
                         </div>
@@ -5489,17 +5755,26 @@ export default function RymonConnect() {
                                     border: '1px solid #05df72',
                                     color: '#05df72',
                                     fontSize: '11px',
-                                    fontWeight: 700
+                                    fontWeight: 700,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
                                   }}
                                   title="Copy Payment Successful & Key delivery slip for customer"
                                 >
-                                  {copiedDeliverySlip === kStr ? '✓ SLIP COPIED!' : '🧾 SLIP'}
+                                  <IconReceipt size={12} color="#05df72" /> {copiedDeliverySlip === kStr ? 'SLIP COPIED!' : 'SLIP'}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleCopyKey(kStr)}
-                                  style={styles.copyKeyBtn}
+                                  style={{
+                                    ...styles.copyKeyBtn,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
                                 >
+                                  {copiedKey === kStr ? <IconCheck size={12} color="#05df72" /> : <IconCopy size={12} color="#cbd5e1" />}
                                   {copiedKey === kStr ? 'COPIED!' : 'COPY'}
                                 </button>
                               </div>
@@ -5535,7 +5810,7 @@ export default function RymonConnect() {
                           fontSize: '12px'
                         }}
                       >
-                        <option value="ALL">👥 All Creators</option>
+                        <option value="ALL">All Creators</option>
                         {Array.from(new Set(keysList.map((k) => k.creator_username))).map((creator) => (
                           <option key={creator} value={creator}>
                             @{creator}
@@ -5551,17 +5826,17 @@ export default function RymonConnect() {
                         width: 'auto',
                         padding: '8px 12px',
                         fontSize: '12px',
-                        color: keyGameFilter === 'ALL' ? '#94a3b8' : '#00d9ff',
-                        borderColor: keyGameFilter === 'ALL' ? 'rgba(51, 65, 85, 0.6)' : '#00d9ff'
+                        color: keyGameFilter === 'ALL' ? '#94a3b8' : '#a78bfa',
+                        borderColor: keyGameFilter === 'ALL' ? 'rgba(255, 255, 255, 0.1)' : '#8b5cf6'
                       }}
                     >
-                      <option value="ALL">🎮 All Keys</option>
-                      <option value="Free Fire MAX">🔥 Free Fire MAX</option>
+                      <option value="ALL">All Games</option>
+                      <option value="Free Fire MAX">Free Fire MAX</option>
                       {Array.from(new Set(keysList.map((k) => k.game || 'Free Fire MAX')))
                         .filter((g) => g !== 'Free Fire MAX')
                         .map((g) => (
                           <option key={g} value={g}>
-                            ✨ {g} (Custom)
+                            {g}
                           </option>
                         ))}
                     </select>
@@ -5582,25 +5857,25 @@ export default function RymonConnect() {
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '12px',
-                    marginBottom: '16px',
-                    padding: '14px 16px',
-                    backgroundColor: 'rgba(13, 17, 26, 0.9)',
-                    border: '1px solid rgba(30, 41, 59, 0.8)',
-                    borderRadius: '12px'
+                    gap: '10px',
+                    marginBottom: '14px',
+                    padding: '12px 14px',
+                    backgroundColor: '#0e131f',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '10px'
                   }}
                 >
                   {/* Row 1: Status Filter Pills with Live Counts */}
                   <div className="sg-filter-scroll-row" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                     {(
                       [
-                        { id: 'ALL', label: `ALL (${stats.total})`, color: '#00d9ff' },
-                        { id: 'PLAYING', label: `🟢 PLAYING (${stats.playingNow})`, color: '#05df72' },
-                        { id: 'ACTIVE', label: `⚡ ACTIVE (${stats.active})`, color: '#00d9ff' },
-                        { id: 'WAITING', label: `🟡 UNUSED (${stats.unused})`, color: '#eab308' },
-                        { id: 'PAUSED', label: `⏸️ PAUSED (${stats.paused})`, color: '#ffb700' },
-                        { id: 'EXPIRED', label: `🔴 EXPIRED (${stats.expired})`, color: '#ef4444' },
-                        { id: 'BANNED', label: `🚫 BANNED (${stats.banned})`, color: '#f43f5e' }
+                        { id: 'ALL', label: `All (${stats.total})`, color: '#f8fafc' },
+                        { id: 'PLAYING', label: `Playing (${stats.playingNow})`, color: '#10b981' },
+                        { id: 'ACTIVE', label: `Active (${stats.active})`, color: '#38bdf8' },
+                        { id: 'WAITING', label: `Unused (${stats.unused})`, color: '#f59e0b' },
+                        { id: 'PAUSED', label: `Paused (${stats.paused})`, color: '#f59e0b' },
+                        { id: 'EXPIRED', label: `Expired (${stats.expired})`, color: '#ef4444' },
+                        { id: 'BANNED', label: `Banned (${stats.banned})`, color: '#ef4444' }
                       ] as const
                     ).map((st) => (
                       <button
@@ -5608,18 +5883,19 @@ export default function RymonConnect() {
                         onClick={() => setKeyStatusFilter(st.id)}
                         style={{
                           padding: '6px 12px',
-                          borderRadius: '8px',
+                          borderRadius: '6px',
                           fontSize: '11px',
-                          fontWeight: 800,
+                          fontWeight: 700,
                           cursor: 'pointer',
+                          touchAction: 'manipulation',
                           border:
                             keyStatusFilter === st.id
                               ? `1px solid ${st.color}`
-                              : '1px solid rgba(51, 65, 85, 0.6)',
+                              : '1px solid rgba(255, 255, 255, 0.08)',
                           backgroundColor:
                             keyStatusFilter === st.id
-                              ? 'rgba(0, 217, 255, 0.16)'
-                              : 'rgba(15, 23, 42, 0.65)',
+                              ? 'rgba(255, 255, 255, 0.08)'
+                              : 'transparent',
                           color: keyStatusFilter === st.id ? st.color : '#94a3b8'
                         }}
                       >
@@ -5633,43 +5909,42 @@ export default function RymonConnect() {
                     className="sg-filter-scroll-row"
                     style={{
                       display: 'flex',
-                      gap: '8px',
+                      gap: '6px',
                       flexWrap: 'nowrap',
                       overflowX: 'auto',
                       alignItems: 'center',
                       paddingTop: '8px',
-                      borderTop: '1px solid rgba(30, 41, 59, 0.5)'
+                      borderTop: '1px solid rgba(255, 255, 255, 0.06)'
                     }}
                   >
-                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      TIER / EDITION:
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      EDITION:
                     </span>
                     {(
                       [
-                        { id: 'ALL', label: `ALL EDITIONS (${stats.total})`, color: '#38bdf8' },
-                        { id: 'NORMAL', label: `📱 STANDARD APK (${stats.normalCount})`, color: '#00d9ff' },
-                        { id: 'VIP', label: `👑 VIP STREAMER (${stats.vipCount})`, color: '#f59e0b' }
+                        { id: 'ALL', label: `All Editions (${stats.total})`, color: '#f8fafc' },
+                        { id: 'NORMAL', label: `Standard (${stats.normalCount})`, color: '#38bdf8' },
+                        { id: 'VIP', label: `VIP Remote (${stats.vipCount})`, color: '#f59e0b' }
                       ] as const
                     ).map((ed) => (
                       <button
                         key={ed.id}
                         onClick={() => setKeyEditionFilter(ed.id)}
                         style={{
-                          padding: '5px 11px',
-                          borderRadius: '8px',
+                          padding: '5px 10px',
+                          borderRadius: '6px',
                           fontSize: '11px',
-                          fontWeight: 800,
+                          fontWeight: 700,
                           cursor: 'pointer',
+                          touchAction: 'manipulation',
                           border:
                             keyEditionFilter === ed.id
                               ? `1px solid ${ed.color}`
-                              : '1px solid rgba(51, 65, 85, 0.55)',
+                              : '1px solid rgba(255, 255, 255, 0.08)',
                           backgroundColor:
                             keyEditionFilter === ed.id
-                              ? ed.id === 'VIP'
-                                ? 'rgba(245, 158, 11, 0.2)'
-                                : 'rgba(0, 217, 255, 0.16)'
-                              : 'rgba(15, 23, 42, 0.6)',
+                              ? 'rgba(255, 255, 255, 0.08)'
+                              : 'transparent',
                           color: keyEditionFilter === ed.id ? ed.color : '#94a3b8'
                         }}
                       >
@@ -5712,7 +5987,7 @@ export default function RymonConnect() {
                       }}
                       title="Copy all Unused (Waiting) keys to clipboard for resale"
                     >
-                      <span>📋</span> COPY UNUSED ({stats.unused})
+                      <IconCopy size={13} color="#fde047" /> COPY UNUSED ({stats.unused})
                     </button>
                     <button
                       onClick={() =>
@@ -5736,7 +6011,7 @@ export default function RymonConnect() {
                       }}
                       title="Download all Unused (Waiting) keys as a .TXT file"
                     >
-                      <span>📥</span> DOWNLOAD UNUSED .TXT
+                      <IconDownload size={13} color="#00d9ff" /> DOWNLOAD UNUSED .TXT
                     </button>
                     <button
                       onClick={() =>
@@ -5760,7 +6035,7 @@ export default function RymonConnect() {
                       }}
                       title="Share Unused (Waiting) keys directly on WhatsApp"
                     >
-                      <span>📲</span> WHATSAPP UNUSED
+                      <IconShare size={13} color="#4ade80" /> WHATSAPP UNUSED
                     </button>
                     <button
                       onClick={() =>
@@ -5784,7 +6059,7 @@ export default function RymonConnect() {
                       }}
                       title="Copy all currently filtered keys to clipboard"
                     >
-                      <span>📋</span> COPY FILTERED ({filteredKeys.length})
+                      <IconCopy size={13} color="#e2e8f0" /> COPY FILTERED ({filteredKeys.length})
                     </button>
                     <button
                       onClick={() => handleBulkPauseAllKeys(true)}
@@ -5802,7 +6077,7 @@ export default function RymonConnect() {
                         gap: '5px'
                       }}
                     >
-                      <span>⏸️</span> PAUSE ALL
+                      <IconPause size={13} color="#ffb700" /> PAUSE ALL
                     </button>
                     <button
                       onClick={() => handleBulkPauseAllKeys(false)}
@@ -5820,7 +6095,7 @@ export default function RymonConnect() {
                         gap: '5px'
                       }}
                     >
-                      <span>▶️</span> RESUME ALL
+                      <IconPlay size={13} color="#05df72" /> RESUME ALL
                     </button>
                     <button
                       onClick={handleBulkResetAllHwid}
@@ -5839,7 +6114,7 @@ export default function RymonConnect() {
                       }}
                       title="Unbind all devices across your keys without resetting active timers"
                     >
-                      <span>🔄</span> RESET ALL HWID
+                      <IconRefresh size={13} color="#00d9ff" /> RESET ALL HWID
                     </button>
                     <button
                       onClick={() => handleBulkExtendAllKeys(7)}
@@ -5857,7 +6132,7 @@ export default function RymonConnect() {
                         gap: '5px'
                       }}
                     >
-                      <span>➕</span> +7 DAYS ALL
+                      <IconPlus size={13} color="#c084fc" /> +7 DAYS ALL
                     </button>
                     <button
                       onClick={() => handleQuickBulkDelete('expired')}
@@ -5876,7 +6151,7 @@ export default function RymonConnect() {
                       }}
                       title="Permanently delete all Expired keys"
                     >
-                      <span>🧹</span> DELETE EXPIRED ({stats.expired})
+                      <IconTrash size={13} color="#fca5a5" /> DELETE EXPIRED ({stats.expired})
                     </button>
                     <button
                       onClick={() => handleQuickBulkDelete('unused')}
@@ -5895,7 +6170,7 @@ export default function RymonConnect() {
                       }}
                       title="Permanently delete all Unused (Waiting) keys"
                     >
-                      <span>🗑️</span> DELETE UNUSED ({stats.unused})
+                      <IconTrash size={13} color="#fdba74" /> DELETE UNUSED ({stats.unused})
                     </button>
                     {isRootOwner && (
                       <button
@@ -5915,7 +6190,7 @@ export default function RymonConnect() {
                         }}
                         title="Owner Only: Wipe all keys in platform"
                       >
-                        <span>💥</span> DELETE ALL ({stats.total})
+                        <IconAlert size={13} color="#ffffff" /> DELETE ALL ({stats.total})
                       </button>
                     )}
                   </div>
@@ -5955,7 +6230,7 @@ export default function RymonConnect() {
                                     style={styles.miniCopyBtn}
                                     title="Copy key"
                                   >
-                                    {copiedKey === k.license_key ? '✓' : '📋'}
+                                    {copiedKey === k.license_key ? <IconCheck size={12} color="#05df72" /> : <IconCopy size={12} color="#94a3b8" />}
                                   </button>
                                   <button
                                     onClick={() => handleCopyDeliverySlip(k.license_key, k.plan_duration, k.game)}
@@ -5965,7 +6240,7 @@ export default function RymonConnect() {
                                     }}
                                     title="Copy Payment Successful & Delivery Slip"
                                   >
-                                    {copiedDeliverySlip === k.license_key ? '✓' : '🧾'}
+                                    {copiedDeliverySlip === k.license_key ? <IconCheck size={12} color="#05df72" /> : <IconReceipt size={12} color="#cbd5e1" />}
                                   </button>
                                 </div>
                               </td>
@@ -6152,7 +6427,7 @@ export default function RymonConnect() {
                                     style={{ ...styles.actionIconBtn, color: '#00d9ff' }}
                                     title="Open Streamer Remote for this Key"
                                   >
-                                    ⚡
+                                    <IconRemote size={13} color="#00d9ff" />
                                   </button>
                                   <button
                                     onClick={() => handleTogglePauseKey(k.license_key)}
@@ -6162,14 +6437,14 @@ export default function RymonConnect() {
                                     }}
                                     title={k.is_paused || k.status === 'PAUSED' ? 'Resume / Unpause Key' : 'Pause / Freeze Key'}
                                   >
-                                    {k.is_paused || k.status === 'PAUSED' ? '▶️' : '⏸️'}
+                                    {k.is_paused || k.status === 'PAUSED' ? <IconPlay size={13} color="#05df72" /> : <IconPause size={13} color="#ffb700" />}
                                   </button>
                                   <button
                                     onClick={() => handleResetHWID(k.license_key)}
                                     style={styles.actionIconBtn}
                                     title="Reset HWID device binding (keeps timer)"
                                   >
-                                    🔄
+                                    <IconRefresh size={13} color="#94a3b8" />
                                   </button>
                                   <button
                                     onClick={() => {
@@ -6179,7 +6454,7 @@ export default function RymonConnect() {
                                     style={{ ...styles.actionIconBtn, color: '#a855f7' }}
                                     title="Extend License Duration"
                                   >
-                                    ⏳
+                                    <IconPlus size={13} color="#a855f7" />
                                   </button>
                                   {(isOwner || isAdmin) && (
                                     <button
@@ -6190,7 +6465,7 @@ export default function RymonConnect() {
                                       }}
                                       title={k.status === 'BANNED' ? 'Unban Key' : 'Ban Key'}
                                     >
-                                      🚫
+                                      <IconClose size={13} color={k.status === 'BANNED' ? '#05df72' : '#f43f5e'} />
                                     </button>
                                   )}
                                   {(isOwner || k.status === 'EXPIRED' || k.status === 'WAITING') && (
@@ -6199,7 +6474,7 @@ export default function RymonConnect() {
                                       style={{ ...styles.actionIconBtn, color: '#ef4444' }}
                                       title="Delete License Key"
                                     >
-                                      🗑️
+                                      <IconTrash size={13} color="#ef4444" />
                                     </button>
                                   )}
                                 </div>
@@ -6392,7 +6667,7 @@ export default function RymonConnect() {
                                       style={styles.actionIconBtn}
                                       title={isOwner ? 'Top up balance (Free Mint)' : 'Transfer balance from your wallet'}
                                     >
-                                      💼
+                                      <IconWallet size={13} color="#00d9ff" />
                                     </button>
                                     <button
                                       onClick={() => {
@@ -6402,7 +6677,7 @@ export default function RymonConnect() {
                                       style={{ ...styles.actionIconBtn, color: '#fde047' }}
                                       title="Set Individual Key Prices for this User"
                                     >
-                                      💰
+                                      <IconPricing size={13} color="#fde047" />
                                     </button>
                                     {isRootOwner && u.username.toLowerCase() !== 'debajoyti' && (
                                       <>
@@ -6465,11 +6740,14 @@ export default function RymonConnect() {
                                         cursor: 'pointer',
                                         background: 'rgba(5, 223, 114, 0.16)',
                                         border: '1px solid rgba(5, 223, 114, 0.45)',
-                                        color: '#05df72'
+                                        color: '#05df72',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
                                       }}
                                       title="Reset Password for this User"
                                     >
-                                      🔑 Pass
+                                      <IconKey size={11} color="#05df72" /> Pass
                                     </button>
                                     <button
                                       onClick={() => handleToggleUserBan(u.username, u.status === 'BANNED')}
@@ -6480,7 +6758,7 @@ export default function RymonConnect() {
                                       }}
                                       title={u.status === 'BANNED' ? 'Unban User (Restore Access)' : 'Ban User (Revoke Access)'}
                                     >
-                                      {u.status === 'BANNED' ? '🚫' : '🛡️'}
+                                      {u.status === 'BANNED' ? <IconClose size={13} color="#ef4444" /> : <IconAlert size={13} color="#94a3b8" />}
                                     </button>
                                     {canDeleteThisUser && (
                                       <button
@@ -6493,7 +6771,7 @@ export default function RymonConnect() {
                                         }}
                                         title={`Permanently Delete User @${u.username}`}
                                       >
-                                        🗑️
+                                        <IconTrash size={13} color="#ef4444" />
                                       </button>
                                     )}
                                   </div>
@@ -9505,7 +9783,7 @@ else:
                           }}
                           title={`Standard accounts: max 3 keys per hour. Active: ${recentKeys.join(', ') || 'None'}`}
                         >
-                          🕒 1-HR LIMIT: {count}/3 KEYS USED
+                          1-HR LIMIT: {count}/3 KEYS USED
                         </span>
                       )
                     })()}
@@ -9531,7 +9809,7 @@ else:
                           }}
                           title="Switch phone between Web + In-Game Overlay and Web-Only Stealth Mode"
                         >
-                          {record?.streamer_name?.includes('P:0') ? '🕶️ WEB ONLY' : '👁️ OVERLAY ON'}
+                          {record?.streamer_name?.includes('P:0') ? 'WEB ONLY' : 'OVERLAY ON'}
                         </button>
 
                         {/* 1-Click Stealth Freeze (Boss Key) */}
@@ -9547,11 +9825,14 @@ else:
                             padding: '6px 11px',
                             fontSize: '11px',
                             fontWeight: 800,
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
                           }}
                           title="Instant Stealth Freeze / Resume without killing daemon"
                         >
-                          {record?.is_paused ? '▶️ RESUME' : '❄️ FREEZE'}
+                          {record?.is_paused ? <><IconPlay size={11} color="#05df72" /> RESUME</> : <><IconPause size={11} color="#ffb700" /> FREEZE</>}
                         </button>
 
                         {/* 1-Click HWID Reset */}
@@ -9566,18 +9847,21 @@ else:
                             padding: '6px 11px',
                             fontSize: '11px',
                             fontWeight: 800,
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
                           }}
                         >
-                          {selfResetBusy ? '...' : '🔄 HWID'}
+                          {selfResetBusy ? '...' : <><IconRefresh size={11} color="#05df72" /> HWID</>}
                         </button>
                       </>
                     )}
                     <button
                       onClick={() => setShowPurgeModal(true)}
-                      style={{ ...styles.emergencyPurgeBtn, padding: '6px 11px', fontSize: '11px' }}
+                      style={{ ...styles.emergencyPurgeBtn, padding: '6px 11px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
-                      🚨 PURGE
+                      <IconAlert size={11} color="#ef4444" /> PURGE
                     </button>
                   </div>
                 </div>
@@ -9682,7 +9966,9 @@ else:
                       marginTop: '8px'
                     }}
                   >
-                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>🎯</div>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+                      <IconRemote size={32} color="#64748b" />
+                    </div>
                     <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc', marginBottom: '6px' }}>
                       No License Key Selected
                     </h3>
@@ -9716,7 +10002,7 @@ else:
                         marginBottom: '18px'
                       }}
                     >
-                      <span style={{ fontSize: '13px' }}>🔒</span>
+                      <IconKey size={13} color="#38bdf8" />
                       <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '1px', color: '#38bdf8' }}>
                         STANDARD MOBILE APK EDITION
                       </span>
@@ -9763,7 +10049,7 @@ else:
                           transition: 'transform 0.15s ease'
                         }}
                       >
-                        <span>👑</span>
+                        <IconRemote size={14} color="#000" />
                         <span>UPGRADE THIS KEY TO VIP WEB REMOTE (+50%)</span>
                       </button>
                     ) : (
@@ -9791,7 +10077,7 @@ else:
                           color: '#ffb700'
                         }}
                       >
-                        <span>❄️ STEALTH FREEZE ACTIVE — All in-game visuals &amp; memory hooks temporarily suspended</span>
+                        <span>STEALTH FREEZE ACTIVE — All in-game visuals &amp; memory hooks temporarily suspended</span>
                         <button
                           onClick={handleToggleStealthFreeze}
                           style={{
@@ -9802,10 +10088,13 @@ else:
                             padding: '4px 10px',
                             fontSize: '11px',
                             fontWeight: 800,
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
                           }}
                         >
-                          ▶️ RESUME
+                          <IconPlay size={11} color="#07090e" /> RESUME
                         </button>
                       </div>
                     )}
@@ -9815,7 +10104,7 @@ else:
                   {/* Column 1: Aim Matrix */}
                   <div className="sg-column-card" style={styles.columnCard}>
                     <div style={styles.columnHead}>
-                      <span style={styles.columnIcon}>🎯</span>
+                      <span style={{ ...styles.columnIcon, display: 'inline-flex', alignItems: 'center' }}><IconRemote size={15} color="#00d9ff" /></span>
                       <h4>AIM ASSIST MATRIX</h4>
                     </div>
 
@@ -9925,7 +10214,7 @@ else:
                   {/* Column 2: ESP Visuals */}
                   <div className="sg-column-card" style={styles.columnCard}>
                     <div style={styles.columnHead}>
-                      <span style={styles.columnIcon}>👁️</span>
+                      <span style={{ ...styles.columnIcon, display: 'inline-flex', alignItems: 'center' }}><IconOverview size={15} color="#00d9ff" /></span>
                       <h4>ESP VISUAL OVERLAY</h4>
                     </div>
 
@@ -10077,7 +10366,7 @@ else:
                   {/* Column 3: Kinematics & Themes */}
                   <div className="sg-column-card" style={styles.columnCard}>
                     <div style={styles.columnHead}>
-                      <span style={styles.columnIcon}>⚡</span>
+                      <span style={{ ...styles.columnIcon, display: 'inline-flex', alignItems: 'center' }}><IconPlus size={15} color="#00d9ff" /></span>
                       <h4>KINEMATICS & THEME</h4>
                     </div>
 
@@ -10203,7 +10492,9 @@ else:
       {showPurgeModal && (
         <div className="sg-modal-overlay" style={styles.modalOverlay}>
           <div className="sg-modal-card" style={styles.modalCard}>
-            <div style={styles.modalIcon}>🚨</div>
+            <div style={{ ...styles.modalIcon, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IconAlert size={30} color="#ef4444" />
+            </div>
             <h3 style={styles.modalTitle}>Confirm Emergency Remote Wipe</h3>
             <p style={styles.modalText}>
               Are you sure you want to trigger a remote purge on target device running key <code>{currentKey}</code>?<br /><br />
@@ -10246,7 +10537,7 @@ else:
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '24px' }}>🔑</span>
+                <IconKey size={22} color="#05df72" />
                 <div>
                   <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#f8fafc' }}>
                     Reset Password for @{pwdModalUser}
@@ -10339,10 +10630,13 @@ else:
                     color: '#4ade80',
                     fontSize: '11px',
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
                   }}
                 >
-                  📲 Share on WhatsApp
+                  <IconShare size={13} color="#4ade80" /> Share on WhatsApp
                 </button>
               </div>
 
@@ -10366,7 +10660,7 @@ else:
                     fontWeight: 800
                   }}
                 >
-                  {pwdLoading ? 'SAVING...' : '🔑 SAVE NEW PASSWORD'}
+                  {pwdLoading ? 'SAVING...' : 'SAVE NEW PASSWORD'}
                 </button>
               </div>
             </form>
@@ -10380,14 +10674,14 @@ else:
           <div style={{ ...styles.modalContent, maxWidth: '480px' }}>
             <div style={styles.modalHeader}>
               <h3 style={styles.modalTitle}>
-                📱 App Permissions: @{appPermModalUser.username}
+                App Permissions: @{appPermModalUser.username}
               </h3>
               <button
                 type="button"
                 onClick={() => setAppPermModalUser(null)}
                 style={styles.modalCloseBtn}
               >
-                ✕
+                <IconClose size={16} />
               </button>
             </div>
 
@@ -10413,7 +10707,7 @@ else:
               >
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: 700, color: appPermWildcard ? '#05df72' : '#f8fafc' }}>
-                    ✨ Allow All Custom Apps (Wildcard)
+                    Allow All Custom Apps (Wildcard)
                   </div>
                   <div style={{ fontSize: '11px', color: '#94a3b8' }}>
                     User can generate keys for every present and future custom app
@@ -10445,7 +10739,7 @@ else:
                     justifyContent: 'space-between'
                   }}>
                     <span style={{ fontSize: '13px', color: '#f8fafc', fontWeight: 600 }}>
-                      🔥 Free Fire MAX
+                      Free Fire MAX
                     </span>
                     <span style={{ fontSize: '10px', background: 'rgba(5, 223, 114, 0.2)', color: '#05df72', padding: '2px 8px', borderRadius: '4px', fontWeight: 800 }}>
                       DEFAULT (ACTIVE)
@@ -10478,8 +10772,8 @@ else:
                             cursor: 'pointer'
                           }}
                         >
-                          <span style={{ fontSize: '13px', color: isChecked ? '#00d9ff' : '#cbd5e1', fontWeight: 600 }}>
-                            {app.icon || '🎮'} {app.name}
+                          <span style={{ fontSize: '13px', color: isChecked ? '#00d9ff' : '#cbd5e1', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <IconGamepad size={14} color="#00d9ff" /> {app.name}
                           </span>
                           <input
                             type="checkbox"
@@ -10512,7 +10806,7 @@ else:
                   disabled={appPermLoading}
                   style={{ ...styles.submitBtn, width: 'auto' }}
                 >
-                  {appPermLoading ? 'SAVING...' : '💾 SAVE PERMISSIONS'}
+                  {appPermLoading ? 'SAVING...' : 'SAVE PERMISSIONS'}
                 </button>
               </div>
             </form>
@@ -10530,7 +10824,7 @@ else:
                 className={`sg-mobile-bottom-tab ${activeTab === 'remote' ? 'active' : ''}`}
                 onClick={() => handleSelectTab('remote')}
               >
-                <span style={{ fontSize: '18px' }}>⚡</span>
+                <IconRemote />
                 <span>Remote</span>
               </button>
               <button
@@ -10538,8 +10832,8 @@ else:
                 className={`sg-mobile-bottom-tab ${mobileMenuOpen || ['referrals', 'users', 'add-balance', 'advance', 'apps', 'connect-api', 'delete', 'extend'].includes(activeTab) ? 'active' : ''}`}
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               >
-                <span style={{ fontSize: '18px' }}>☰</span>
-                <span>More</span>
+                <IconMenu />
+                <span>Menu</span>
               </button>
             </>
           ) : (
@@ -10549,7 +10843,7 @@ else:
                 className={`sg-mobile-bottom-tab ${activeTab === 'remote' ? 'active' : ''}`}
                 onClick={() => handleSelectTab('remote')}
               >
-                <span style={{ fontSize: '18px' }}>⚡</span>
+                <IconRemote />
                 <span>Remote</span>
               </button>
               <button
@@ -10557,7 +10851,7 @@ else:
                 className={`sg-mobile-bottom-tab ${activeTab === 'keys' ? 'active' : ''}`}
                 onClick={() => handleSelectTab('keys')}
               >
-                <span style={{ fontSize: '18px' }}>🔑</span>
+                <IconKey />
                 <span>Keys</span>
               </button>
               <button
@@ -10565,7 +10859,7 @@ else:
                 className={`sg-mobile-bottom-tab ${activeTab === 'generate' ? 'active' : ''}`}
                 onClick={() => handleSelectTab('generate')}
               >
-                <span style={{ fontSize: '18px' }}>➕</span>
+                <IconPlus />
                 <span>Gen</span>
               </button>
               <button
@@ -10573,7 +10867,7 @@ else:
                 className={`sg-mobile-bottom-tab ${activeTab === 'overview' ? 'active' : ''}`}
                 onClick={() => handleSelectTab('overview')}
               >
-                <span style={{ fontSize: '18px' }}>📊</span>
+                <IconOverview />
                 <span>Stats</span>
               </button>
               <button
@@ -10581,7 +10875,7 @@ else:
                 className={`sg-mobile-bottom-tab ${mobileMenuOpen || ['referrals', 'users', 'add-balance', 'advance', 'apps', 'connect-api', 'delete', 'extend'].includes(activeTab) ? 'active' : ''}`}
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               >
-                <span style={{ fontSize: '18px' }}>☰</span>
+                <IconMenu />
                 <span>Menu</span>
               </button>
             </>
@@ -10593,11 +10887,11 @@ else:
   )
 }
 
-// ── Phantom Amethyst Glassmorphism Scoped Design System ────────────────────────
+// ── Premium Minimal Charcoal Design System ──────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   appShell: {
     minHeight: '100vh',
-    backgroundColor: '#08070e',
+    backgroundColor: '#090d16',
     color: '#f8fafc',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     position: 'relative',
@@ -10609,9 +10903,7 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundImage: `radial-gradient(rgba(168, 85, 247, 0.08) 1px, transparent 0), radial-gradient(rgba(244, 63, 94, 0.04) 1px, transparent 0)`,
-    backgroundSize: '36px 36px, 72px 72px',
-    backgroundPosition: '0 0, 18px 18px',
+    backgroundColor: '#090d16',
     pointerEvents: 'none',
     zIndex: 0
   },
@@ -10619,11 +10911,9 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '14px 24px',
-    backgroundColor: 'rgba(11, 9, 20, 0.88)',
-    backdropFilter: 'blur(20px)',
-    borderBottom: '1px solid rgba(168, 85, 247, 0.2)',
-    boxShadow: '0 4px 30px rgba(0, 0, 0, 0.55)',
+    padding: '10px 16px',
+    backgroundColor: '#0e131f',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
     position: 'sticky',
     top: 0,
     zIndex: 50
@@ -10631,7 +10921,7 @@ const styles: Record<string, React.CSSProperties> = {
   headerLeft: {
     display: 'flex',
     alignItems: 'center',
-    gap: '14px'
+    gap: '10px'
   },
   mobileMenuToggle: {
     display: 'none',
@@ -10644,15 +10934,14 @@ const styles: Record<string, React.CSSProperties> = {
   brandCluster: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    gap: '10px'
   },
   logoFrame: {
-    width: '38px',
-    height: '38px',
-    borderRadius: '10px',
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
     overflow: 'hidden',
-    border: '1px solid rgba(168, 85, 247, 0.55)',
-    boxShadow: '0 0 14px rgba(168, 85, 247, 0.35)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
     flexShrink: 0
   },
   logoImage: {
@@ -10661,91 +10950,90 @@ const styles: Record<string, React.CSSProperties> = {
     objectFit: 'cover'
   },
   brandTitleText: {
-    fontSize: '16px',
+    fontSize: '15px',
     fontWeight: 800,
-    letterSpacing: '0.04em',
+    letterSpacing: '0.03em',
     color: '#f8fafc'
   },
   brandVioletPill: {
-    background: 'linear-gradient(135deg, #c084fc 0%, #a855f7 50%, #f43f5e 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    fontWeight: 900,
-    letterSpacing: '0.06em',
-    filter: 'drop-shadow(0 0 12px rgba(168, 85, 247, 0.5))'
+    color: '#a78bfa',
+    fontWeight: 700,
+    fontSize: '10px',
+    marginLeft: '6px',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(139, 92, 246, 0.12)',
+    border: '1px solid rgba(139, 92, 246, 0.25)'
   },
   brandSubText: {
-    fontSize: '10px',
-    color: '#a78bfa',
-    letterSpacing: '0.07em',
-    fontWeight: 700
+    display: 'none'
   },
   headerRight: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    gap: '10px'
   },
   balancePill: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '6px 14px',
-    backgroundColor: 'rgba(18, 14, 29, 0.9)',
-    border: '1px solid rgba(168, 85, 247, 0.32)',
-    borderRadius: '20px',
-    fontSize: '13px',
+    gap: '6px',
+    padding: '6px 12px',
+    minHeight: '36px',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '8px',
+    fontSize: '12px',
     fontWeight: 700,
     cursor: 'pointer',
-    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)'
+    color: '#f8fafc',
+    touchAction: 'manipulation'
   },
   balanceAmount: {
-    color: '#c084fc'
+    color: '#a78bfa'
   },
   telemetryPill: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '6px 12px',
-    backgroundColor: 'rgba(18, 14, 29, 0.85)',
-    border: '1px solid rgba(168, 85, 247, 0.22)',
-    borderRadius: '20px',
+    gap: '6px',
+    padding: '6px 10px',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '8px',
     fontSize: '11px',
     fontWeight: 600
   },
   pulseDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    boxShadow: '0 0 8px currentColor'
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%'
   },
   telemetryText: {
-    color: '#cbd5e1'
+    color: '#94a3b8'
   },
   pingText: {
     color: '#38bdf8',
-    fontWeight: 700
+    fontWeight: 600
   },
   userProfilePill: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    padding: '4px 8px 4px 12px',
-    backgroundColor: 'rgba(18, 14, 29, 0.9)',
-    border: '1px solid rgba(168, 85, 247, 0.25)',
-    borderRadius: '20px'
+    gap: '8px',
+    padding: '4px 6px 4px 10px',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '8px'
   },
   userAvatarSquare: {
     width: '24px',
     height: '24px',
     borderRadius: '6px',
-    backgroundColor: '#a855f7',
+    backgroundColor: '#8b5cf6',
     color: '#ffffff',
     fontWeight: 800,
     fontSize: '12px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 0 10px rgba(168, 85, 247, 0.45)'
+    justifyContent: 'center'
   },
   userNameBlock: {
     display: 'flex',
@@ -10753,107 +11041,109 @@ const styles: Record<string, React.CSSProperties> = {
   },
   userNameText: {
     fontSize: '12px',
-    fontWeight: 700,
+    fontWeight: 600,
     color: '#f8fafc'
   },
   userRoleTag: {
-    fontSize: '9px',
-    color: '#c084fc',
-    fontWeight: 700,
-    letterSpacing: '0.04em'
+    fontSize: '10px',
+    color: '#a78bfa',
+    fontWeight: 600
   },
   headerLogoutBtn: {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    fontSize: '14px',
-    padding: '4px 6px',
+    fontSize: '13px',
+    padding: '6px 8px',
     borderRadius: '6px',
-    color: '#94a3b8'
+    color: '#94a3b8',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   quickLoginBtn: {
-    padding: '7px 16px',
-    background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+    padding: '8px 16px',
+    background: '#8b5cf6',
     color: '#ffffff',
     border: 'none',
     borderRadius: '8px',
-    fontWeight: 700,
+    fontWeight: 600,
     fontSize: '12px',
-    cursor: 'pointer',
-    boxShadow: '0 2px 12px rgba(168, 85, 247, 0.4)'
+    cursor: 'pointer'
   },
   toastBanner: {
-    backgroundColor: 'rgba(5, 223, 114, 0.15)',
-    border: '1px solid rgba(5, 223, 114, 0.4)',
-    color: '#05df72',
-    padding: '10px 20px',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    border: '1px solid rgba(16, 185, 129, 0.3)',
+    color: '#10b981',
+    padding: '10px 16px',
     textAlign: 'center',
-    fontSize: '13px',
-    fontWeight: 600,
-    boxShadow: '0 4px 16px rgba(0,0,0,0.4)'
+    fontSize: '12px',
+    fontWeight: 600
   },
   authGateBox: {
-    maxWidth: '520px',
-    margin: '60px auto',
-    padding: '36px',
-    backgroundColor: 'rgba(18, 14, 29, 0.88)',
-    border: '1px solid rgba(168, 85, 247, 0.28)',
-    borderRadius: '20px',
-    boxShadow: '0 20px 50px rgba(0,0,0,0.7), 0 0 35px rgba(168, 85, 247, 0.16)',
-    backdropFilter: 'blur(20px)',
+    maxWidth: '440px',
+    margin: '40px auto',
+    padding: '24px 20px',
+    backgroundColor: '#111827',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '12px',
     position: 'relative',
     zIndex: 1
   },
   authBadge: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '4px 12px',
-    borderRadius: '12px',
-    backgroundColor: 'rgba(168, 85, 247, 0.14)',
-    color: '#c084fc',
+    padding: '4px 10px',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(139, 92, 246, 0.12)',
+    color: '#a78bfa',
     fontSize: '11px',
     fontWeight: 700,
-    letterSpacing: '0.06em',
-    marginBottom: '16px',
-    border: '1px solid rgba(168, 85, 247, 0.3)'
+    letterSpacing: '0.04em',
+    marginBottom: '14px',
+    border: '1px solid rgba(139, 92, 246, 0.25)'
   },
   authTabSelector: {
     display: 'flex',
-    gap: '8px',
-    backgroundColor: 'rgba(11, 9, 20, 0.75)',
+    gap: '6px',
+    backgroundColor: '#090d16',
     padding: '4px',
-    borderRadius: '12px',
-    marginBottom: '24px',
-    border: '1px solid rgba(168, 85, 247, 0.18)'
+    borderRadius: '8px',
+    marginBottom: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.08)'
   },
   authTabBtn: {
     flex: 1,
     padding: '10px 12px',
-    borderRadius: '8px',
+    minHeight: '44px',
+    borderRadius: '6px',
     border: 'none',
     backgroundColor: 'transparent',
     color: '#94a3b8',
     fontSize: '12px',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.2s ease'
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    transition: 'all 0.15s ease'
   },
   authTabBtnActive: {
-    backgroundColor: 'rgba(168, 85, 247, 0.2)',
-    color: '#c084fc',
-    fontWeight: 700,
-    boxShadow: '0 0 12px rgba(168, 85, 247, 0.25)'
+    backgroundColor: 'rgba(139, 92, 246, 0.16)',
+    color: '#ffffff',
+    fontWeight: 700
   },
   authHead: {
-    fontSize: '22px',
+    fontSize: '20px',
     fontWeight: 800,
-    marginBottom: '8px',
+    marginBottom: '6px',
     color: '#f8fafc'
   },
   authForm: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px'
+    gap: '14px'
   },
   formGroup: {
     display: 'flex',
@@ -10867,96 +11157,101 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.04em'
   },
   keyInput: {
-    padding: '12px 16px',
-    backgroundColor: 'rgba(11, 9, 20, 0.85)',
-    border: '1px solid rgba(168, 85, 247, 0.25)',
-    borderRadius: '10px',
+    padding: '12px 14px',
+    backgroundColor: '#0e131f',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
     color: '#f8fafc',
     fontSize: '14px',
     outline: 'none',
     boxSizing: 'border-box',
-    width: '100%'
+    width: '100%',
+    minHeight: '44px'
   },
   selectInput: {
-    padding: '12px 16px',
-    backgroundColor: 'rgba(11, 9, 20, 0.85)',
-    border: '1px solid rgba(168, 85, 247, 0.25)',
-    borderRadius: '10px',
+    padding: '12px 14px',
+    backgroundColor: '#0e131f',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
     color: '#f8fafc',
     fontSize: '14px',
     outline: 'none',
     boxSizing: 'border-box',
-    width: '100%'
+    width: '100%',
+    minHeight: '44px'
   },
   chipBtn: {
-    padding: '4px 10px',
-    backgroundColor: 'rgba(28, 20, 44, 0.6)',
-    border: '1px solid rgba(168, 85, 247, 0.3)',
+    padding: '6px 12px',
+    minHeight: '36px',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     borderRadius: '6px',
-    color: '#c084fc',
+    color: '#a78bfa',
     fontSize: '11px',
     fontWeight: 600,
     cursor: 'pointer'
   },
   submitBtn: {
-    padding: '14px 20px',
-    background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+    padding: '12px 18px',
+    minHeight: '44px',
+    background: '#8b5cf6',
     color: '#ffffff',
     border: 'none',
-    borderRadius: '12px',
-    fontWeight: 800,
+    borderRadius: '8px',
+    fontWeight: 700,
     fontSize: '13px',
-    letterSpacing: '0.04em',
     cursor: 'pointer',
-    boxShadow: '0 4px 20px rgba(168, 85, 247, 0.45)'
+    transition: 'background-color 0.15s ease'
   },
   primaryActionBtn: {
-    padding: '12px 24px',
-    borderRadius: '10px',
+    padding: '10px 18px',
+    minHeight: '44px',
+    borderRadius: '8px',
     border: 'none',
     fontSize: '13px',
+    fontWeight: 600,
     cursor: 'pointer'
   },
   errorBox: {
-    padding: '10px 14px',
-    backgroundColor: 'rgba(244, 63, 94, 0.15)',
-    border: '1px solid rgba(244, 63, 94, 0.45)',
+    padding: '10px 12px',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    border: '1px solid rgba(239, 68, 68, 0.3)',
     borderRadius: '8px',
-    color: '#f43f5e',
+    color: '#f87171',
     fontSize: '12px',
     lineHeight: 1.4
   },
   mainLayout: {
     display: 'flex',
-    minHeight: 'calc(100vh - 67px)',
+    minHeight: 'calc(100vh - 56px)',
     position: 'relative',
     zIndex: 1
   },
   sidebar: {
-    width: '260px',
-    backgroundColor: 'rgba(11, 9, 20, 0.82)',
-    borderRight: '1px solid rgba(168, 85, 247, 0.18)',
-    padding: '20px 14px',
+    width: '240px',
+    backgroundColor: '#0e131f',
+    borderRight: '1px solid rgba(255, 255, 255, 0.08)',
+    padding: '16px 12px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
+    gap: '12px',
     flexShrink: 0
   },
   sidebarMobileOpen: {
     display: 'flex',
     position: 'fixed',
-    top: '67px',
+    top: '56px',
     left: 0,
     bottom: 0,
     zIndex: 100,
-    backgroundColor: '#0b0914'
+    backgroundColor: '#0e131f'
   },
   sidebarUserCard: {
-    padding: '12px',
-    backgroundColor: 'rgba(18, 14, 29, 0.85)',
-    border: '1px solid rgba(168, 85, 247, 0.22)',
-    borderRadius: '12px',
-    marginBottom: '10px'
+    padding: '10px 12px',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid rgba(255, 255, 255, 0.06)',
+    borderRadius: '8px',
+    marginBottom: '8px'
   },
   sidebarUserRow: {
     display: 'flex',
@@ -10964,26 +11259,25 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '10px'
   },
   sidebarUserAvatar: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+    width: '28px',
+    height: '28px',
+    borderRadius: '6px',
+    backgroundColor: '#8b5cf6',
     color: '#ffffff',
     fontWeight: 800,
-    fontSize: '14px',
+    fontSize: '12px',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 0 10px rgba(168, 85, 247, 0.4)'
+    justifyContent: 'center'
   },
   sidebarUserName: {
-    fontSize: '13px',
+    fontSize: '12px',
     fontWeight: 700,
     color: '#f8fafc'
   },
   sidebarUserSub: {
     fontSize: '10px',
-    color: '#64748b',
+    color: '#94a3b8',
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
@@ -10993,7 +11287,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '6px',
     height: '6px',
     borderRadius: '50%',
-    backgroundColor: '#05df72'
+    backgroundColor: '#10b981'
   },
   navStack: {
     display: 'flex',
@@ -11002,17 +11296,18 @@ const styles: Record<string, React.CSSProperties> = {
   },
   navCategoryHeader: {
     fontSize: '10px',
-    fontWeight: 800,
-    letterSpacing: '0.08em',
-    color: '#6b7280',
-    padding: '14px 10px 4px 10px'
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    color: '#64748b',
+    padding: '12px 8px 4px 8px'
   },
   navItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
     padding: '10px 12px',
-    borderRadius: '10px',
+    minHeight: '44px',
+    borderRadius: '8px',
     backgroundColor: 'transparent',
     border: 'none',
     color: '#94a3b8',
@@ -11020,48 +11315,54 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
     textAlign: 'left',
+    width: '100%',
+    touchAction: 'manipulation',
     transition: 'all 0.15s ease'
   },
   navItemActive: {
-    backgroundColor: 'rgba(168, 85, 247, 0.16)',
-    color: '#c084fc',
+    backgroundColor: 'rgba(139, 92, 246, 0.12)',
+    color: '#ffffff',
     fontWeight: 700,
-    borderLeft: '3px solid #a855f7',
-    boxShadow: 'inset 0 0 16px rgba(168, 85, 247, 0.08)'
+    borderLeft: '3px solid #8b5cf6'
   },
   navIcon: {
-    fontSize: '14px'
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '18px',
+    height: '18px',
+    flexShrink: 0
   },
   cyanMiniBadge: {
     marginLeft: 'auto',
     fontSize: '9px',
     padding: '2px 6px',
-    borderRadius: '6px',
-    backgroundColor: 'rgba(168, 85, 247, 0.18)',
-    color: '#c084fc',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    color: '#a78bfa',
     fontWeight: 700
   },
   contentPane: {
     flex: 1,
-    padding: '30px',
+    padding: '20px',
     overflowY: 'auto',
     position: 'relative',
     zIndex: 1
   },
   viewContainer: {
-    maxWidth: '1240px',
+    maxWidth: '1200px',
     margin: '0 auto'
   },
   bannerRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '18px',
+    marginBottom: '14px',
     flexWrap: 'wrap',
-    gap: '14px'
+    gap: '10px'
   },
   pageTitle: {
-    fontSize: '21px',
+    fontSize: '18px',
     fontWeight: 800,
     margin: 0,
     color: '#f8fafc'
@@ -11069,240 +11370,254 @@ const styles: Record<string, React.CSSProperties> = {
   badgeCluster: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px'
+    gap: '8px'
   },
   greenPulseBadge: {
     fontSize: '11px',
-    fontWeight: 700,
-    padding: '6px 12px',
-    borderRadius: '12px',
-    backgroundColor: 'rgba(5, 223, 114, 0.15)',
-    color: '#05df72',
-    border: '1px solid rgba(5, 223, 114, 0.3)'
+    fontWeight: 600,
+    padding: '4px 8px',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    color: '#10b981',
+    border: '1px solid rgba(16, 185, 129, 0.25)'
   },
   statGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: '16px',
-    marginBottom: '28px',
-    position: 'relative',
-    zIndex: 5
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '12px',
+    marginBottom: '18px'
   },
   statCard: {
     display: 'flex',
     alignItems: 'center',
-    gap: '16px',
-    padding: '20px',
-    backgroundColor: 'rgba(18, 14, 29, 0.78)',
-    border: '1px solid rgba(168, 85, 247, 0.2)',
-    borderRadius: '16px',
-    backdropFilter: 'blur(16px)',
-    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+    gap: '12px',
+    padding: '12px 14px',
+    backgroundColor: '#111827',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '10px',
     cursor: 'pointer',
     userSelect: 'none',
-    touchAction: 'manipulation'
+    touchAction: 'manipulation',
+    minHeight: '64px',
+    transition: 'border-color 0.15s ease'
   },
   statIconFrame: {
-    width: '44px',
-    height: '44px',
-    borderRadius: '12px',
-    backgroundColor: 'rgba(168, 85, 247, 0.14)',
-    color: '#c084fc',
-    border: '1px solid rgba(168, 85, 247, 0.28)',
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    color: '#94a3b8',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '20px'
+    flexShrink: 0
   },
   statNum: {
-    fontSize: '24px',
+    fontSize: '18px',
     fontWeight: 800,
-    color: '#f8fafc'
+    color: '#f8fafc',
+    lineHeight: 1.2
   },
   statLabel: {
     fontSize: '11px',
     fontWeight: 600,
-    color: '#94a3b8'
+    color: '#94a3b8',
+    marginTop: '2px'
   },
   dualGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
-    gap: '24px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+    gap: '16px'
   },
   cardBox: {
-    padding: '24px',
-    backgroundColor: 'rgba(18, 14, 29, 0.82)',
-    border: '1px solid rgba(168, 85, 247, 0.22)',
-    borderRadius: '16px',
-    backdropFilter: 'blur(16px)',
-    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04)'
+    padding: '16px',
+    backgroundColor: '#111827',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '12px'
   },
   cardHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '16px'
+    marginBottom: '12px'
   },
   quickGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '12px'
+    gap: '8px'
   },
   quickActionCard: {
-    padding: '16px',
-    backgroundColor: 'rgba(11, 9, 20, 0.65)',
-    border: '1px solid rgba(168, 85, 247, 0.22)',
-    borderRadius: '12px',
-    textAlign: 'left',
+    padding: '10px 12px',
+    backgroundColor: '#0e131f',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
     cursor: 'pointer',
     color: '#f8fafc',
-    transition: 'all 0.2s ease'
+    minHeight: '48px',
+    touchAction: 'manipulation',
+    transition: 'all 0.15s ease'
   },
   quickActionIcon: {
-    fontSize: '20px',
-    marginBottom: '8px'
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '20px',
+    height: '20px',
+    flexShrink: 0
   },
   quickActionTitle: {
-    fontSize: '13px',
-    fontWeight: 700
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#f8fafc'
   },
   activityFeed: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '6px'
   },
   activityRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    padding: '10px 12px',
-    backgroundColor: 'rgba(11, 9, 20, 0.55)',
-    borderRadius: '10px'
+    gap: '10px',
+    padding: '8px 10px',
+    backgroundColor: 'transparent',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+    borderRadius: '6px'
   },
   activityIcon: {
-    width: '24px',
-    height: '24px',
-    borderRadius: '6px',
-    backgroundColor: 'rgba(5, 223, 114, 0.15)',
-    color: '#05df72',
+    width: '20px',
+    height: '20px',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    color: '#10b981',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '12px',
-    fontWeight: 700
+    fontSize: '10px',
+    fontWeight: 700,
+    flexShrink: 0
   },
   activityTitle: {
     fontSize: '12px',
-    fontWeight: 700,
+    fontWeight: 600,
     color: '#f8fafc'
   },
   activityDetails: {
     fontSize: '11px',
-    color: '#94a3b8'
+    color: '#94a3b8',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    maxWidth: '280px'
   },
   activityTime: {
     fontSize: '10px',
-    color: '#64748b'
+    color: '#64748b',
+    marginLeft: 'auto',
+    flexShrink: 0
   },
   centerCardWrapper: {
-    maxWidth: '680px',
+    maxWidth: '640px',
     margin: '0 auto'
   },
   managementCard: {
-    padding: '30px',
-    backgroundColor: 'rgba(18, 14, 29, 0.88)',
-    border: '1px solid rgba(168, 85, 247, 0.24)',
-    borderRadius: '16px',
-    boxShadow: '0 16px 44px rgba(0,0,0,0.5)',
-    backdropFilter: 'blur(16px)'
+    padding: '20px 18px',
+    backgroundColor: '#111827',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '12px'
   },
   formGrid2Col: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '16px'
+    gap: '12px'
   },
   invoiceSummaryBox: {
-    marginTop: '20px',
-    padding: '16px',
-    backgroundColor: 'rgba(11, 9, 20, 0.7)',
-    border: '1px solid rgba(168, 85, 247, 0.25)',
-    borderRadius: '12px',
+    marginTop: '16px',
+    padding: '14px',
+    backgroundColor: '#0e131f',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '8px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center'
   },
   generatedKeyBox: {
-    marginTop: '24px',
-    padding: '16px',
-    backgroundColor: 'rgba(5, 223, 114, 0.1)',
-    border: '1px solid rgba(5, 223, 114, 0.3)',
-    borderRadius: '12px'
+    marginTop: '20px',
+    padding: '14px',
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    border: '1px solid rgba(16, 185, 129, 0.25)',
+    borderRadius: '8px'
   },
   generatedKeyRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: '10px',
-    gap: '12px'
+    marginTop: '8px',
+    gap: '10px'
   },
   keyCodeText: {
-    fontSize: '16px',
-    fontWeight: 800,
-    color: '#c084fc',
-    letterSpacing: '0.04em'
+    fontSize: '14px',
+    fontWeight: 700,
+    color: '#a78bfa',
+    letterSpacing: '0.04em',
+    fontFamily: 'monospace'
   },
   copyKeyBtn: {
     padding: '8px 14px',
-    background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+    minHeight: '36px',
+    background: '#8b5cf6',
     color: '#ffffff',
     fontWeight: 700,
     fontSize: '11px',
     border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    boxShadow: '0 2px 10px rgba(168, 85, 247, 0.35)'
+    borderRadius: '6px',
+    cursor: 'pointer'
   },
   searchBox: {
-    minWidth: '280px'
+    minWidth: '240px'
   },
   searchInput: {
     width: '100%',
     padding: '10px 14px',
-    backgroundColor: 'rgba(11, 9, 20, 0.85)',
-    border: '1px solid rgba(168, 85, 247, 0.25)',
-    borderRadius: '10px',
+    minHeight: '44px',
+    backgroundColor: '#0e131f',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
     color: '#f8fafc',
     fontSize: '13px',
     outline: 'none',
     boxSizing: 'border-box'
   },
   tableCard: {
-    backgroundColor: 'rgba(18, 14, 29, 0.8)',
-    border: '1px solid rgba(168, 85, 247, 0.22)',
-    borderRadius: '16px',
-    overflow: 'hidden',
-    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.4)'
+    backgroundColor: '#111827',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '12px',
+    overflow: 'hidden'
   },
   dataTable: {
     width: '100%',
     borderCollapse: 'collapse',
-    fontSize: '13px',
+    fontSize: '12px',
     textAlign: 'left'
   },
   th: {
-    padding: '14px 18px',
-    backgroundColor: 'rgba(11, 9, 20, 0.8)',
-    color: '#a78bfa',
+    padding: '10px 12px',
+    backgroundColor: '#0e131f',
+    color: '#94a3b8',
     fontSize: '11px',
     fontWeight: 700,
-    letterSpacing: '0.06em',
-    borderBottom: '1px solid rgba(168, 85, 247, 0.2)'
+    letterSpacing: '0.04em',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
   },
   tr: {
-    borderBottom: '1px solid rgba(168, 85, 247, 0.12)'
+    borderBottom: '1px solid rgba(255, 255, 255, 0.04)'
   },
   td: {
-    padding: '14px 18px',
+    padding: '10px 12px',
     verticalAlign: 'middle'
   },
   miniCopyBtn: {
@@ -11310,24 +11625,25 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     fontSize: '12px',
-    padding: '2px 4px'
+    padding: '4px',
+    color: '#94a3b8'
   },
   deviceBarBack: {
-    width: '90px',
+    width: '80px',
     height: '4px',
-    backgroundColor: 'rgba(30, 41, 59, 0.8)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: '2px',
     marginTop: '4px',
     overflow: 'hidden'
   },
   deviceBarFill: {
     height: '100%',
-    background: 'linear-gradient(90deg, #a855f7, #f43f5e)'
+    background: '#8b5cf6'
   },
   planBadge: {
     padding: '3px 8px',
-    backgroundColor: 'rgba(28, 20, 44, 0.6)',
-    border: '1px solid rgba(168, 85, 247, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     borderRadius: '6px',
     fontSize: '11px',
     fontWeight: 600,
@@ -11337,7 +11653,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '18px',
     height: '18px',
     borderRadius: '50%',
-    backgroundColor: '#a855f7',
+    backgroundColor: '#8b5cf6',
     color: '#ffffff',
     fontSize: '10px',
     fontWeight: 800,
@@ -11346,13 +11662,13 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center'
   },
   avatarCircle: {
-    width: '32px',
-    height: '32px',
+    width: '28px',
+    height: '28px',
     borderRadius: '50%',
-    backgroundColor: 'rgba(168, 85, 247, 0.18)',
-    color: '#c084fc',
-    fontSize: '13px',
-    fontWeight: 800,
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    color: '#a78bfa',
+    fontSize: '12px',
+    fontWeight: 700,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center'
@@ -11367,44 +11683,48 @@ const styles: Record<string, React.CSSProperties> = {
   roleBadge: {
     padding: '2px 6px',
     borderRadius: '4px',
-    backgroundColor: 'rgba(168, 85, 247, 0.18)',
-    color: '#c084fc',
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    color: '#a78bfa',
     fontSize: '10px',
     fontWeight: 700
   },
   userBalanceGreen: {
-    fontSize: '13px',
+    fontSize: '12px',
     fontWeight: 700,
-    color: '#05df72'
+    color: '#10b981'
   },
   actionIconBtn: {
-    background: 'rgba(28, 20, 44, 0.5)',
-    border: '1px solid rgba(168, 85, 247, 0.3)',
+    background: 'rgba(255, 255, 255, 0.04)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     borderRadius: '6px',
     cursor: 'pointer',
     padding: '6px 8px',
     fontSize: '12px',
-    color: '#f8fafc'
+    color: '#f8fafc',
+    minHeight: '36px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   actionIconCircle: {
-    width: '38px',
-    height: '38px',
-    borderRadius: '10px',
+    width: '34px',
+    height: '34px',
+    borderRadius: '8px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '18px'
+    fontSize: '16px'
   },
   settingToggleRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '14px 0',
-    borderTop: '1px solid rgba(168, 85, 247, 0.18)'
+    padding: '12px 0',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)'
   },
   settingTitle: {
     fontSize: '13px',
-    fontWeight: 700,
+    fontWeight: 600,
     color: '#f8fafc'
   },
   settingSub: {
@@ -11418,40 +11738,37 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     padding: '2px',
     cursor: 'pointer',
-    transition: 'background 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s ease',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    transition: 'background-color 0.15s ease'
   },
   switchKnob: {
     width: '20px',
     height: '20px',
     borderRadius: '50%',
     backgroundColor: '#ffffff',
-    boxShadow: '0 2px 5px rgba(0,0,0,0.4)',
-    transition: 'transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1)'
+    transition: 'transform 0.15s ease'
   },
   emergencyPurgeBtn: {
     padding: '8px 14px',
-    background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.2), rgba(190, 18, 60, 0.25))',
-    border: '1px solid rgba(244, 63, 94, 0.55)',
-    color: '#f43f5e',
+    minHeight: '44px',
+    background: 'rgba(239, 68, 68, 0.1)',
+    border: '1px solid rgba(239, 68, 68, 0.3)',
+    color: '#f87171',
     fontSize: '11px',
-    fontWeight: 800,
-    borderRadius: '8px',
-    cursor: 'pointer',
-    boxShadow: '0 0 10px rgba(244, 63, 94, 0.25)'
+    fontWeight: 700,
+    borderRadius: '6px',
+    cursor: 'pointer'
   },
   controlGrid3Col: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
-    gap: '16px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '12px'
   },
   columnCard: {
-    padding: '16px 18px',
-    backgroundColor: 'rgba(18, 14, 29, 0.85)',
-    border: '1px solid rgba(168, 85, 247, 0.22)',
-    borderRadius: '14px',
-    backdropFilter: 'blur(12px)',
-    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)'
+    padding: '14px 16px',
+    backgroundColor: '#111827',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '12px'
   },
   columnHead: {
     display: 'flex',
@@ -11459,65 +11776,65 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     marginBottom: '10px',
     paddingBottom: '10px',
-    borderBottom: '1px solid rgba(168, 85, 247, 0.2)'
+    borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
   },
   columnIcon: {
-    fontSize: '16px'
+    fontSize: '14px'
   },
   toggleRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '9px 0',
-    borderBottom: '1px solid rgba(168, 85, 247, 0.14)'
+    padding: '8px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.04)'
   },
   toggleTitle: {
-    fontSize: '13px',
-    fontWeight: 700,
+    fontSize: '12px',
+    fontWeight: 600,
     color: '#f8fafc'
   },
   sliderBlock: {
-    padding: '10px 0',
-    borderBottom: '1px solid rgba(168, 85, 247, 0.14)'
+    padding: '8px 0',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.04)'
   },
   sliderLabelRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    fontSize: '12px',
+    fontSize: '11px',
     color: '#94a3b8',
-    marginBottom: '8px',
+    marginBottom: '6px',
     fontWeight: 600
   },
   sliderValText: {
-    color: '#c084fc',
+    color: '#a78bfa',
     fontWeight: 700
   },
   sliderInput: {
     width: '100%',
-    accentColor: '#a855f7',
+    accentColor: '#8b5cf6',
     cursor: 'pointer'
   },
   themePaletteGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-    gap: '8px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
+    gap: '6px'
   },
   themePillBtn: {
     padding: '8px 10px',
-    borderRadius: '8px',
-    backgroundColor: 'rgba(11, 9, 20, 0.65)',
-    border: '1px solid rgba(168, 85, 247, 0.25)',
+    minHeight: '36px',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     color: '#94a3b8',
     fontSize: '11px',
     fontWeight: 600,
     cursor: 'pointer'
   },
   themePillBtnActive: {
-    backgroundColor: 'rgba(168, 85, 247, 0.2)',
-    borderColor: '#a855f7',
-    color: '#c084fc',
-    fontWeight: 700,
-    boxShadow: '0 0 10px rgba(168, 85, 247, 0.3)'
+    backgroundColor: 'rgba(139, 92, 246, 0.16)',
+    borderColor: '#8b5cf6',
+    color: '#ffffff',
+    fontWeight: 700
   },
   modalOverlay: {
     position: 'fixed',
@@ -11526,62 +11843,62 @@ const styles: Record<string, React.CSSProperties> = {
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    backdropFilter: 'blur(8px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1200
+    zIndex: 1200,
+    padding: '14px'
   },
   modalCard: {
-    maxWidth: '460px',
-    width: '90%',
-    padding: '30px',
-    backgroundColor: '#0e0b17',
-    border: '1px solid rgba(244, 63, 94, 0.5)',
-    borderRadius: '16px',
-    textAlign: 'center',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.85), 0 0 35px rgba(244, 63, 94, 0.25)'
+    maxWidth: '440px',
+    width: '92%',
+    padding: '24px 20px',
+    backgroundColor: '#111827',
+    border: '1px solid rgba(239, 68, 68, 0.35)',
+    borderRadius: '12px',
+    textAlign: 'center'
   },
   modalIcon: {
-    fontSize: '40px',
-    marginBottom: '12px'
+    fontSize: '32px',
+    marginBottom: '10px'
   },
   modalTitle: {
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: 800,
     color: '#f8fafc',
-    margin: '0 0 10px 0'
+    margin: '0 0 8px 0'
   },
   modalText: {
-    fontSize: '13px',
+    fontSize: '12px',
     color: '#94a3b8',
     lineHeight: 1.5,
-    margin: '0 0 24px 0'
+    margin: '0 0 20px 0'
   },
   modalActions: {
     display: 'flex',
-    gap: '12px',
+    gap: '10px',
     justifyContent: 'center'
   },
   modalCancelBtn: {
     padding: '10px 18px',
-    borderRadius: '8px',
-    backgroundColor: 'rgba(28, 20, 44, 0.7)',
-    border: '1px solid rgba(168, 85, 247, 0.25)',
+    minHeight: '44px',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
     color: '#cbd5e1',
     fontWeight: 600,
-    fontSize: '13px',
+    fontSize: '12px',
     cursor: 'pointer'
   },
   modalConfirmPurgeBtn: {
     padding: '10px 18px',
-    borderRadius: '8px',
-    background: 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)',
+    minHeight: '44px',
+    borderRadius: '6px',
+    background: '#ef4444',
     border: 'none',
     color: '#ffffff',
     fontWeight: 700,
-    fontSize: '13px',
-    cursor: 'pointer',
-    boxShadow: '0 4px 16px rgba(244, 63, 94, 0.4)'
+    fontSize: '12px',
+    cursor: 'pointer'
   }
 }
