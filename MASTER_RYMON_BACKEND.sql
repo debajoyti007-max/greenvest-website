@@ -275,20 +275,11 @@ BEGIN
         );
     END IF;
 
-    -- 1. Exact Master Key Verification (No substring wildcard bypass)
-    IF v_clean_key = 'RYMON-MASTER-KEY' THEN
+    -- Reject any attempts to use revoked master key bypasses
+    IF v_clean_key = 'RYMON-MASTER-KEY' OR v_clean_key LIKE '%MASTER%' OR v_clean_key LIKE '%OWNER%' THEN
         RETURN jsonb_build_object(
-            'valid', true,
-            'key', v_clean_key,
-            'game', CASE WHEN v_req_game != '' THEN v_req_game ELSE 'Universal' END,
-            'plan', 'Lifetime',
-            'creator', 'debajoyti',
-            'status', 'ACTIVE',
-            'is_master', true,
-            'is_paused', false,
-            'expires_at', (now() + INTERVAL '10 years'),
-            'devices_used', 1,
-            'devices_max', 999
+            'valid', false,
+            'error', 'Invalid license key. Master key bypass has been permanently revoked.'
         );
     END IF;
 
@@ -1417,8 +1408,7 @@ VALUES
 (38501, 'RYMON-PB-8491-3004', 'Free Fire MAX', '30 Days', 'rymon', 1, 1, 'ACTIVE', now() + INTERVAL '30 days'),
 (38500, 'RYMON-PB-1190-7734', 'PUBG', '7 Days', 'rymon', 0, 1, 'WAITING', NULL),
 (38499, 'RYMON-PB-9920-4100', 'BGMI', '1 Day', 'ROGER', 1, 1, 'ACTIVE', now() + INTERVAL '1 day'),
-(38506, 'RYMON-FF-94A2-9981', 'Free Fire MAX', '30 Days', 'rymon', 1, 1, 'ACTIVE', now() + INTERVAL '30 days'),
-(38507, 'RYMON-MASTER-KEY', 'Free Fire MAX', 'Lifetime', 'rymon', 1, 999, 'ACTIVE', now() + INTERVAL '10 years')
+(38506, 'RYMON-FF-94A2-9981', 'Free Fire MAX', '30 Days', 'rymon', 1, 1, 'ACTIVE', now() + INTERVAL '30 days')
 ON CONFLICT (license_key) DO UPDATE
 SET status = EXCLUDED.status,
     devices_used = EXCLUDED.devices_used,

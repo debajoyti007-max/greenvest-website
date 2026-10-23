@@ -546,3 +546,40 @@ describe('Wallet Top-Up: Set Exact Balance vs Add Balance', () => {
   })
 })
 
+// 9. Master Key Revocation and Backdoor Elimination Engine
+describe('Master Key Revocation and Backdoor Elimination Engine', () => {
+  function verifyLicenseKeyRule(key) {
+    const cleanKey = String(key || '').trim().toUpperCase()
+    if (!cleanKey) {
+      return { valid: false, error: 'License key is required.' }
+    }
+    // Strict block of all master key bypasses
+    if (cleanKey === 'RYMON-MASTER-KEY' || cleanKey.includes('MASTER') || cleanKey.includes('OWNER')) {
+      return {
+        valid: false,
+        error: 'Invalid license key. Master key bypass has been permanently revoked.',
+      }
+    }
+    return { valid: true, key: cleanKey }
+  }
+
+  test('Rejects RYMON-MASTER-KEY unconditionally', () => {
+    const res = verifyLicenseKeyRule('RYMON-MASTER-KEY')
+    assert.equal(res.valid, false)
+    assert.match(res.error, /permanently revoked/i)
+  })
+
+  test('Rejects any variant containing MASTER or OWNER', () => {
+    assert.equal(verifyLicenseKeyRule('rymon-master-key').valid, false)
+    assert.equal(verifyLicenseKeyRule('MASTER-KEY-123').valid, false)
+    assert.equal(verifyLicenseKeyRule('VIP-OWNER-BYPASS').valid, false)
+  })
+
+  test('Accepts standard valid license keys', () => {
+    const res = verifyLicenseKeyRule('RYMON-FF-E9SA-UMC8')
+    assert.equal(res.valid, true)
+    assert.equal(res.key, 'RYMON-FF-E9SA-UMC8')
+  })
+})
+
+

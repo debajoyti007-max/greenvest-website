@@ -83,22 +83,12 @@ export default async function handler(req, res) {
       })
     }
 
-    // 1. Root Master Key Shortcut
     const upperKey = userKey.toUpperCase()
     if (upperKey === 'RYMON-MASTER-KEY' || upperKey.includes('MASTER') || upperKey.includes('OWNER')) {
-      const masterApp = targetApp || 'Universal'
-      return res.status(200).json({
-        status: true,
-        success: true,
-        message: 'Root Master Key Authenticated',
-        data: {
-          EXP: 'Lifetime',
-          exp: 'Lifetime',
-          expiry: 'Lifetime',
-          app: masterApp,
-          game: masterApp,
-          status: 'ACTIVE'
-        }
+      return res.status(403).json({
+        status: false,
+        success: false,
+        reason: 'Master key bypass has been permanently revoked. Please use a valid license key.'
       })
     }
 
