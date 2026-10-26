@@ -399,6 +399,13 @@ export default function RymonConnect() {
   const [showPurgeModal, setShowPurgeModal] = useState(false)
   const sliderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Local UI interval ticker for live countdowns (Zero Supabase network egress)
+  const [, setLocalTimeTicker] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => setLocalTimeTicker((t) => t + 1), 30000)
+    return () => clearInterval(timer)
+  }, [])
+
   // Live Database Collections
   const [keysList, setKeysList] = useState<RymonLicense[]>([])
   const [usersList, setUsersList] = useState<RymonAccount[]>([])
@@ -2216,6 +2223,91 @@ export default function RymonConnect() {
     return `${isPaused ? '⏸️ ' : '⏳ '}${mins}m left`
   }
 
+  const formatLastSeen = (lastHeartbeat?: string | null, status?: string) => {
+    if (status === 'WAITING' || !lastHeartbeat) return '⚪ Never Used'
+    const diff = Date.now() - new Date(lastHeartbeat).getTime()
+    if (diff < 60000) return '🟢 Active Just Now'
+    const mins = Math.floor(diff / 60000)
+    if (mins < 60) return `⏱️ ${mins}m ago`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `⏱️ ${hours}h ago`
+    const days = Math.floor(hours / 24)
+    if (days < 30) return `📅 ${days}d ago`
+    return new Date(lastHeartbeat).toLocaleDateString()
+  }
+
+  const getResellerSubscriptionStatus = (user: RymonAccount | null) => {
+    if (!user) return null
+    const isOwnerUser = user.role === 'owner' || user.username?.toLowerCase() === 'debajoyti'
+    if (isOwnerUser) {
+      return {
+        isLifetime: true,
+        label: '👑 FOUNDER PASS',
+        sublabel: 'Lifetime Access (Never Expires)',
+        timeString: 'Lifetime',
+        daysLeft: 9999,
+        isExpired: false,
+        color: '#fde047',
+        bg: 'rgba(250, 204, 21, 0.12)',
+        border: 'rgba(250, 204, 21, 0.35)'
+      }
+    }
+
+    if (!user.expires_at) {
+      return {
+        isLifetime: false,
+        label: '⏳ ACTIVE PASS',
+        sublabel: 'Standard Reseller Plan',
+        timeString: '30 Days Remaining',
+        daysLeft: 30,
+        isExpired: false,
+        color: '#38bdf8',
+        bg: 'rgba(56, 189, 248, 0.12)',
+        border: 'rgba(56, 189, 248, 0.35)'
+      }
+    }
+
+    const expMs = new Date(user.expires_at).getTime()
+    const diffMs = expMs - Date.now()
+    const isExpired = diffMs <= 0
+    const totalSecs = Math.max(0, Math.floor(diffMs / 1000))
+    const days = Math.floor(totalSecs / 86400)
+    const hours = Math.floor((totalSecs % 86400) / 3600)
+    const mins = Math.floor((totalSecs % 3600) / 60)
+
+    let color = '#38bdf8'
+    let bg = 'rgba(56, 189, 248, 0.12)'
+    let border = 'rgba(56, 189, 248, 0.35)'
+
+    if (isExpired) {
+      color = '#ef4444'
+      bg = 'rgba(239, 68, 68, 0.15)'
+      border = 'rgba(239, 68, 68, 0.45)'
+    } else if (days <= 3) {
+      color = '#f59e0b'
+      bg = 'rgba(245, 158, 11, 0.15)'
+      border = 'rgba(245, 158, 11, 0.45)'
+    }
+
+    const timeString = isExpired
+      ? 'EXPIRED'
+      : days > 0
+      ? `${days}d ${hours}h left`
+      : `${hours}h ${mins}m left`
+
+    return {
+      isLifetime: false,
+      label: isExpired ? '🔴 PASS EXPIRED' : `⏳ ${timeString}`,
+      sublabel: `Ends: ${new Date(expMs).toLocaleDateString()}`,
+      timeString,
+      daysLeft: days,
+      isExpired,
+      color,
+      bg,
+      border
+    }
+  }
+
   const handleResetHWID = async (keyString: string) => {
     const res = await resetHwidBackend(
       keyString,
@@ -4014,6 +4106,36 @@ export default function RymonConnect() {
         </div>
 
         <div className="sg-header-right" style={styles.headerRight}>
+          {/* Reseller Subscription Validity Timer */}
+          {isAuthenticated && currentUser?.role !== 'streamer' && (() => {
+            const sub = getResellerSubscriptionStatus(currentUser)
+            if (!sub) return null
+            return (
+              <div
+                className="sg-sub-pill"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  background: sub.bg,
+                  border: `1px solid ${sub.border}`,
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  color: sub.color,
+                  letterSpacing: '0.2px',
+                  cursor: (isOwner || isAdmin) ? 'pointer' : 'default',
+                  userSelect: 'none'
+                }}
+                onClick={() => (isOwner || isAdmin) && handleSelectTab('users')}
+                title={`Reseller Pass: ${sub.sublabel}`}
+              >
+                <span>{sub.label}</span>
+              </div>
+            )
+          })()}
+
           {/* Wallet Balance Pill */}
           {isAuthenticated && currentUser?.role !== 'streamer' && (
             <div
@@ -4677,6 +4799,40 @@ export default function RymonConnect() {
                   </div>
                 </div>
               </div>
+
+              {/* Reseller Subscription Countdown Pass */}
+              {currentUser && currentUser.role !== 'streamer' && (() => {
+                const sub = getResellerSubscriptionStatus(currentUser)
+                if (!sub) return null
+                return (
+                  <div
+                    style={{
+                      marginTop: '10px',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      background: sub.bg,
+                      border: `1px solid ${sub.border}`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '3px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, color: sub.color, letterSpacing: '0.2px' }}>
+                        {sub.label}
+                      </span>
+                      {sub.isExpired && (
+                        <span style={{ fontSize: '8.5px', fontWeight: 800, color: '#f87171', background: 'rgba(239,68,68,0.25)', padding: '1px 5px', borderRadius: '4px' }}>
+                          LOCKED
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '9.5px', color: '#94a3b8' }}>
+                      {sub.sublabel}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Nav Categories */}
@@ -6400,6 +6556,11 @@ export default function RymonConnect() {
                                     {copiedDeliverySlip === k.license_key ? <IconCheck size={12} color="#05df72" /> : <IconReceipt size={12} color="#cbd5e1" />}
                                   </button>
                                 </div>
+                                {k.created_at && (
+                                  <div style={{ fontSize: '9.5px', color: '#64748b', marginTop: '3px' }}>
+                                    📅 Created: {new Date(k.created_at).toLocaleDateString()}
+                                  </div>
+                                )}
                               </td>
                               <td style={styles.td}>
                                 <div style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 600 }}>
@@ -6571,6 +6732,9 @@ export default function RymonConnect() {
                                       • {new Date(k.expires_at).toLocaleDateString()}
                                     </span>
                                   )}
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
+                                  {formatLastSeen(k.last_heartbeat, k.status)}
                                 </div>
                               </td>
                               <td style={styles.td}>
