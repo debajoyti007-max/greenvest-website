@@ -29,7 +29,6 @@ export const DEFAULT_CONFIG = {
   VITE_SUPABASE_ANON_KEY: 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR',
   VITE_SUPER_ADMIN_EMAIL: 'debajoyti007@gmail.com',
   VITE_SUPER_ADMIN_PHONE: '8170859653',
-  VITE_STORE_NAME: 'MS Vegetable Center',
 }
 
 export function parseEnvContent(content) {
