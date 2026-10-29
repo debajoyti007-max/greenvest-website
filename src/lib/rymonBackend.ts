@@ -761,9 +761,29 @@ export async function verifyLicenseKey(
   return { valid: false, error: 'Invalid license key. Check key string or generate a new key.' }
 }
 
+// ============================================================================
+// ASYNC & EVENT LOOP PERFORMANCE UTILITIES (Guide 2 & 3 Senior Dev Upgrades)
+// ============================================================================
+
+/**
+ * Event Loop Cooperative Yielding:
+ * Breaks long JavaScript tasks (> 50ms) and yields execution back to the browser's
+ * Event Loop, preventing UI frame drops and keeping Interaction to Next Paint (INP) fast.
+ */
+export async function yieldToMain(): Promise<void> {
+  if (typeof (globalThis as any).scheduler?.yield === 'function') {
+    return (globalThis as any).scheduler.yield()
+  }
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+// In-flight Promise memoization for downline tree resolutions (saves network roundtrips)
+const downlinePromiseCache = new Map<string, { promise: Promise<Set<string>>; expires: number }>()
+
 /**
  * Recursively resolves all usernames belonging to actor's downline tree.
  * Traverses parent (uplink) -> child relationship in full breadth/depth.
+ * Uses in-flight Promise sharing so concurrent callers reuse a single network round-trip.
  */
 async function getDownlineUsernames(
   actorUsername: string,
@@ -774,48 +794,60 @@ async function getDownlineUsernames(
   if (!cleanActor) return result
   if (includeSelf) result.add(cleanActor)
 
-  let accounts: { username: string; uplink?: string }[] = []
-
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('rymon_accounts')
-        .select('username, uplink')
-      if (!error && Array.isArray(data)) {
-        accounts = data
-      }
-    } catch {}
+  const cacheKey = `${cleanActor}::${includeSelf}`
+  const now = Date.now()
+  const cached = downlinePromiseCache.get(cacheKey)
+  if (cached && cached.expires > now) {
+    return cached.promise
   }
 
-  if (accounts.length === 0) {
-    accounts = getStoredAccounts()
-  }
+  const fetchPromise = (async () => {
+    let accounts: { username: string; uplink?: string }[] = []
 
-  const childMap = new Map<string, string[]>()
-  for (const acc of accounts) {
-    const parent = (acc.uplink || '').trim().toLowerCase()
-    const child = (acc.username || '').trim().toLowerCase()
-    if (parent && child) {
-      if (!childMap.has(parent)) childMap.set(parent, [])
-      childMap.get(parent)!.push(child)
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('rymon_accounts')
+          .select('username, uplink')
+        if (!error && Array.isArray(data)) {
+          accounts = data
+        }
+      } catch {}
     }
-  }
 
-  const queue: string[] = [cleanActor]
-  while (queue.length > 0) {
-    const curr = queue.shift()!
-    const children = childMap.get(curr)
-    if (children) {
-      for (const ch of children) {
-        if (!result.has(ch)) {
-          result.add(ch)
-          queue.push(ch)
+    if (accounts.length === 0) {
+      accounts = getStoredAccounts()
+    }
+
+    const childMap = new Map<string, string[]>()
+    for (const acc of accounts) {
+      const parent = (acc.uplink || '').trim().toLowerCase()
+      const child = (acc.username || '').trim().toLowerCase()
+      if (parent && child) {
+        if (!childMap.has(parent)) childMap.set(parent, [])
+        childMap.get(parent)!.push(child)
+      }
+    }
+
+    const queue: string[] = [cleanActor]
+    while (queue.length > 0) {
+      const curr = queue.shift()!
+      const children = childMap.get(curr)
+      if (children) {
+        for (const ch of children) {
+          if (!result.has(ch)) {
+            result.add(ch)
+            queue.push(ch)
+          }
         }
       }
     }
-  }
 
-  return result
+    return result
+  })()
+
+  downlinePromiseCache.set(cacheKey, { promise: fetchPromise, expires: now + 5000 })
+  return fetchPromise
 }
 
 function getDownlineUsernamesSync(
