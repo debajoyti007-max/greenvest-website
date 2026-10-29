@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import RymonIntroVideo from './components/RymonIntroVideo'
+import MontageMascot from './components/MontageMascot'
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="*" element={<RymonConnect />} />
         </Routes>
       </Suspense>
+      <MontageMascot />
     </BrowserRouter>
   )
 }
