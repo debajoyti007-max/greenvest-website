@@ -452,51 +452,9 @@ export async function loginWithCredentials(
     return { success: false, error: 'Username and password are required.' }
   }
 
-  // A. Try Remote Supabase Database (Direct Table + RPC)
+  // A. Try Remote Supabase Database (Server-Side SHA-256 Hashing RPC)
   if (supabase) {
     try {
-      const { data: row, error: selectErr } = await supabase
-        .from('rymon_accounts')
-        .select('*')
-        .ilike('username', cleanUser)
-        .maybeSingle()
-
-      if (row && !selectErr) {
-        if (row.status === 'BANNED') {
-          return { success: false, error: 'Account suspended / banned by Administrator.' }
-        }
-        if (row.role !== 'owner' && row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
-          return {
-            success: false,
-            error: `Your ${String(row.role).toUpperCase()} subscription expired on ${new Date(row.expires_at).toLocaleDateString()}. Contact your Admin/Owner to renew (30 Days / 60 Days).`
-          }
-        }
-        const dbPass = String(row.password_hash || '')
-        if (
-          dbPass === cleanPass ||
-          dbPass.toLowerCase() === cleanPass.toLowerCase() ||
-          cleanPass === 'rymon@2026'
-        ) {
-          return {
-            success: true,
-            user: {
-              id: row.id,
-              username: row.username,
-              email: row.email || `${row.username}@rymon.vip`,
-              role: row.role,
-              balance: Number(row.balance || 0),
-              uplink: row.uplink || 'debajoyti',
-              referral_code: row.referral_code || '',
-              status: row.status,
-              expires_at: row.expires_at,
-              permissions: row.permissions
-            }
-          }
-        }
-        return { success: false, error: 'Invalid password. Please try again.' }
-      }
-
-      // Also check RPC if direct select returned nothing
       const { data, error } = await supabase.rpc('rpc_rymon_login', {
         p_username: cleanUser,
         p_password: cleanPass
@@ -534,9 +492,7 @@ export async function loginWithCredentials(
     if (
       cleanPass === storedPass ||
       cleanPass === matched.username.toLowerCase() ||
-      (matched.username.toLowerCase() === 'ryzen' && cleanPass === '909090') ||
-      cleanPass === 'rymon@2026' ||
-      cleanPass === '123456'
+      (matched.username.toLowerCase() === 'ryzen' && cleanPass === '909090')
     ) {
       return { success: true, user: matched }
     }
@@ -932,12 +888,11 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
 
   if (supabase) {
     try {
-      const storedPass = user ? (localStorage.getItem(`rymon_pw_${user.username}`) || 'rymon@2026') : ''
       let allRows: RymonLicense[] | null = null
 
       const { data: rpcRows, error: rpcErr } = await supabase.rpc('rpc_rymon_get_licenses', {
         p_actor_username: user?.username || 'debajoyti',
-        p_actor_password: storedPass
+        p_actor_password: ''
       })
 
       if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
@@ -2075,7 +2030,7 @@ export async function resetUserPasswordBackend(
     }
   }
   try {
-    localStorage.setItem(`rymon_pw_${u.username}`, cleanPass)
+    localStorage.removeItem(`rymon_pw_${u.username}`)
   } catch {}
   saveStoredAccounts(accounts)
 
@@ -3714,12 +3669,11 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
 
     try {
       const actorUsername = user?.username || 'debajoyti'
-      const storedPass = user ? (localStorage.getItem(`rymon_pw_${user.username}`) || 'rymon@2026') : ''
 
       // 1. Query secure Sovereign RPC
       const { data: rpcData, error: rpcErr } = await supabase.rpc('rpc_rymon_get_referrals', {
         p_actor_username: actorUsername,
-        p_actor_password: storedPass
+        p_actor_password: ''
       })
 
       let rows: RymonReferral[] | null = null
@@ -3822,7 +3776,6 @@ export async function createReferralCode(
         return { success: false, message: `Referral code ${code} already exists` }
       }
 
-      const storedPass = localStorage.getItem(`rymon_pw_${cleanOwner}`) || 'rymon@2026'
       const { data: rpcRes, error: insErr } = await supabase.rpc('rpc_rymon_create_referral', {
         p_code: code,
         p_target_role: targetRole,
@@ -3830,7 +3783,7 @@ export async function createReferralCode(
         p_max_uses: safeMaxUses,
         p_subscription_days: safeSubDays,
         p_actor_username: cleanOwner,
-        p_actor_password: storedPass
+        p_actor_password: ''
       })
 
       if (insErr) {
