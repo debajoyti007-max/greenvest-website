@@ -172,7 +172,16 @@ AS $$
 DECLARE
     v_acc public.rymon_accounts%ROWTYPE;
 BEGIN
-    -- Case insensitive lookup
+    -- 1. Auto-cleanup: proactively mark any past-due licenses and controls as EXPIRED
+    UPDATE public.rymon_licenses
+    SET status = 'EXPIRED', updated_at = now()
+    WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= now();
+
+    UPDATE public.rymon_streamer_controls
+    SET is_active = false, is_online = false, updated_at = now()
+    WHERE expires_at IS NOT NULL AND expires_at <= now() AND is_active = true;
+
+    -- 2. Case insensitive lookup
     SELECT * INTO v_acc
     FROM public.rymon_accounts
     WHERE LOWER(username) = LOWER(TRIM(p_username));
