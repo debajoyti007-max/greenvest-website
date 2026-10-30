@@ -56,7 +56,10 @@ function getVipState(key) {
       license_key: normKey,
       is_online: false,
       is_paused: false,
-      is_active: true,
+      is_active: false, // Default false until verified against database
+      status: 'WAITING',
+      expires_at: null,
+      _lastVerified: 0,
       in_game_panel: true,
       aim_silent: false,
       hit_rate: 100,
@@ -91,6 +94,74 @@ function getVipState(key) {
   return vipStates.get(normKey)
 }
 
+async function syncAndValidateVipLicense(normKey, state) {
+  const now = Date.now()
+  // Fast in-memory check
+  if (state.expires_at) {
+    const expMs = new Date(state.expires_at).getTime()
+    if (!isNaN(expMs) && expMs <= now) {
+      state.is_active = false
+      state.is_paused = true
+      state.is_online = false
+      state.status = 'EXPIRED'
+      return state
+    }
+  }
+
+  // Supabase database verification if unverified or older than 3 minutes
+  if (!state._lastVerified || (now - state._lastVerified > 180000)) {
+    try {
+      const { data, error } = await supabase
+        .from('rymon_licenses')
+        .select('status, expires_at, is_paused, creator_username')
+        .eq('license_key', normKey)
+        .maybeSingle()
+
+      state._lastVerified = now
+
+      if (error || !data) {
+        // Key not found in DB or deleted/purged -> strictly expired/inactive
+        state.is_active = false
+        state.is_paused = true
+        state.is_online = false
+        state.status = 'EXPIRED'
+      } else {
+        state.status = data.status || 'ACTIVE'
+        state.expires_at = data.expires_at || null
+        if (data.creator_username) state.creator = data.creator_username
+        const expMs = data.expires_at ? new Date(data.expires_at).getTime() : 0
+
+        if (data.status === 'EXPIRED' || (expMs > 0 && expMs <= now)) {
+          state.is_active = false
+          state.is_paused = true
+          state.is_online = false
+          state.status = 'EXPIRED'
+        } else if (data.status === 'BANNED') {
+          state.is_active = false
+          state.is_paused = true
+          state.is_online = false
+          state.status = 'BANNED'
+        } else if (data.is_paused) {
+          state.is_paused = true
+          state.is_active = false
+        } else {
+          state.is_active = true
+          state.is_paused = false
+        }
+      }
+    } catch {
+      if (state.expires_at && new Date(state.expires_at).getTime() <= now) {
+        state.is_active = false
+        state.is_paused = true
+        state.is_online = false
+        state.status = 'EXPIRED'
+      }
+    }
+  }
+
+  return state
+}
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
@@ -117,6 +188,7 @@ const healthServer = http.createServer(async (req, res) => {
       res.writeHead(400, CORS_HEADERS)
       return res.end(JSON.stringify({ ok: false, error: 'Missing key parameter' }))
     }
+    await syncAndValidateVipLicense(String(key || '').trim().toUpperCase(), state)
     res.writeHead(200, CORS_HEADERS)
     return res.end(JSON.stringify({ ok: true, state }))
   }
@@ -125,7 +197,7 @@ const healthServer = http.createServer(async (req, res) => {
   if ((req.method === 'POST' || req.method === 'PATCH') && pathname === '/api/vip/patch') {
     let body = ''
     req.on('data', (chunk) => { body += chunk })
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}')
         const key = payload.license_key || payload.key || urlObj.searchParams.get('key')
@@ -133,6 +205,19 @@ const healthServer = http.createServer(async (req, res) => {
         if (!state) {
           res.writeHead(400, CORS_HEADERS)
           return res.end(JSON.stringify({ ok: false, error: 'Invalid or missing key' }))
+        }
+
+        await syncAndValidateVipLicense(String(key || '').trim().toUpperCase(), state)
+
+        // Strict expiration / revocation protection: expired or banned keys cannot be enabled
+        if (state.status === 'EXPIRED' || state.status === 'BANNED' || (state.expires_at && new Date(state.expires_at).getTime() <= Date.now())) {
+          state.is_active = false
+          state.is_paused = true
+          state.is_online = false
+          state.status = 'EXPIRED'
+          state.updated_at = new Date().toISOString()
+          res.writeHead(200, CORS_HEADERS)
+          return res.end(JSON.stringify({ ok: true, state }))
         }
 
         // Apply incoming fields
@@ -176,7 +261,7 @@ const healthServer = http.createServer(async (req, res) => {
   if (req.method === 'POST' && pathname === '/api/vip/command') {
     let body = ''
     req.on('data', (chunk) => { body += chunk })
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}')
         const key = payload.key || payload.license_key
@@ -185,6 +270,18 @@ const healthServer = http.createServer(async (req, res) => {
           res.writeHead(400, CORS_HEADERS)
           return res.end(JSON.stringify({ ok: false, error: 'Invalid or missing key' }))
         }
+
+        await syncAndValidateVipLicense(String(key || '').trim().toUpperCase(), state)
+
+        if (state.status === 'EXPIRED' || state.status === 'BANNED' || (state.expires_at && new Date(state.expires_at).getTime() <= Date.now())) {
+          state.is_active = false
+          state.is_paused = true
+          state.is_online = false
+          state.status = 'EXPIRED'
+          res.writeHead(403, CORS_HEADERS)
+          return res.end(JSON.stringify({ ok: false, error: 'License key has expired or is invalid.' }))
+        }
+
         if (payload.toggle !== undefined) {
           state[payload.toggle] = payload.value
           if (payload.toggle === 'esp_radar') {
@@ -268,6 +365,18 @@ healthServer.listen(PORT, '0.0.0.0', () => {
 setInterval(async () => {
   const now = Date.now()
   for (const [key, state] of vipStates.entries()) {
+    // Proactive expiry detection: auto-freeze if key expired in the background
+    if (state.expires_at) {
+      const expMs = new Date(state.expires_at).getTime()
+      if (!isNaN(expMs) && expMs <= now && state.status !== 'EXPIRED') {
+        state.is_active = false
+        state.is_paused = true
+        state.is_online = false
+        state.status = 'EXPIRED'
+        state._dirty = true
+      }
+    }
+
     if (state.is_online || state._dirty) {
       try {
         const telem = `VIP|P:${state.in_game_panel ? 1 : 0}|E:${state.enemies || 0}|B:${state.bots || 0}`

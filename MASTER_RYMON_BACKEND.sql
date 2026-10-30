@@ -283,14 +283,19 @@ BEGIN
         );
     END IF;
 
-    -- 2. Lookup License Record (with Self-Healing from Streamer Controls)
+    -- 2. Lookup License Record (with Safe Self-Healing from Streamer Controls)
     SELECT * INTO v_lic
     FROM public.rymon_licenses
     WHERE license_key = v_clean_key;
 
     IF NOT FOUND THEN
-        -- Check Streamer Controls table fallback: self-heal into rymon_licenses
-        IF EXISTS (SELECT 1 FROM public.rymon_streamer_controls WHERE license_key = v_clean_key) THEN
+        -- Check Streamer Controls table fallback: ONLY self-heal if the record actually has remaining time!
+        IF EXISTS (
+            SELECT 1 FROM public.rymon_streamer_controls
+            WHERE license_key = v_clean_key
+              AND expires_at IS NOT NULL
+              AND expires_at > now()
+        ) THEN
             INSERT INTO public.rymon_licenses (
                 license_key, game, plan_duration, creator_username,
                 devices_used, devices_max, device_hwid, status, expires_at, created_at, updated_at, is_paused
@@ -303,8 +308,8 @@ BEGIN
                 0,
                 GREATEST(COALESCE(sc.devices_max, 1), 1),
                 COALESCE(sc.device_hwid, ''),
-                CASE WHEN sc.is_active THEN 'ACTIVE' ELSE 'BANNED' END,
-                COALESCE(sc.expires_at, now() + INTERVAL '30 days'),
+                'ACTIVE',
+                sc.expires_at,
                 now(),
                 now(),
                 COALESCE(sc.is_paused, false)
@@ -314,9 +319,11 @@ BEGIN
                 SET updated_at = now()
             RETURNING * INTO v_lic;
         ELSE
+            -- If key does not exist or was expired/deleted, reject immediately
             RETURN jsonb_build_object(
                 'valid', false,
-                'error', 'License key not found. Check key string or generate a new key.'
+                'is_expired', true,
+                'error', 'License key not found or expired. Renew subscription via Telegram @Rymon007bot.'
             );
         END IF;
     END IF;
@@ -325,6 +332,7 @@ BEGIN
     IF v_lic.status = 'BANNED' THEN
         RETURN jsonb_build_object(
             'valid', false,
+            'is_banned', true,
             'error', 'License key has been revoked/banned by administrator.'
         );
     END IF;
@@ -338,7 +346,27 @@ BEGIN
         );
     END IF;
 
-    -- 5. Cross-App Isolation Enforcement (Two-Way Strict Enforcement)
+    -- 5. Check Expiration FIRST before activation or binding
+    IF v_lic.status = 'EXPIRED' OR (v_lic.expires_at IS NOT NULL AND v_lic.expires_at <= now()) THEN
+        UPDATE public.rymon_licenses
+        SET status = 'EXPIRED',
+            updated_at = now()
+        WHERE id = v_lic.id;
+
+        UPDATE public.rymon_streamer_controls
+        SET is_active = false,
+            is_online = false,
+            updated_at = now()
+        WHERE license_key = v_clean_key;
+
+        RETURN jsonb_build_object(
+            'valid', false,
+            'is_expired', true,
+            'error', 'License key expired on ' || to_char(v_lic.expires_at, 'DD/MM/YYYY HH24:MI') || '. Renew via Telegram @Rymon007bot.'
+        );
+    END IF;
+
+    -- 6. Cross-App Isolation Enforcement (Two-Way Strict Enforcement)
     v_lic_game := TRIM(COALESCE(v_lic.game, 'Free Fire MAX'));
     IF v_lic_game = '' THEN v_lic_game := 'Free Fire MAX'; END IF;
 
@@ -361,7 +389,7 @@ BEGIN
         END IF;
     END IF;
 
-    -- 6. Parse Duration Interval
+    -- 7. Parse Duration Interval
     IF v_lic.plan_duration ILIKE '%2 Hour%' THEN v_duration_interval := INTERVAL '2 hours';
     ELSIF v_lic.plan_duration ILIKE '%1 Day%' THEN v_duration_interval := INTERVAL '1 day';
     ELSIF v_lic.plan_duration ILIKE '%3 Day%' THEN v_duration_interval := INTERVAL '3 days';
@@ -371,8 +399,8 @@ BEGIN
     ELSE v_duration_interval := INTERVAL '30 days';
     END IF;
 
-    -- 7. First-time Activation (WAITING -> ACTIVE)
-    IF v_lic.status = 'WAITING' OR v_lic.expires_at IS NULL THEN
+    -- 8. First-time Activation: strictly ONLY when WAITING and NEVER previously activated (expires_at IS NULL)
+    IF v_lic.status = 'WAITING' AND v_lic.expires_at IS NULL THEN
         v_calc_expiry := now() + v_duration_interval;
         IF v_clean_hwid = '' THEN
             v_clean_hwid := 'ANDROID-DEVICE-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 8));
@@ -401,6 +429,17 @@ BEGIN
         v_lic.expires_at := v_calc_expiry;
         v_lic.devices_used := 1;
         v_lic.device_hwid := v_clean_hwid;
+    ELSIF v_lic.status = 'WAITING' AND v_lic.expires_at IS NOT NULL THEN
+        -- If it somehow had expires_at while in WAITING, re-check expiration
+        IF v_lic.expires_at <= now() THEN
+            UPDATE public.rymon_licenses SET status = 'EXPIRED', updated_at = now() WHERE id = v_lic.id;
+            UPDATE public.rymon_streamer_controls SET is_active = false, is_online = false, updated_at = now() WHERE license_key = v_clean_key;
+            RETURN jsonb_build_object(
+                'valid', false,
+                'is_expired', true,
+                'error', 'License key expired on ' || to_char(v_lic.expires_at, 'DD/MM/YYYY HH24:MI') || '. Renew via Telegram @Rymon007bot.'
+            );
+        END IF;
     ELSE
         -- 8. Check Expiration
         IF v_lic.expires_at < now() THEN
@@ -716,6 +755,7 @@ BEGIN
         devices_used = 0,
         status = CASE
             WHEN is_paused THEN 'PAUSED'
+            WHEN expires_at IS NOT NULL AND expires_at <= now() THEN 'EXPIRED'
             WHEN expires_at IS NOT NULL AND expires_at > now() THEN 'ACTIVE'
             ELSE 'WAITING'
         END,
@@ -760,20 +800,33 @@ SET search_path = public
 AS $$
 DECLARE
     v_status TEXT;
+    v_lic RECORD;
 BEGIN
-    v_status := CASE WHEN p_action = 'ban' THEN 'BANNED' ELSE 'ACTIVE' END;
-
     IF p_type = 'user' THEN
+        v_status := CASE WHEN p_action = 'ban' THEN 'BANNED' ELSE 'ACTIVE' END;
         UPDATE public.rymon_accounts
         SET status = v_status, updated_at = now()
         WHERE LOWER(username) = LOWER(TRIM(p_target));
     ELSE
+        IF p_action = 'ban' THEN
+            v_status := 'BANNED';
+        ELSE
+            SELECT expires_at INTO v_lic FROM public.rymon_licenses WHERE license_key = UPPER(TRIM(p_target));
+            IF FOUND AND v_lic.expires_at IS NOT NULL AND v_lic.expires_at <= now() THEN
+                v_status := 'EXPIRED';
+            ELSIF FOUND AND v_lic.expires_at IS NULL THEN
+                v_status := 'WAITING';
+            ELSE
+                v_status := 'ACTIVE';
+            END IF;
+        END IF;
+
         UPDATE public.rymon_licenses
         SET status = v_status, updated_at = now()
         WHERE license_key = UPPER(TRIM(p_target));
 
         UPDATE public.rymon_streamer_controls
-        SET is_active = (p_action != 'ban'), updated_at = now()
+        SET is_active = (v_status = 'ACTIVE'), updated_at = now()
         WHERE license_key = UPPER(TRIM(p_target));
     END IF;
 
