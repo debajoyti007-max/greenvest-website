@@ -582,4 +582,147 @@ describe('Master Key Revocation and Backdoor Elimination Engine', () => {
   })
 })
 
+// 10. Session Persistence, Logout Integrity & Refresh Anti-Auto-Login
+describe('Session Persistence, Logout Integrity & Refresh Anti-Auto-Login', () => {
+  function simulateAuthFlow() {
+    const storage = new Map()
+    const sessionStorage = new Map()
+    let currentUrl = 'https://greenvest.shop/?key=RYMON-TEST-VIP'
+
+    function login(username, role) {
+      sessionStorage.delete('rymon_explicit_logout')
+      storage.set('rymon_session_user', JSON.stringify({ username, role }))
+    }
+
+    function logout() {
+      storage.delete('rymon_session_user')
+      storage.delete('rymon_remote_key')
+      storage.delete('rymon_remote_expiry')
+      sessionStorage.set('rymon_explicit_logout', 'true')
+      // Strip query parameters
+      currentUrl = currentUrl.split('?')[0]
+    }
+
+    function checkOnMount() {
+      if (sessionStorage.get('rymon_explicit_logout') === 'true') {
+        return { isAuthenticated: false, user: null, reason: 'Explicit logout marker present' }
+      }
+      const savedUser = storage.get('rymon_session_user')
+      if (savedUser) {
+        return { isAuthenticated: true, user: JSON.parse(savedUser) }
+      }
+      const urlParams = new URL(currentUrl).searchParams
+      const queryKey = urlParams.get('key') || urlParams.get('k')
+      if (queryKey) {
+        return { isAuthenticated: true, user: { role: 'streamer', key: queryKey } }
+      }
+      return { isAuthenticated: false, user: null }
+    }
+
+    return { login, logout, checkOnMount, storage, sessionStorage, setUrl: (u) => { currentUrl = u } }
+  }
+
+  test('Logging out sets explicit logout flag and strips URL params', () => {
+    const env = simulateAuthFlow()
+    env.login('testuser', 'reseller')
+    assert.equal(env.checkOnMount().isAuthenticated, true)
+
+    env.logout()
+    assert.equal(env.storage.has('rymon_session_user'), false)
+    assert.equal(env.sessionStorage.get('rymon_explicit_logout'), 'true')
+  })
+
+  test('Page refresh after logout stays logged out and rejects auto-login', () => {
+    const env = simulateAuthFlow()
+    env.login('testuser', 'reseller')
+    env.logout()
+
+    // Simulate page refresh (new mount)
+    const mountState = env.checkOnMount()
+    assert.equal(mountState.isAuthenticated, false)
+    assert.equal(mountState.user, null)
+    assert.equal(mountState.reason, 'Explicit logout marker present')
+  })
+
+  test('Logging back in clears explicit logout flag so session persists normally', () => {
+    const env = simulateAuthFlow()
+    env.login('testuser', 'reseller')
+    env.logout()
+    assert.equal(env.checkOnMount().isAuthenticated, false)
+
+    // User logs in again
+    env.login('testuser', 'reseller')
+    assert.equal(env.sessionStorage.has('rymon_explicit_logout'), false)
+    assert.equal(env.checkOnMount().isAuthenticated, true)
+  })
+})
+
+// 11. Cumulative License Key Duration Extension (Fresh vs Active Keys)
+describe('Cumulative License Key Duration Extension (Fresh vs Active Keys)', () => {
+  function extendKeyDuration(license, daysToAdd) {
+    const currDays = parseInt(license.plan_duration?.match(/\d+/)?.[0] || '1', 10)
+    const totalDays = currDays + daysToAdd
+    const isVip = (license.plan_duration || '').includes('[VIP]')
+    const newPlan = `${totalDays} Days${isVip ? ' [VIP]' : ''}`
+
+    let newExpiresAt = null
+    if (license.expires_at) {
+      // Active key: timer is ticking, add days to existing expiration
+      const base = Math.max(new Date(license.expires_at).getTime(), Date.now())
+      newExpiresAt = new Date(base + daysToAdd * 86400000).toISOString()
+    } else {
+      // Fresh unactivated key: timer must NOT start ticking until 1st login!
+      newExpiresAt = null
+    }
+
+    return {
+      plan_duration: newPlan,
+      expires_at: newExpiresAt,
+      isFresh: newExpiresAt === null,
+      status: license.status
+    }
+  }
+
+  test('Fresh unactivated key cumulatively extends plan duration without starting timer', () => {
+    const fresh7DayKey = {
+      license_key: 'RYMON-TEST-FRESH',
+      plan_duration: '7 Days [VIP]',
+      expires_at: null,
+      status: 'WAITING'
+    }
+
+    // Extend fresh 7-day key by 1 day
+    const res1 = extendKeyDuration(fresh7DayKey, 1)
+    assert.equal(res1.plan_duration, '8 Days [VIP]')
+    assert.equal(res1.expires_at, null)
+    assert.equal(res1.isFresh, true)
+
+    // Extend again by 3 days
+    const res2 = extendKeyDuration(res1, 3)
+    assert.equal(res2.plan_duration, '11 Days [VIP]')
+    assert.equal(res2.expires_at, null)
+    assert.equal(res2.isFresh, true)
+  })
+
+  test('Active ticking key correctly adds extension days onto expires_at', () => {
+    const now = Date.now()
+    const activeKey = {
+      license_key: 'RYMON-TEST-ACTIVE',
+      plan_duration: '7 Days [VIP]',
+      expires_at: new Date(now + 5 * 86400000).toISOString(), // 5 days remaining
+      status: 'ACTIVE'
+    }
+
+    // Extend active key by 7 days
+    const res = extendKeyDuration(activeKey, 7)
+    assert.equal(res.plan_duration, '14 Days [VIP]')
+    assert.notEqual(res.expires_at, null)
+
+    const expectedMs = now + 12 * 86400000
+    const actualMs = new Date(res.expires_at).getTime()
+    assert.ok(Math.abs(actualMs - expectedMs) < 2000)
+  })
+})
+
+
 

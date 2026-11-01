@@ -24,7 +24,6 @@ import {
   fetchReferralCodes,
   createReferralCode,
   deleteReferralCode,
-  registerWithReferral,
   renewUserSubscriptionBackend,
   updateUserPermissionsBackend,
   togglePauseLicenseBackend,
@@ -398,6 +397,7 @@ export default function RymonConnect() {
   const [isLiveConnected, setIsLiveConnected] = useState(false)
   const [showPurgeModal, setShowPurgeModal] = useState(false)
   const sliderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isLoggingOutRef = useRef(false)
 
   // Local UI interval ticker for live countdowns (Zero Supabase network egress)
   const [, setLocalTimeTicker] = useState(0)
@@ -477,6 +477,7 @@ export default function RymonConnect() {
   const [deleteKeyType, setDeleteKeyType] = useState<'expired' | 'unused' | 'all'>('expired')
   const [targetExtendKey, setTargetExtendKey] = useState('')
   const [extendAmount, setExtendAmount] = useState(7)
+  const [extendLoading, setExtendLoading] = useState(false)
   const [showBulkExtendModal, setShowBulkExtendModal] = useState(false)
   const [bulkExtendDays, setBulkExtendDays] = useState<number>(1)
   const [bulkExtendBusy, setBulkExtendBusy] = useState(false)
@@ -502,15 +503,6 @@ export default function RymonConnect() {
 
   const [selfResetMsg, setSelfResetMsg] = useState('')
   const [selfResetBusy, setSelfResetBusy] = useState(false)
-
-  // User Registration with Referral Code State
-  const [isRegisterMode, setIsRegisterMode] = useState(false)
-  const [regUsername, setRegUsername] = useState('')
-  const [regPassword, setRegPassword] = useState('')
-  const [regEmail, setRegEmail] = useState('')
-  const [regInviteCode, setRegInviteCode] = useState('')
-  const [regLoading, setRegLoading] = useState(false)
-  const [regError, setRegError] = useState('')
 
   // Sovereign Referral Codes Engine State
   const [referralList, setReferralList] = useState<RymonReferral[]>([])
@@ -572,7 +564,24 @@ export default function RymonConnect() {
 
   // 1. Initial Session & Database Verification on Mount
   useEffect(() => {
+    // 0. Explicit logout guard: If user explicitly logged out in this session, DO NOT auto-restore session!
+    const isExplicitlyLoggedOut =
+      typeof window !== 'undefined' &&
+      window.sessionStorage.getItem('rymon_explicit_logout') === 'true'
 
+    if (isExplicitlyLoggedOut) {
+      try {
+        localStorage.removeItem('rymon_session_user')
+        localStorage.removeItem('rymon_remote_key')
+        localStorage.removeItem('rymon_remote_expiry')
+        if (window.history?.replaceState) {
+          window.history.replaceState({}, document.title, window.location.pathname || '/')
+        }
+      } catch {}
+      setIsAuthenticated(false)
+      setCurrentUser(null)
+      return
+    }
 
     // Check if key or auto-reset is provided via query parameter (?key=..., ?k=..., or ?reset=...)
     let queryKey = ''
@@ -660,7 +669,7 @@ export default function RymonConnect() {
                 liveAcc = data
               }
 
-              if (liveAcc) {
+              if (liveAcc && !isLoggingOutRef.current && localStorage.getItem('rymon_session_user')) {
                 const isSovereignOwner =
                   liveAcc.username?.toLowerCase() === 'debajoyti' || liveAcc.username?.toLowerCase() === 'ryzen'
                 const effectiveRole = isSovereignOwner ? 'owner' : (liveAcc.role || u.role)
@@ -735,7 +744,7 @@ export default function RymonConnect() {
         fetchRegisteredApps()
       ])
 
-      if (isMounted) {
+      if (isMounted && !isLoggingOutRef.current) {
         setGlobalPrices(getGlobalPriceMap())
         setAllCustomUserMaps(getAllUserCustomPriceMaps())
         setSecurityPolicy(getSovereignSecurityPolicy())
@@ -777,8 +786,8 @@ export default function RymonConnect() {
           if (freshMe) {
             setWalletBalance(freshMe.balance)
             setCurrentUser((prev) => {
+              if (!prev || isLoggingOutRef.current) return null
               if (
-                !prev ||
                 prev.balance !== freshMe.balance ||
                 prev.role !== freshMe.role ||
                 prev.status !== freshMe.status ||
@@ -798,10 +807,10 @@ export default function RymonConnect() {
               const { data: myAcc } = await supabase.rpc('rpc_rymon_get_account', {
                 p_username: currentUser.username
               })
-              if (myAcc && myAcc.found) {
+              if (myAcc && myAcc.found && !isLoggingOutRef.current) {
                 setWalletBalance(Number(myAcc.balance) || 0)
                 setCurrentUser((prev) => {
-                  if (!prev) return null
+                  if (!prev || isLoggingOutRef.current) return null
                   if (
                     prev.balance !== Number(myAcc.balance) ||
                     prev.role !== myAcc.role ||
@@ -1404,6 +1413,10 @@ export default function RymonConnect() {
     setAuthLoading(false)
 
     if (res.success && res.user) {
+      isLoggingOutRef.current = false
+      try {
+        sessionStorage.removeItem('rymon_explicit_logout')
+      } catch {}
       clearRymonThrottle(throttleKey)
       setStaffLockSeconds(0)
       setCurrentUser(res.user)
@@ -1451,6 +1464,10 @@ export default function RymonConnect() {
     setAuthLoading(false)
 
     if (res.valid && res.key) {
+      isLoggingOutRef.current = false
+      try {
+        sessionStorage.removeItem('rymon_explicit_logout')
+      } catch {}
       clearRymonThrottle(throttleKey)
       setKeyLockSeconds(0)
       const cleanKey = res.key
@@ -1488,13 +1505,31 @@ export default function RymonConnect() {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('rymon_session_user')
-    localStorage.removeItem('rymon_remote_key')
-    localStorage.removeItem('rymon_remote_expiry')
+    isLoggingOutRef.current = true
+    try {
+      localStorage.removeItem('rymon_session_user')
+      localStorage.removeItem('rymon_remote_key')
+      localStorage.removeItem('rymon_remote_expiry')
+      sessionStorage.setItem('rymon_explicit_logout', 'true')
+    } catch {}
+
+    // Clean up browser address bar query parameters (?key=..., ?k=..., etc.)
+    if (typeof window !== 'undefined' && window.history?.replaceState) {
+      try {
+        const cleanPath = window.location.pathname || '/'
+        window.history.replaceState({}, document.title, cleanPath)
+      } catch {}
+    }
+
     setIsAuthenticated(false)
     setCurrentUser(null)
     setCurrentKey('')
     setRecord(null)
+    setStaffUsername('')
+    setStaffPassword('')
+    setKeyInput('')
+    setAuthError('')
+    setTargetExtendKey('')
     setActiveTab('overview')
   }
 
@@ -1621,9 +1656,9 @@ export default function RymonConnect() {
 
   // 7. KEY GENERATION ENGINE WITH DYNAMIC DEFAULT + INDIVIDUAL USER PRICING
   const effectiveUserPrices = useMemo(() => {
-    return getEffectivePriceMap(currentUser?.username)
+    return getEffectivePriceMap(currentUser?.username, currentUser?.role)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.username, globalPrices, allCustomUserMaps])
+  }, [currentUser?.username, currentUser?.role, globalPrices, allCustomUserMaps])
 
   const hasCustomPricingForCurrentUser = useMemo(() => {
     if (!currentUser?.username) return false
@@ -2239,9 +2274,9 @@ export default function RymonConnect() {
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer')
   }
 
-  const formatRemainingTime = (expiresAt?: string | null, status?: string, isPaused?: boolean) => {
+  const formatRemainingTime = (expiresAt?: string | null, status?: string, isPaused?: boolean, planDuration?: string) => {
     if (status === 'BANNED') return '🚫 BANNED'
-    if (status === 'WAITING' || !expiresAt) return '🟡 Starts on 1st Login'
+    if (status === 'WAITING' || !expiresAt) return `🟡 ${planDuration ? planDuration.replace(' [VIP]', '') : 'Fresh'} (1st Login)`
     const diff = new Date(expiresAt).getTime() - Date.now()
     if (diff <= 0 || status === 'EXPIRED') return '🔴 EXPIRED'
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -2528,6 +2563,7 @@ export default function RymonConnect() {
   }
 
   const handleApplyExtendKey = async () => {
+    if (extendLoading) return
     if (!targetExtendKey) {
       alert('Please select a target key.')
       return
@@ -2547,26 +2583,32 @@ export default function RymonConnect() {
       alert(`Insufficient wallet balance! Extending this key by +${extendAmount} days costs ₹${cost}, but your balance is ₹${currentBal}.`)
       return
     }
-    const res = await extendLicenseBackend(
-      targetExtendKey,
-      extendAmount,
-      currentUser?.username || 'debajoyti'
-    )
-    if (res.success) {
-      if (res.remainingBalance !== undefined && currentUser) {
-        setWalletBalance(res.remainingBalance)
-        const updatedMe = { ...currentUser, balance: res.remainingBalance }
-        setCurrentUser(updatedMe)
-        localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
-      }
-      showToast(
-        `License ${targetExtendKey} extended by +${extendAmount} days!${
-          !isOwner && res.cost ? ` (₹${res.cost} deducted from wallet)` : ''
-        }`
+    setExtendLoading(true)
+    try {
+      const res = await extendLicenseBackend(
+        targetExtendKey,
+        extendAmount,
+        currentUser?.username || 'debajoyti'
       )
-      fetchAllLicenses(currentUser).then(setKeysList)
-    } else {
-      alert(res.error || 'Failed to extend license.')
+      if (res.success) {
+        if (res.remainingBalance !== undefined && currentUser) {
+          setWalletBalance(res.remainingBalance)
+          const updatedMe = { ...currentUser, balance: res.remainingBalance }
+          setCurrentUser(updatedMe)
+          localStorage.setItem('rymon_session_user', JSON.stringify(updatedMe))
+        }
+        showToast(
+          `License ${targetExtendKey} extended by +${extendAmount} days!${
+            !isOwner && res.cost ? ` (₹${res.cost} deducted from wallet)` : ''
+          }`
+        )
+        setTargetExtendKey('')
+        fetchAllLicenses(currentUser).then(setKeysList)
+      } else {
+        alert(res.error || 'Failed to extend license.')
+      }
+    } finally {
+      setExtendLoading(false)
     }
   }
 
@@ -2605,26 +2647,6 @@ export default function RymonConnect() {
   }
 
   // 12. REFERRAL ONBOARDING & CONNECT API HANDLERS
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setRegLoading(true)
-    setRegError('')
-
-    const res = await registerWithReferral(regUsername, regPassword, regEmail, regInviteCode)
-    setRegLoading(false)
-
-    if (res.success && res.user) {
-      setCurrentUser(res.user)
-      setWalletBalance(res.user.balance)
-      setIsAuthenticated(true)
-      localStorage.setItem('rymon_session_user', JSON.stringify(res.user))
-      showToast(`Welcome! You are registered as ${res.user.role.toUpperCase()} (Starting Balance: ₹${res.user.balance.toLocaleString('en-IN')})`)
-      setActiveTab('overview')
-    } else {
-      setRegError(res.message || 'Registration failed. Check referral code.')
-    }
-  }
-
   const handleCreateReferral = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isOwner && refTargetRole !== 'reseller') {
@@ -4167,18 +4189,35 @@ export default function RymonConnect() {
 
           {/* Wallet Balance Pill */}
           {isAuthenticated && currentUser?.role !== 'streamer' && (
-            <div
-              className="sg-balance-pill"
-              style={styles.balancePill}
-              onClick={() => (isOwner || isAdmin) && handleSelectTab('add-balance')}
-              title={isOwner || isAdmin ? 'Manage balances' : 'Wallet balance'}
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', color: '#a78bfa' }}>
-                <IconWallet />
-              </span>
-              <span style={styles.balanceAmount}>
-                {isOwner ? 'FREE' : `₹${walletBalance.toLocaleString('en-IN')}`}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div
+                className="sg-balance-pill"
+                style={styles.balancePill}
+                onClick={() => (isOwner || isAdmin) && handleSelectTab('add-balance')}
+                title={isOwner || isAdmin ? 'Manage balances' : 'Wallet balance'}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', color: '#a78bfa' }}>
+                  <IconWallet />
+                </span>
+                <span style={styles.balanceAmount}>
+                  {isOwner ? 'FREE' : `₹${walletBalance.toLocaleString('en-IN')}`}
+                </span>
+              </div>
+              {/* ➕ Add Funds button for non-owner users */}
+              {!isOwner && (
+                <button
+                  onClick={() => handleSelectTab('add-balance')}
+                  title="Add funds to your wallet via UPI / Razorpay"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(0,217,255,0.4)',
+                    background: 'rgba(0,217,255,0.08)', color: '#00d9ff',
+                    fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap'
+                  }}
+                >
+                  ➕ Add Funds
+                </button>
+              )}
             </div>
           )}
 
@@ -4317,191 +4356,80 @@ export default function RymonConnect() {
 
           {authMode === 'staff' ? (
             <div>
-              {/* Sign In vs Register Toggle */}
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <h2 style={styles.authHead}>Staff Login</h2>
+
+              <form onSubmit={handleStaffLogin} style={styles.authForm}>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>USERNAME</label>
+                  <input
+                    type="text"
+                    value={staffUsername}
+                    onChange={(e) => setStaffUsername(e.target.value)}
+                    placeholder="Enter registered username"
+                    style={styles.keyInput}
+                    required
+                  />
+                </div>
+
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>PASSWORD</label>
+                  <input
+                    type="password"
+                    value={staffPassword}
+                    onChange={(e) => setStaffPassword(e.target.value)}
+                    placeholder="Enter account password"
+                    style={styles.keyInput}
+                    required
+                  />
+                </div>
+
                 <button
-                  type="button"
-                  onClick={() => {
-                    setIsRegisterMode(false)
-                    setAuthError('')
-                    setRegError('')
-                  }}
+                  type="submit"
+                  disabled={authLoading || staffLockSeconds > 0}
                   style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: !isRegisterMode ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
-                    background: !isRegisterMode ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                    color: !isRegisterMode ? '#00d9ff' : '#94a3b8',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  🔑 Sign In (Existing User)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRegisterMode(true)
-                    setAuthError('')
-                    setRegError('')
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: isRegisterMode ? '1px solid #00d9ff' : '1px solid rgba(255,255,255,0.08)',
-                    background: isRegisterMode ? 'rgba(0, 217, 255, 0.2)' : 'rgba(15, 23, 42, 0.6)',
-                    color: isRegisterMode ? '#00d9ff' : '#94a3b8',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  📝 Register with Invite Code
-                </button>
-              </div>
-
-              {!isRegisterMode ? (
-                <div>
-                  <h2 style={styles.authHead}>Staff Login</h2>
-
-                  <form onSubmit={handleStaffLogin} style={styles.authForm}>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>USERNAME</label>
-                      <input
-                        type="text"
-                        value={staffUsername}
-                        onChange={(e) => setStaffUsername(e.target.value)}
-                        placeholder="Enter registered username"
-                        style={styles.keyInput}
-                        required
-                      />
-                    </div>
-
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>PASSWORD</label>
-                      <input
-                        type="password"
-                        value={staffPassword}
-                        onChange={(e) => setStaffPassword(e.target.value)}
-                        placeholder="Enter account password"
-                        style={styles.keyInput}
-                        required
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={authLoading || staffLockSeconds > 0}
-                      style={{
-                        ...styles.submitBtn,
-                        ...(staffLockSeconds > 0
-                          ? {
-                              background: 'rgba(239, 68, 68, 0.2)',
-                              border: '1px solid #ef4444',
-                              color: '#f87171',
-                              cursor: 'not-allowed'
-                            }
-                          : {})
-                      }}
-                    >
-                      {authLoading
-                        ? 'AUTHENTICATING...'
-                        : staffLockSeconds > 0
-                          ? `🔒 LOCKED (${formatLockCountdown(staffLockSeconds)})`
-                          : 'SIGN IN TO DASHBOARD'}
-                    </button>
-
-                    {staffLockSeconds > 0 && (
-                      <div
-                        style={{
-                          marginTop: '10px',
-                          padding: '10px 14px',
-                          borderRadius: '8px',
-                          background: 'rgba(239, 68, 68, 0.12)',
-                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                    ...styles.submitBtn,
+                    ...(staffLockSeconds > 0
+                      ? {
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          border: '1px solid #ef4444',
                           color: '#f87171',
-                          fontSize: '12.5px',
-                          fontWeight: 600,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between'
-                        }}
-                      >
-                        <span>🔒 5-Minute Security Lockout Active</span>
-                        <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '14px', color: '#ef4444' }}>
-                          {formatLockCountdown(staffLockSeconds)}
-                        </span>
-                      </div>
-                    )}
+                          cursor: 'not-allowed'
+                        }
+                      : {})
+                  }}
+                >
+                  {authLoading
+                    ? 'AUTHENTICATING...'
+                    : staffLockSeconds > 0
+                      ? `🔒 LOCKED (${formatLockCountdown(staffLockSeconds)})`
+                      : 'SIGN IN TO DASHBOARD'}
+                </button>
 
-                    {authError && <div style={styles.errorBox}>{authError}</div>}
-                  </form>
-                </div>
-              ) : (
-                <div>
-                  <h2 style={styles.authHead}>Create Account</h2>
+                {staffLockSeconds > 0 && (
+                  <div
+                    style={{
+                      marginTop: '10px',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      color: '#f87171',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <span>🔒 5-Minute Security Lockout Active</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '14px', color: '#ef4444' }}>
+                      {formatLockCountdown(staffLockSeconds)}
+                    </span>
+                  </div>
+                )}
 
-                  <form onSubmit={handleRegister} style={styles.authForm}>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>DESIRED USERNAME</label>
-                      <input
-                        type="text"
-                        value={regUsername}
-                        onChange={(e) => setRegUsername(e.target.value)}
-                        placeholder="e.g. MyResellerName"
-                        style={styles.keyInput}
-                        required
-                      />
-                    </div>
-
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>PASSWORD</label>
-                      <input
-                        type="password"
-                        value={regPassword}
-                        onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="Create strong account password"
-                        style={styles.keyInput}
-                        required
-                      />
-                    </div>
-
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>EMAIL ADDRESS (OPTIONAL)</label>
-                      <input
-                        type="email"
-                        value={regEmail}
-                        onChange={(e) => setRegEmail(e.target.value)}
-                        placeholder="e.g. contact@domain.com"
-                        style={styles.keyInput}
-                      />
-                    </div>
-
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>
-                        OWNER REFERRAL / INVITE CODE <span style={{ color: '#00d9ff' }}>*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={regInviteCode}
-                        onChange={(e) => setRegInviteCode(e.target.value)}
-                        placeholder="e.g. RYMON-RESELLER-VIP"
-                        style={{ ...styles.keyInput, textTransform: 'uppercase' }}
-                        required
-                      />
-                    </div>
-
-                    <button type="submit" disabled={regLoading} style={styles.submitBtn}>
-                      {regLoading ? 'VERIFYING REFERRAL CODE...' : '⚡ CREATE RYMON ACCOUNT'}
-                    </button>
-
-                    {regError && <div style={styles.errorBox}>{regError}</div>}
-                  </form>
-                </div>
-              )}
+                {authError && <div style={styles.errorBox}>{authError}</div>}
+              </form>
             </div>
           ) : authMode === 'key' ? (
             <div>
@@ -5404,7 +5332,7 @@ export default function RymonConnect() {
             )}
 
             {/* 2. TOP UP / TRANSFER USER BALANCE */}
-            {activeTab === 'add-balance' && (
+            {activeTab === 'add-balance' && (isOwner || isAdmin) && (
               <div className="sg-view-container" style={styles.viewContainer}>
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
@@ -5414,20 +5342,21 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
-                <div style={styles.centerCardWrapper}>
-                  <div className="sg-management-card" style={styles.managementCard}>
-                    <div style={styles.cardHeader}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ ...styles.actionIconCircle, background: 'rgba(5,223,114,0.15)', color: '#05df72' }}>
-                          <IconWallet size={18} color="#05df72" />
-                        </div>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
-                            {isOwner ? 'Top Up Balance' : 'Transfer Balance'}
-                          </h3>
+                {(isOwner || isAdmin) && (
+                  <div style={styles.centerCardWrapper}>
+                    <div className="sg-management-card" style={styles.managementCard}>
+                      <div style={styles.cardHeader}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ ...styles.actionIconCircle, background: 'rgba(5,223,114,0.15)', color: '#05df72' }}>
+                            <IconWallet size={18} color="#05df72" />
+                          </div>
+                          <div>
+                            <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
+                              {isOwner ? 'Top Up Balance' : 'Transfer Balance'}
+                            </h3>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
                     <form onSubmit={handleTopUpSubmit} style={{ marginTop: '24px' }}>
                       <div className="sg-form-grid-2col" style={styles.formGrid2Col}>
@@ -5546,6 +5475,7 @@ export default function RymonConnect() {
                     </form>
                   </div>
                 </div>
+                )}
               </div>
             )}
 
@@ -5959,6 +5889,12 @@ export default function RymonConnect() {
                           <div style={{ fontSize: '20px', fontWeight: 700, color: isVipSelected ? '#fbbf24' : '#00d9ff' }}>
                             {isOwner ? '₹0 (Owner Free Mint)' : `₹${projectedInvoice.toLocaleString('en-IN')}`}
                           </div>
+                          {/* Customer retail price hint — private to reseller/admin */}
+                          {!isOwner && currentUser?.role !== 'user' && projectedInvoice > 0 && (
+                            <div style={{ marginTop: '4px', fontSize: '11px', color: '#a16207', fontWeight: 700 }}>
+                              💡 Customer price: <span style={{ color: '#facc15' }}>₹{Math.ceil(projectedInvoice * 1.4).toLocaleString('en-IN')}</span>
+                            </div>
+                          )}
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontSize: '13px', color: '#94a3b8' }}>Remaining After Creation:</div>
@@ -6754,7 +6690,7 @@ export default function RymonConnect() {
                                     marginTop: '4px'
                                   }}
                                 >
-                                  {formatRemainingTime(k.expires_at, k.status, k.is_paused)}
+                                  {formatRemainingTime(k.expires_at, k.status, k.is_paused, k.plan_duration)}
                                   {k.expires_at && k.status !== 'WAITING' && (
                                     <span style={{ color: '#64748b', fontWeight: 400 }}>
                                       {' '}
@@ -7318,7 +7254,7 @@ export default function RymonConnect() {
 
                     <div style={{ ...styles.formGroup, marginTop: '16px' }}>
                       <label style={styles.formLabel}>
-                        Days to Add (Max 30 Days Cap) <span style={{ color: '#ef4444' }}>*</span>
+                        Days to Add <span style={{ color: '#ef4444' }}>*</span>
                       </label>
                       <select
                         value={extendAmount}
@@ -7329,7 +7265,7 @@ export default function RymonConnect() {
                         <option value="3">3 Days</option>
                         <option value="7">7 Days</option>
                         <option value="15">15 Days</option>
-                        <option value="30">30 Days (Max Cap)</option>
+                        <option value="30">30 Days</option>
                       </select>
                     </div>
 
@@ -7388,14 +7324,17 @@ export default function RymonConnect() {
 
                     <button
                       onClick={handleApplyExtendKey}
+                      disabled={extendLoading || !targetExtendKey}
                       style={{
                         ...styles.submitBtn,
                         marginTop: '20px',
-                        background: '#00d9ff',
-                        color: '#07090e'
+                        background: extendLoading || !targetExtendKey ? 'rgba(0, 217, 255, 0.25)' : '#00d9ff',
+                        color: extendLoading || !targetExtendKey ? '#94a3b8' : '#07090e',
+                        cursor: extendLoading || !targetExtendKey ? 'not-allowed' : 'pointer',
+                        opacity: extendLoading ? 0.7 : 1
                       }}
                     >
-                      Extend Key Expiration
+                      {extendLoading ? 'Extending Key...' : 'Extend Key Expiration'}
                     </button>
                   </div>
                 </div>
@@ -7482,32 +7421,45 @@ export default function RymonConnect() {
                       </form>
                     </div>
                   ) : (
-                    /* Card 1 (Admin/Reseller): Read-only view of Wholesale/Reseller Rates */
+                    /* Card 1 (Admin/Reseller): Wholesale rates + 40% Customer Suggested Price */
                     <div className="sg-card-box" style={styles.cardBox}>
                       <div style={styles.cardHeader}>
                         <h4>{isAdmin ? '🛡️ Your Admin Wholesale Key Rates' : '💼 Your Reseller Key Rates'}</h4>
                         <span style={styles.cyanMiniBadge}>YOUR BASE COST</span>
                       </div>
-                      <div className="sg-form-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '14px' }}>
-                        {Object.keys(DEFAULT_KEY_PRICES).map((plan) => (
-                          <div
-                            key={plan}
-                            style={{
-                              padding: '10px 12px',
-                              borderRadius: '10px',
-                              background: 'rgba(15, 23, 42, 0.65)',
-                              border: '1px solid rgba(255, 255, 255, 0.07)',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center'
-                            }}
-                          >
-                            <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>{plan}</span>
-                            <span style={{ fontSize: '14px', color: '#05df72', fontWeight: 800 }}>
-                              ₹{getEffectivePriceMap(currentUser?.username)[plan] ?? DEFAULT_KEY_PRICES[plan]}
-                            </span>
-                          </div>
-                        ))}
+
+                      {/* Column headers */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '14px', marginBottom: '6px', padding: '0 4px' }}>
+                        <span style={{ fontSize: '10px', color: '#475569', fontWeight: 700, textTransform: 'uppercase' }}>Plan</span>
+                        <span style={{ fontSize: '10px', color: '#05df72', fontWeight: 700, textTransform: 'uppercase', textAlign: 'center' }}>Your Cost</span>
+                        <span style={{ fontSize: '10px', color: '#facc15', fontWeight: 700, textTransform: 'uppercase', textAlign: 'center' }}>Customer Price</span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {Object.keys(DEFAULT_KEY_PRICES).map((plan) => {
+                          const cost = getEffectivePriceMap(currentUser?.username)[plan] ?? DEFAULT_KEY_PRICES[plan]
+                          const customerPrice = Math.ceil(cost * 1.4)
+                          return (
+                            <div
+                              key={plan}
+                              style={{
+                                display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+                                gap: '8px', alignItems: 'center',
+                                padding: '9px 12px', borderRadius: '10px',
+                                background: 'rgba(15, 23, 42, 0.65)',
+                                border: '1px solid rgba(255,255,255,0.06)'
+                              }}
+                            >
+                              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>{plan}</span>
+                              <span style={{ fontSize: '14px', color: '#05df72', fontWeight: 800, textAlign: 'center' }}>₹{cost}</span>
+                              <span style={{ fontSize: '14px', color: '#facc15', fontWeight: 800, textAlign: 'center' }}>₹{customerPrice}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div style={{ marginTop: '12px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(250,204,21,0.07)', border: '1px solid rgba(250,204,21,0.2)', fontSize: '11px', color: '#a16207' }}>
+                        💡 Suggested retail price for your customers.
                       </div>
                     </div>
                   )}

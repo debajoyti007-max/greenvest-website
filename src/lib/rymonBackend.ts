@@ -10,7 +10,7 @@ export interface RymonAccount {
   id: string
   username: string
   email: string
-  role: 'owner' | 'admin' | 'reseller' | 'streamer'
+  role: 'owner' | 'admin' | 'reseller' | 'streamer' | 'user'
   balance: number
   uplink: string
   referral_code?: string
@@ -897,8 +897,8 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
   }
 
   const nowMs = Date.now()
-  const max30DaysMs = nowMs + 30 * 86400000
-  const max30DaysIso = new Date(max30DaysMs).toISOString()
+  const max365DaysMs = nowMs + 365 * 86400000
+  const max365DaysIso = new Date(max365DaysMs).toISOString()
   const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
 
   const normalizeExpiry = (rows: RymonLicense[]): RymonLicense[] => {
@@ -911,8 +911,8 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
       ) {
         return { ...r, status: 'EXPIRED' as const, is_paused: false }
       }
-      if (r.expires_at && new Date(r.expires_at).getTime() > max30DaysMs) {
-        return { ...r, expires_at: max30DaysIso, plan_duration: '30 Days' }
+      if (r.expires_at && new Date(r.expires_at).getTime() > max365DaysMs) {
+        return { ...r, expires_at: max365DaysIso }
       }
       return r
     })
@@ -1406,12 +1406,35 @@ export function clearUserCustomPriceMap(username: string): void {
   }
 }
 
-export function getEffectivePriceMap(username?: string): Record<string, number> {
+export function getEffectivePriceMap(username?: string, role?: string): Record<string, number> {
   const globalMap = getGlobalPriceMap()
-  if (!username) return globalMap
-  const custom = getUserCustomPriceMap(username)
-  if (!custom) return globalMap
-  return { ...globalMap, ...custom }
+  let baseMap = globalMap
+  if (username) {
+    const custom = getUserCustomPriceMap(username)
+    if (custom) baseMap = { ...globalMap, ...custom }
+  }
+
+  let effectiveRole = role
+  if (!effectiveRole && username && typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('rymon_session_user')
+      if (raw) {
+        const u = JSON.parse(raw)
+        if (u.username?.toLowerCase() === username.trim().toLowerCase()) {
+          effectiveRole = u.role
+        }
+      }
+    } catch {}
+    if (!effectiveRole) {
+      try {
+        const accs = getStoredAccounts()
+        const found = accs.find((a) => (a.username || '').toLowerCase() === username.trim().toLowerCase())
+        if (found) effectiveRole = found.role
+      } catch {}
+    }
+  }
+
+  return baseMap
 }
 
 // ============================================================================
@@ -1440,7 +1463,7 @@ export async function generateLicenseKeyBackend(params: {
   const ALLOWED_DURATIONS = ['2 Hours', '1 Day', '3 Days', '7 Days', '15 Days', '30 Days']
   const duration = ALLOWED_DURATIONS.includes(rawDuration) ? rawDuration : '30 Days'
 
-  const effectiveMap = getEffectivePriceMap(creator.username)
+  const effectiveMap = getEffectivePriceMap(creator.username, creator.role)
   const normalizedDuration = duration.replace(/^(\d+)\s+Day$/, '$1 Days')
   const baseUnitPrice =
     effectiveMap[duration] ??
@@ -1804,7 +1827,106 @@ export async function topUpUserBalanceBackend(
 }
 
 // ============================================================================
-// 6B. SOVEREIGN SECURITY & APK VERSION POLICY ENGINE
+// 6A. RAZORPAY WALLET TOP-UP (Self-Service — Any logged-in user)
+// ============================================================================
+const RENDER_BASE_URL = 'https://rymon-telegram-bot.onrender.com'
+
+export async function razorpayAddFunds(
+  username: string,
+  amountInRupees: number,
+  userEmail: string = ''
+): Promise<void> {
+  if (!username || amountInRupees < 1) {
+    throw new Error('Invalid username or amount.')
+  }
+
+  // Step 1: Create Razorpay order on server (keeps KEY_SECRET off frontend)
+  const orderRes = await fetch(`${RENDER_BASE_URL}/api/payment/create-order`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount: amountInRupees, username })
+  })
+  const orderData = await orderRes.json()
+  if (!orderData.ok) {
+    throw new Error(orderData.error || 'Failed to create payment order.')
+  }
+
+  const { order_id, amount: orderAmountPaise, currency } = orderData
+
+  // Step 2: Open Razorpay checkout popup
+  return new Promise((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Razorpay = (window as any).Razorpay
+    if (!Razorpay) {
+      reject(new Error('Razorpay SDK not loaded. Please refresh the page.'))
+      return
+    }
+
+    const rzp = new Razorpay({
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: orderAmountPaise,
+      currency: currency || 'INR',
+      name: 'RYMON SOVEREIGN',
+      description: `Wallet Top-Up — @${username}`,
+      image: '/logo.png',
+      order_id,
+      prefill: {
+        name: username,
+        email: userEmail || `${username}@greenvest.shop`,
+        contact: ''
+      },
+      notes: { username },
+      theme: { color: '#00d9ff' },
+      modal: {
+        ondismiss: () => {
+          reject(new Error('Payment cancelled by user.'))
+        }
+      },
+      handler: async (response: {
+        razorpay_order_id: string
+        razorpay_payment_id: string
+        razorpay_signature: string
+      }) => {
+        try {
+          // Step 3: Verify signature server-side and credit wallet
+          const verifyRes = await fetch(`${RENDER_BASE_URL}/api/payment/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              username,
+              amount: amountInRupees
+            })
+          })
+          const verifyData = await verifyRes.json()
+          if (!verifyData.ok) {
+            reject(new Error(verifyData.error || 'Payment verification failed.'))
+            return
+          }
+
+          // Update cached session balance
+          try {
+            const raw = localStorage.getItem('rymon_session_user')
+            if (raw) {
+              const u = JSON.parse(raw)
+              u.balance = verifyData.new_balance ?? ((u.balance || 0) + amountInRupees)
+              localStorage.setItem('rymon_session_user', JSON.stringify(u))
+            }
+          } catch { /* non-critical */ }
+
+          resolve()
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error('Payment verification error.'))
+        }
+      }
+    })
+    rzp.open()
+  })
+}
+
+
 // ============================================================================
 export interface SovereignSecurityPolicy {
   reseller_hwid_limit_per_day: number // 0 = Unlimited, default 2 per key per 24h
@@ -2213,13 +2335,14 @@ export async function renewUserSubscriptionBackend(
 export function calculateExtensionCost(
   days: number,
   username?: string,
-  devicesMax: number = 1
+  devicesMax: number = 1,
+  role?: string
 ): number {
   if (!username) return 0
   const clean = username.trim().toLowerCase()
   if (clean === 'debajoyti') return 0
 
-  const map = getEffectivePriceMap(username)
+  const map = getEffectivePriceMap(username, role)
   const devMult = Math.max(1, Number(devicesMax) || 1)
   let unit = 0
   if (days === 1) unit = map['1 Day'] ?? 35
@@ -2700,7 +2823,7 @@ export async function extendLicenseBackend(
     }
   }
   const days = Math.min(30, rawNum)
-  const max30DaysMs = Date.now() + 30 * 86400000
+  const max365DaysMs = Date.now() + 365 * 86400000
   const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
 
   if (supabase) {
@@ -2790,14 +2913,25 @@ export async function extendLicenseBackend(
     saveStoredAccounts(accounts)
   }
 
-  let newExp = new Date(Math.min(Date.now() + days * 86400000, max30DaysMs)).toISOString()
+  let newExp: string | undefined = undefined
   if (l) {
-    const base = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
-    newExp = new Date(
-      Math.min(Math.max(base, Date.now()) + days * 86400000, max30DaysMs)
-    ).toISOString()
-    l.expires_at = newExp
-    l.status = 'ACTIVE'
+    const currDays = parseInt(l.plan_duration?.match(/\d+/)?.[0] || '1', 10)
+    const totalDays = currDays + days
+    const isVip = (l.plan_duration || '').includes('[VIP]')
+    const newPlan = `${totalDays} Days${isVip ? ' [VIP]' : ''}`
+    l.plan_duration = newPlan
+
+    if (l.expires_at) {
+      const base = new Date(l.expires_at).getTime()
+      newExp = new Date(
+        Math.min(Math.max(base, Date.now()) + days * 86400000, max365DaysMs)
+      ).toISOString()
+      l.expires_at = newExp
+    } else {
+      // Unactivated fresh key: plan_duration extended cumulatively, clock starts on first login!
+      newExp = undefined
+      l.expires_at = null
+    }
     saveStoredLicenses(lics)
   }
   return { success: true, newExpiresAt: newExp, remainingBalance, cost }
@@ -2816,7 +2950,7 @@ export async function togglePauseLicenseBackend(
   const cleanKey = licenseKey.trim().toUpperCase()
   const nowMs = Date.now()
   const nowIso = new Date(nowMs).toISOString()
-  const max30DaysMs = nowMs + 30 * 86400000
+  const max365DaysMs = nowMs + 365 * 86400000
   const pauseMap = getPausedKeyTimestamps()
 
   if (supabase) {
@@ -2869,7 +3003,7 @@ export async function togglePauseLicenseBackend(
 
         if (licRow?.expires_at && frozenMs > 60000) {
           const oldExpMs = new Date(licRow.expires_at).getTime()
-          const restoredExpMs = Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max30DaysMs)
+          const restoredExpMs = Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max365DaysMs)
           nextExpiresAt = new Date(restoredExpMs).toISOString()
           restoredNote = ` (+${formatDurationShort(frozenMs)} frozen time restored)`
         }
@@ -2947,7 +3081,7 @@ export async function togglePauseLicenseBackend(
       if (stored[idx].expires_at && frozenMs > 60000) {
         const oldExpMs = new Date(stored[idx].expires_at!).getTime()
         stored[idx].expires_at = new Date(
-          Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max30DaysMs)
+          Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max365DaysMs)
         ).toISOString()
       }
     }
@@ -2974,7 +3108,7 @@ export async function bulkTogglePauseAllKeysBackend(
   let affected = 0
   const nowMs = Date.now()
   const nowIso = new Date(nowMs).toISOString()
-  const max30DaysMs = nowMs + 30 * 86400000
+  const max365DaysMs = nowMs + 365 * 86400000
   const pauseMap = getPausedKeyTimestamps()
   const isRootOwner = (actorUsername || 'debajoyti').trim().toLowerCase() === 'debajoyti'
 
@@ -3015,7 +3149,7 @@ export async function bulkTogglePauseAllKeysBackend(
             if (r.expires_at && frozenMs > 60000) {
               const oldExpMs = new Date(r.expires_at).getTime()
               nextExp = new Date(
-                Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max30DaysMs)
+                Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max365DaysMs)
               ).toISOString()
             }
           }
@@ -3179,7 +3313,7 @@ export async function bulkExtendAllKeysBackend(
   }
   const days = Math.min(30, rawNum)
   const msToAdd = days * 86400000
-  const max30DaysMs = Date.now() + 30 * 86400000
+  const max365DaysMs = Date.now() + 365 * 86400000
   const cleanActor = (actorUsername || 'debajoyti').trim()
   const isRootOwner = cleanActor.toLowerCase() === 'debajoyti'
   let remainingBalance: number | undefined = undefined
@@ -3270,11 +3404,21 @@ export async function bulkExtendAllKeysBackend(
   }
 
   targetLicenses.forEach((l) => {
-    const base = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
-    l.expires_at = new Date(
-      Math.min(Math.max(base, Date.now()) + msToAdd, max30DaysMs)
-    ).toISOString()
-    if (l.status === 'EXPIRED') l.status = 'ACTIVE'
+    const currDays = parseInt(l.plan_duration?.match(/\d+/)?.[0] || '1', 10)
+    const totalDays = currDays + days
+    const isVip = (l.plan_duration || '').includes('[VIP]')
+    const newPlan = `${totalDays} Days${isVip ? ' [VIP]' : ''}`
+    l.plan_duration = newPlan
+
+    if (l.expires_at) {
+      const base = new Date(l.expires_at).getTime()
+      l.expires_at = new Date(
+        Math.min(Math.max(base, Date.now()) + msToAdd, max365DaysMs)
+      ).toISOString()
+    } else {
+      // Unactivated fresh key: keep timer unstarted until first login!
+      l.expires_at = null
+    }
     count++
   })
   saveStoredLicenses(rawLicenses)
@@ -3283,7 +3427,7 @@ export async function bulkExtendAllKeysBackend(
     id: Date.now(),
     title: `Bulk Extend (+${days}d)`,
     event_type: 'BULK_EXTEND',
-    details: `Added +${days} Day(s) (Max 30d Cap) to ${count} key(s) by @${cleanActor}${!isRootOwner && remainingBalance !== undefined ? ` • New Bal: ₹${remainingBalance}` : ''}`,
+    details: `Added +${days} Day(s) to ${count} key(s) by @${cleanActor}${!isRootOwner && remainingBalance !== undefined ? ` • New Bal: ₹${remainingBalance}` : ''}`,
     actor_username: cleanActor,
     status: 'SUCCESS',
     created_at: new Date().toISOString()
@@ -3942,9 +4086,6 @@ export async function registerWithReferral(
   if (cleanPass.length < 4) {
     return { success: false, message: 'Password must be at least 4 characters' }
   }
-  if (!cleanRef) {
-    return { success: false, message: 'Referral / Invite code is required' }
-  }
   if (cleanUser.toLowerCase() === 'debajoyti' || cleanUser.toLowerCase() === 'rymon') {
     return { success: false, message: 'Reserved root owner username cannot be registered' }
   }
@@ -4155,6 +4296,34 @@ export async function registerWithReferral(
   }
 
   // Local fallback if offline
+  if (!cleanRef) {
+    const storedAccounts = getStoredAccounts()
+    if (storedAccounts.some((a) => (a.username || '').toLowerCase() === cleanUser.toLowerCase())) {
+      return { success: false, message: 'Username already taken' }
+    }
+    const newUser: RymonAccount = {
+      id:
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12),
+      username: cleanUser,
+      email: cleanEmail,
+      role: 'user',
+      balance: 0,
+      uplink: 'debajoyti',
+      referral_code: '',
+      status: 'ACTIVE',
+      expires_at: new Date(Date.now() + 365 * 86400000).toISOString()
+    }
+    storedAccounts.push(newUser)
+    saveStoredAccounts(storedAccounts)
+    return {
+      success: true,
+      user: newUser,
+      message: 'Account created successfully! Welcome to RYMON.'
+    }
+  }
+
   const storedRefs = getStoredReferrals()
   const ref = storedRefs.find((r) => r.code.toUpperCase() === cleanRef && r.is_active)
   if (!ref) {
