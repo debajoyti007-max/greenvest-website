@@ -58,3 +58,5 @@ PROJECT_BLUEPRINT.md
 # Local build artifacts (CI deploys from dist/ — never commit these)
 /assets/
 /docs/
+
+/download/

@@ -4,8 +4,6 @@ import path from 'path'
 
 const ROOT = process.cwd()
 const DIST = path.join(ROOT, 'dist')
-const DOCS = path.join(ROOT, 'docs')
-const ASSETS_ROOT = path.join(ROOT, 'assets')
 const TEMPLATE = path.join(ROOT, 'index.template.html')
 const INDEX_HTML = path.join(ROOT, 'index.html')
 
@@ -33,29 +31,4 @@ if (fs.existsSync(distSw)) {
   fs.writeFileSync(distSw, swContent, 'utf8')
 }
 
-console.log('4. Syncing to /docs (for GitHub Pages /docs mode)...')
-if (fs.existsSync(DOCS)) {
-  fs.rmSync(DOCS, { recursive: true, force: true })
-}
-fs.cpSync(DIST, DOCS, { recursive: true })
-
-console.log('5. Syncing to / (root) (for GitHub Pages /root mode)...')
-if (fs.existsSync(ASSETS_ROOT)) {
-  fs.rmSync(ASSETS_ROOT, { recursive: true, force: true })
-}
-fs.cpSync(path.join(DIST, 'assets'), ASSETS_ROOT, { recursive: true })
-fs.copyFileSync(path.join(DIST, 'index.html'), INDEX_HTML)
-fs.copyFileSync(path.join(DIST, '404.html'), path.join(ROOT, '404.html'))
-fs.writeFileSync(path.join(ROOT, 'CNAME'), 'greenvest.shop')
-fs.writeFileSync(path.join(ROOT, '.nojekyll'), '')
-
-// Ensure search crawlers, PWA files, and edge headers are present in root
-const publicFiles = ['robots.txt', 'sitemap.xml', 'manifest.webmanifest', 'sw.js', 'rymon_logo.jpg', '_headers']
-for (const file of publicFiles) {
-  const distFile = path.join(DIST, file)
-  if (fs.existsSync(distFile)) {
-    fs.copyFileSync(distFile, path.join(ROOT, file))
-  }
-}
-
-console.log('✨ Build & Dual Sync (Root + /docs) Successful!')
+console.log('✨ Build Successful (dist/ ready for GitHub Actions Pages deployment)!')
