@@ -1,6 +1,6 @@
-// RYMON GHOST CONNECT Service Worker (v3.0.0 - Auto Cache Busting Edition)
-const CACHE_NAME = 'rymon-ghost-v1793560339832'
-const FONT_CACHE_NAME = 'rymon-fonts-v3.0'
+// RYMON GHOST CONNECT Service Worker (v4.0.0 - Game Realm Cache Busting Edition)
+const CACHE_NAME = 'rymon-ghost-v1793901449708'
+const FONT_CACHE_NAME = 'rymon-fonts-v4.0'
 
 const STATIC_ASSETS = [
   '/manifest.webmanifest',

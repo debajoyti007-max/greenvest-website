@@ -60,7 +60,7 @@ import {
   saveStoredAccounts
 } from '../lib/rymonBackend'
 import RymonAnimatedLogo from '../components/RymonAnimatedLogo'
-import { FairytaleAtmosphere } from '../components/FairytaleAtmosphere'
+import { FairytaleRealm } from '../components/FairytaleRealm'
 
 type TabType =
   | 'overview'
@@ -3265,6 +3265,45 @@ export default function RymonConnect() {
           from { opacity: 0; }
           to { opacity: 1; }
         }
+        @keyframes pulseGlow {
+          0%, 100% { opacity: 0.75; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.18); }
+        }
+        @keyframes spinOrbit {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .sg-corner-flourish {
+          position: absolute;
+          width: 14px;
+          height: 14px;
+          pointer-events: none;
+          z-index: 2;
+        }
+        .sg-corner-tl {
+          top: 6px;
+          left: 6px;
+          border-top: 2px solid #f59e0b;
+          border-left: 2px solid #f59e0b;
+        }
+        .sg-corner-tr {
+          top: 6px;
+          right: 6px;
+          border-top: 2px solid #f59e0b;
+          border-right: 2px solid #f59e0b;
+        }
+        .sg-corner-bl {
+          bottom: 6px;
+          left: 6px;
+          border-bottom: 2px solid #f59e0b;
+          border-left: 2px solid #f59e0b;
+        }
+        .sg-corner-br {
+          bottom: 6px;
+          right: 6px;
+          border-bottom: 2px solid #f59e0b;
+          border-right: 2px solid #f59e0b;
+        }
 
         /* Glassmorphic Translucent Scrollbars */
         ::-webkit-scrollbar {
@@ -4130,8 +4169,8 @@ export default function RymonConnect() {
         }
       `}</style>
 
-      {/* ── 3D UNREAL ENGINE FAIRYTALE ATMOSPHERE ──────────────────────────── */}
-      <FairytaleAtmosphere isDashboard={isAuthenticated} />
+      {/* ── 120 FPS GPU-COMPOSITED FAIRYTALE REALM ──────────────────────────── */}
+      <FairytaleRealm isDashboard={isAuthenticated} />
 
       {/* Background Cyber Ambient */}
       <div
@@ -4298,8 +4337,48 @@ export default function RymonConnect() {
       {/* ── CONDITIONAL VIEW: AUTH GATEWAY VS MAIN WORKSPACE ────────────────── */}
       {!isAuthenticated ? (
         <div className="sg-auth-gate-box" style={styles.authGateBox}>
+          {/* Ornate Gold Filigree Corner Accents */}
+          <div className="sg-corner-flourish sg-corner-tl" />
+          <div className="sg-corner-flourish sg-corner-tr" />
+          <div className="sg-corner-flourish sg-corner-bl" />
+          <div className="sg-corner-flourish sg-corner-br" />
+
+          {/* Celestial Mythic Emblem Crest */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ position: 'relative', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{
+                position: 'absolute',
+                inset: '-6px',
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(245, 158, 11, 0.45) 0%, rgba(217, 119, 6, 0.15) 50%, transparent 70%)',
+                filter: 'blur(8px)',
+                animation: 'pulseGlow 3s ease-in-out infinite'
+              }} />
+              <div style={{
+                position: 'absolute',
+                inset: '2px',
+                borderRadius: '50%',
+                border: '1.5px dashed rgba(245, 158, 11, 0.7)',
+                animation: 'spinOrbit 20s linear infinite'
+              }} />
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '5px',
+                background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
+                transform: 'rotate(45deg)',
+                boxShadow: '0 0 14px rgba(245, 158, 11, 0.9), inset 0 0 4px #ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <span style={{ transform: 'rotate(-45deg)', fontSize: '11px', color: '#05070d', fontWeight: 900 }}>✦</span>
+              </div>
+            </div>
+          </div>
+
           <div
-            style={{ display: 'flex', justifyContent: 'center', marginBottom: '22px', cursor: 'pointer' }}
+            style={{ display: 'flex', justifyContent: 'center', marginBottom: '18px', cursor: 'pointer' }}
             onClick={() => window.dispatchEvent(new CustomEvent('replay_rymon_intro'))}
             title="Click to replay RYMON CORPORATION Intro"
           >
@@ -4307,7 +4386,7 @@ export default function RymonConnect() {
           </div>
 
           <div style={styles.authBadge}>
-            <span style={{ fontSize: '10px', marginRight: '6px' }}>🔒</span> SECURE RYMON GATEWAY
+            <span style={{ fontSize: '11px', marginRight: '6px' }}>✦</span> CELESTIAL GATEWAY // REALM ACCESS
           </div>
 
           {/* Tri-Gateway Tabs: Staff Portal vs Streamer Key vs Dedicated Key Reset */}
@@ -11678,49 +11757,49 @@ const styles: Record<string, React.CSSProperties> = {
   },
   authGateBox: {
     maxWidth: '440px',
-    margin: '40px auto',
-    padding: '24px 20px',
-    backgroundColor: 'rgba(17, 24, 39, 0.75)',
-    backdropFilter: 'blur(24px) saturate(190%)',
-    WebkitBackdropFilter: 'blur(24px) saturate(190%)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
-    boxShadow: '0 16px 48px rgba(0, 0, 0, 0.55), 0 0 32px rgba(139, 92, 246, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.18)',
-    borderRadius: '14px',
+    margin: '32px auto',
+    padding: '28px 24px',
+    background: 'linear-gradient(180deg, rgba(14, 20, 36, 0.90) 0%, rgba(7, 10, 18, 0.96) 100%)',
+    backdropFilter: 'blur(28px) saturate(200%)',
+    WebkitBackdropFilter: 'blur(28px) saturate(200%)',
+    border: '1px solid rgba(245, 158, 11, 0.38)',
+    boxShadow: '0 24px 64px rgba(0, 0, 0, 0.85), 0 0 35px rgba(245, 158, 11, 0.14), inset 0 1px 0 rgba(254, 240, 138, 0.3), inset 0 0 25px rgba(245, 158, 11, 0.05)',
+    borderRadius: '16px',
     position: 'relative',
     zIndex: 1
   },
   authBadge: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '4px 10px',
-    borderRadius: '6px',
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
-    color: '#a78bfa',
+    padding: '5px 12px',
+    borderRadius: '20px',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    color: '#fbbf24',
     fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '0.04em',
-    marginBottom: '14px',
-    border: '1px solid rgba(139, 92, 246, 0.3)',
-    boxShadow: '0 0 10px rgba(139, 92, 246, 0.2)'
+    fontWeight: 800,
+    letterSpacing: '0.06em',
+    marginBottom: '16px',
+    border: '1px solid rgba(245, 158, 11, 0.4)',
+    boxShadow: '0 0 12px rgba(245, 158, 11, 0.25)'
   },
   authTabSelector: {
     display: 'flex',
     gap: '6px',
-    backgroundColor: 'rgba(10, 15, 28, 0.65)',
+    backgroundColor: 'rgba(5, 7, 13, 0.8)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
     padding: '4px',
-    borderRadius: '8px',
+    borderRadius: '10px',
     marginBottom: '20px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.4)'
+    border: '1px solid rgba(245, 158, 11, 0.22)',
+    boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.6)'
   },
   authTabBtn: {
     flex: 1,
     padding: '10px 12px',
     minHeight: '44px',
-    borderRadius: '6px',
-    border: 'none',
+    borderRadius: '8px',
+    border: '1px solid transparent',
     backgroundColor: 'transparent',
     color: '#94a3b8',
     fontSize: '12px',
@@ -11733,10 +11812,11 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.15s ease'
   },
   authTabBtnActive: {
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
-    boxShadow: '0 2px 10px rgba(139, 92, 246, 0.25)',
-    color: '#ffffff',
-    fontWeight: 700
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+    borderColor: 'rgba(245, 158, 11, 0.55)',
+    boxShadow: '0 0 16px rgba(245, 158, 11, 0.3), inset 0 1px 0 rgba(254, 240, 138, 0.35)',
+    color: '#fbbf24',
+    fontWeight: 800
   },
   authHead: {
     fontSize: '20px',
@@ -11762,11 +11842,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   keyInput: {
     padding: '12px 14px',
-    backgroundColor: 'rgba(10, 15, 28, 0.65)',
+    backgroundColor: 'rgba(5, 7, 14, 0.75)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
-    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.4)',
+    border: '1px solid rgba(245, 158, 11, 0.22)',
+    boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.6)',
     borderRadius: '8px',
     color: '#f8fafc',
     fontSize: '14px',
@@ -11778,11 +11858,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   selectInput: {
     padding: '12px 14px',
-    backgroundColor: 'rgba(10, 15, 28, 0.65)',
+    backgroundColor: 'rgba(5, 7, 14, 0.75)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
-    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.4)',
+    border: '1px solid rgba(245, 158, 11, 0.22)',
+    boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.6)',
     borderRadius: '8px',
     color: '#f8fafc',
     fontSize: '14px',
@@ -11807,15 +11887,16 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer'
   },
   submitBtn: {
-    padding: '12px 18px',
-    minHeight: '44px',
-    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-    boxShadow: '0 4px 18px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25)',
-    color: '#ffffff',
+    padding: '13px 20px',
+    minHeight: '46px',
+    background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 50%, #fbbf24 100%)',
+    boxShadow: '0 4px 20px rgba(245, 158, 11, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.55)',
+    color: '#05070d',
     border: 'none',
     borderRadius: '8px',
-    fontWeight: 700,
+    fontWeight: 800,
     fontSize: '13px',
+    letterSpacing: '0.04em',
     cursor: 'pointer',
     transition: 'all 0.15s ease'
   },
