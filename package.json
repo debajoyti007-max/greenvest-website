@@ -18,9 +18,11 @@
     "@bible-strong/avatar-core": "^0.1.0",
     "@bible-strong/avatar-react": "^0.1.0",
     "@supabase/supabase-js": "^2.109.0",
+    "@types/three": "^0.187.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
+    "three": "^0.187.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {

@@ -60,6 +60,7 @@ import {
   saveStoredAccounts
 } from '../lib/rymonBackend'
 import RymonAnimatedLogo from '../components/RymonAnimatedLogo'
+import { FairytaleAtmosphere } from '../components/FairytaleAtmosphere'
 
 type TabType =
   | 'overview'
@@ -4129,8 +4130,17 @@ export default function RymonConnect() {
         }
       `}</style>
 
+      {/* ── 3D UNREAL ENGINE FAIRYTALE ATMOSPHERE ──────────────────────────── */}
+      <FairytaleAtmosphere isDashboard={isAuthenticated} />
+
       {/* Background Cyber Ambient */}
-      <div style={styles.ambientGrid} />
+      <div
+        style={{
+          ...styles.ambientGrid,
+          backgroundColor: isAuthenticated ? '#070b14' : 'transparent',
+          transition: 'background-color 0.8s ease'
+        }}
+      />
 
       {/* ── TOP NAV HEADER ─────────────────────────────────────────────────── */}
       <header className="sg-top-header" style={styles.topHeader}>
