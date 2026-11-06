@@ -24,6 +24,7 @@ import {
   fetchReferralCodes,
   createReferralCode,
   deleteReferralCode,
+  registerWithReferral,
   renewUserSubscriptionBackend,
   updateUserPermissionsBackend,
   togglePauseLicenseBackend,
@@ -371,6 +372,15 @@ export default function RymonConnect() {
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState('')
 
+  // Sovereign Staff Registration (Invite-Only) State
+  const [isRegisterMode, setIsRegisterMode] = useState(false)
+  const [regUsername, setRegUsername] = useState('')
+  const [regPassword, setRegPassword] = useState('')
+  const [regEmail, setRegEmail] = useState('')
+  const [regInviteCode, setRegInviteCode] = useState('')
+  const [regLoading, setRegLoading] = useState(false)
+  const [regError, setRegError] = useState('')
+
   // Rate Limiting & Brute-Force Lockout State (5-min lock duration)
   const [staffLockSeconds, setStaffLockSeconds] = useState(0)
   const [keyLockSeconds, setKeyLockSeconds] = useState(0)
@@ -592,6 +602,12 @@ export default function RymonConnect() {
       queryResetKey = (urlParams.get('reset') || urlParams.get('reset_key') || (urlParams.get('action') === 'reset' ? urlParams.get('key') : '') || '').trim()
       if (!queryResetKey) {
         queryKey = (urlParams.get('key') || urlParams.get('k') || '').trim()
+      }
+      const queryInvite = (urlParams.get('ref') || urlParams.get('invite') || urlParams.get('code') || '').trim()
+      if (queryInvite) {
+        setRegInviteCode(queryInvite)
+        setIsRegisterMode(true)
+        setAuthMode('staff')
       }
     } catch {}
 
@@ -2648,6 +2664,30 @@ export default function RymonConnect() {
   }
 
   // 12. REFERRAL ONBOARDING & CONNECT API HANDLERS
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setRegLoading(true)
+    setRegError('')
+
+    const res = await registerWithReferral(regUsername, regPassword, regEmail, regInviteCode)
+    setRegLoading(false)
+
+    if (res.success && res.user) {
+      isLoggingOutRef.current = false
+      try {
+        sessionStorage.removeItem('rymon_explicit_logout')
+      } catch {}
+      setCurrentUser(res.user)
+      setWalletBalance(res.user.balance)
+      setIsAuthenticated(true)
+      localStorage.setItem('rymon_session_user', JSON.stringify(res.user))
+      showToast(`Welcome! You are registered as ${res.user.role.toUpperCase()} (Starting Balance: ₹${res.user.balance.toLocaleString('en-IN')})`)
+      setActiveTab('overview')
+    } else {
+      setRegError(res.message || 'Registration failed. Check referral code.')
+    }
+  }
+
   const handleCreateReferral = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isOwner && refTargetRole !== 'reseller') {
@@ -4445,80 +4485,287 @@ export default function RymonConnect() {
 
           {authMode === 'staff' ? (
             <div>
-              <h2 style={styles.authHead}>Staff Login</h2>
-
-              <form onSubmit={handleStaffLogin} style={styles.authForm}>
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>USERNAME</label>
-                  <input
-                    type="text"
-                    value={staffUsername}
-                    onChange={(e) => setStaffUsername(e.target.value)}
-                    placeholder="Enter registered username"
-                    style={styles.keyInput}
-                    required
-                  />
-                </div>
-
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>PASSWORD</label>
-                  <input
-                    type="password"
-                    value={staffPassword}
-                    onChange={(e) => setStaffPassword(e.target.value)}
-                    placeholder="Enter account password"
-                    style={styles.keyInput}
-                    required
-                  />
-                </div>
-
+              {/* Sleek Segmented Switcher: Sign In vs Register */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '6px',
+                  padding: '4px',
+                  backgroundColor: 'rgba(5, 7, 13, 0.85)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  marginBottom: '18px',
+                  backdropFilter: 'blur(12px)',
+                  boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.6)'
+                }}
+              >
                 <button
-                  type="submit"
-                  disabled={authLoading || staffLockSeconds > 0}
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterMode(false)
+                    setAuthError('')
+                    setRegError('')
+                  }}
                   style={{
-                    ...styles.submitBtn,
-                    ...(staffLockSeconds > 0
-                      ? {
-                          background: 'rgba(239, 68, 68, 0.2)',
-                          border: '1px solid #ef4444',
-                          color: '#f87171',
-                          cursor: 'not-allowed'
-                        }
-                      : {})
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: !isRegisterMode ? '1px solid rgba(0, 217, 255, 0.55)' : '1px solid transparent',
+                    background: !isRegisterMode
+                      ? 'linear-gradient(135deg, rgba(0, 217, 255, 0.22) 0%, rgba(59, 130, 246, 0.15) 100%)'
+                      : 'transparent',
+                    color: !isRegisterMode ? '#ffffff' : '#94a3b8',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    boxShadow: !isRegisterMode ? '0 4px 14px rgba(0, 217, 255, 0.25)' : 'none',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
                   }}
                 >
-                  {authLoading
-                    ? 'AUTHENTICATING...'
-                    : staffLockSeconds > 0
-                      ? `🔒 LOCKED (${formatLockCountdown(staffLockSeconds)})`
-                      : 'SIGN IN TO DASHBOARD'}
+                  <span>🔑</span> Sign In
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterMode(true)
+                    setAuthError('')
+                    setRegError('')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: isRegisterMode ? '1px solid rgba(0, 217, 255, 0.55)' : '1px solid transparent',
+                    background: isRegisterMode
+                      ? 'linear-gradient(135deg, rgba(0, 217, 255, 0.22) 0%, rgba(59, 130, 246, 0.15) 100%)'
+                      : 'transparent',
+                    color: isRegisterMode ? '#ffffff' : '#94a3b8',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    boxShadow: isRegisterMode ? '0 4px 14px rgba(0, 217, 255, 0.25)' : 'none',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                >
+                  <span>📝</span> Register (Invite)
+                </button>
+              </div>
 
-                {staffLockSeconds > 0 && (
-                  <div
-                    style={{
-                      marginTop: '10px',
-                      padding: '10px 14px',
-                      borderRadius: '8px',
-                      background: 'rgba(239, 68, 68, 0.12)',
-                      border: '1px solid rgba(239, 68, 68, 0.4)',
-                      color: '#f87171',
-                      fontSize: '12.5px',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between'
-                    }}
-                  >
-                    <span>🔒 5-Minute Security Lockout Active</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '14px', color: '#ef4444' }}>
-                      {formatLockCountdown(staffLockSeconds)}
-                    </span>
+              {!isRegisterMode ? (
+                <div>
+                  <div style={{ marginBottom: '14px', textAlign: 'left' }}>
+                    <h2 style={{ ...styles.authHead, margin: 0, fontSize: '18px', letterSpacing: '-0.3px' }}>
+                      Staff Portal Sign In
+                    </h2>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#94a3b8' }}>
+                      Access your Reseller, Admin, or Founder control dashboard.
+                    </p>
                   </div>
-                )}
 
-                {authError && <div style={styles.errorBox}>{authError}</div>}
-              </form>
+                  <form onSubmit={handleStaffLogin} style={styles.authForm}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>USERNAME</label>
+                      <input
+                        type="text"
+                        value={staffUsername}
+                        onChange={(e) => setStaffUsername(e.target.value)}
+                        placeholder="Enter registered username"
+                        style={styles.keyInput}
+                        required
+                        autoComplete="username"
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>PASSWORD</label>
+                      <input
+                        type="password"
+                        value={staffPassword}
+                        onChange={(e) => setStaffPassword(e.target.value)}
+                        placeholder="Enter account password"
+                        style={styles.keyInput}
+                        required
+                        autoComplete="current-password"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={authLoading || staffLockSeconds > 0}
+                      style={{
+                        ...styles.submitBtn,
+                        ...(staffLockSeconds > 0
+                          ? {
+                              background: 'rgba(239, 68, 68, 0.2)',
+                              border: '1px solid #ef4444',
+                              color: '#f87171',
+                              cursor: 'not-allowed'
+                            }
+                          : {})
+                      }}
+                    >
+                      {authLoading
+                        ? 'AUTHENTICATING...'
+                        : staffLockSeconds > 0
+                          ? `🔒 LOCKED (${formatLockCountdown(staffLockSeconds)})`
+                          : 'SIGN IN TO DASHBOARD'}
+                    </button>
+
+                    {staffLockSeconds > 0 && (
+                      <div
+                        style={{
+                          marginTop: '10px',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          color: '#f87171',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <span>🔒 5-Minute Security Lockout Active</span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '14px', color: '#ef4444' }}>
+                          {formatLockCountdown(staffLockSeconds)}
+                        </span>
+                      </div>
+                    )}
+
+                    {authError && <div style={styles.errorBox}>{authError}</div>}
+                  </form>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ marginBottom: '14px', textAlign: 'left' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <h2 style={{ ...styles.authHead, margin: 0, fontSize: '18px', letterSpacing: '-0.3px' }}>
+                        Staff Onboarding
+                      </h2>
+                      <span
+                        style={{
+                          fontSize: '9.5px',
+                          fontWeight: 800,
+                          letterSpacing: '0.6px',
+                          textTransform: 'uppercase',
+                          padding: '2px 7px',
+                          borderRadius: '5px',
+                          background: 'rgba(251, 191, 36, 0.15)',
+                          color: '#fbbf24',
+                          border: '1px solid rgba(251, 191, 36, 0.35)'
+                        }}
+                      >
+                        Invite Only
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '11.5px', color: '#94a3b8', lineHeight: 1.4 }}>
+                      Create your authorized account using a verified Sovereign Invite Code.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleRegister} style={styles.authForm}>
+                    <div style={styles.formGroup}>
+                      <label style={{ ...styles.formLabel, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>DESIRED USERNAME</span>
+                        <span style={{ fontSize: '10.5px', color: '#64748b' }}>min 3 characters</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={regUsername}
+                        onChange={(e) => setRegUsername(e.target.value)}
+                        placeholder="e.g. ShadowReseller"
+                        style={styles.keyInput}
+                        required
+                        autoComplete="username"
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={{ ...styles.formLabel, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>ACCOUNT PASSWORD</span>
+                        <span style={{ fontSize: '10.5px', color: '#64748b' }}>min 4 characters</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="Create strong account password"
+                        style={styles.keyInput}
+                        required
+                        autoComplete="new-password"
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={{ ...styles.formLabel, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>EMAIL ADDRESS</span>
+                        <span style={{ fontSize: '10.5px', color: '#64748b' }}>optional · for receipts</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        placeholder="e.g. partner@example.com"
+                        style={styles.keyInput}
+                        autoComplete="email"
+                      />
+                    </div>
+
+                    <div style={styles.formGroup}>
+                      <label style={{ ...styles.formLabel, display: 'flex', justifyContent: 'space-between', color: '#fbbf24' }}>
+                        <span>SOVEREIGN INVITE CODE</span>
+                        <span style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 800 }}>REQUIRED</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={regInviteCode}
+                        onChange={(e) => setRegInviteCode(e.target.value.toUpperCase())}
+                        placeholder="e.g. RYMON-RES-XXXXX"
+                        style={{
+                          ...styles.keyInput,
+                          textTransform: 'uppercase',
+                          fontFamily: 'monospace',
+                          letterSpacing: '1px',
+                          borderColor: regInviteCode ? 'rgba(251, 191, 36, 0.6)' : 'rgba(255, 255, 255, 0.15)',
+                          background: regInviteCode ? 'rgba(251, 191, 36, 0.05)' : undefined
+                        }}
+                        required
+                      />
+                      <div style={{ marginTop: '5px', fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <span>🎫</span>
+                        <span>Unlocks instant 30D / 60D staff pass & starting wallet balance.</span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={regLoading}
+                      style={{
+                        ...styles.submitBtn,
+                        background: 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)',
+                        color: '#030712',
+                        fontWeight: 800,
+                        boxShadow: '0 4px 20px rgba(0, 217, 255, 0.35)',
+                        marginTop: '4px'
+                      }}
+                    >
+                      {regLoading ? 'VERIFYING INVITE & CREATING...' : '✨ CREATE ACCOUNT & ENTER'}
+                    </button>
+
+                    {regError && <div style={{ ...styles.errorBox, marginTop: '12px' }}>{regError}</div>}
+                  </form>
+                </div>
+              )}
             </div>
           ) : authMode === 'key' ? (
             <div>
