@@ -41,6 +41,7 @@ export interface RymonLicense {
   device_hwid: string
   status: 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED'
   is_paused?: boolean
+  paused_at?: string | null   // DB-persisted freeze timestamp (device-agnostic)
   expires_at: string | null
   last_heartbeat?: string
   created_at?: string
@@ -65,6 +66,7 @@ export interface StreamerControlRecord {
   device_hwid?: string
   is_active: boolean
   is_paused?: boolean
+  paused_at?: string | null   // DB-persisted freeze timestamp (device-agnostic)
   is_online: boolean
   last_heartbeat?: string
   expires_at?: string
@@ -2959,7 +2961,9 @@ export async function togglePauseLicenseBackend(
   const cleanKey = licenseKey.trim().toUpperCase()
   const nowMs = Date.now()
   const nowIso = new Date(nowMs).toISOString()
+  // Hard cap: never extend beyond 365 days from now
   const max365DaysMs = nowMs + 365 * 86400000
+  // localStorage is a secondary cache only — DB paused_at is source of truth
   const pauseMap = getPausedKeyTimestamps()
 
   if (supabase) {
@@ -2967,12 +2971,12 @@ export async function togglePauseLicenseBackend(
       const [{ data: currentCtrl }, { data: licRow }] = await Promise.all([
         supabase
           .from('rymon_streamer_controls')
-          .select('is_paused')
+          .select('is_paused, paused_at')
           .eq('license_key', cleanKey)
           .maybeSingle(),
         supabase
           .from('rymon_licenses')
-          .select('is_paused, expires_at, updated_at, status, creator_username')
+          .select('is_paused, paused_at, expires_at, updated_at, status, creator_username')
           .eq('license_key', cleanKey)
           .maybeSingle()
       ])
@@ -2998,45 +3002,64 @@ export async function togglePauseLicenseBackend(
       let restoredNote = ''
 
       if (newPaused) {
-        // Record exact timestamp when freeze started
-        pauseMap[cleanKey] = nowMs
+        // ── PAUSE: record exact freeze timestamp in DB (device-agnostic) ──
+        pauseMap[cleanKey] = nowMs  // also cache locally
         savePausedKeyTimestamps(pauseMap)
+
+        await supabase
+          .from('rymon_streamer_controls')
+          .update({ is_paused: true, is_online: false, paused_at: nowIso, updated_at: nowIso })
+          .eq('license_key', cleanKey)
+
+        await supabase
+          .from('rymon_licenses')
+          .update({ is_paused: true, status: 'PAUSED', paused_at: nowIso, updated_at: nowIso })
+          .eq('license_key', cleanKey)
+
       } else {
-        // True Timer Freeze: Calculate how long the key was paused and add it back to expires_at
-        const pausedSinceMs =
-          pauseMap[cleanKey] ||
-          (licRow?.updated_at ? new Date(licRow.updated_at).getTime() : nowMs)
+        // ── UNPAUSE: read paused_at from DB first, fall back to localStorage, then updated_at ──
+        // DB is the authoritative source — works across devices and sessions
+        const dbPausedAt = licRow?.paused_at ?? currentCtrl?.paused_at ?? null
+        const pausedSinceMs = dbPausedAt
+          ? new Date(dbPausedAt).getTime()
+          : (pauseMap[cleanKey] ?? (licRow?.updated_at ? new Date(licRow.updated_at).getTime() : nowMs))
+
         const frozenMs = Math.max(0, nowMs - pausedSinceMs)
         delete pauseMap[cleanKey]
         savePausedKeyTimestamps(pauseMap)
 
+        // ── CORRECT FORMULA: add frozen duration directly to original expiry ──
+        // Never use Math.max(oldExpMs, nowMs) — that gives free time for keys that
+        // were paused AFTER their expiry (edge case), causing 2-3 day extensions.
         if (licRow?.expires_at && frozenMs > 60000) {
           const oldExpMs = new Date(licRow.expires_at).getTime()
-          const restoredExpMs = Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max365DaysMs)
+          // Simple: original_expiry + frozen_duration, capped at 365 days
+          const restoredExpMs = Math.min(oldExpMs + frozenMs, max365DaysMs)
           nextExpiresAt = new Date(restoredExpMs).toISOString()
           restoredNote = ` (+${formatDurationShort(frozenMs)} frozen time restored)`
         }
+
+        await supabase
+          .from('rymon_streamer_controls')
+          .update({
+            is_paused: false,
+            paused_at: null,
+            ...(nextExpiresAt ? { expires_at: nextExpiresAt } : {}),
+            updated_at: nowIso
+          })
+          .eq('license_key', cleanKey)
+
+        await supabase
+          .from('rymon_licenses')
+          .update({
+            is_paused: false,
+            status: newStatus,
+            paused_at: null,
+            ...(nextExpiresAt ? { expires_at: nextExpiresAt } : {}),
+            updated_at: nowIso
+          })
+          .eq('license_key', cleanKey)
       }
-
-      await supabase
-        .from('rymon_streamer_controls')
-        .update({
-          is_paused: newPaused,
-          ...(newPaused ? { is_online: false } : {}),
-          ...(nextExpiresAt ? { expires_at: nextExpiresAt } : {}),
-          updated_at: nowIso
-        })
-        .eq('license_key', cleanKey)
-
-      await supabase
-        .from('rymon_licenses')
-        .update({
-          is_paused: newPaused,
-          status: newStatus,
-          ...(nextExpiresAt ? { expires_at: nextExpiresAt } : {}),
-          updated_at: nowIso
-        })
-        .eq('license_key', cleanKey)
 
       await supabase.from('rymon_activities').insert({
         title: newPaused ? 'Key Paused (Timer Frozen)' : 'Key Resumed (Timer Restored)',
@@ -3060,6 +3083,7 @@ export async function togglePauseLicenseBackend(
     }
   }
 
+  // ── Offline / localStorage fallback path ──
   const stored = getStoredLicenses()
   const idx = stored.findIndex((l) => l.license_key === cleanKey)
   if (idx >= 0) {
@@ -3083,15 +3107,14 @@ export async function togglePauseLicenseBackend(
       pauseMap[cleanKey] = nowMs
       savePausedKeyTimestamps(pauseMap)
     } else {
-      const pausedSinceMs = pauseMap[cleanKey] || nowMs
+      const pausedSinceMs = pauseMap[cleanKey] ?? nowMs
       const frozenMs = Math.max(0, nowMs - pausedSinceMs)
       delete pauseMap[cleanKey]
       savePausedKeyTimestamps(pauseMap)
+      // Use same corrected formula in offline path
       if (stored[idx].expires_at && frozenMs > 60000) {
         const oldExpMs = new Date(stored[idx].expires_at!).getTime()
-        stored[idx].expires_at = new Date(
-          Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max365DaysMs)
-        ).toISOString()
+        stored[idx].expires_at = new Date(Math.min(oldExpMs + frozenMs, max365DaysMs)).toISOString()
       }
     }
     saveStoredLicenses(stored)
@@ -3129,9 +3152,10 @@ export async function bulkTogglePauseAllKeysBackend(
         allowedCreators.delete('debajoyti')
       }
 
+      // Fetch paused_at from DB (device-agnostic source of truth)
       let fetchQuery = supabase
         .from('rymon_licenses')
-        .select('license_key, expires_at, updated_at, is_paused, status, creator_username')
+        .select('license_key, expires_at, updated_at, paused_at, is_paused, status, creator_username')
         .neq('status', 'BANNED')
         .neq('status', 'EXPIRED')
       if (creatorFilter) {
@@ -3146,29 +3170,35 @@ export async function bulkTogglePauseAllKeysBackend(
           if (allowedCreators && !allowedCreators.has(creator)) continue
           const k = r.license_key.toUpperCase()
           let nextExp = r.expires_at
+
           if (pauseState) {
+            // PAUSING: record paused_at in DB + localStorage cache
             if (!r.is_paused) {
               pauseMap[k] = nowMs
             }
           } else if (r.is_paused) {
-            const pausedSinceMs =
-              pauseMap[k] || (r.updated_at ? new Date(r.updated_at).getTime() : nowMs)
+            // UNPAUSING: DB paused_at is authoritative; localStorage is fallback
+            const dbPausedAt = r.paused_at ?? null
+            const pausedSinceMs = dbPausedAt
+              ? new Date(dbPausedAt).getTime()
+              : (pauseMap[k] ?? (r.updated_at ? new Date(r.updated_at).getTime() : nowMs))
             const frozenMs = Math.max(0, nowMs - pausedSinceMs)
             delete pauseMap[k]
+            // Corrected formula: oldExpiry + frozenTime (no Math.max that gives free days)
             if (r.expires_at && frozenMs > 60000) {
               const oldExpMs = new Date(r.expires_at).getTime()
-              nextExp = new Date(
-                Math.min(Math.max(oldExpMs, nowMs) + frozenMs, max365DaysMs)
-              ).toISOString()
+              nextExp = new Date(Math.min(oldExpMs + frozenMs, max365DaysMs)).toISOString()
             }
           }
+
           const rowNextStatus = pauseState ? 'PAUSED' : nextExp ? 'ACTIVE' : 'WAITING'
           await supabase
             .from('rymon_licenses')
             .update({
               is_paused: pauseState,
               status: rowNextStatus,
-              ...(nextExp ? { expires_at: nextExp } : {}),
+              paused_at: pauseState ? nowIso : null,
+              ...(nextExp !== r.expires_at ? { expires_at: nextExp } : {}),
               updated_at: nowIso
             })
             .eq('license_key', r.license_key)
@@ -3177,10 +3207,12 @@ export async function bulkTogglePauseAllKeysBackend(
         savePausedKeyTimestamps(pauseMap)
       }
 
+      // Sync streamer_controls: set paused_at + is_paused + expires_at
       let ctrlQuery = supabase
         .from('rymon_streamer_controls')
         .update({
           is_paused: pauseState,
+          paused_at: pauseState ? nowIso : null,
           ...(pauseState ? { is_online: false } : {}),
           updated_at: nowIso
         })
