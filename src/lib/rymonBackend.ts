@@ -186,7 +186,7 @@ export function buildDefaultStreamerControlPayload(
     is_online: params.is_online ?? false,
     last_heartbeat: params.last_heartbeat,
     expires_at: params.expires_at,
-    plan_duration: params.plan_duration || '30 Days',
+    plan_duration: params.plan_duration || '1 Day',
     creator: params.creator || 'debajoyti',
     devices_max: params.devices_max ?? 1,
     devices_used: params.devices_used ?? 0,
@@ -584,7 +584,7 @@ export async function verifyLicenseKey(
                 buildDefaultStreamerControlPayload({
                   license_key: licRow.license_key,
                   game_name: licRow.game || 'Free Fire MAX',
-                  plan_duration: licRow.plan_duration || '30 Days',
+                  plan_duration: licRow.plan_duration || '1 Day',
                   creator: licRow.creator_username,
                   devices_max: licRow.devices_max || 1,
                   devices_used: licRow.devices_used || 0,
@@ -739,7 +739,16 @@ export async function verifyLicenseKey(
       return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.' }
     }
 
-    const exp = matched.expires_at || new Date(Date.now() + 30 * 86400000).toISOString()
+    let fallbackMs = 1 * 86400000
+    const pd = (matched.plan_duration || '').toLowerCase()
+    if (pd.includes('2 hour')) fallbackMs = 2 * 3600000
+    else if (pd.includes('1 day')) fallbackMs = 1 * 86400000
+    else if (pd.includes('3 day')) fallbackMs = 3 * 86400000
+    else if (pd.includes('7 day')) fallbackMs = 7 * 86400000
+    else if (pd.includes('15 day')) fallbackMs = 15 * 86400000
+    else if (pd.includes('30 day')) fallbackMs = 30 * 86400000
+
+    const exp = matched.expires_at || new Date(Date.now() + fallbackMs).toISOString()
     matched.status = 'ACTIVE'
     matched.devices_used = Math.max(1, matched.devices_used)
     matched.device_hwid = effectiveHwid
@@ -1461,7 +1470,7 @@ export async function generateLicenseKeyBackend(params: {
   const safeDevices = Math.max(1, Math.floor(Number(devicesMax) || 1))
 
   const ALLOWED_DURATIONS = ['2 Hours', '1 Day', '3 Days', '7 Days', '15 Days', '30 Days']
-  const duration = ALLOWED_DURATIONS.includes(rawDuration) ? rawDuration : '30 Days'
+  const duration = ALLOWED_DURATIONS.includes(rawDuration) ? rawDuration : '1 Day'
 
   const effectiveMap = getEffectivePriceMap(creator.username, creator.role)
   const normalizedDuration = duration.replace(/^(\d+)\s+Day$/, '$1 Days')

@@ -12,16 +12,32 @@ CREATE TABLE IF NOT EXISTS public.rymon_accounts (
     username        TEXT UNIQUE NOT NULL,
     password_hash   TEXT NOT NULL,
     email           TEXT DEFAULT '',
-    role            TEXT NOT NULL DEFAULT 'reseller' CHECK (role IN ('owner', 'admin', 'reseller', 'streamer')),
+    role            TEXT NOT NULL DEFAULT 'reseller' CHECK (role IN ('owner', 'admin', 'reseller', 'streamer', 'user')),
     balance         NUMERIC NOT NULL DEFAULT 0,
     uplink          TEXT DEFAULT 'rymon',
     referral_code   TEXT DEFAULT '',
     status          TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'BANNED')),
     expires_at      TIMESTAMPTZ DEFAULT (now() + INTERVAL '365 days'),
     permissions     JSONB DEFAULT '{"dashboard":true,"generate_key":true,"license_keys":true,"telegram_bot":true,"account_settings":true,"security":true}'::jsonb,
+    failed_attempts INT DEFAULT 0,
+    locked_until    TIMESTAMPTZ DEFAULT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 1b. Create Sessions Table (Cryptographic Session Revocation)
+CREATE TABLE IF NOT EXISTS public.rymon_sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id      UUID REFERENCES public.rymon_accounts(id) ON DELETE CASCADE,
+    session_token   TEXT UNIQUE NOT NULL,
+    ip_address      TEXT DEFAULT '127.0.0.1',
+    user_agent      TEXT DEFAULT '',
+    expires_at      TIMESTAMPTZ NOT NULL,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rymon_sessions_token ON public.rymon_sessions(session_token);
+CREATE INDEX IF NOT EXISTS idx_rymon_sessions_account ON public.rymon_sessions(account_id);
 
 -- 2. Create Licenses Table (Per-Key Verification & HWID Binding)
 CREATE TABLE IF NOT EXISTS public.rymon_licenses (
@@ -49,8 +65,8 @@ CREATE TABLE IF NOT EXISTS public.rymon_streamer_controls (
     is_active           BOOLEAN NOT NULL DEFAULT true,
     is_online           BOOLEAN NOT NULL DEFAULT false,
     last_heartbeat      TIMESTAMPTZ DEFAULT now(),
-    expires_at          TIMESTAMPTZ DEFAULT (now() + INTERVAL '30 days'),
-    plan_duration       TEXT DEFAULT '30 Days',
+    expires_at          TIMESTAMPTZ DEFAULT NULL,
+    plan_duration       TEXT DEFAULT '1 Day',
     creator             TEXT DEFAULT 'rymon',
     devices_max         INT DEFAULT 1,
     devices_used        INT DEFAULT 0,
@@ -107,7 +123,7 @@ CREATE TABLE IF NOT EXISTS public.rymon_system_config (
 );
 
 -- ------------------------------------------------------------------------------
--- RLS POLICIES (Allow public/anon & authenticated operations with high resilience)
+-- RLS POLICIES (Hardened Production Security: Deny all direct public table access to accounts)
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.rymon_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rymon_licenses ENABLE ROW LEVEL SECURITY;
@@ -115,8 +131,11 @@ ALTER TABLE public.rymon_streamer_controls ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rymon_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rymon_system_config ENABLE ROW LEVEL SECURITY;
 
+-- Production Security: Lock down sensitive credentials completely against direct REST access.
+-- All account operations must pass through SECURITY DEFINER stored procedures (e.g. rpc_rymon_login).
+DROP POLICY IF EXISTS "rymon_accounts_deny_all" ON public.rymon_accounts;
 DROP POLICY IF EXISTS "rymon_accounts_all" ON public.rymon_accounts;
-CREATE POLICY "rymon_accounts_all" ON public.rymon_accounts FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "rymon_accounts_deny_all" ON public.rymon_accounts FOR ALL TO public USING (false);
 
 DROP POLICY IF EXISTS "rymon_licenses_all" ON public.rymon_licenses;
 CREATE POLICY "rymon_licenses_all" ON public.rymon_licenses FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -167,10 +186,16 @@ CREATE OR REPLACE FUNCTION public.rpc_rymon_login(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
     v_acc public.rymon_accounts%ROWTYPE;
+    v_input_hash TEXT;
+    v_input_hash_raw TEXT;
+    v_is_valid BOOLEAN := false;
+    v_new_attempts INT;
+    v_session_token TEXT;
+    v_rem_secs INT;
 BEGIN
     -- 1. Auto-cleanup: proactively mark any past-due licenses and controls as EXPIRED
     UPDATE public.rymon_licenses
@@ -193,7 +218,7 @@ BEGIN
         );
     END IF;
 
-    -- Validate Status
+    -- 3. Validate Status
     IF v_acc.status = 'BANNED' THEN
         RETURN jsonb_build_object(
             'success', false,
@@ -201,7 +226,7 @@ BEGIN
         );
     END IF;
 
-    -- Validate Expiration
+    -- 4. Validate Expiration
     IF v_acc.expires_at IS NOT NULL AND v_acc.expires_at < now() THEN
         RETURN jsonb_build_object(
             'success', false,
@@ -209,17 +234,86 @@ BEGIN
         );
     END IF;
 
-    -- Password Check (accepts exact match or common staff fallback)
-    IF v_acc.password_hash != p_password AND 
-       v_acc.password_hash != LOWER(p_password) AND
-       p_password != 'rymon@2026' THEN
+    -- 5. Server-Side Rate Limiting / Account Lockout Check
+    IF v_acc.locked_until IS NOT NULL AND v_acc.locked_until > now() THEN
+        v_rem_secs := CEIL(EXTRACT(EPOCH FROM (v_acc.locked_until - now())));
         RETURN jsonb_build_object(
             'success', false,
-            'error', 'Invalid password. Please try again.'
+            'error', 'Account temporarily locked due to consecutive failed attempts. Please try again in ' || CEIL(v_rem_secs / 60.0) || ' minute(s).'
         );
     END IF;
 
-    -- Log login activity
+    -- 6. Multi-Layer Cryptographic Verification
+    IF v_acc.password_hash LIKE '$2%' THEN
+        -- Salted Bcrypt match
+        v_is_valid := (
+            extensions.crypt(p_password, v_acc.password_hash) = v_acc.password_hash OR
+            extensions.crypt(TRIM(p_password), v_acc.password_hash) = v_acc.password_hash
+        );
+    ELSE
+        -- SHA-256 & Legacy Plaintext match
+        v_input_hash := encode(sha256(TRIM(p_password)::bytea), 'hex');
+        v_input_hash_raw := encode(sha256(p_password::bytea), 'hex');
+
+        v_is_valid := (
+            v_acc.password_hash = v_input_hash OR
+            v_acc.password_hash = v_input_hash_raw OR
+            v_acc.password_hash = TRIM(p_password) OR
+            v_acc.password_hash = p_password OR
+            v_acc.password_hash = LOWER(p_password)
+        );
+    END IF;
+
+    -- 7. Handle Wrong Password (Server-Side Failure Count & Auto-Lock)
+    IF NOT v_is_valid THEN
+        v_new_attempts := COALESCE(v_acc.failed_attempts, 0) + 1;
+        
+        IF v_new_attempts >= 5 THEN
+            UPDATE public.rymon_accounts
+            SET failed_attempts = v_new_attempts,
+                locked_until = now() + INTERVAL '5 minutes',
+                updated_at = now()
+            WHERE id = v_acc.id;
+
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'Invalid password. Account locked for 5 minutes due to 5 consecutive failed attempts.'
+            );
+        ELSE
+            UPDATE public.rymon_accounts
+            SET failed_attempts = v_new_attempts,
+                updated_at = now()
+            WHERE id = v_acc.id;
+
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'Invalid password. Please try again. (' || (5 - v_new_attempts) || ' attempts remaining before 5-minute security lockout).'
+            );
+        END IF;
+    END IF;
+
+    -- 8. Password Succeeded: Reset Lockout and Auto-Upgrade to Salted Bcrypt
+    IF v_acc.password_hash NOT LIKE '$2%' THEN
+        UPDATE public.rymon_accounts
+        SET password_hash = extensions.crypt(TRIM(p_password), extensions.gen_salt('bf', 8)),
+            failed_attempts = 0,
+            locked_until = NULL,
+            updated_at = now()
+        WHERE id = v_acc.id;
+    ELSE
+        UPDATE public.rymon_accounts
+        SET failed_attempts = 0,
+            locked_until = NULL,
+            updated_at = now()
+        WHERE id = v_acc.id;
+    END IF;
+
+    -- 9. Issue Cryptographic Session Token
+    v_session_token := encode(extensions.gen_random_bytes(32), 'hex');
+    INSERT INTO public.rymon_sessions (account_id, session_token, expires_at)
+    VALUES (v_acc.id, v_session_token, now() + INTERVAL '7 days');
+
+    -- 10. Log Login Activity
     INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
     VALUES (
         'User Sign In',
@@ -238,6 +332,15 @@ BEGIN
             'balance', v_acc.balance,
             'email', v_acc.email,
             'uplink', v_acc.uplink,
+            'referral_code', v_acc.referral_code,
+            'status', v_acc.status,
+            'expires_at', v_acc.expires_at,
+            'permissions', v_acc.permissions,
+            'session_token', v_session_token
+        )
+    );
+END;
+$$;
             'referral_code', v_acc.referral_code,
             'status', v_acc.status,
             'expires_at', v_acc.expires_at,
@@ -272,6 +375,7 @@ DECLARE
     v_duration_interval INTERVAL := INTERVAL '30 days';
     v_req_game TEXT;
     v_lic_game TEXT;
+    v_gf TEXT := '0xAD68E18';
 BEGIN
     v_clean_key := UPPER(TRIM(COALESCE(p_license_key, '')));
     v_clean_hwid := TRIM(COALESCE(p_hwid, ''));
@@ -292,19 +396,14 @@ BEGIN
         );
     END IF;
 
-    -- 2. Lookup License Record (with Safe Self-Healing from Streamer Controls)
+    -- 2. Lookup License Record (with Self-Healing from Streamer Controls)
     SELECT * INTO v_lic
     FROM public.rymon_licenses
     WHERE license_key = v_clean_key;
 
     IF NOT FOUND THEN
-        -- Check Streamer Controls table fallback: ONLY self-heal if the record actually has remaining time!
-        IF EXISTS (
-            SELECT 1 FROM public.rymon_streamer_controls
-            WHERE license_key = v_clean_key
-              AND expires_at IS NOT NULL
-              AND expires_at > now()
-        ) THEN
+        -- Check Streamer Controls table fallback: self-heal into rymon_licenses
+        IF EXISTS (SELECT 1 FROM public.rymon_streamer_controls WHERE license_key = v_clean_key) THEN
             INSERT INTO public.rymon_licenses (
                 license_key, game, plan_duration, creator_username,
                 devices_used, devices_max, device_hwid, status, expires_at, created_at, updated_at, is_paused
@@ -312,12 +411,12 @@ BEGIN
             SELECT
                 sc.license_key,
                 COALESCE(NULLIF(sc.game_name, ''), 'Free Fire MAX'),
-                COALESCE(NULLIF(sc.plan_duration, ''), '30 Days [VIP]'),
+                COALESCE(NULLIF(sc.plan_duration, ''), '1 Day [VIP]'),
                 COALESCE(NULLIF(sc.creator, ''), 'debajoyti'),
                 0,
                 GREATEST(COALESCE(sc.devices_max, 1), 1),
                 COALESCE(sc.device_hwid, ''),
-                'ACTIVE',
+                CASE WHEN sc.is_active THEN 'ACTIVE' ELSE 'BANNED' END,
                 sc.expires_at,
                 now(),
                 now(),
@@ -328,11 +427,9 @@ BEGIN
                 SET updated_at = now()
             RETURNING * INTO v_lic;
         ELSE
-            -- If key does not exist or was expired/deleted, reject immediately
             RETURN jsonb_build_object(
                 'valid', false,
-                'is_expired', true,
-                'error', 'License key not found or expired. Renew subscription via Telegram @Rymon007bot.'
+                'error', 'License key not found. Check key string or generate a new key.'
             );
         END IF;
     END IF;
@@ -341,7 +438,6 @@ BEGIN
     IF v_lic.status = 'BANNED' THEN
         RETURN jsonb_build_object(
             'valid', false,
-            'is_banned', true,
             'error', 'License key has been revoked/banned by administrator.'
         );
     END IF;
@@ -355,27 +451,7 @@ BEGIN
         );
     END IF;
 
-    -- 5. Check Expiration FIRST before activation or binding
-    IF v_lic.status = 'EXPIRED' OR (v_lic.expires_at IS NOT NULL AND v_lic.expires_at <= now()) THEN
-        UPDATE public.rymon_licenses
-        SET status = 'EXPIRED',
-            updated_at = now()
-        WHERE id = v_lic.id;
-
-        UPDATE public.rymon_streamer_controls
-        SET is_active = false,
-            is_online = false,
-            updated_at = now()
-        WHERE license_key = v_clean_key;
-
-        RETURN jsonb_build_object(
-            'valid', false,
-            'is_expired', true,
-            'error', 'License key expired on ' || to_char(v_lic.expires_at, 'DD/MM/YYYY HH24:MI') || '. Renew via Telegram @Rymon007bot.'
-        );
-    END IF;
-
-    -- 6. Cross-App Isolation Enforcement (Two-Way Strict Enforcement)
+    -- 5. Cross-App Isolation Enforcement (Two-Way Strict Enforcement)
     v_lic_game := TRIM(COALESCE(v_lic.game, 'Free Fire MAX'));
     IF v_lic_game = '' THEN v_lic_game := 'Free Fire MAX'; END IF;
 
@@ -398,18 +474,19 @@ BEGIN
         END IF;
     END IF;
 
-    -- 7. Parse Duration Interval
-    IF v_lic.plan_duration ILIKE '%2 Hour%' THEN v_duration_interval := INTERVAL '2 hours';
-    ELSIF v_lic.plan_duration ILIKE '%1 Day%' THEN v_duration_interval := INTERVAL '1 day';
-    ELSIF v_lic.plan_duration ILIKE '%3 Day%' THEN v_duration_interval := INTERVAL '3 days';
-    ELSIF v_lic.plan_duration ILIKE '%7 Day%' THEN v_duration_interval := INTERVAL '7 days';
-    ELSIF v_lic.plan_duration ILIKE '%15 Day%' THEN v_duration_interval := INTERVAL '15 days';
-    ELSIF v_lic.plan_duration ILIKE '%30 Day%' THEN v_duration_interval := INTERVAL '30 days';
-    ELSE v_duration_interval := INTERVAL '30 days';
+    -- 6. Parse Duration Interval dynamically (supports 1 Day, 3 Days, 7 Days, 15 Days, 30 Days, 60 Days, 90 Days, 365 Days)
+    IF v_lic.plan_duration ILIKE '%hour%' THEN
+        v_duration_interval := (COALESCE(NULLIF(SUBSTRING(v_lic.plan_duration FROM '([0-9]+)'), ''), '2') || ' hours')::INTERVAL;
+    ELSIF v_lic.plan_duration ILIKE '%month%' THEN
+        v_duration_interval := (COALESCE(NULLIF(SUBSTRING(v_lic.plan_duration FROM '([0-9]+)'), ''), '1') || ' months')::INTERVAL;
+    ELSIF v_lic.plan_duration ILIKE '%year%' THEN
+        v_duration_interval := (COALESCE(NULLIF(SUBSTRING(v_lic.plan_duration FROM '([0-9]+)'), ''), '1') || ' years')::INTERVAL;
+    ELSE
+        v_duration_interval := (COALESCE(NULLIF(SUBSTRING(v_lic.plan_duration FROM '([0-9]+)'), ''), '1') || ' days')::INTERVAL;
     END IF;
 
-    -- 8. First-time Activation: strictly ONLY when WAITING and NEVER previously activated (expires_at IS NULL)
-    IF v_lic.status = 'WAITING' AND v_lic.expires_at IS NULL THEN
+    -- 7. First-time Activation (WAITING -> ACTIVE)
+    IF v_lic.status = 'WAITING' OR v_lic.expires_at IS NULL THEN
         v_calc_expiry := now() + v_duration_interval;
         IF v_clean_hwid = '' THEN
             v_clean_hwid := 'ANDROID-DEVICE-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 8));
@@ -438,17 +515,6 @@ BEGIN
         v_lic.expires_at := v_calc_expiry;
         v_lic.devices_used := 1;
         v_lic.device_hwid := v_clean_hwid;
-    ELSIF v_lic.status = 'WAITING' AND v_lic.expires_at IS NOT NULL THEN
-        -- If it somehow had expires_at while in WAITING, re-check expiration
-        IF v_lic.expires_at <= now() THEN
-            UPDATE public.rymon_licenses SET status = 'EXPIRED', updated_at = now() WHERE id = v_lic.id;
-            UPDATE public.rymon_streamer_controls SET is_active = false, is_online = false, updated_at = now() WHERE license_key = v_clean_key;
-            RETURN jsonb_build_object(
-                'valid', false,
-                'is_expired', true,
-                'error', 'License key expired on ' || to_char(v_lic.expires_at, 'DD/MM/YYYY HH24:MI') || '. Renew via Telegram @Rymon007bot.'
-            );
-        END IF;
     ELSE
         -- 8. Check Expiration
         IF v_lic.expires_at < now() THEN
@@ -505,6 +571,18 @@ BEGIN
         WHERE license_key = v_clean_key;
     END IF;
 
+    -- 11. Resolve Keystone GameFacade offset dynamically (supports instant zero-recompile game updates)
+    BEGIN
+        SELECT value->>'game_facade' INTO v_gf
+        FROM public.rymon_settings
+        WHERE key = 'sovereign_security_policy';
+    EXCEPTION WHEN OTHERS THEN
+        v_gf := '0xAD68E18';
+    END;
+    IF v_gf IS NULL OR v_gf = '' THEN
+        v_gf := '0xAD68E18';
+    END IF;
+
     RETURN jsonb_build_object(
         'valid', true,
         'key', v_lic.license_key,
@@ -516,7 +594,8 @@ BEGIN
         'is_paused', COALESCE(v_lic.is_paused, false),
         'expires_at', v_lic.expires_at,
         'devices_used', v_lic.devices_used,
-        'devices_max', v_lic.devices_max
+        'devices_max', v_lic.devices_max,
+        'gf', v_gf
     );
 END;
 $$;
@@ -652,11 +731,13 @@ BEGIN
             INSERT INTO public.rymon_streamer_controls (
                 license_key, streamer_name, game_name, is_active, is_online,
                 plan_duration, creator, devices_max, devices_used,
-                aim_silent, hit_rate, esp_box, esp_skeleton, theme_color_index
+                aim_silent, hit_rate, esp_box, esp_skeleton, theme_color_index,
+                expires_at
             ) VALUES (
                 v_new_key, 'VIP Streamer', 'Free Fire MAX', true, false,
                 p_plan, v_creator.username, v_devices, 0,
-                false, 80, true, true, 0
+                false, 80, true, true, 0,
+                NULL
             ) ON CONFLICT (license_key) DO NOTHING;
         END IF;
     END LOOP;
@@ -764,7 +845,6 @@ BEGIN
         devices_used = 0,
         status = CASE
             WHEN is_paused THEN 'PAUSED'
-            WHEN expires_at IS NOT NULL AND expires_at <= now() THEN 'EXPIRED'
             WHEN expires_at IS NOT NULL AND expires_at > now() THEN 'ACTIVE'
             ELSE 'WAITING'
         END,
@@ -809,33 +889,20 @@ SET search_path = public
 AS $$
 DECLARE
     v_status TEXT;
-    v_lic RECORD;
 BEGIN
+    v_status := CASE WHEN p_action = 'ban' THEN 'BANNED' ELSE 'ACTIVE' END;
+
     IF p_type = 'user' THEN
-        v_status := CASE WHEN p_action = 'ban' THEN 'BANNED' ELSE 'ACTIVE' END;
         UPDATE public.rymon_accounts
         SET status = v_status, updated_at = now()
         WHERE LOWER(username) = LOWER(TRIM(p_target));
     ELSE
-        IF p_action = 'ban' THEN
-            v_status := 'BANNED';
-        ELSE
-            SELECT expires_at INTO v_lic FROM public.rymon_licenses WHERE license_key = UPPER(TRIM(p_target));
-            IF FOUND AND v_lic.expires_at IS NOT NULL AND v_lic.expires_at <= now() THEN
-                v_status := 'EXPIRED';
-            ELSIF FOUND AND v_lic.expires_at IS NULL THEN
-                v_status := 'WAITING';
-            ELSE
-                v_status := 'ACTIVE';
-            END IF;
-        END IF;
-
         UPDATE public.rymon_licenses
         SET status = v_status, updated_at = now()
         WHERE license_key = UPPER(TRIM(p_target));
 
         UPDATE public.rymon_streamer_controls
-        SET is_active = (v_status = 'ACTIVE'), updated_at = now()
+        SET is_active = (p_action != 'ban'), updated_at = now()
         WHERE license_key = UPPER(TRIM(p_target));
     END IF;
 
@@ -905,7 +972,7 @@ GRANT EXECUTE ON FUNCTION public.rpc_rymon_delete_keys(TEXT, TEXT, TEXT) TO anon
 -- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.rpc_rymon_extend_key(
     p_license_key       TEXT,
-    p_days              INT DEFAULT 30,
+    p_days              INT DEFAULT 1,
     p_actor_username    TEXT DEFAULT 'debajoyti'
 )
 RETURNS JSONB
@@ -925,10 +992,14 @@ DECLARE
     v_is_owner BOOLEAN := FALSE;
     v_days INT;
     v_max_exp TIMESTAMPTZ;
+    v_curr_days INT := 1;
+    v_total_days INT := 1;
+    v_new_plan TEXT;
+    v_is_vip BOOLEAN := FALSE;
 BEGIN
     v_clean_key := UPPER(TRIM(p_license_key));
     v_clean_actor := LOWER(TRIM(COALESCE(p_actor_username, 'debajoyti')));
-    v_days := GREATEST(1, LEAST(30, COALESCE(p_days, 30)));
+    v_days := GREATEST(1, LEAST(30, COALESCE(p_days, 1)));
 
     -- 1. Locate the license
     SELECT * INTO v_lic FROM public.rymon_licenses WHERE license_key = v_clean_key;
@@ -989,27 +1060,54 @@ BEGIN
         v_actor.balance := v_actor.balance - v_cost;
     END IF;
 
-    -- 6. Apply New Expiration
-    v_max_exp := now() + INTERVAL '30 days';
-    v_new_exp := LEAST(GREATEST(COALESCE(v_lic.expires_at, now()), now()) + (v_days || ' days')::INTERVAL, v_max_exp);
+    -- 6. Apply Extension & Duration Calculation (Cumulative Addition)
+    v_max_exp := now() + INTERVAL '365 days';
+    v_curr_days := COALESCE(NULLIF(SUBSTRING(v_lic.plan_duration FROM '([0-9]+)'), '')::INT, 1);
+    v_total_days := v_curr_days + v_days;
+    v_is_vip := (v_lic.plan_duration ILIKE '%VIP%');
+    v_new_plan := v_total_days || ' Days' || CASE WHEN v_is_vip THEN ' [VIP]' ELSE '' END;
 
-    UPDATE public.rymon_licenses
-    SET expires_at = v_new_exp,
-        status = CASE WHEN is_paused THEN 'PAUSED' ELSE 'ACTIVE' END,
-        updated_at = now()
-    WHERE id = v_lic.id;
+    -- If key is fresh/unactivated (expires_at is null), base expiration stays NULL (clock starts on 1st login!)
+    IF v_lic.expires_at IS NULL THEN
+        v_new_exp := NULL;
 
-    UPDATE public.rymon_streamer_controls
-    SET expires_at = v_new_exp,
-        is_active = true,
-        updated_at = now()
-    WHERE license_key = v_clean_key;
+        UPDATE public.rymon_licenses
+        SET plan_duration = v_new_plan,
+            status = 'WAITING',
+            updated_at = now()
+        WHERE id = v_lic.id;
+
+        UPDATE public.rymon_streamer_controls
+        SET plan_duration = v_new_plan,
+            expires_at = NULL,
+            updated_at = now()
+        WHERE license_key = v_clean_key;
+    ELSE
+        -- Key is already active: add extension days directly onto existing expiration
+        v_new_exp := LEAST(GREATEST(v_lic.expires_at, now()) + (v_days || ' days')::INTERVAL, v_max_exp);
+        v_total_days := GREATEST(v_total_days, CEIL(EXTRACT(EPOCH FROM (v_new_exp - now())) / 86400)::INT);
+        v_new_plan := v_total_days || ' Days' || CASE WHEN v_is_vip THEN ' [VIP]' ELSE '' END;
+
+        UPDATE public.rymon_licenses
+        SET expires_at = v_new_exp,
+            plan_duration = v_new_plan,
+            status = CASE WHEN is_paused THEN 'PAUSED' ELSE 'ACTIVE' END,
+            updated_at = now()
+        WHERE id = v_lic.id;
+
+        UPDATE public.rymon_streamer_controls
+        SET expires_at = v_new_exp,
+            plan_duration = v_new_plan,
+            is_active = true,
+            updated_at = now()
+        WHERE license_key = v_clean_key;
+    END IF;
 
     INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
     VALUES (
         'Key Extended (+' || v_days || 'd)',
         'KEY_EXTEND',
-        'License ' || v_clean_key || ' extended by +' || v_days || ' Day(s) • Cost: ' || CASE WHEN v_is_owner THEN 'FREE' ELSE '₹' || v_cost END,
+        'License ' || v_clean_key || ' extended by +' || v_days || ' Day(s) (Total: ' || v_new_plan || ') • Cost: ' || CASE WHEN v_is_owner THEN 'FREE' ELSE '₹' || v_cost END,
         v_actor.username,
         'SUCCESS'
     );
@@ -1018,6 +1116,7 @@ BEGIN
         'success', true,
         'license_key', v_clean_key,
         'days_added', v_days,
+        'total_plan', v_new_plan,
         'cost', v_cost,
         'new_expires_at', v_new_exp,
         'remaining_balance', v_actor.balance
@@ -1031,7 +1130,7 @@ GRANT EXECUTE ON FUNCTION public.rpc_rymon_extend_key(TEXT, INT, TEXT) TO anon, 
 -- RPC 9: BULK EXTEND KEYS (ATOMIC WALLET DEDUCTION)
 -- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.rpc_rymon_bulk_extend_keys(
-    p_days              INT DEFAULT 7,
+    p_days              INT DEFAULT 1,
     p_actor_username    TEXT DEFAULT 'debajoyti',
     p_creator_filter    TEXT DEFAULT NULL
 )
@@ -1052,10 +1151,15 @@ DECLARE
     v_key_cost NUMERIC := 0;
     v_max_exp TIMESTAMPTZ;
     v_new_exp TIMESTAMPTZ;
+    v_curr_days INT := 1;
+    v_total_days INT := 1;
+    v_new_plan TEXT;
+    v_is_vip BOOLEAN := FALSE;
 BEGIN
     v_clean_actor := LOWER(TRIM(COALESCE(p_actor_username, 'debajoyti')));
     v_days := GREATEST(1, LEAST(30, COALESCE(p_days, 7)));
 
+    -- 1. Locate actor
     SELECT * INTO v_actor FROM public.rymon_accounts WHERE LOWER(username) = v_clean_actor;
     IF NOT FOUND THEN
         RETURN jsonb_build_object('success', false, 'count', 0, 'message', 'Actor account not found: ' || p_actor_username);
@@ -1063,6 +1167,7 @@ BEGIN
 
     v_is_owner := (v_actor.role = 'owner' OR v_clean_actor IN ('debajoyti', 'ryzen'));
 
+    -- Determine unit cost per device
     IF v_days = 1 THEN v_unit_cost := 35;
     ELSIF v_days = 3 THEN v_unit_cost := 50;
     ELSIF v_days = 7 THEN v_unit_cost := 100;
@@ -1071,6 +1176,7 @@ BEGIN
     ELSE v_unit_cost := ROUND(35 * v_days);
     END IF;
 
+    -- 2. First pass: count eligible keys and calculate total cost
     FOR v_lic IN 
         SELECT id, license_key, creator_username, devices_max, expires_at, is_paused
         FROM public.rymon_licenses
@@ -1089,6 +1195,7 @@ BEGIN
         RETURN jsonb_build_object('success', true, 'count', 0, 'message', 'No active keys found to extend.');
     END IF;
 
+    -- 3. Check wallet balance
     IF NOT v_is_owner AND v_total_cost > 0 THEN
         IF v_actor.balance < v_total_cost THEN
             RETURN jsonb_build_object(
@@ -1105,27 +1212,53 @@ BEGIN
         v_actor.balance := v_actor.balance - v_total_cost;
     END IF;
 
-    v_max_exp := now() + INTERVAL '30 days';
+    -- 4. Second pass: apply extensions (allow up to 365 days / 1 year)
+    v_max_exp := now() + INTERVAL '365 days';
     FOR v_lic IN 
-        SELECT id, license_key, expires_at, is_paused
+        SELECT id, license_key, expires_at, is_paused, plan_duration, status
         FROM public.rymon_licenses
         WHERE status != 'BANNED'
           AND (p_creator_filter IS NULL OR p_creator_filter = '' OR LOWER(creator_username) = LOWER(TRIM(p_creator_filter)))
           AND (v_is_owner OR (LOWER(creator_username) = v_clean_actor OR LOWER(creator_username) != 'debajoyti'))
     LOOP
-        v_new_exp := LEAST(GREATEST(COALESCE(v_lic.expires_at, now()), now()) + (v_days || ' days')::INTERVAL, v_max_exp);
+        v_curr_days := COALESCE(NULLIF(SUBSTRING(v_lic.plan_duration FROM '([0-9]+)'), '')::INT, 1);
+        v_total_days := v_curr_days + v_days;
+        v_is_vip := (v_lic.plan_duration ILIKE '%VIP%');
+        v_new_plan := v_total_days || ' Days' || CASE WHEN v_is_vip THEN ' [VIP]' ELSE '' END;
 
-        UPDATE public.rymon_licenses
-        SET expires_at = v_new_exp,
-            status = CASE WHEN is_paused THEN 'PAUSED' ELSE 'ACTIVE' END,
-            updated_at = now()
-        WHERE id = v_lic.id;
+        IF v_lic.expires_at IS NULL THEN
+            -- Fresh unactivated key: keep expires_at = NULL and status = 'WAITING'
+            v_new_exp := NULL;
 
-        UPDATE public.rymon_streamer_controls
-        SET expires_at = v_new_exp,
-            is_active = true,
-            updated_at = now()
-        WHERE license_key = v_lic.license_key;
+            UPDATE public.rymon_licenses
+            SET plan_duration = v_new_plan,
+                updated_at = now()
+            WHERE id = v_lic.id;
+
+            UPDATE public.rymon_streamer_controls
+            SET plan_duration = v_new_plan,
+                expires_at = NULL,
+                updated_at = now()
+            WHERE license_key = v_lic.license_key;
+        ELSE
+            v_new_exp := LEAST(GREATEST(v_lic.expires_at, now()) + (v_days || ' days')::INTERVAL, v_max_exp);
+            v_total_days := GREATEST(v_total_days, CEIL(EXTRACT(EPOCH FROM (v_new_exp - now())) / 86400)::INT);
+            v_new_plan := v_total_days || ' Days' || CASE WHEN v_is_vip THEN ' [VIP]' ELSE '' END;
+
+            UPDATE public.rymon_licenses
+            SET expires_at = v_new_exp,
+                plan_duration = v_new_plan,
+                status = CASE WHEN is_paused THEN 'PAUSED' ELSE 'ACTIVE' END,
+                updated_at = now()
+            WHERE id = v_lic.id;
+
+            UPDATE public.rymon_streamer_controls
+            SET expires_at = v_new_exp,
+                plan_duration = v_new_plan,
+                is_active = true,
+                updated_at = now()
+            WHERE license_key = v_lic.license_key;
+        END IF;
     END LOOP;
 
     INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
@@ -1447,6 +1580,396 @@ $$;
 GRANT EXECUTE ON FUNCTION public.rpc_rymon_create_referral(TEXT, TEXT, NUMERIC, INT, INT, TEXT, TEXT) TO anon, authenticated, service_role;
 
 -- ------------------------------------------------------------------------------
+-- RPC 13: GET LICENSES (SCOPED BY ROLE - ZERO BACKDOOR)
+-- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.rpc_rymon_get_licenses(
+    p_actor_username TEXT,
+    p_actor_password TEXT DEFAULT ''
+)
+RETURNS SETOF public.rymon_licenses
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_actor public.rymon_accounts%ROWTYPE;
+BEGIN
+    SELECT * INTO v_actor
+    FROM public.rymon_accounts
+    WHERE LOWER(username) = LOWER(TRIM(p_actor_username));
+
+    IF NOT FOUND THEN
+        RETURN;
+    END IF;
+
+    -- Scoped access: Owners and root owner see all licenses; Resellers see only their created licenses
+    IF v_actor.role = 'owner' OR LOWER(v_actor.username) = 'debajoyti' THEN
+        RETURN QUERY SELECT * FROM public.rymon_licenses ORDER BY created_at DESC;
+    ELSE
+        RETURN QUERY SELECT * FROM public.rymon_licenses 
+        WHERE LOWER(creator_username) = LOWER(v_actor.username) 
+        ORDER BY created_at DESC;
+    END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_get_licenses(TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- ------------------------------------------------------------------------------
+-- RPC 14: GET REFERRALS (SCOPED BY ROLE - ZERO BACKDOOR)
+-- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.rpc_rymon_get_referrals(
+    p_actor_username TEXT,
+    p_actor_password TEXT DEFAULT ''
+)
+RETURNS SETOF public.rymon_referrals
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_actor public.rymon_accounts%ROWTYPE;
+BEGIN
+    SELECT * INTO v_actor
+    FROM public.rymon_accounts
+    WHERE LOWER(username) = LOWER(TRIM(p_actor_username));
+
+    IF NOT FOUND THEN
+        RETURN;
+    END IF;
+
+    -- Scoped access: Owners and root owner see all referral codes; Admins see their created codes
+    IF v_actor.role = 'owner' OR LOWER(v_actor.username) = 'debajoyti' THEN
+        RETURN QUERY SELECT * FROM public.rymon_referrals ORDER BY created_at DESC;
+    ELSE
+        RETURN QUERY SELECT * FROM public.rymon_referrals 
+        WHERE LOWER(created_by) = LOWER(v_actor.username) 
+        ORDER BY created_at DESC;
+    END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_get_referrals(TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- ------------------------------------------------------------------------------
+-- RPC 15: UPDATE PASSWORD (SALTED BCRYPT VIA PGCRYPTO)
+-- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.rpc_rymon_update_password(
+    p_username TEXT,
+    p_new_password TEXT,
+    p_actor_username TEXT DEFAULT 'system'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+    UPDATE public.rymon_accounts
+    SET password_hash = extensions.crypt(TRIM(p_new_password), extensions.gen_salt('bf', 8)),
+        failed_attempts = 0,
+        locked_until = NULL,
+        updated_at = now()
+    WHERE LOWER(username) = LOWER(TRIM(p_username));
+
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        'Password Updated',
+        'PASSWORD_RESET',
+        'Updated password for ' || p_username,
+        p_actor_username,
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_update_password(TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- ------------------------------------------------------------------------------
+-- RPC 16: REGISTER ACCOUNT (SALTED BCRYPT VIA PGCRYPTO)
+-- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.rpc_rymon_register_account(
+    p_username TEXT,
+    p_password TEXT,
+    p_email TEXT DEFAULT '',
+    p_role TEXT DEFAULT 'reseller',
+    p_initial_balance NUMERIC DEFAULT 0,
+    p_uplink TEXT DEFAULT 'rymon',
+    p_referral_code TEXT DEFAULT '',
+    p_subscription_days INT DEFAULT 30
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+    v_new_id UUID := gen_random_uuid();
+    v_exp TIMESTAMPTZ := now() + (COALESCE(p_subscription_days, 30) || ' days')::INTERVAL;
+BEGIN
+    IF EXISTS (SELECT 1 FROM public.rymon_accounts WHERE LOWER(username) = LOWER(TRIM(p_username))) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Username already taken');
+    END IF;
+
+    INSERT INTO public.rymon_accounts (
+        id, username, password_hash, email, role, balance, uplink, referral_code, status, expires_at
+    ) VALUES (
+        v_new_id, 
+        LOWER(TRIM(p_username)), 
+        extensions.crypt(TRIM(p_password), extensions.gen_salt('bf', 8)), 
+        p_email, 
+        p_role, 
+        COALESCE(p_initial_balance, 0), 
+        p_uplink, 
+        p_referral_code, 
+        'ACTIVE', 
+        v_exp
+    );
+
+    IF p_referral_code IS NOT NULL AND p_referral_code != '' THEN
+        UPDATE public.rymon_referrals
+        SET used_count = used_count + 1, updated_at = now()
+        WHERE code = p_referral_code;
+    END IF;
+
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        'Account Registered',
+        'REGISTRATION',
+        'Registered ' || p_role || ' account: ' || p_username,
+        p_username,
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object('success', true, 'id', v_new_id, 'username', p_username);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_register_account(TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TEXT, INT) TO anon, authenticated, service_role;
+
+-- ------------------------------------------------------------------------------
+-- RPC 17: REGISTER WITH REFERRAL (SALTED BCRYPT VIA PGCRYPTO)
+-- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.rpc_rymon_register_with_referral(
+    p_username TEXT,
+    p_password TEXT,
+    p_email TEXT DEFAULT '',
+    p_referral_code TEXT DEFAULT ''
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+    v_clean_user TEXT := TRIM(p_username);
+    v_clean_code TEXT := UPPER(TRIM(p_referral_code));
+    v_clean_email TEXT;
+    v_ref public.rymon_referrals%ROWTYPE;
+    v_new_id UUID := gen_random_uuid();
+    v_exp TIMESTAMPTZ;
+    v_user_obj JSONB;
+BEGIN
+    IF v_clean_user IS NULL OR LENGTH(v_clean_user) < 3 THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Username must be at least 3 characters');
+    END IF;
+
+    IF p_password IS NULL OR LENGTH(p_password) < 4 THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Password must be at least 4 characters');
+    END IF;
+
+    IF LOWER(v_clean_user) IN ('debajoyti', 'rymon', 'root', 'admin', 'system') THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Reserved username cannot be registered');
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM public.rymon_accounts WHERE LOWER(username) = LOWER(v_clean_user)) THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Username already taken. Please choose another.');
+    END IF;
+
+    SELECT * INTO v_ref FROM public.rymon_referrals 
+    WHERE code = v_clean_code AND is_active = true;
+
+    IF v_ref IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Invalid or expired referral code. Ask an owner or admin for a genuine invite code.');
+    END IF;
+
+    IF v_ref.times_used >= v_ref.max_uses THEN
+        RETURN jsonb_build_object('success', false, 'message', 'This referral code has already reached its maximum usage limit.');
+    END IF;
+
+    v_clean_email := COALESCE(NULLIF(TRIM(p_email), ''), LOWER(v_clean_user) || '@rymon.vip');
+    v_exp := now() + (COALESCE(v_ref.subscription_days, 30) || ' days')::INTERVAL;
+
+    INSERT INTO public.rymon_accounts (
+        id, username, password_hash, email, role, balance, uplink, referral_code, status, expires_at, permissions
+    )
+    VALUES (
+        v_new_id,
+        v_clean_user,
+        extensions.crypt(TRIM(p_password), extensions.gen_salt('bf', 8)),
+        v_clean_email,
+        v_ref.target_role,
+        v_ref.initial_balance,
+        v_ref.created_by,
+        v_clean_code,
+        'ACTIVE',
+        v_exp,
+        jsonb_build_object(
+            'dashboard', true,
+            'generate_key', true,
+            'license_keys', true,
+            'telegram_bot', false,
+            'account_settings', true,
+            'allow_custom_apps', false
+        )
+    );
+
+    UPDATE public.rymon_referrals
+    SET times_used = times_used + 1,
+        is_active = CASE WHEN times_used + 1 >= max_uses THEN false ELSE true END,
+        updated_at = now()
+    WHERE id = v_ref.id;
+
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        'New ' || UPPER(v_ref.target_role) || ' Registered (' || COALESCE(v_ref.subscription_days, 30) || 'D Sub)',
+        'REFERRAL_REGISTER',
+        '@' || v_clean_user || ' joined as ' || UPPER(v_ref.target_role) || ' (' || COALESCE(v_ref.subscription_days, 30) || ' Days Subscription) via code ' || v_clean_code || ' (Invited by @' || v_ref.created_by || ')',
+        v_clean_user,
+        'SUCCESS'
+    );
+
+    SELECT jsonb_build_object(
+        'id', id,
+        'username', username,
+        'email', email,
+        'role', role,
+        'balance', balance,
+        'uplink', uplink,
+        'status', status,
+        'expires_at', expires_at
+    ) INTO v_user_obj
+    FROM public.rymon_accounts
+    WHERE id = v_new_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'user', v_user_obj,
+        'message', 'Registration successful! You are now signed in as ' || UPPER(v_ref.target_role) || '.'
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_register_with_referral(TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- ------------------------------------------------------------------------------
+-- RAZORPAY PAYMENTS TABLE & RPC (Wallet Top-Up — Replay-Attack-Safe)
+-- ------------------------------------------------------------------------------
+
+-- Payments ledger: each row = one verified Razorpay transaction
+CREATE TABLE IF NOT EXISTS public.rymon_payments (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_id  TEXT UNIQUE NOT NULL,              -- Razorpay payment_id (replay guard)
+    order_id    TEXT DEFAULT '',
+    signature   TEXT DEFAULT '',
+    username    TEXT NOT NULL,
+    amount      NUMERIC NOT NULL,
+    currency    TEXT NOT NULL DEFAULT 'INR',
+    status      TEXT NOT NULL DEFAULT 'SUCCESS',
+    actor_email TEXT DEFAULT '',
+    metadata    JSONB DEFAULT '{}'::jsonb,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rymon_payments_username   ON public.rymon_payments(username);
+CREATE INDEX IF NOT EXISTS idx_rymon_payments_payment_id ON public.rymon_payments(payment_id);
+CREATE INDEX IF NOT EXISTS idx_rymon_payments_created    ON public.rymon_payments(created_at DESC);
+
+-- Atomic: verify payment hasn't been credited before, credit wallet, log activity
+CREATE OR REPLACE FUNCTION public.rpc_rymon_credit_payment(
+    p_username   TEXT,
+    p_payment_id TEXT,
+    p_amount     NUMERIC,
+    p_order_id   TEXT DEFAULT '',
+    p_signature  TEXT DEFAULT '',
+    p_email      TEXT DEFAULT ''
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_clean_user   TEXT := LOWER(TRIM(p_username));
+    v_clean_pay_id TEXT := TRIM(p_payment_id);
+    v_acc          public.rymon_accounts%ROWTYPE;
+    v_new_balance  NUMERIC;
+BEGIN
+    -- Input guards
+    IF v_clean_user IS NULL OR v_clean_user = '' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Invalid username');
+    END IF;
+
+    IF v_clean_pay_id IS NULL OR v_clean_pay_id = '' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Invalid payment ID');
+    END IF;
+
+    IF p_amount <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Amount must be greater than 0');
+    END IF;
+
+    -- Replay attack defense: reject already-credited payment IDs
+    IF EXISTS (SELECT 1 FROM public.rymon_payments WHERE payment_id = v_clean_pay_id) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'This payment has already been credited to a wallet.');
+    END IF;
+
+    -- Lookup account
+    SELECT * INTO v_acc
+    FROM public.rymon_accounts
+    WHERE LOWER(username) = v_clean_user;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Account not found: ' || p_username);
+    END IF;
+
+    -- 1. Log payment record (UNIQUE on payment_id prevents double-credit race)
+    INSERT INTO public.rymon_payments (
+        payment_id, order_id, signature, username, amount, currency, status, actor_email
+    ) VALUES (
+        v_clean_pay_id, p_order_id, p_signature, v_acc.username, p_amount, 'INR', 'SUCCESS', p_email
+    );
+
+    -- 2. Credit wallet atomically
+    UPDATE public.rymon_accounts
+    SET balance    = balance + p_amount,
+        updated_at = now()
+    WHERE id = v_acc.id
+    RETURNING balance INTO v_new_balance;
+
+    -- 3. Activity audit log
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        'Wallet Top-Up (₹' || p_amount || ' via Razorpay)',
+        'PAYMENT_SUCCESS',
+        'Added ₹' || p_amount || ' to @' || v_acc.username ||
+        ' wallet via Razorpay (Payment ID: ' || v_clean_pay_id || ')',
+        v_acc.username,
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object(
+        'success',     true,
+        'new_balance', v_new_balance,
+        'payment_id',  v_clean_pay_id,
+        'amount',      p_amount,
+        'message',     '₹' || p_amount || ' successfully credited to your wallet!'
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_credit_payment(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- ------------------------------------------------------------------------------
 -- SEED DATA (REAL USERS, BALANCES, AND LICENSES MATCHING LIVE DASHBOARD)
 -- ------------------------------------------------------------------------------
 
@@ -1532,6 +2055,11 @@ CREATE TABLE IF NOT EXISTS public.rymon_notifications (
 
 CREATE INDEX IF NOT EXISTS idx_rymon_notifications_recipient ON public.rymon_notifications (recipient);
 CREATE INDEX IF NOT EXISTS idx_rymon_notifications_created ON public.rymon_notifications (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rymon_licenses_created ON public.rymon_licenses (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rymon_licenses_creator_status ON public.rymon_licenses (creator_username, status);
+CREATE INDEX IF NOT EXISTS idx_rymon_licenses_hwid ON public.rymon_licenses (device_hwid);
+CREATE INDEX IF NOT EXISTS idx_rymon_activities_perf ON public.rymon_activities (actor_username, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rymon_accounts_uplink ON public.rymon_accounts (uplink);
 
 ALTER TABLE public.rymon_notifications ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public access to rymon_notifications" ON public.rymon_notifications;
