@@ -530,6 +530,9 @@ export default function RymonConnect() {
   const [renewConfirmDays, setRenewConfirmDays] = useState<30 | 60>(30)
   const [renewConfirmLoading, setRenewConfirmLoading] = useState(false)
 
+  // Per-key pause loading set — prevents double-tap race condition
+  const [pauseLoadingKeys, setPauseLoadingKeys] = useState<Set<string>>(new Set())
+
   // Sovereign Connect URL & APK Test Sandbox State
   const [testConnectKey, setTestConnectKey] = useState('')
   const [testConnectHwid, setTestConnectHwid] = useState('DEVICE-SIM-ANDROID-9981')
@@ -2143,6 +2146,10 @@ export default function RymonConnect() {
 
   const handleToggleStealthFreeze = async () => {
     if (!canControlCurrentKey()) return
+    // Prevent double-tap while request is in-flight
+    if (pauseLoadingKeys.has(currentKey)) return
+    setPauseLoadingKeys((prev) => new Set(prev).add(currentKey))
+
     const nextPaused = !record?.is_paused
     const nowIso = new Date().toISOString()
     setRecord((prev) => (prev ? { ...prev, is_paused: nextPaused, updated_at: nowIso } : null))
@@ -2178,6 +2185,12 @@ export default function RymonConnect() {
     )
 
     showToast(nextPaused ? '❄️ Stealth Freeze Active (Visuals Hidden)' : '▶️ Resumed Live Controls')
+
+    setPauseLoadingKeys((prev) => {
+      const next = new Set(prev)
+      next.delete(currentKey)
+      return next
+    })
   }
 
   const handleCopyKey = (keyString: string) => {
@@ -2801,31 +2814,44 @@ export default function RymonConnect() {
   }
 
   const handleTogglePauseKey = async (keyString: string) => {
-    const res = await togglePauseLicenseBackend(keyString, currentUser?.username || 'debajoyti')
-    if (res.success) {
-      showToast(res.message)
-      // Keep Render VIP in sync if streamer daemon is attached
-      sendRenderVipPatch(keyString, { is_paused: res.is_paused })
-      setKeysList((prev) =>
-        prev.map((k) =>
-          k.license_key === keyString
-            ? {
-                ...k,
-                is_paused: res.is_paused,
-                status: res.status as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED',
-                expires_at: res.newExpiresAt !== undefined ? res.newExpiresAt : k.expires_at
-              }
-            : k
+    // Prevent double-tap: if already in-flight for this key, ignore
+    if (pauseLoadingKeys.has(keyString)) return
+    setPauseLoadingKeys((prev) => new Set(prev).add(keyString))
+
+    try {
+      const res = await togglePauseLicenseBackend(keyString, currentUser?.username || 'debajoyti')
+      if (res.success) {
+        showToast(res.message)
+        // Keep Render VIP in sync if streamer daemon is attached
+        sendRenderVipPatch(keyString, { is_paused: res.is_paused })
+        setKeysList((prev) =>
+          prev.map((k) =>
+            k.license_key === keyString
+              ? {
+                  ...k,
+                  is_paused: res.is_paused,
+                  status: res.status as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED',
+                  expires_at: res.newExpiresAt !== undefined ? res.newExpiresAt : k.expires_at
+                }
+              : k
+          )
         )
-      )
-      if (currentKey === keyString && res.newExpiresAt) {
-        setExpiryDate(new Date(res.newExpiresAt))
+        if (currentKey === keyString && res.newExpiresAt) {
+          setExpiryDate(new Date(res.newExpiresAt))
+        }
+        if (record && record.license_key === keyString) {
+          setRecord((prev) => (prev ? { ...prev, is_paused: res.is_paused } : null))
+        }
+      } else {
+        alert(`Error: ${res.message}`)
       }
-      if (record && record.license_key === keyString) {
-        setRecord((prev) => (prev ? { ...prev, is_paused: res.is_paused } : null))
-      }
-    } else {
-      alert(`Error: ${res.message}`)
+    } finally {
+      // Always unblock the button, success or failure
+      setPauseLoadingKeys((prev) => {
+        const next = new Set(prev)
+        next.delete(keyString)
+        return next
+      })
     }
   }
 
@@ -7053,13 +7079,20 @@ export default function RymonConnect() {
                                   </button>
                                   <button
                                     onClick={() => handleTogglePauseKey(k.license_key)}
+                                    disabled={pauseLoadingKeys.has(k.license_key)}
                                     style={{
                                       ...styles.actionIconBtn,
-                                      color: k.is_paused || k.status === 'PAUSED' ? '#05df72' : '#ffb700'
+                                      color: pauseLoadingKeys.has(k.license_key)
+                                        ? '#64748b'
+                                        : k.is_paused || k.status === 'PAUSED' ? '#05df72' : '#ffb700',
+                                      opacity: pauseLoadingKeys.has(k.license_key) ? 0.5 : 1,
+                                      cursor: pauseLoadingKeys.has(k.license_key) ? 'not-allowed' : 'pointer'
                                     }}
-                                    title={k.is_paused || k.status === 'PAUSED' ? 'Resume / Unpause Key' : 'Pause / Freeze Key'}
+                                    title={pauseLoadingKeys.has(k.license_key) ? 'Working...' : k.is_paused || k.status === 'PAUSED' ? 'Resume / Unpause Key' : 'Pause / Freeze Key'}
                                   >
-                                    {k.is_paused || k.status === 'PAUSED' ? <IconPlay size={13} color="#05df72" /> : <IconPause size={13} color="#ffb700" />}
+                                    {pauseLoadingKeys.has(k.license_key)
+                                      ? '⏳'
+                                      : k.is_paused || k.status === 'PAUSED' ? <IconPlay size={13} color="#05df72" /> : <IconPause size={13} color="#ffb700" />}
                                   </button>
                                   <button
                                     onClick={() => handleResetHWID(k.license_key)}
@@ -10453,6 +10486,7 @@ else:
                         {/* 1-Click Stealth Freeze (Boss Key) */}
                         <button
                           onClick={handleToggleStealthFreeze}
+                          disabled={pauseLoadingKeys.has(currentKey)}
                           style={{
                             backgroundColor: record?.is_paused
                               ? 'rgba(5, 223, 114, 0.18)'
@@ -10463,14 +10497,17 @@ else:
                             padding: '6px 11px',
                             fontSize: '11px',
                             fontWeight: 800,
-                            cursor: 'pointer',
+                            cursor: pauseLoadingKeys.has(currentKey) ? 'not-allowed' : 'pointer',
+                            opacity: pauseLoadingKeys.has(currentKey) ? 0.5 : 1,
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px'
                           }}
                           title="Instant Stealth Freeze / Resume without killing daemon"
                         >
-                          {record?.is_paused ? <><IconPlay size={11} color="#05df72" /> RESUME</> : <><IconPause size={11} color="#ffb700" /> FREEZE</>}
+                          {pauseLoadingKeys.has(currentKey)
+                            ? '⏳'
+                            : record?.is_paused ? <><IconPlay size={11} color="#05df72" /> RESUME</> : <><IconPause size={11} color="#ffb700" /> FREEZE</>}
                         </button>
 
                         {/* 1-Click HWID Reset */}
@@ -10718,21 +10755,23 @@ else:
                         <span>STEALTH FREEZE ACTIVE — All in-game visuals &amp; memory hooks temporarily suspended</span>
                         <button
                           onClick={handleToggleStealthFreeze}
+                          disabled={pauseLoadingKeys.has(currentKey)}
                           style={{
-                            background: '#05df72',
+                            background: pauseLoadingKeys.has(currentKey) ? '#334155' : '#05df72',
                             color: '#07090e',
                             border: 'none',
                             borderRadius: '6px',
                             padding: '4px 10px',
                             fontSize: '11px',
                             fontWeight: 800,
-                            cursor: 'pointer',
+                            cursor: pauseLoadingKeys.has(currentKey) ? 'not-allowed' : 'pointer',
+                            opacity: pauseLoadingKeys.has(currentKey) ? 0.5 : 1,
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px'
                           }}
                         >
-                          <IconPlay size={11} color="#07090e" /> RESUME
+                          {pauseLoadingKeys.has(currentKey) ? '⏳' : <><IconPlay size={11} color="#07090e" /> RESUME</>}
                         </button>
                       </div>
                     )}
