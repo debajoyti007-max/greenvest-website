@@ -505,6 +505,28 @@ export async function loginWithCredentials(
 }
 
 // ============================================================================
+/**
+ * Checks whether two hardware IDs match, normalizing across legacy and modern formats:
+ * - Strips prefixes like 'android_id:', 'install_id:', 'boot_fallback:', etc.
+ * - Performs case-insensitive comparison
+ * - Substring containment for 12+ char IDs
+ */
+export function areHwidsMatching(dbHwid?: string, reqHwid?: string): boolean {
+  if (!dbHwid || !reqHwid) return false
+  const cleanDb = dbHwid.trim().toLowerCase()
+  const cleanReq = reqHwid.trim().toLowerCase()
+  if (cleanDb === cleanReq) return true
+
+  const normDb = cleanDb.replace(/^(android_id:|install_id:|boot_fallback:|hwid:|device:)/, '')
+  const normReq = cleanReq.replace(/^(android_id:|install_id:|boot_fallback:|hwid:|device:)/, '')
+  if (normDb === normReq) return true
+
+  if (normDb.length >= 12 && normReq.length >= 12) {
+    if (normDb.includes(normReq) || normReq.includes(normDb)) return true
+  }
+  return false
+}
+
 // 3. PER-KEY VERIFICATION & HWID BINDING (STREAMER LOGIN)
 // ============================================================================
 export async function verifyLicenseKey(
@@ -686,7 +708,7 @@ export async function verifyLicenseKey(
         if (licRow.expires_at && new Date(licRow.expires_at).getTime() < Date.now()) {
           return { valid: false, error: `License key expired on ${new Date(licRow.expires_at).toLocaleDateString()}` }
         }
-        if (licRow.device_hwid && licRow.device_hwid !== effectiveHwid && licRow.devices_used >= licRow.devices_max) {
+        if (licRow.device_hwid && !areHwidsMatching(licRow.device_hwid, effectiveHwid) && licRow.devices_used >= licRow.devices_max) {
           return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.' }
         }
 
@@ -737,7 +759,7 @@ export async function verifyLicenseKey(
     if (matched.expires_at && new Date(matched.expires_at).getTime() < Date.now()) {
       return { valid: false, error: 'License key has expired.' }
     }
-    if (matched.device_hwid && matched.device_hwid !== effectiveHwid && matched.devices_used >= matched.devices_max) {
+    if (matched.device_hwid && !areHwidsMatching(matched.device_hwid, effectiveHwid) && matched.devices_used >= matched.devices_max) {
       return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.' }
     }
 
@@ -4619,6 +4641,294 @@ export async function deleteRegisteredApp(appIdOrName: string): Promise<Register
   )
   await saveRegisteredApps(filtered)
   return filtered
+}
+
+// ============================================================================
+// RYMON APK RELEASES & DISTRIBUTION MODULE
+// ============================================================================
+
+export interface RymonApkRelease {
+  id: string
+  version: string
+  title: string
+  download_url: string
+  telegram_url?: string
+  file_size?: string
+  min_android?: string
+  is_latest?: boolean
+  is_force_update?: boolean
+  release_notes?: string
+  changelog?: string[]
+  downloads_count?: number
+  created_by?: string
+  created_at: string
+  updated_at?: string
+}
+
+const APK_RELEASES_STORAGE_KEY = 'rymon_apk_releases_cache_v1'
+
+const DEFAULT_LATEST_APK_RELEASE: RymonApkRelease = {
+  id: 'rel_v2_5_rthook',
+  version: '2.5',
+  title: 'RYMON Safe Streamer (RT Hook Driver Edition)',
+  download_url: 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk',
+  telegram_url: 'https://t.me/Rymon007bot',
+  file_size: '14.8 MB',
+  min_android: 'Android 9 - 15',
+  is_latest: true,
+  is_force_update: false,
+  release_notes:
+    'Upgraded Kernel Driver Engine to RT Hook (5.4, 5.10, 5.15, 6.1, 6.6, 6.12). Fixed daemon background exit 137. Improved anti-detection & live streamer telemetry.',
+  changelog: [
+    'Upgraded to RT Hook Kernel Driver Engine (5.4, 5.10, 5.15, 6.1, 6.6, 6.12)',
+    'Fixed daemon background crash / exit 137',
+    'Full Android 14 & 15 Kernel 6.12 auto-detection',
+    'Optimized live streamer ESP & telemetry synchronization'
+  ],
+  downloads_count: 342,
+  created_by: 'debajoyti',
+  created_at: new Date().toISOString()
+}
+
+export function getLocalApkReleases(): RymonApkRelease[] {
+  try {
+    const raw = localStorage.getItem(APK_RELEASES_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch {}
+  return [DEFAULT_LATEST_APK_RELEASE]
+}
+
+export function saveLocalApkReleases(releases: RymonApkRelease[]): void {
+  try {
+    localStorage.setItem(APK_RELEASES_STORAGE_KEY, JSON.stringify(releases))
+  } catch {}
+}
+
+export async function fetchApkReleases(): Promise<RymonApkRelease[]> {
+  try {
+    if (!supabase) return getLocalApkReleases()
+    const { data, error } = await supabase
+      .from('rymon_apk_releases')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const formatted: RymonApkRelease[] = data.map((row: any) => ({
+        id: String(row.id),
+        version: String(row.version || '2.5'),
+        title: String(row.title || 'RYMON Safe Streamer'),
+        download_url: String(row.download_url || ''),
+        telegram_url: row.telegram_url ? String(row.telegram_url) : '',
+        file_size: String(row.file_size || '14.8 MB'),
+        min_android: String(row.min_android || 'Android 9 - 15'),
+        is_latest: Boolean(row.is_latest),
+        is_force_update: Boolean(row.is_force_update),
+        release_notes: String(row.release_notes || ''),
+        changelog: Array.isArray(row.changelog)
+          ? row.changelog.map(String)
+          : typeof row.changelog === 'string'
+            ? [row.changelog]
+            : [],
+        downloads_count: Number(row.downloads_count || 0),
+        created_by: String(row.created_by || 'debajoyti'),
+        created_at: String(row.created_at || new Date().toISOString()),
+        updated_at: row.updated_at ? String(row.updated_at) : undefined
+      }))
+      saveLocalApkReleases(formatted)
+      return formatted
+    }
+  } catch (err) {
+    console.warn('[RymonBackend] Failed to fetch rymon_apk_releases:', err)
+  }
+  return getLocalApkReleases()
+}
+
+export async function fetchLatestApkRelease(): Promise<RymonApkRelease> {
+  const all = await fetchApkReleases()
+  const latest = all.find((r) => r.is_latest) || all[0] || DEFAULT_LATEST_APK_RELEASE
+  return latest
+}
+
+export async function publishApkReleaseBackend(
+  payload: {
+    version: string
+    title: string
+    download_url: string
+    telegram_url?: string
+    file_size?: string
+    min_android?: string
+    is_latest?: boolean
+    is_force_update?: boolean
+    release_notes?: string
+    changelog?: string[]
+  },
+  currentUser: RymonAccount | null
+): Promise<{ success: boolean; release?: RymonApkRelease; error?: string }> {
+  if (!currentUser || (currentUser.role !== 'owner' && currentUser.role !== 'admin')) {
+    return { success: false, error: 'Unauthorized: Only Owner or Admin can post APK releases.' }
+  }
+  if (!supabase) {
+    return { success: false, error: 'Database service is currently unreachable.' }
+  }
+
+  const cleanVersion = payload.version.trim().replace(/^v/i, '')
+  if (!cleanVersion) {
+    return { success: false, error: 'Version number is required.' }
+  }
+  if (!payload.download_url || !payload.download_url.trim()) {
+    return { success: false, error: 'Download URL or uploaded APK is required.' }
+  }
+
+  const markAsLatest = payload.is_latest !== false
+
+  try {
+    if (markAsLatest) {
+      await supabase
+        .from('rymon_apk_releases')
+        .update({ is_latest: false })
+        .eq('is_latest', true)
+    }
+
+    const newRecord = {
+      version: cleanVersion,
+      title: payload.title.trim() || `RYMON Safe Streamer v${cleanVersion}`,
+      download_url: payload.download_url.trim(),
+      telegram_url: payload.telegram_url?.trim() || '',
+      file_size: payload.file_size?.trim() || '15 MB',
+      min_android: payload.min_android?.trim() || 'Android 9 - 15',
+      is_latest: markAsLatest,
+      is_force_update: Boolean(payload.is_force_update),
+      release_notes: payload.release_notes?.trim() || '',
+      changelog: payload.changelog || [],
+      created_by: currentUser.username || 'debajoyti',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
+    const { data, error } = await supabase
+      .from('rymon_apk_releases')
+      .insert(newRecord)
+      .select()
+      .single()
+
+    if (error) {
+      console.warn('[RymonBackend] Insert rymon_apk_releases error:', error)
+      return { success: false, error: error.message }
+    }
+
+    // Mirror to sovereign_security_policy so live sync immediately propagates
+    if (markAsLatest) {
+      try {
+        saveSovereignSecurityPolicy({
+          apk_latest_version: cleanVersion,
+          apk_release_notes: payload.release_notes || payload.title
+        })
+      } catch {}
+    }
+
+    // Log activity
+    try {
+      await supabase.from('rymon_activities').insert({
+        title: `APK Released: v${cleanVersion}`,
+        event_type: 'APK_RELEASE_POSTED',
+        details: `Version: v${cleanVersion} | Title: ${payload.title} | By: @${currentUser.username}`,
+        actor_username: currentUser.username,
+        status: 'SUCCESS'
+      })
+    } catch {}
+
+    const formatted: RymonApkRelease = {
+      id: String(data.id),
+      version: String(data.version),
+      title: String(data.title),
+      download_url: String(data.download_url),
+      telegram_url: data.telegram_url,
+      file_size: data.file_size,
+      min_android: data.min_android,
+      is_latest: data.is_latest,
+      is_force_update: data.is_force_update,
+      release_notes: data.release_notes,
+      changelog: data.changelog,
+      downloads_count: data.downloads_count || 0,
+      created_by: data.created_by,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    }
+
+    return { success: true, release: formatted }
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to publish APK release.' }
+  }
+}
+
+export async function deleteApkReleaseBackend(
+  id: string,
+  currentUser: RymonAccount | null
+): Promise<{ success: boolean; error?: string }> {
+  if (!currentUser || (currentUser.role !== 'owner' && currentUser.role !== 'admin')) {
+    return { success: false, error: 'Unauthorized: Only Owner or Admin can delete releases.' }
+  }
+  if (!supabase) {
+    return { success: false, error: 'Database service is currently unreachable.' }
+  }
+
+  try {
+    const { error } = await supabase.from('rymon_apk_releases').delete().eq('id', id)
+    if (error) return { success: false, error: error.message }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to delete APK release.' }
+  }
+}
+
+export async function incrementApkDownloadCount(id: string): Promise<void> {
+  if (!supabase) return
+  try {
+    const { data } = await supabase
+      .from('rymon_apk_releases')
+      .select('downloads_count')
+      .eq('id', id)
+      .single()
+
+    const currentCount = Number(data?.downloads_count || 0)
+    await supabase
+      .from('rymon_apk_releases')
+      .update({ downloads_count: currentCount + 1 })
+      .eq('id', id)
+  } catch {}
+}
+
+export async function uploadApkFileToStorage(
+  file: File,
+  versionName?: string
+): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Storage service is unreachable.' }
+  }
+  try {
+    const sanitizedName = (versionName ? `RYMON_v${versionName}_` : 'RYMON_') + Date.now().toString(36) + '.apk'
+    const { data, error } = await supabase.storage
+      .from('apk-releases')
+      .upload(sanitizedName, file, {
+        cacheControl: '3600',
+        upsert: true
+      })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    const { data: pubData } = supabase.storage
+      .from('apk-releases')
+      .getPublicUrl(data.path)
+
+    return { success: true, publicUrl: pubData.publicUrl }
+  } catch (err: any) {
+    return { success: false, error: err.message || 'File upload failed.' }
+  }
 }
 
 
