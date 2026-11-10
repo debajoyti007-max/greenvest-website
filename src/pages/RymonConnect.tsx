@@ -58,7 +58,13 @@ import {
   fetchRegisteredApps,
   addRegisteredApp,
   deleteRegisteredApp,
-  saveStoredAccounts
+  saveStoredAccounts,
+  type RymonApkRelease,
+  fetchApkReleases,
+  publishApkReleaseBackend,
+  deleteApkReleaseBackend,
+  incrementApkDownloadCount,
+  uploadApkFileToStorage
 } from '../lib/rymonBackend'
 import RymonAnimatedLogo from '../components/RymonAnimatedLogo'
 import { FairytaleRealm } from '../components/FairytaleRealm'
@@ -71,6 +77,7 @@ type TabType =
   | 'users'
   | 'connect-api'
   | 'apps'
+  | 'downloads'
   | 'referrals'
   | 'add-balance'
   | 'delete'
@@ -397,6 +404,27 @@ export default function RymonConnect() {
   const [currentKey, setCurrentKey] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
+
+  // APK Releases & Distribution State
+  const [apkReleases, setApkReleases] = useState<RymonApkRelease[]>([])
+  const [latestApk, setLatestApk] = useState<RymonApkRelease | null>(null)
+  const [apkLoading, setApkLoading] = useState(false)
+  const [apkPublishForm, setApkPublishForm] = useState({
+    version: '2.5',
+    title: 'RYMON Safe Streamer (RT Hook Edition)',
+    download_url: 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk',
+    telegram_url: 'https://t.me/Rymon007bot',
+    file_size: '11.3 MB',
+    min_android: 'Android 9 - 15',
+    is_latest: true,
+    is_force_update: false,
+    release_notes: 'v2.5 Release: Native RT Hook Multi-Kernel Engine (5.4 - 6.12), Zero-Fatal Stability, 120 FPS Stream-Proof Overlay & Instant HWID Auto-Migration',
+    changelog: '1. Integrated 9 high-performance RTHook kernel drivers (5.4, 5.10, 5.15, 6.1, 6.6, 6.12)\n2. Fixed RT DEV driver not found error with automatic driver option detection\n3. Zero-loss HWID compatibility between old and new APK updates\n4. Ultra-smooth 120 FPS hardware VSync with zero micro-stutter'
+  })
+  const [apkFile, setApkFile] = useState<File | null>(null)
+  const [apkUploading, setApkUploading] = useState(false)
+  const [apkActionError, setApkActionError] = useState('')
+  const [apkActionSuccess, setApkActionSuccess] = useState('')
 
 
 
@@ -725,6 +753,15 @@ export default function RymonConnect() {
       }
       setActiveTab('remote')
     }
+  }, [])
+
+  // 1B. Public APK Releases Sync (Loads immediately on page visit)
+  useEffect(() => {
+    fetchApkReleases().then((releases) => {
+      setApkReleases(releases)
+      const lat = releases.find((r) => r.is_latest) || releases[0] || null
+      setLatestApk(lat)
+    })
   }, [])
 
 
@@ -5064,6 +5101,106 @@ export default function RymonConnect() {
               </div>
             </div>
           )}
+
+          {/* Public Latest APK Download Quick Banner */}
+          <div
+            style={{
+              marginTop: '18px',
+              width: '100%',
+              maxWidth: '440px',
+              padding: '16px 20px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(6, 78, 59, 0.3) 100%)',
+              border: '1px solid rgba(5, 223, 114, 0.35)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '20px' }}>📱</span>
+                <div>
+                  <div style={{ fontSize: '13.5px', fontWeight: 900, color: '#f8fafc' }}>
+                    {latestApk?.title || 'RYMON Safe Streamer APK'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#05df72', fontWeight: 700 }}>
+                    v{latestApk?.version || '2.5'} • {latestApk?.file_size || '11.3 MB'} • {latestApk?.min_android || 'Android 9 - 15'}
+                  </div>
+                </div>
+              </div>
+              <span style={{
+                padding: '3px 8px',
+                borderRadius: '6px',
+                background: 'rgba(5, 223, 114, 0.15)',
+                border: '1px solid #05df72',
+                color: '#05df72',
+                fontSize: '10px',
+                fontWeight: 900,
+                letterSpacing: '0.5px'
+              }}>
+                LATEST BUILD
+              </span>
+            </div>
+
+            <div style={{ fontSize: '11.5px', color: '#94a3b8', lineHeight: '1.4' }}>
+              {latestApk?.release_notes || 'Native RT Hook Multi-Kernel Engine, 120 FPS Stream-Proof overlay, and automatic HWID migration.'}
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <a
+                href={latestApk?.download_url || 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk'}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  if (latestApk?.id) incrementApkDownloadCount(latestApk.id)
+                }}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #05df72 0%, #047857 100%)',
+                  color: '#07090e',
+                  fontWeight: 900,
+                  fontSize: '12px',
+                  textDecoration: 'none',
+                  boxShadow: '0 4px 16px rgba(5, 223, 114, 0.35)',
+                  cursor: 'pointer'
+                }}
+              >
+                <IconDownload size={14} color="#07090e" />
+                <span>DOWNLOAD APK</span>
+              </a>
+              {latestApk?.telegram_url && (
+                <a
+                  href={latestApk.telegram_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                    color: '#38bdf8',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    textDecoration: 'none'
+                  }}
+                >
+                  <span>💬</span> Telegram
+                </a>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="sg-main-layout" style={styles.mainLayout}>
@@ -5168,6 +5305,19 @@ export default function RymonConnect() {
                 <span style={styles.navIcon}><IconRemote /></span>
                 <span>Streamer Remote</span>
                 <span style={styles.cyanMiniBadge}>LIVE</span>
+              </button>
+
+              <div style={styles.navCategoryHeader}>DISTRIBUTION</div>
+              <button
+                onClick={() => handleSelectTab('downloads')}
+                style={{
+                  ...styles.navItem,
+                  ...(activeTab === 'downloads' ? styles.navItemActive : {})
+                }}
+              >
+                <span style={styles.navIcon}><IconDownload /></span>
+                <span>APK Releases</span>
+                <span style={styles.cyanMiniBadge}>NEW v2.5</span>
               </button>
 
               {/* Streamer-Specific Utilities */}
@@ -10266,6 +10416,689 @@ else:
                 </div>
               </div>
             )}
+
+            {/* 12C. APK RELEASES & DOWNLOADS (PUBLIC & STAFF DISTRIBUTION) */}
+            {activeTab === 'downloads' && (() => {
+              const totalDownloads = apkReleases.reduce((sum, r) => sum + (r.downloads_count || 0), 0)
+              const activeRelease = latestApk || apkReleases[0]
+
+              return (
+                <div className="sg-view-container" style={styles.viewContainer}>
+                  {/* Header Banner */}
+                  <div className="sg-banner-row" style={styles.bannerRow}>
+                    <div>
+                      <h2 style={styles.pageTitle}>APK Releases &amp; Downloads</h2>
+                      <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                        Official production builds, changelogs, and direct high-speed download mirrors.
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setApkLoading(true)
+                          try {
+                            const rels = await fetchApkReleases()
+                            setApkReleases(rels)
+                            setLatestApk(rels.find((r) => r.is_latest) || rels[0] || null)
+                            showToast('Refreshed APK releases from server!')
+                          } catch {
+                            showToast('Failed to refresh releases.')
+                          } finally {
+                            setApkLoading(false)
+                          }
+                        }}
+                        disabled={apkLoading}
+                        style={{ ...styles.chipBtn, padding: '8px 14px', fontSize: '12px' }}
+                      >
+                        {apkLoading ? '⟳ REFRESHING...' : '🔄 REFRESH RELEASES'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Metrics Grid */}
+                  <div className="sg-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                    <div className="sg-management-card" style={{ ...styles.managementCard, padding: '16px 20px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        LATEST VERSION
+                      </div>
+                      <div style={{ fontSize: '24px', fontWeight: 900, color: '#00d9ff', marginTop: '6px' }}>
+                        v{activeRelease?.version || '2.5'}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
+                        RT Hook Multi-Kernel Edition
+                      </div>
+                    </div>
+
+                    <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        COMPATIBILITY
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: 900, color: '#05df72', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        📱 {activeRelease?.min_android || 'Android 9 - 15'}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
+                        ARM64-v8a • Magisk / KSU / APatch
+                      </div>
+                    </div>
+
+                    <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        PERFORMANCE ENGINE
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: 900, color: '#38bdf8', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        ⚡ 120 FPS VSYNC
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
+                        Stream-Proof • Pure Hardware Compositing
+                      </div>
+                    </div>
+
+                    <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        TOTAL DOWNLOADS
+                      </div>
+                      <div style={{ fontSize: '24px', fontWeight: 900, color: '#fde047', marginTop: '6px' }}>
+                        {totalDownloads.toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
+                        Across {apkReleases.length} releases
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hero Featured Download Card */}
+                  <div
+                    className="sg-management-card"
+                    style={{
+                      ...styles.managementCard,
+                      padding: '28px',
+                      background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(6, 78, 59, 0.3) 100%)',
+                      border: '1px solid rgba(5, 223, 114, 0.4)',
+                      boxShadow: '0 12px 40px rgba(0, 0, 0, 0.4)',
+                      marginBottom: '28px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div
+                          style={{
+                            width: '64px',
+                            height: '64px',
+                            borderRadius: '16px',
+                            background: 'linear-gradient(135deg, #05df72 0%, #0284c7 100%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '32px',
+                            boxShadow: '0 8px 24px rgba(5, 223, 114, 0.35)'
+                          }}
+                        >
+                          📱
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <h3 style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: '#f8fafc' }}>
+                              {activeRelease?.title || 'RYMON Safe Streamer (RT Hook Edition)'}
+                            </h3>
+                            <span
+                              style={{
+                                padding: '3px 10px',
+                                borderRadius: '6px',
+                                background: 'rgba(5, 223, 114, 0.2)',
+                                border: '1px solid #05df72',
+                                color: '#05df72',
+                                fontSize: '11px',
+                                fontWeight: 900,
+                                letterSpacing: '0.5px'
+                              }}
+                            >
+                              OFFICIAL PRODUCTION BUILD
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            <span><strong>Version:</strong> v{activeRelease?.version || '2.5'}</span>
+                            <span>•</span>
+                            <span><strong>Size:</strong> {activeRelease?.file_size || '11.3 MB'}</span>
+                            <span>•</span>
+                            <span><strong>Target:</strong> {activeRelease?.min_android || 'Android 9 - 15'}</span>
+                            <span>•</span>
+                            <span><strong>Downloads:</strong> {activeRelease?.downloads_count || 0}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Pill Highlights */}
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(0, 217, 255, 0.15)', border: '1px solid rgba(0, 217, 255, 0.35)', color: '#00d9ff', fontSize: '11px', fontWeight: 800 }}>
+                          🔥 RTHook Multi-Kernel (5.4 - 6.12)
+                        </span>
+                        <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(5, 223, 114, 0.15)', border: '1px solid rgba(5, 223, 114, 0.35)', color: '#05df72', fontSize: '11px', fontWeight: 800 }}>
+                          🛡️ Anti-Lag 120 FPS
+                        </span>
+                        <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(253, 224, 71, 0.15)', border: '1px solid rgba(253, 224, 71, 0.35)', color: '#fde047', fontSize: '11px', fontWeight: 800 }}>
+                          ⚡ Auto-HWID Migration
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Release Notes Banner */}
+                    <div
+                      style={{
+                        marginTop: '20px',
+                        padding: '16px 20px',
+                        borderRadius: '12px',
+                        background: 'rgba(15, 23, 42, 0.7)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        color: '#cbd5e1',
+                        fontSize: '13px',
+                        lineHeight: '1.6'
+                      }}
+                    >
+                      <div style={{ color: '#00d9ff', fontWeight: 800, marginBottom: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>📋</span> RELEASE NOTES &amp; HIGHLIGHTS:
+                      </div>
+                      <p style={{ margin: '0 0 10px 0' }}>
+                        {activeRelease?.release_notes || 'Native RT Hook Multi-Kernel Engine, 120 FPS Stream-Proof overlay, and automatic HWID migration.'}
+                      </p>
+                      {activeRelease?.changelog && activeRelease.changelog.length > 0 && (
+                        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                          <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '12px', marginBottom: '6px' }}>
+                            Key Improvements in this build:
+                          </div>
+                          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                            {activeRelease.changelog.map((item, idx) => (
+                              <li key={idx} style={{ marginBottom: '4px' }}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons Row */}
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '22px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <a
+                        href={activeRelease?.download_url || 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          if (activeRelease?.id) incrementApkDownloadCount(activeRelease.id)
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '14px 28px',
+                          borderRadius: '12px',
+                          background: 'linear-gradient(135deg, #05df72 0%, #047857 100%)',
+                          color: '#07090e',
+                          fontWeight: 900,
+                          fontSize: '14px',
+                          textDecoration: 'none',
+                          boxShadow: '0 6px 24px rgba(5, 223, 114, 0.4)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <IconDownload size={18} color="#07090e" />
+                        <span>DOWNLOAD APK ({activeRelease?.file_size || '11.3 MB'})</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = activeRelease?.download_url || 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk'
+                          navigator.clipboard.writeText(url)
+                          showToast('Copied APK direct download link to clipboard!')
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '14px 20px',
+                          borderRadius: '12px',
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          color: '#f8fafc',
+                          fontWeight: 800,
+                          fontSize: '13px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <span>🔗</span>
+                        <span>Copy Link</span>
+                      </button>
+
+                      {activeRelease?.telegram_url && (
+                        <a
+                          href={activeRelease.telegram_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '14px 20px',
+                            borderRadius: '12px',
+                            background: 'rgba(56, 189, 248, 0.12)',
+                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                            color: '#38bdf8',
+                            fontWeight: 800,
+                            fontSize: '13px',
+                            textDecoration: 'none'
+                          }}
+                        >
+                          <span>💬</span>
+                          <span>Telegram Channel</span>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Owner / Admin APK Publisher Form */}
+                  {(isOwner || isAdmin) && (
+                    <div className="sg-management-card" style={{ ...styles.managementCard, padding: '24px', marginBottom: '28px' }}>
+                      <div style={styles.cardHeader}>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>🚀</span> Post New APK Release
+                          </h3>
+                          <div style={{ fontSize: '12.5px', color: '#94a3b8', marginTop: '2px' }}>
+                            Upload an APK binary or paste a direct download URL. Instantly updates the website and APK distribution fleet.
+                          </div>
+                        </div>
+                        <span style={styles.cyanMiniBadge}>STAFF ONLY</span>
+                      </div>
+
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault()
+                          setApkActionError('')
+                          setApkActionSuccess('')
+
+                          if (!apkPublishForm.version.trim()) {
+                            setApkActionError('Version number is required (e.g. 2.5).')
+                            return
+                          }
+
+                          let finalUrl = apkPublishForm.download_url.trim()
+
+                          // Handle file upload if an APK file was selected
+                          if (apkFile) {
+                            setApkUploading(true)
+                            const upRes = await uploadApkFileToStorage(apkFile, apkPublishForm.version.trim())
+                            setApkUploading(false)
+                            if (!upRes.success || !upRes.publicUrl) {
+                              setApkActionError(upRes.error || 'Failed to upload APK file to storage bucket.')
+                              return
+                            }
+                            finalUrl = upRes.publicUrl
+                          }
+
+                          if (!finalUrl) {
+                            setApkActionError('Please choose an APK file to upload or enter a direct download URL.')
+                            return
+                          }
+
+                          const changelogList = apkPublishForm.changelog
+                            .split('\n')
+                            .map((s) => s.trim())
+                            .filter(Boolean)
+
+                          setApkLoading(true)
+                          const res = await publishApkReleaseBackend(
+                            {
+                              version: apkPublishForm.version.trim(),
+                              title: apkPublishForm.title.trim() || `RYMON Safe Streamer v${apkPublishForm.version.trim()}`,
+                              download_url: finalUrl,
+                              telegram_url: apkPublishForm.telegram_url.trim(),
+                              file_size: apkPublishForm.file_size.trim() || '11.3 MB',
+                              min_android: apkPublishForm.min_android.trim() || 'Android 9 - 15',
+                              is_latest: apkPublishForm.is_latest,
+                              is_force_update: apkPublishForm.is_force_update,
+                              release_notes: apkPublishForm.release_notes.trim(),
+                              changelog: changelogList
+                            },
+                            currentUser
+                          )
+                          setApkLoading(false)
+
+                          if (res.success && res.release) {
+                            setApkActionSuccess(`🎉 Successfully published APK v${res.release.version}!`)
+                            setApkFile(null)
+                            const updated = await fetchApkReleases()
+                            setApkReleases(updated)
+                            setLatestApk(updated.find((r) => r.is_latest) || updated[0] || null)
+                            showToast(`Published APK v${res.release.version}!`)
+                          } else {
+                            setApkActionError(res.error || 'Failed to publish release.')
+                          }
+                        }}
+                        style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}
+                      >
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                          <div style={styles.formGroup}>
+                            <label style={styles.formLabel}>VERSION NUMBER *</label>
+                            <input
+                              type="text"
+                              value={apkPublishForm.version}
+                              onChange={(e) => setApkPublishForm({ ...apkPublishForm, version: e.target.value })}
+                              placeholder="e.g. 2.5"
+                              required
+                              style={styles.keyInput}
+                            />
+                          </div>
+
+                          <div style={styles.formGroup}>
+                            <label style={styles.formLabel}>RELEASE TITLE</label>
+                            <input
+                              type="text"
+                              value={apkPublishForm.title}
+                              onChange={(e) => setApkPublishForm({ ...apkPublishForm, title: e.target.value })}
+                              placeholder="e.g. RYMON Safe Streamer (RT Hook Edition)"
+                              style={styles.keyInput}
+                            />
+                          </div>
+
+                          <div style={styles.formGroup}>
+                            <label style={styles.formLabel}>FILE SIZE</label>
+                            <input
+                              type="text"
+                              value={apkPublishForm.file_size}
+                              onChange={(e) => setApkPublishForm({ ...apkPublishForm, file_size: e.target.value })}
+                              placeholder="e.g. 11.3 MB"
+                              style={styles.keyInput}
+                            />
+                          </div>
+
+                          <div style={styles.formGroup}>
+                            <label style={styles.formLabel}>MINIMUM ANDROID VERSION</label>
+                            <input
+                              type="text"
+                              value={apkPublishForm.min_android}
+                              onChange={(e) => setApkPublishForm({ ...apkPublishForm, min_android: e.target.value })}
+                              placeholder="e.g. Android 9 - 15"
+                              style={styles.keyInput}
+                            />
+                          </div>
+                        </div>
+
+                        {/* File Upload or Direct URL Box */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                          <div style={styles.formGroup}>
+                            <label style={styles.formLabel}>UPLOAD .APK FILE (SUPABASE STORAGE)</label>
+                            <input
+                              type="file"
+                              accept=".apk"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0] || null
+                                setApkFile(f)
+                                if (f) {
+                                  const sizeMb = (f.size / (1024 * 1024)).toFixed(1) + ' MB'
+                                  setApkPublishForm((prev) => ({ ...prev, file_size: sizeMb }))
+                                }
+                              }}
+                              style={{
+                                ...styles.keyInput,
+                                padding: '8px 12px',
+                                background: 'rgba(15, 23, 42, 0.9)',
+                                cursor: 'pointer'
+                              }}
+                            />
+                            {apkFile && (
+                              <div style={{ fontSize: '11px', color: '#05df72', marginTop: '4px' }}>
+                                ✓ Selected: {apkFile.name} ({(apkFile.size / (1024 * 1024)).toFixed(2)} MB)
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={styles.formGroup}>
+                            <label style={styles.formLabel}>OR DIRECT DOWNLOAD URL</label>
+                            <input
+                              type="url"
+                              value={apkPublishForm.download_url}
+                              onChange={(e) => setApkPublishForm({ ...apkPublishForm, download_url: e.target.value })}
+                              placeholder="https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk"
+                              style={styles.keyInput}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>TELEGRAM CHANNEL / SUPPORT URL</label>
+                          <input
+                            type="url"
+                            value={apkPublishForm.telegram_url}
+                            onChange={(e) => setApkPublishForm({ ...apkPublishForm, telegram_url: e.target.value })}
+                            placeholder="https://t.me/Rymon007bot"
+                            style={styles.keyInput}
+                          />
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>RELEASE NOTES / SUMMARY</label>
+                          <textarea
+                            value={apkPublishForm.release_notes}
+                            onChange={(e) => setApkPublishForm({ ...apkPublishForm, release_notes: e.target.value })}
+                            placeholder="Brief description of this release shown on the hero banner..."
+                            rows={3}
+                            style={{ ...styles.keyInput, height: 'auto', resize: 'vertical' }}
+                          />
+                        </div>
+
+                        <div style={styles.formGroup}>
+                          <label style={styles.formLabel}>CHANGELOG (ONE ITEM PER LINE)</label>
+                          <textarea
+                            value={apkPublishForm.changelog}
+                            onChange={(e) => setApkPublishForm({ ...apkPublishForm, changelog: e.target.value })}
+                            placeholder="1. High-speed RTHook kernel driver&#10;2. Fixed RT DEV driver not found&#10;3. Seamless HWID upgrade compatibility"
+                            rows={4}
+                            style={{ ...styles.keyInput, height: 'auto', resize: 'vertical' }}
+                          />
+                        </div>
+
+                        {/* Toggles */}
+                        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#f8fafc' }}>
+                            <input
+                              type="checkbox"
+                              checked={apkPublishForm.is_latest}
+                              onChange={(e) => setApkPublishForm({ ...apkPublishForm, is_latest: e.target.checked })}
+                              style={{ width: '18px', height: '18px', accentColor: '#05df72' }}
+                            />
+                            <span>Set as Active Latest Release</span>
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#f8fafc' }}>
+                            <input
+                              type="checkbox"
+                              checked={apkPublishForm.is_force_update}
+                              onChange={(e) => setApkPublishForm({ ...apkPublishForm, is_force_update: e.target.checked })}
+                              style={{ width: '18px', height: '18px', accentColor: '#ef4444' }}
+                            />
+                            <span>Require Forced Update in APK</span>
+                          </label>
+                        </div>
+
+                        {apkActionError && (
+                          <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#f87171', fontSize: '12.5px' }}>
+                            ⚠️ {apkActionError}
+                          </div>
+                        )}
+
+                        {apkActionSuccess && (
+                          <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(5, 223, 114, 0.15)', border: '1px solid #05df72', color: '#05df72', fontSize: '12.5px' }}>
+                            {apkActionSuccess}
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={apkLoading || apkUploading}
+                          style={{
+                            ...styles.primaryActionBtn,
+                            background: 'linear-gradient(135deg, #05df72 0%, #047857 100%)',
+                            color: '#07090e',
+                            fontWeight: 900,
+                            fontSize: '13px',
+                            padding: '14px 24px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {apkUploading
+                            ? 'UPLOADING APK TO STORAGE...'
+                            : apkLoading
+                              ? 'PUBLISHING RELEASE...'
+                              : '🚀 PUBLISH APK RELEASE'}
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* Release History Archive */}
+                  <div className="sg-management-card" style={styles.managementCard}>
+                    <div style={styles.cardHeader}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>
+                          Release Archive &amp; Version History
+                        </h3>
+                        <div style={{ fontSize: '12.5px', color: '#94a3b8', marginTop: '2px' }}>
+                          All published builds available for rollback, testing, or user distribution.
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>
+                        {apkReleases.length} Total Versions
+                      </span>
+                    </div>
+
+                    <div style={{ overflowX: 'auto', marginTop: '16px' }}>
+                      <table style={styles.dataTable}>
+                        <thead>
+                          <tr>
+                            <th style={styles.th}>VERSION</th>
+                            <th style={styles.th}>RELEASE TITLE &amp; NOTES</th>
+                            <th style={styles.th}>SIZE</th>
+                            <th style={styles.th}>MIN ANDROID</th>
+                            <th style={styles.th}>DOWNLOADS</th>
+                            <th style={styles.th}>DATE</th>
+                            <th style={{ ...styles.th, textAlign: 'right' }}>ACTIONS</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {apkReleases.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} style={{ ...styles.td, textAlign: 'center', padding: '32px', color: '#64748b' }}>
+                                No APK releases published yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            apkReleases.map((rel) => (
+                              <tr key={rel.id || rel.version} style={styles.tr}>
+                                <td style={styles.td}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontWeight: 900, color: '#00d9ff', fontSize: '13px' }}>
+                                      v{rel.version}
+                                    </span>
+                                    {rel.is_latest && (
+                                      <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(5, 223, 114, 0.2)', border: '1px solid #05df72', color: '#05df72', fontSize: '9.5px', fontWeight: 900 }}>
+                                        LATEST
+                                      </span>
+                                    )}
+                                    {rel.is_force_update && (
+                                      <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#f87171', fontSize: '9.5px', fontWeight: 900 }}>
+                                        FORCE
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td style={{ ...styles.td, maxWidth: '340px' }}>
+                                  <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '12.5px' }}>
+                                    {rel.title}
+                                  </div>
+                                  <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {rel.release_notes}
+                                  </div>
+                                </td>
+                                <td style={{ ...styles.td, fontSize: '12px', color: '#cbd5e1' }}>
+                                  {rel.file_size || '11.3 MB'}
+                                </td>
+                                <td style={{ ...styles.td, fontSize: '12px', color: '#cbd5e1' }}>
+                                  {rel.min_android || 'Android 9 - 15'}
+                                </td>
+                                <td style={{ ...styles.td, fontSize: '12px', fontWeight: 800, color: '#fde047' }}>
+                                  {rel.downloads_count || 0}
+                                </td>
+                                <td style={{ ...styles.td, fontSize: '11.5px', color: '#64748b' }}>
+                                  {new Date(rel.created_at).toLocaleDateString()}
+                                </td>
+                                <td style={{ ...styles.td, textAlign: 'right' }}>
+                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                    <a
+                                      href={rel.download_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={() => {
+                                        if (rel.id) incrementApkDownloadCount(rel.id)
+                                      }}
+                                      style={{
+                                        ...styles.chipBtn,
+                                        padding: '5px 10px',
+                                        fontSize: '11px',
+                                        background: 'rgba(5, 223, 114, 0.15)',
+                                        borderColor: '#05df72',
+                                        color: '#05df72',
+                                        textDecoration: 'none'
+                                      }}
+                                    >
+                                      ⬇ Download
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(rel.download_url)
+                                        showToast(`Copied v${rel.version} download link!`)
+                                      }}
+                                      style={{ ...styles.chipBtn, padding: '5px 10px', fontSize: '11px' }}
+                                    >
+                                      🔗 Copy
+                                    </button>
+                                    {(isOwner || isAdmin) && rel.id && (
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          if (!confirm(`Are you sure you want to delete release v${rel.version}?`)) return
+                                          const delRes = await deleteApkReleaseBackend(rel.id!, currentUser)
+                                          if (delRes.success) {
+                                            const up = await fetchApkReleases()
+                                            setApkReleases(up)
+                                            showToast(`Deleted release v${rel.version}`)
+                                          } else {
+                                            showToast(delRes.error || 'Failed to delete release.')
+                                          }
+                                        }}
+                                        style={{
+                                          ...styles.chipBtn,
+                                          padding: '5px 8px',
+                                          fontSize: '11px',
+                                          background: 'rgba(239, 68, 68, 0.15)',
+                                          borderColor: '#ef4444',
+                                          color: '#f87171'
+                                        }}
+                                      >
+                                        🗑
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* 13. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
             {activeTab === 'remote' && (() => {
