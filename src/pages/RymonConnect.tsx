@@ -29,6 +29,8 @@ import {
   updateUserPermissionsBackend,
   togglePauseLicenseBackend,
   bulkTogglePauseAllKeysBackend,
+  grantBonusTimeToKeyBackend,
+  bulkGrantBonusTimeBackend,
   bulkResetAllHwidBackend,
   bulkExtendAllKeysBackend,
   DEFAULT_KEY_PRICES,
@@ -566,6 +568,11 @@ export default function RymonConnect() {
   const [hwidLoadingKeys, setHwidLoadingKeys] = useState<Set<string>>(new Set())
   const [banLoadingKeys, setBanLoadingKeys] = useState<Set<string>>(new Set())
   const [deleteLoadingKeys, setDeleteLoadingKeys] = useState<Set<string>>(new Set())
+
+  // Bonus Time Modal State (Pause, Resume & Bonus system)
+  const [bonusModalKey, setBonusModalKey] = useState<string | null>(null)
+  const [bonusHoursInput, setBonusHoursInput] = useState<number>(1)
+  const [bonusLoading, setBonusLoading] = useState<boolean>(false)
 
   // Sovereign Connect URL & APK Test Sandbox State
   const [testConnectKey, setTestConnectKey] = useState('')
@@ -3107,6 +3114,64 @@ export default function RymonConnect() {
       fetchAllActivities(currentUser).then(setActivities)
     } else {
       alert(res.message)
+    }
+  }
+
+  const handleConfirmGrantBonus = async () => {
+    if (!bonusModalKey || bonusHoursInput <= 0) return
+    setBonusLoading(true)
+
+    try {
+      if (bonusModalKey === 'ALL') {
+        const creatorFilter = currentUser?.role === 'reseller' ? currentUser.username : undefined
+        const res = await bulkGrantBonusTimeBackend(
+          bonusHoursInput,
+          currentUser?.username || 'debajoyti',
+          creatorFilter
+        )
+        if (res.success) {
+          showToast(`⚡ ${res.message}`)
+          fetchAllLicenses(currentUser).then(setKeysList)
+          fetchAllActivities(currentUser).then(setActivities)
+          setBonusModalKey(null)
+        } else {
+          alert(`Bulk Bonus Failed: ${res.message}`)
+        }
+      } else {
+        const targetKey = bonusModalKey
+        const res = await grantBonusTimeToKeyBackend(
+          targetKey,
+          bonusHoursInput,
+          currentUser?.username || 'debajoyti'
+        )
+        if (res.success) {
+          showToast(`🎁 ${res.message}`)
+          if (res.newExpiresAt) {
+            const nextExp = res.newExpiresAt
+            const nextStat = (res.status || 'ACTIVE') as any
+            setKeysList((prev) =>
+              prev.map((k) =>
+                k.license_key === targetKey
+                  ? { ...k, expires_at: nextExp, status: nextStat }
+                  : k
+              )
+            )
+            if (currentKey === targetKey) {
+              setExpiryDate(new Date(nextExp))
+            }
+          } else {
+            fetchAllLicenses(currentUser).then(setKeysList)
+          }
+          fetchAllActivities(currentUser).then(setActivities)
+          setBonusModalKey(null)
+        } else {
+          alert(`Bonus Failed: ${res.message}`)
+        }
+      }
+    } catch (err: any) {
+      alert(`Error granting bonus: ${err?.message || err}`)
+    } finally {
+      setBonusLoading(false)
     }
   }
 
@@ -7052,6 +7117,30 @@ export default function RymonConnect() {
                       {isBulkPausing ? '⏳ RESUMING...' : <><IconPlay size={13} color="#05df72" /> RESUME ALL</>}
                     </button>
                     <button
+                      onClick={() => {
+                        setBonusHoursInput(1)
+                        setBonusModalKey('ALL')
+                      }}
+                      disabled={isBulkPausing}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: isBulkPausing ? 'not-allowed' : 'pointer',
+                        opacity: isBulkPausing ? 0.6 : 1,
+                        backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                        border: '1px solid #eab308',
+                        color: '#eab308',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                      title="Grant free bonus hours/days to all matching keys"
+                    >
+                      🎁 BONUS ALL
+                    </button>
+                    <button
                       onClick={handleBulkResetAllHwid}
                       style={{
                         padding: '6px 12px',
@@ -7411,6 +7500,19 @@ export default function RymonConnect() {
                                     {pauseLoadingKeys.has(k.license_key)
                                       ? '⏳'
                                       : k.is_paused || k.status === 'PAUSED' ? <IconPlay size={13} color="#05df72" /> : <IconPause size={13} color="#ffb700" />}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setBonusHoursInput(1)
+                                      setBonusModalKey(k.license_key)
+                                    }}
+                                    style={{
+                                      ...styles.actionIconBtn,
+                                      color: '#eab308'
+                                    }}
+                                    title="Grant Bonus Time (Gift/Compensation) to this Key"
+                                  >
+                                    <span style={{ fontSize: '13px' }}>🎁</span>
                                   </button>
                                   <button
                                     onClick={() => handleResetHWID(k.license_key)}
@@ -12370,6 +12472,163 @@ else:
         </div>
       )}
 
+
+      {/* ── GRANT BONUS TIME MODAL ───────────────────────────────────────── */}
+      {bonusModalKey && (
+        <div className="sg-modal-overlay" style={styles.modalOverlay} onClick={() => !bonusLoading && setBonusModalKey(null)}>
+          <div
+            className="sg-modal-card"
+            style={{
+              ...styles.modalCard,
+              maxWidth: '460px',
+              width: '92%',
+              textAlign: 'left',
+              padding: '24px',
+              border: '1px solid rgba(234, 179, 8, 0.4)',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.85), 0 0 28px rgba(234, 179, 8, 0.15)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '26px' }}>🎁</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#f8fafc' }}>
+                    {bonusModalKey === 'ALL' ? 'Grant Bonus Time to ALL Keys' : 'Grant Bonus Time'}
+                  </h3>
+                  <div style={{ fontSize: '11px', color: '#eab308', marginTop: '2px', fontWeight: 600 }}>
+                    {bonusModalKey === 'ALL'
+                      ? `Targeting all ${filteredKeys.length} matching license keys`
+                      : `Target: ${bonusModalKey}`}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => !bonusLoading && setBonusModalKey(null)}
+                style={{ background: 'transparent', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '6px', color: '#94a3b8', padding: '4px 10px', cursor: 'pointer', fontSize: '14px' }}
+              >✕</button>
+            </div>
+
+            {/* Quick Presets */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                Quick Presets
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                {[
+                  { label: '+1 Hr', hours: 1 },
+                  { label: '+3 Hrs', hours: 3 },
+                  { label: '+6 Hrs', hours: 6 },
+                  { label: '+12 Hrs', hours: 12 },
+                  { label: '+1 Day', hours: 24 },
+                  { label: '+3 Days', hours: 72 },
+                  { label: '+7 Days', hours: 168 },
+                  { label: '+15 Days', hours: 360 }
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setBonusHoursInput(preset.hours)}
+                    style={{
+                      padding: '8px 4px',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      border: bonusHoursInput === preset.hours ? '1px solid #eab308' : '1px solid rgba(148, 163, 184, 0.2)',
+                      background: bonusHoursInput === preset.hours ? 'rgba(234, 179, 8, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                      color: bonusHoursInput === preset.hours ? '#eab308' : '#cbd5e1',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Input */}
+            <div style={{ marginBottom: '18px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                Custom Duration (Hours)
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <input
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  max="2160"
+                  value={bonusHoursInput}
+                  onChange={(e) => setBonusHoursInput(Math.max(0.5, parseFloat(e.target.value) || 1))}
+                  style={{
+                    flex: 1,
+                    background: '#07090e',
+                    border: '1px solid rgba(234, 179, 8, 0.3)',
+                    color: '#f8fafc',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    outline: 'none'
+                  }}
+                />
+                <span style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>
+                  ≈ {bonusHoursInput >= 24 ? `${(bonusHoursInput / 24).toFixed(1)} Day(s)` : `${bonusHoursInput} Hr(s)`}
+                </span>
+              </div>
+            </div>
+
+            {/* Summary Banner */}
+            <div style={{ background: 'rgba(234, 179, 8, 0.08)', border: '1px solid rgba(234, 179, 8, 0.25)', borderRadius: '10px', padding: '12px 14px', marginBottom: '18px' }}>
+              <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                🎁 <strong>Complimentary Bonus:</strong> This will extend key expiration by{' '}
+                <strong style={{ color: '#eab308' }}>+{bonusHoursInput >= 24 ? `${(bonusHoursInput / 24).toFixed(1)} Day(s) (${bonusHoursInput}h)` : `${bonusHoursInput} Hour(s)`}</strong> without charging wallet balance.
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setBonusModalKey(null)}
+                disabled={bonusLoading}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: bonusLoading ? 'not-allowed' : 'pointer',
+                  border: '1px solid rgba(148, 163, 184, 0.3)',
+                  background: 'transparent',
+                  color: '#94a3b8'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmGrantBonus}
+                disabled={bonusLoading || bonusHoursInput <= 0}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: bonusLoading ? 'not-allowed' : 'pointer',
+                  border: 'none',
+                  background: bonusLoading ? '#475569' : '#eab308',
+                  color: '#07090e',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {bonusLoading ? '⏳ Applying...' : '⚡ Grant Bonus Now'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── RESET USER PASSWORD MODAL ───────────────────────────────────────── */}
       {renewConfirmTarget && (

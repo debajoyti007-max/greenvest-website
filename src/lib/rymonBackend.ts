@@ -45,6 +45,7 @@ export interface RymonLicense {
   expires_at: string | null
   last_heartbeat?: string
   created_at?: string
+  updated_at?: string
 }
 
 export interface RymonActivity {
@@ -3577,6 +3578,121 @@ export async function bulkExtendAllKeysBackend(
     count,
     remainingBalance,
     message: `Added +${days} Day(s) to ${count} active license(s) (Max 30 Days cap enforced).`
+  }
+}
+
+export async function grantBonusTimeToKeyBackend(
+  licenseKey: string,
+  bonusHours: number,
+  actorUsername: string = 'debajoyti'
+): Promise<{
+  success: boolean
+  newExpiresAt?: string | null
+  status?: string
+  message: string
+}> {
+  const cleanKey = licenseKey.trim().toUpperCase()
+  const cleanActor = actorUsername.trim()
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_rymon_grant_bonus_time', {
+        p_license_key: cleanKey,
+        p_bonus_hours: bonusHours,
+        p_actor_username: cleanActor
+      })
+      if (!error && data && typeof data === 'object') {
+        const res = data as {
+          success: boolean
+          new_expires_at?: string
+          status?: string
+          message: string
+        }
+        if (res.success) {
+          return {
+            success: true,
+            newExpiresAt: res.new_expires_at,
+            status: res.status,
+            message: res.message
+          }
+        }
+        return { success: false, message: res.message || 'Failed to grant bonus' }
+      }
+    } catch (e: any) {
+      console.warn('RPC rpc_rymon_grant_bonus_time error, using fallback:', e)
+    }
+  }
+
+  // Fallback for offline/local storage
+  const stored = getStoredLicenses()
+  const idx = stored.findIndex((l) => l.license_key === cleanKey)
+  if (idx >= 0) {
+    const lic = stored[idx]
+    const curExp = lic.expires_at ? new Date(lic.expires_at).getTime() : Date.now()
+    const base = Math.max(Date.now(), curExp)
+    const nextExp = new Date(base + bonusHours * 3600000).toISOString()
+    lic.expires_at = nextExp
+    lic.status = lic.is_paused ? 'PAUSED' : 'ACTIVE'
+    lic.updated_at = new Date().toISOString()
+    saveStoredLicenses(stored)
+    return {
+      success: true,
+      newExpiresAt: nextExp,
+      status: lic.status,
+      message: `🎁 Granted +${bonusHours} hrs bonus time!`
+    }
+  }
+  return { success: false, message: 'License key not found' }
+}
+
+export async function bulkGrantBonusTimeBackend(
+  bonusHours: number,
+  actorUsername: string = 'debajoyti',
+  creatorFilter?: string
+): Promise<{
+  success: boolean
+  count: number
+  message: string
+}> {
+  const cleanActor = actorUsername.trim()
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc('rpc_rymon_bulk_grant_bonus_time', {
+        p_bonus_hours: bonusHours,
+        p_actor_username: cleanActor,
+        p_creator_filter: creatorFilter || null
+      })
+      if (!error && data && typeof data === 'object') {
+        const res = data as { success: boolean; count: number; message: string }
+        if (res.success) {
+          return { success: true, count: res.count, message: res.message }
+        }
+        return { success: false, count: 0, message: res.message || 'Failed to grant bulk bonus' }
+      }
+    } catch (e: any) {
+      console.warn('RPC rpc_rymon_bulk_grant_bonus_time error, using fallback:', e)
+    }
+  }
+
+  // Fallback for offline
+  const stored = getStoredLicenses()
+  let affected = 0
+  stored.forEach((l) => {
+    if (l.status !== 'BANNED') {
+      const curExp = l.expires_at ? new Date(l.expires_at).getTime() : Date.now()
+      const base = Math.max(Date.now(), curExp)
+      l.expires_at = new Date(base + bonusHours * 3600000).toISOString()
+      l.status = l.is_paused ? 'PAUSED' : 'ACTIVE'
+      l.updated_at = new Date().toISOString()
+      affected++
+    }
+  })
+  saveStoredLicenses(stored)
+  return {
+    success: true,
+    count: affected,
+    message: `🎁 Granted +${bonusHours} hrs bonus to ${affected} key(s)!`
   }
 }
 
