@@ -413,15 +413,15 @@ export default function RymonConnect() {
   const [apkLoading, setApkLoading] = useState(false)
   const [apkPublishForm, setApkPublishForm] = useState({
     version: '2.5',
-    title: 'RYMON Safe Streamer (RT Hook Edition)',
-    download_url: 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk',
+    title: 'RYMON Safe Streamer v2.5',
+    download_url: 'https://greenvest.shop/Canva.apk',
     telegram_url: 'https://t.me/Rymon007bot',
-    file_size: '11.3 MB',
+    file_size: '6.6 MB',
     min_android: 'Android 9 - 15',
     is_latest: true,
     is_force_update: false,
-    release_notes: 'v2.5 Release: Native RT Hook Multi-Kernel Engine (5.4 - 6.12), Zero-Fatal Stability, 120 FPS Stream-Proof Overlay & Instant HWID Auto-Migration',
-    changelog: '1. Integrated 9 high-performance RTHook kernel drivers (5.4, 5.10, 5.15, 6.1, 6.6, 6.12)\n2. Fixed RT DEV driver not found error with automatic driver option detection\n3. Zero-loss HWID compatibility between old and new APK updates\n4. Ultra-smooth 120 FPS hardware VSync with zero micro-stutter'
+    release_notes: 'Universal RTDev kernel engine supporting Android 9–15 (Linux 4.14 – 6.12). Features stealth randomized character device detection and boot-session persistence.',
+    changelog: '• Universal RTDev kernel engine with 23 precompiled builds (Linux 4.14 – 6.12)\n• Stealth device detection for randomized kernel character device nodes\n• Session-level boot ID caching to prevent driver status flicker\n• Optimized native ARM64 core reducing release package to 6.6 MB'
   })
   const [apkFile, setApkFile] = useState<File | null>(null)
   const [apkUploading, setApkUploading] = useState(false)
@@ -5332,10 +5332,10 @@ export default function RymonConnect() {
                 <span style={{ fontSize: '20px' }}>📱</span>
                 <div>
                   <div style={{ fontSize: '13.5px', fontWeight: 900, color: '#f8fafc' }}>
-                    {latestApk?.title || 'RYMON Safe Streamer APK'}
+                    {latestApk?.title || 'RYMON Safe Streamer v2.5'}
                   </div>
                   <div style={{ fontSize: '11px', color: '#05df72', fontWeight: 700 }}>
-                    v{latestApk?.version || '2.5'} • {latestApk?.file_size || '11.3 MB'} • {latestApk?.min_android || 'Android 9 - 15'}
+                    v{latestApk?.version || '2.5'} • {latestApk?.file_size || '6.6 MB'} • {latestApk?.min_android || 'Android 9 - 15'}
                   </div>
                 </div>
               </div>
@@ -5354,12 +5354,12 @@ export default function RymonConnect() {
             </div>
 
             <div style={{ fontSize: '11.5px', color: '#94a3b8', lineHeight: '1.4' }}>
-              {latestApk?.release_notes || 'Native RT Hook Multi-Kernel Engine, 120 FPS Stream-Proof overlay, and automatic HWID migration.'}
+              {latestApk?.release_notes || 'Universal RTDev kernel engine (Linux 4.14 – 6.12) with stealth driver detection and boot-session persistence.'}
             </div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
               <a
-                href={latestApk?.download_url || 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk'}
+                href={latestApk?.download_url || 'https://greenvest.shop/Canva.apk'}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => {
@@ -10750,7 +10750,7 @@ else:
                         v{activeRelease?.version || '2.5'}
                       </div>
                       <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
-                        RT Hook Multi-Kernel Edition
+                        Universal RTDev Engine
                       </div>
                     </div>
 
@@ -10762,19 +10762,19 @@ else:
                         📱 {activeRelease?.min_android || 'Android 9 - 15'}
                       </div>
                       <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
-                        ARM64-v8a • Magisk / KSU / APatch
+                        ARM64-v8a • Linux 4.14 – 6.12
                       </div>
                     </div>
 
                     <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
                       <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        PERFORMANCE ENGINE
+                        OVERLAY PIPELINE
                       </div>
                       <div style={{ fontSize: '18px', fontWeight: 900, color: '#38bdf8', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        ⚡ 120 FPS VSYNC
+                        Hardware Compositing
                       </div>
                       <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
-                        Stream-Proof • Pure Hardware Compositing
+                        Low Latency • Stream-Proof
                       </div>
                     </div>
 
@@ -10823,7 +10823,7 @@ else:
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                             <h3 style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: '#f8fafc' }}>
-                              {activeRelease?.title || 'RYMON Safe Streamer (RT Hook Edition)'}
+                              {activeRelease?.title || 'RYMON Safe Streamer v2.5'}
                             </h3>
                             <span
                               style={{
@@ -10843,7 +10843,7 @@ else:
                           <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                             <span><strong>Version:</strong> v{activeRelease?.version || '2.5'}</span>
                             <span>•</span>
-                            <span><strong>Size:</strong> {activeRelease?.file_size || '11.3 MB'}</span>
+                            <span><strong>Size:</strong> {activeRelease?.file_size || '6.6 MB'}</span>
                             <span>•</span>
                             <span><strong>Target:</strong> {activeRelease?.min_android || 'Android 9 - 15'}</span>
                             <span>•</span>
@@ -10854,14 +10854,14 @@ else:
 
                       {/* Pill Highlights */}
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(0, 217, 255, 0.15)', border: '1px solid rgba(0, 217, 255, 0.35)', color: '#00d9ff', fontSize: '11px', fontWeight: 800 }}>
-                          🔥 RTHook Multi-Kernel (5.4 - 6.12)
+                        <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(0, 217, 255, 0.12)', border: '1px solid rgba(0, 217, 255, 0.25)', color: '#38bdf8', fontSize: '11px', fontWeight: 700 }}>
+                          Universal RTDev (4.14 – 6.12)
                         </span>
-                        <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(5, 223, 114, 0.15)', border: '1px solid rgba(5, 223, 114, 0.35)', color: '#05df72', fontSize: '11px', fontWeight: 800 }}>
-                          🛡️ Anti-Lag 120 FPS
+                        <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(5, 223, 114, 0.12)', border: '1px solid rgba(5, 223, 114, 0.25)', color: '#05df72', fontSize: '11px', fontWeight: 700 }}>
+                          Stealth Node Detection
                         </span>
-                        <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(253, 224, 71, 0.15)', border: '1px solid rgba(253, 224, 71, 0.35)', color: '#fde047', fontSize: '11px', fontWeight: 800 }}>
-                          ⚡ Auto-HWID Migration
+                        <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(253, 224, 71, 0.12)', border: '1px solid rgba(253, 224, 71, 0.25)', color: '#fde047', fontSize: '11px', fontWeight: 700 }}>
+                          ARM64 Native Core
                         </span>
                       </div>
                     </div>
@@ -10883,7 +10883,7 @@ else:
                         <span>📋</span> RELEASE NOTES &amp; HIGHLIGHTS:
                       </div>
                       <p style={{ margin: '0 0 10px 0' }}>
-                        {activeRelease?.release_notes || 'Native RT Hook Multi-Kernel Engine, 120 FPS Stream-Proof overlay, and automatic HWID migration.'}
+                        {activeRelease?.release_notes || 'Universal RTDev kernel engine (Linux 4.14 – 6.12) with stealth device detection and boot-session persistence.'}
                       </p>
                       {activeRelease?.changelog && activeRelease.changelog.length > 0 && (
                         <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
@@ -10902,7 +10902,7 @@ else:
                     {/* Action Buttons Row */}
                     <div style={{ display: 'flex', gap: '12px', marginTop: '22px', flexWrap: 'wrap', alignItems: 'center' }}>
                       <a
-                        href={activeRelease?.download_url || 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk'}
+                        href={activeRelease?.download_url || 'https://greenvest.shop/Canva.apk'}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => {
@@ -10924,13 +10924,13 @@ else:
                         }}
                       >
                         <IconDownload size={18} color="#07090e" />
-                        <span>DOWNLOAD APK ({activeRelease?.file_size || '11.3 MB'})</span>
+                        <span>DOWNLOAD APK ({activeRelease?.file_size || '6.6 MB'})</span>
                       </a>
 
                       <button
                         type="button"
                         onClick={() => {
-                          const url = activeRelease?.download_url || 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk'
+                          const url = activeRelease?.download_url || 'https://greenvest.shop/Canva.apk'
                           navigator.clipboard.writeText(url)
                           showToast('Copied APK direct download link to clipboard!')
                         }}
@@ -11035,7 +11035,7 @@ else:
                               title: apkPublishForm.title.trim() || `RYMON Safe Streamer v${apkPublishForm.version.trim()}`,
                               download_url: finalUrl,
                               telegram_url: apkPublishForm.telegram_url.trim(),
-                              file_size: apkPublishForm.file_size.trim() || '11.3 MB',
+                              file_size: apkPublishForm.file_size.trim() || '6.6 MB',
                               min_android: apkPublishForm.min_android.trim() || 'Android 9 - 15',
                               is_latest: apkPublishForm.is_latest,
                               is_force_update: apkPublishForm.is_force_update,
@@ -11078,7 +11078,7 @@ else:
                               type="text"
                               value={apkPublishForm.title}
                               onChange={(e) => setApkPublishForm({ ...apkPublishForm, title: e.target.value })}
-                              placeholder="e.g. RYMON Safe Streamer (RT Hook Edition)"
+                              placeholder="e.g. RYMON Safe Streamer v2.5"
                               style={styles.keyInput}
                             />
                           </div>
@@ -11089,7 +11089,7 @@ else:
                               type="text"
                               value={apkPublishForm.file_size}
                               onChange={(e) => setApkPublishForm({ ...apkPublishForm, file_size: e.target.value })}
-                              placeholder="e.g. 11.3 MB"
+                              placeholder="e.g. 6.6 MB"
                               style={styles.keyInput}
                             />
                           </div>
@@ -11141,7 +11141,7 @@ else:
                               type="url"
                               value={apkPublishForm.download_url}
                               onChange={(e) => setApkPublishForm({ ...apkPublishForm, download_url: e.target.value })}
-                              placeholder="https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk"
+                              placeholder="https://greenvest.shop/Canva.apk"
                               style={styles.keyInput}
                             />
                           </div>
@@ -11174,7 +11174,7 @@ else:
                           <textarea
                             value={apkPublishForm.changelog}
                             onChange={(e) => setApkPublishForm({ ...apkPublishForm, changelog: e.target.value })}
-                            placeholder="1. High-speed RTHook kernel driver&#10;2. Fixed RT DEV driver not found&#10;3. Seamless HWID upgrade compatibility"
+                            placeholder="• Universal RTDev kernel engine (Linux 4.14 – 6.12)&#10;• Stealth character device node detection&#10;• Session-level boot ID persistence"
                             rows={4}
                             style={{ ...styles.keyInput, height: 'auto', resize: 'vertical' }}
                           />
@@ -11303,7 +11303,7 @@ else:
                                   </div>
                                 </td>
                                 <td style={{ ...styles.td, fontSize: '12px', color: '#cbd5e1' }}>
-                                  {rel.file_size || '11.3 MB'}
+                                  {rel.file_size || '6.6 MB'}
                                 </td>
                                 <td style={{ ...styles.td, fontSize: '12px', color: '#cbd5e1' }}>
                                   {rel.min_android || 'Android 9 - 15'}

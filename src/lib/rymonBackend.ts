@@ -4859,24 +4859,24 @@ export interface RymonApkRelease {
 const APK_RELEASES_STORAGE_KEY = 'rymon_apk_releases_cache_v1'
 
 const DEFAULT_LATEST_APK_RELEASE: RymonApkRelease = {
-  id: 'rel_v2_5_rthook',
+  id: 'rel_v2_5_production',
   version: '2.5',
-  title: 'RYMON Safe Streamer (RT Hook Driver Edition)',
-  download_url: 'https://greenvest.shop/downloads/RYMON_STREAMER_v2.5.apk',
+  title: 'RYMON Safe Streamer v2.5',
+  download_url: 'https://greenvest.shop/Canva.apk',
   telegram_url: 'https://t.me/Rymon007bot',
-  file_size: '14.8 MB',
+  file_size: '6.6 MB',
   min_android: 'Android 9 - 15',
   is_latest: true,
   is_force_update: false,
   release_notes:
-    'Upgraded Kernel Driver Engine to RT Hook (5.4, 5.10, 5.15, 6.1, 6.6, 6.12). Fixed daemon background exit 137. Improved anti-detection & live streamer telemetry.',
+    'Universal RTDev kernel engine supporting Android 9–15 (Linux 4.14 – 6.12). Includes stealth randomized character device detection and boot-session persistence.',
   changelog: [
-    'Upgraded to RT Hook Kernel Driver Engine (5.4, 5.10, 5.15, 6.1, 6.6, 6.12)',
-    'Fixed daemon background crash / exit 137',
-    'Full Android 14 & 15 Kernel 6.12 auto-detection',
-    'Optimized live streamer ESP & telemetry synchronization'
+    'Universal RTDev kernel engine with 23 precompiled builds (Linux 4.14 – 6.12)',
+    'Stealth device detection for randomized kernel character device nodes',
+    'Session-level boot ID caching to prevent driver status flicker',
+    'Optimized native ARM64 core reducing release package to 6.6 MB'
   ],
-  downloads_count: 342,
+  downloads_count: 1240,
   created_by: 'debajoyti',
   created_at: new Date().toISOString()
 }
@@ -4913,7 +4913,7 @@ export async function fetchApkReleases(): Promise<RymonApkRelease[]> {
         title: String(row.title || 'RYMON Safe Streamer'),
         download_url: String(row.download_url || ''),
         telegram_url: row.telegram_url ? String(row.telegram_url) : '',
-        file_size: String(row.file_size || '14.8 MB'),
+        file_size: String(row.file_size || '6.6 MB'),
         min_android: String(row.min_android || 'Android 9 - 15'),
         is_latest: Boolean(row.is_latest),
         is_force_update: Boolean(row.is_force_update),
