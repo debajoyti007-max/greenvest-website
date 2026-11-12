@@ -457,6 +457,8 @@ export default function RymonConnect() {
   usersListRef.current = usersList
   const streamerControlsRef = useRef(streamerControls)
   streamerControlsRef.current = streamerControls
+  const activeTabRef = useRef(activeTab)
+  activeTabRef.current = activeTab
 
   // Dynamic Pricing Management State (Owner)
   const [globalPrices, setGlobalPrices] = useState<Record<string, number>>(() => getGlobalPriceMap())
@@ -560,6 +562,10 @@ export default function RymonConnect() {
 
   // Per-key pause loading set — prevents double-tap race condition
   const [pauseLoadingKeys, setPauseLoadingKeys] = useState<Set<string>>(new Set())
+  const [isBulkPausing, setIsBulkPausing] = useState(false)
+  const [hwidLoadingKeys, setHwidLoadingKeys] = useState<Set<string>>(new Set())
+  const [banLoadingKeys, setBanLoadingKeys] = useState<Set<string>>(new Set())
+  const [deleteLoadingKeys, setDeleteLoadingKeys] = useState<Set<string>>(new Set())
 
   // Sovereign Connect URL & APK Test Sandbox State
   const [testConnectKey, setTestConnectKey] = useState('')
@@ -1155,6 +1161,8 @@ export default function RymonConnect() {
     async function fastPulseTelemetry() {
       if (!isMounted || sliderTimerRef.current) return
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      // Senior Dev Zero-Overhead Optimization: only poll 1000ms Render RAM when actively viewing the Remote tab
+      if (activeTabRef.current !== 'remote') return
 
       const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
       const isKeyVip = Boolean(
@@ -2187,47 +2195,63 @@ export default function RymonConnect() {
     if (pauseLoadingKeys.has(currentKey)) return
     setPauseLoadingKeys((prev) => new Set(prev).add(currentKey))
 
-    const nextPaused = !record?.is_paused
+    const wasPaused = Boolean(record?.is_paused)
+    const nextPaused = !wasPaused
+    const nextStatus = nextPaused ? 'PAUSED' : 'ACTIVE'
     const nowIso = new Date().toISOString()
+
+    // 1. Optimistic UI update: 0ms visual flip
     setRecord((prev) => (prev ? { ...prev, is_paused: nextPaused, updated_at: nowIso } : null))
-
-    // 1. Immediately patch Render VIP bridge for zero-latency in-memory sync
-    sendRenderVipPatch(currentKey, { is_paused: nextPaused })
-
-    // 2. Patch Supabase streamer controls
-    if (supabase) {
-      try {
-        await supabase
-          .from('rymon_streamer_controls')
-          .update({ is_paused: nextPaused, updated_at: nowIso })
-          .eq('license_key', currentKey)
-      } catch {}
-
-      // 3. Keep rymon_licenses in sync so telemetry refresh does not revert is_paused
-      try {
-        await supabase
-          .from('rymon_licenses')
-          .update({ is_paused: nextPaused, updated_at: nowIso })
-          .eq('license_key', currentKey)
-      } catch {}
-    }
-
-    // 4. Update local keys list if staff viewing admin/reseller table
     setKeysList((prev) =>
       prev.map((k) =>
         k.license_key.toUpperCase() === currentKey.toUpperCase()
-          ? { ...k, is_paused: nextPaused }
+          ? { ...k, is_paused: nextPaused, status: nextStatus as any }
           : k
       )
     )
 
-    showToast(nextPaused ? '❄️ Stealth Freeze Active (Visuals Hidden)' : '▶️ Resumed Live Controls')
+    // 2. Immediately patch Render VIP bridge for zero-latency in-memory sync
+    sendRenderVipPatch(currentKey, { is_paused: nextPaused })
 
-    setPauseLoadingKeys((prev) => {
-      const next = new Set(prev)
-      next.delete(currentKey)
-      return next
-    })
+    try {
+      const res = await togglePauseLicenseBackend(currentKey, currentUser?.username || 'debajoyti')
+      if (res.success) {
+        showToast(nextPaused ? '❄️ Stealth Freeze Active (Visuals Hidden)' : `▶️ Resumed Live Controls${res.message.includes('hrs') ? ' • Frozen Time Restored' : ''}`)
+        if (res.newExpiresAt) {
+          setExpiryDate(new Date(res.newExpiresAt))
+        }
+      } else {
+        // Revert optimistic state on backend failure
+        setRecord((prev) => (prev ? { ...prev, is_paused: wasPaused } : null))
+        setKeysList((prev) =>
+          prev.map((k) =>
+            k.license_key.toUpperCase() === currentKey.toUpperCase()
+              ? { ...k, is_paused: wasPaused, status: (wasPaused ? 'PAUSED' : 'ACTIVE') as any }
+              : k
+          )
+        )
+        sendRenderVipPatch(currentKey, { is_paused: wasPaused })
+        alert(res.message)
+      }
+    } catch (err: any) {
+      // Revert optimistic state on error
+      setRecord((prev) => (prev ? { ...prev, is_paused: wasPaused } : null))
+      setKeysList((prev) =>
+        prev.map((k) =>
+          k.license_key.toUpperCase() === currentKey.toUpperCase()
+            ? { ...k, is_paused: wasPaused, status: (wasPaused ? 'PAUSED' : 'ACTIVE') as any }
+            : k
+        )
+      )
+      sendRenderVipPatch(currentKey, { is_paused: wasPaused })
+      alert(`Error toggling freeze: ${err?.message || err}`)
+    } finally {
+      setPauseLoadingKeys((prev) => {
+        const next = new Set(prev)
+        next.delete(currentKey)
+        return next
+      })
+    }
   }
 
   const handleCopyKey = (keyString: string) => {
@@ -2440,21 +2464,32 @@ export default function RymonConnect() {
   }
 
   const handleResetHWID = async (keyString: string) => {
-    const res = await resetHwidBackend(
-      keyString,
-      currentUser?.username || 'debajoyti',
-      currentUser?.role
-    )
-    if (!res.success) {
-      alert(res.message)
-      return
+    if (hwidLoadingKeys.has(keyString)) return
+    setHwidLoadingKeys((prev) => new Set(prev).add(keyString))
+    try {
+      const res = await resetHwidBackend(
+        keyString,
+        currentUser?.username || 'debajoyti',
+        currentUser?.role
+      )
+      if (!res.success) {
+        alert(res.message)
+        return
+      }
+      showToast(`🔄 ${res.message}`)
+      fetchAllLicenses(currentUser).then(setKeysList)
+      fetchAllActivities(currentUser).then(setActivities)
+    } finally {
+      setHwidLoadingKeys((prev) => {
+        const next = new Set(prev)
+        next.delete(keyString)
+        return next
+      })
     }
-    showToast(`🔄 ${res.message}`)
-    fetchAllLicenses(currentUser).then(setKeysList)
-    fetchAllActivities(currentUser).then(setActivities)
   }
 
   const handleDeleteKey = async (keyString: string, keyStatus?: string) => {
+    if (deleteLoadingKeys.has(keyString)) return
     const canDeleteThisKey =
       isOwner || keyStatus === 'EXPIRED' || keyStatus === 'WAITING'
     if (!canDeleteThisKey) {
@@ -2464,33 +2499,54 @@ export default function RymonConnect() {
       return
     }
     if (confirm(`Permanently delete license key ${keyString}?`)) {
-      const ok = await deleteLicenseBackend(keyString, currentUser?.username || 'debajoyti')
-      if (ok) {
-        showToast(`🗑️ Key ${keyString} deleted.`)
-        fetchAllLicenses(currentUser).then(setKeysList)
-        fetchAllActivities(currentUser).then(setActivities)
-      } else {
-        alert('Permission Denied: You cannot delete keys outside your downline.')
+      setDeleteLoadingKeys((prev) => new Set(prev).add(keyString))
+      try {
+        const ok = await deleteLicenseBackend(keyString, currentUser?.username || 'debajoyti')
+        if (ok) {
+          showToast(`🗑️ Key ${keyString} deleted.`)
+          fetchAllLicenses(currentUser).then(setKeysList)
+          fetchAllActivities(currentUser).then(setActivities)
+        } else {
+          alert('Permission Denied: You cannot delete keys outside your downline.')
+        }
+      } finally {
+        setDeleteLoadingKeys((prev) => {
+          const next = new Set(prev)
+          next.delete(keyString)
+          return next
+        })
       }
     }
   }
 
   const handleToggleBanKey = async (keyString: string, currentStatus: string) => {
+    if (banLoadingKeys.has(keyString)) return
     if (!isOwner && !isAdmin) {
       alert('Power restriction: Resellers cannot ban keys (use Pause instead).')
       return
     }
-    const shouldBan = currentStatus !== 'BANNED'
-    const res = await toggleBanStatusBackend(
-      keyString,
-      'key',
-      shouldBan,
-      currentUser?.username || 'debajoyti'
-    )
-    if (res.success) {
-      showToast(res.message)
-      fetchAllLicenses(currentUser).then(setKeysList)
-      fetchAllActivities(currentUser).then(setActivities)
+    setBanLoadingKeys((prev) => new Set(prev).add(keyString))
+    try {
+      const shouldBan = currentStatus !== 'BANNED'
+      const res = await toggleBanStatusBackend(
+        keyString,
+        'key',
+        shouldBan,
+        currentUser?.username || 'debajoyti'
+      )
+      if (res.success) {
+        showToast(res.message)
+        fetchAllLicenses(currentUser).then(setKeysList)
+        fetchAllActivities(currentUser).then(setActivities)
+      } else {
+        alert(res.message)
+      }
+    } finally {
+      setBanLoadingKeys((prev) => {
+        const next = new Set(prev)
+        next.delete(keyString)
+        return next
+      })
     }
   }
 
@@ -2853,6 +2909,31 @@ export default function RymonConnect() {
   const handleTogglePauseKey = async (keyString: string) => {
     // Prevent double-tap: if already in-flight for this key, ignore
     if (pauseLoadingKeys.has(keyString)) return
+
+    const existingKey = keysList.find((k) => k.license_key === keyString)
+    const wasPaused = Boolean(existingKey?.is_paused)
+    const nextPaused = !wasPaused
+    const nextStatus = nextPaused ? 'PAUSED' : 'ACTIVE'
+
+    // 1. Optimistic UI update: 0ms visual feedback
+    setKeysList((prev) =>
+      prev.map((k) =>
+        k.license_key === keyString
+          ? {
+              ...k,
+              is_paused: nextPaused,
+              status: nextStatus as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED'
+            }
+          : k
+      )
+    )
+    if (record && record.license_key === keyString) {
+      setRecord((prev) => (prev ? { ...prev, is_paused: nextPaused } : null))
+    }
+
+    // 2. Immediate Render VIP bridge update
+    sendRenderVipPatch(keyString, { is_paused: nextPaused })
+
     setPauseLoadingKeys((prev) => new Set(prev).add(keyString))
 
     try {
@@ -2880,8 +2961,42 @@ export default function RymonConnect() {
           setRecord((prev) => (prev ? { ...prev, is_paused: res.is_paused } : null))
         }
       } else {
+        // Revert optimistic update
+        setKeysList((prev) =>
+          prev.map((k) =>
+            k.license_key === keyString
+              ? {
+                  ...k,
+                  is_paused: wasPaused,
+                  status: (existingKey?.status || 'ACTIVE') as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED'
+                }
+              : k
+          )
+        )
+        if (record && record.license_key === keyString) {
+          setRecord((prev) => (prev ? { ...prev, is_paused: wasPaused } : null))
+        }
+        sendRenderVipPatch(keyString, { is_paused: wasPaused })
         alert(`Error: ${res.message}`)
       }
+    } catch (err: any) {
+      // Revert optimistic update
+      setKeysList((prev) =>
+        prev.map((k) =>
+          k.license_key === keyString
+            ? {
+                ...k,
+                is_paused: wasPaused,
+                status: (existingKey?.status || 'ACTIVE') as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED'
+              }
+            : k
+        )
+      )
+      if (record && record.license_key === keyString) {
+        setRecord((prev) => (prev ? { ...prev, is_paused: wasPaused } : null))
+      }
+      sendRenderVipPatch(keyString, { is_paused: wasPaused })
+      alert(`Error toggling key pause: ${err?.message || err}`)
     } finally {
       // Always unblock the button, success or failure
       setPauseLoadingKeys((prev) => {
@@ -2893,18 +3008,47 @@ export default function RymonConnect() {
   }
 
   const handleBulkPauseAllKeys = async (pauseState: boolean) => {
-    const creatorFilter = currentUser?.role === 'reseller' ? currentUser.username : undefined
-    const res = await bulkTogglePauseAllKeysBackend(
-      pauseState,
-      currentUser?.username || 'debajoyti',
-      creatorFilter
+    if (isBulkPausing) return
+    setIsBulkPausing(true)
+
+    // 1. Optimistic bulk UI update
+    setKeysList((prev) =>
+      prev.map((k) =>
+        k.status !== 'BANNED' && k.status !== 'EXPIRED'
+          ? {
+              ...k,
+              is_paused: pauseState,
+              status: pauseState ? 'PAUSED' : 'ACTIVE'
+            }
+          : k
+      )
     )
-    if (res.success) {
-      showToast(`⚡ ${res.message}`)
-      fetchAllLicenses(currentUser).then(setKeysList)
-      if (record) {
-        setRecord((prev) => (prev ? { ...prev, is_paused: pauseState } : null))
+    if (record) {
+      setRecord((prev) => (prev ? { ...prev, is_paused: pauseState } : null))
+    }
+
+    try {
+      const creatorFilter = currentUser?.role === 'reseller' ? currentUser.username : undefined
+      const res = await bulkTogglePauseAllKeysBackend(
+        pauseState,
+        currentUser?.username || 'debajoyti',
+        creatorFilter
+      )
+      if (res.success) {
+        showToast(`⚡ ${res.message}`)
+        fetchAllLicenses(currentUser).then(setKeysList)
+        if (record) {
+          setRecord((prev) => (prev ? { ...prev, is_paused: pauseState } : null))
+        }
+      } else {
+        alert(`Bulk action failed: ${res.message}`)
+        fetchAllLicenses(currentUser).then(setKeysList)
       }
+    } catch (err: any) {
+      alert(`Bulk action error: ${err?.message || err}`)
+      fetchAllLicenses(currentUser).then(setKeysList)
+    } finally {
+      setIsBulkPausing(false)
     }
   }
 
@@ -5798,17 +5942,37 @@ export default function RymonConnect() {
                       </button>
                       <button
                         onClick={() => handleBulkPauseAllKeys(true)}
-                        style={{ ...styles.quickActionCard, borderColor: 'rgba(245, 158, 11, 0.3)' }}
+                        disabled={isBulkPausing}
+                        style={{
+                          ...styles.quickActionCard,
+                          borderColor: 'rgba(245, 158, 11, 0.3)',
+                          opacity: isBulkPausing ? 0.6 : 1,
+                          cursor: isBulkPausing ? 'not-allowed' : 'pointer'
+                        }}
                       >
-                        <div style={{ ...styles.quickActionIcon, color: '#f59e0b' }}><IconPause /></div>
-                        <div style={{ ...styles.quickActionTitle, color: '#f59e0b' }}>Pause All Keys</div>
+                        <div style={{ ...styles.quickActionIcon, color: '#f59e0b' }}>
+                          {isBulkPausing ? '⏳' : <IconPause />}
+                        </div>
+                        <div style={{ ...styles.quickActionTitle, color: '#f59e0b' }}>
+                          {isBulkPausing ? 'Freezing...' : 'Pause All Keys'}
+                        </div>
                       </button>
                       <button
                         onClick={() => handleBulkPauseAllKeys(false)}
-                        style={{ ...styles.quickActionCard, borderColor: 'rgba(16, 185, 129, 0.3)' }}
+                        disabled={isBulkPausing}
+                        style={{
+                          ...styles.quickActionCard,
+                          borderColor: 'rgba(16, 185, 129, 0.3)',
+                          opacity: isBulkPausing ? 0.6 : 1,
+                          cursor: isBulkPausing ? 'not-allowed' : 'pointer'
+                        }}
                       >
-                        <div style={{ ...styles.quickActionIcon, color: '#10b981' }}><IconPlay /></div>
-                        <div style={{ ...styles.quickActionTitle, color: '#10b981' }}>Resume All Keys</div>
+                        <div style={{ ...styles.quickActionIcon, color: '#10b981' }}>
+                          {isBulkPausing ? '⏳' : <IconPlay />}
+                        </div>
+                        <div style={{ ...styles.quickActionTitle, color: '#10b981' }}>
+                          {isBulkPausing ? 'Resuming...' : 'Resume All Keys'}
+                        </div>
                       </button>
                     </div>
                   </div>
@@ -6849,12 +7013,14 @@ export default function RymonConnect() {
                     </button>
                     <button
                       onClick={() => handleBulkPauseAllKeys(true)}
+                      disabled={isBulkPausing}
                       style={{
                         padding: '6px 12px',
                         borderRadius: '8px',
                         fontSize: '11px',
                         fontWeight: 800,
-                        cursor: 'pointer',
+                        cursor: isBulkPausing ? 'not-allowed' : 'pointer',
+                        opacity: isBulkPausing ? 0.6 : 1,
                         backgroundColor: 'rgba(255, 183, 0, 0.15)',
                         border: '1px solid #ffb700',
                         color: '#ffb700',
@@ -6863,16 +7029,18 @@ export default function RymonConnect() {
                         gap: '5px'
                       }}
                     >
-                      <IconPause size={13} color="#ffb700" /> PAUSE ALL
+                      {isBulkPausing ? '⏳ PAUSING...' : <><IconPause size={13} color="#ffb700" /> PAUSE ALL</>}
                     </button>
                     <button
                       onClick={() => handleBulkPauseAllKeys(false)}
+                      disabled={isBulkPausing}
                       style={{
                         padding: '6px 12px',
                         borderRadius: '8px',
                         fontSize: '11px',
                         fontWeight: 800,
-                        cursor: 'pointer',
+                        cursor: isBulkPausing ? 'not-allowed' : 'pointer',
+                        opacity: isBulkPausing ? 0.6 : 1,
                         backgroundColor: 'rgba(5, 223, 114, 0.15)',
                         border: '1px solid #05df72',
                         color: '#05df72',
@@ -6881,7 +7049,7 @@ export default function RymonConnect() {
                         gap: '5px'
                       }}
                     >
-                      <IconPlay size={13} color="#05df72" /> RESUME ALL
+                      {isBulkPausing ? '⏳ RESUMING...' : <><IconPlay size={13} color="#05df72" /> RESUME ALL</>}
                     </button>
                     <button
                       onClick={handleBulkResetAllHwid}
@@ -7246,10 +7414,15 @@ export default function RymonConnect() {
                                   </button>
                                   <button
                                     onClick={() => handleResetHWID(k.license_key)}
-                                    style={styles.actionIconBtn}
-                                    title="Reset HWID device binding (keeps timer)"
+                                    disabled={hwidLoadingKeys.has(k.license_key)}
+                                    style={{
+                                      ...styles.actionIconBtn,
+                                      opacity: hwidLoadingKeys.has(k.license_key) ? 0.5 : 1,
+                                      cursor: hwidLoadingKeys.has(k.license_key) ? 'not-allowed' : 'pointer'
+                                    }}
+                                    title={hwidLoadingKeys.has(k.license_key) ? 'Resetting...' : 'Reset HWID device binding (keeps timer)'}
                                   >
-                                    <IconRefresh size={13} color="#94a3b8" />
+                                    {hwidLoadingKeys.has(k.license_key) ? '⏳' : <IconRefresh size={13} color="#94a3b8" />}
                                   </button>
                                   <button
                                     onClick={() => {
@@ -7264,22 +7437,31 @@ export default function RymonConnect() {
                                   {(isOwner || isAdmin) && (
                                     <button
                                       onClick={() => handleToggleBanKey(k.license_key, k.status)}
+                                      disabled={banLoadingKeys.has(k.license_key)}
                                       style={{
                                         ...styles.actionIconBtn,
-                                        color: k.status === 'BANNED' ? '#05df72' : '#f43f5e'
+                                        color: k.status === 'BANNED' ? '#05df72' : '#f43f5e',
+                                        opacity: banLoadingKeys.has(k.license_key) ? 0.5 : 1,
+                                        cursor: banLoadingKeys.has(k.license_key) ? 'not-allowed' : 'pointer'
                                       }}
-                                      title={k.status === 'BANNED' ? 'Unban Key' : 'Ban Key'}
+                                      title={banLoadingKeys.has(k.license_key) ? 'Updating...' : k.status === 'BANNED' ? 'Unban Key' : 'Ban Key'}
                                     >
-                                      <IconClose size={13} color={k.status === 'BANNED' ? '#05df72' : '#f43f5e'} />
+                                      {banLoadingKeys.has(k.license_key) ? '⏳' : <IconClose size={13} color={k.status === 'BANNED' ? '#05df72' : '#f43f5e'} />}
                                     </button>
                                   )}
                                   {(isOwner || k.status === 'EXPIRED' || k.status === 'WAITING') && (
                                     <button
                                       onClick={() => handleDeleteKey(k.license_key, k.status)}
-                                      style={{ ...styles.actionIconBtn, color: '#ef4444' }}
-                                      title="Delete License Key"
+                                      disabled={deleteLoadingKeys.has(k.license_key)}
+                                      style={{
+                                        ...styles.actionIconBtn,
+                                        color: '#ef4444',
+                                        opacity: deleteLoadingKeys.has(k.license_key) ? 0.5 : 1,
+                                        cursor: deleteLoadingKeys.has(k.license_key) ? 'not-allowed' : 'pointer'
+                                      }}
+                                      title={deleteLoadingKeys.has(k.license_key) ? 'Deleting...' : 'Delete License Key'}
                                     >
-                                      <IconTrash size={13} color="#ef4444" />
+                                      {deleteLoadingKeys.has(k.license_key) ? '⏳' : <IconTrash size={13} color="#ef4444" />}
                                     </button>
                                   )}
                                 </div>

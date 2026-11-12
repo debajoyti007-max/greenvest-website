@@ -839,11 +839,16 @@ async function getDownlineUsernames(
 
     if (supabase) {
       try {
-        const { data, error } = await supabase
-          .from('rymon_accounts')
-          .select('username, uplink')
+        const { data, error } = await supabase.rpc('rpc_rymon_get_accounts')
         if (!error && Array.isArray(data)) {
           accounts = data
+        } else {
+          const { data: tableData, error: tableErr } = await supabase
+            .from('rymon_accounts')
+            .select('username, uplink')
+          if (!tableErr && Array.isArray(tableData)) {
+            accounts = tableData
+          }
         }
       } catch {}
     }
@@ -2111,6 +2116,10 @@ function savePausedKeyTimestamps(map: Record<string, number>): void {
   }
 }
 
+function clearPausedKeyTimestamps(): void {
+  savePausedKeyTimestamps({})
+}
+
 function getHwidResetLog(): Record<string, number[]> {
   try {
     const raw = localStorage.getItem(HWID_RESET_LOG_STORAGE_KEY)
@@ -2989,6 +2998,48 @@ export async function togglePauseLicenseBackend(
   const pauseMap = getPausedKeyTimestamps()
 
   if (supabase) {
+    // ── ATOMIC POSTGRESQL RPC (Sub-100ms, atomic, server-side freeze/restore) ──
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_toggle_pause_key', {
+        p_license_key: cleanKey,
+        p_requester: requesterUsername || 'debajoyti'
+      })
+      if (!rpcErr && rpcRes && typeof rpcRes === 'object') {
+        const res = rpcRes as {
+          success: boolean
+          is_paused: boolean
+          status: string
+          new_expires_at?: string | null
+          restored_seconds?: number
+          message: string
+        }
+        if (res.success) {
+          if (res.is_paused) {
+            pauseMap[cleanKey] = nowMs
+          } else {
+            delete pauseMap[cleanKey]
+          }
+          savePausedKeyTimestamps(pauseMap)
+          return {
+            success: true,
+            is_paused: res.is_paused,
+            status: res.status,
+            newExpiresAt: res.new_expires_at,
+            message: res.message
+          }
+        } else {
+          return {
+            success: false,
+            is_paused: false,
+            status: 'ACTIVE',
+            message: res.message || 'Operation failed'
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('RPC rpc_rymon_toggle_pause_key error, using fallback:', e)
+    }
+
     try {
       const [{ data: currentCtrl }, { data: licRow }] = await Promise.all([
         supabase
@@ -3167,6 +3218,30 @@ export async function bulkTogglePauseAllKeysBackend(
   const isRootOwner = (actorUsername || 'debajoyti').trim().toLowerCase() === 'debajoyti'
 
   if (supabase) {
+    // ── ATOMIC POSTGRESQL BULK RPC (Single transaction for all 135+ keys) ──
+    try {
+      const { data: bulkRes, error: bulkErr } = await supabase.rpc('rpc_rymon_bulk_pause_keys', {
+        p_pause_state: pauseState,
+        p_actor_username: actorUsername || 'debajoyti',
+        p_creator_filter: creatorFilter || null
+      })
+      if (!bulkErr && bulkRes && typeof bulkRes === 'object') {
+        const res = bulkRes as { success: boolean; count: number; message: string }
+        if (res.success) {
+          if (!pauseState) {
+            clearPausedKeyTimestamps()
+          }
+          return {
+            success: true,
+            count: res.count,
+            message: res.message
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('RPC rpc_rymon_bulk_pause_keys error, using fallback:', e)
+    }
+
     try {
       let allowedCreators: Set<string> | null = null
       if (!isRootOwner) {

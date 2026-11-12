@@ -1812,22 +1812,22 @@ async function processUpdate(upd) {
         await sendTelegramReply(chatId, `❌ Key <code>${targetKey}</code> not found.`)
         return
       }
-      const nowIso = new Date().toISOString()
-      const nextStatus = wantPause ? 'PAUSED' : licRow.expires_at ? 'ACTIVE' : 'WAITING'
-      await supabase
-        .from('rymon_licenses')
-        .update({ is_paused: wantPause, status: nextStatus, updated_at: nowIso })
-        .eq('license_key', licRow.license_key)
-      await supabase
-        .from('rymon_streamer_controls')
-        .update({ is_paused: wantPause, ...(wantPause ? { is_online: false } : {}), updated_at: nowIso })
-        .eq('license_key', licRow.license_key)
-      await sendTelegramReply(
-        chatId,
-        wantPause
-          ? `❄️ Key <code>${licRow.license_key}</code> PAUSED — Countdown timer frozen.`
-          : `▶️ Key <code>${licRow.license_key}</code> RESUMED!`
-      )
+      const { data: rpcRes } = await supabase.rpc('rpc_rymon_toggle_pause_key', {
+        p_license_key: licRow.license_key,
+        p_requester: 'debajoyti'
+      })
+      const vipObj = getVipState(licRow.license_key)
+      if (vipObj) {
+        vipObj.is_paused = wantPause
+        vipObj._lastVerified = 0
+        if (wantPause) {
+          vipObj.is_online = false
+        }
+      }
+      const replyMsg = rpcRes?.message || (wantPause
+        ? `❄️ Key <code>${licRow.license_key}</code> PAUSED — Countdown timer frozen.`
+        : `▶️ Key <code>${licRow.license_key}</code> RESUMED!`)
+      await sendTelegramReply(chatId, replyMsg)
       return
     }
 
