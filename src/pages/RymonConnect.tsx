@@ -2744,8 +2744,9 @@ export default function RymonConnect() {
 
   const handleCustomerSelfResetHwid = async (targetKey: string) => {
     const clean = (targetKey || '').trim().toUpperCase()
+    const clientLimit = securityPolicy.client_hwid_limit_per_day ?? 1
     if (!clean) {
-      setSelfResetMsg('ℹ️ Enter your License Key above first, then click Reset Key HWID (2/Day).')
+      setSelfResetMsg(`ℹ️ Enter your License Key above first, then click Reset Key HWID (${clientLimit > 0 ? `${clientLimit}/Day` : 'Disabled'}).`)
       showToast('ℹ️ Please enter your License Key first!')
       return
     }
@@ -4941,7 +4942,7 @@ export default function RymonConnect() {
                       </span>
                     </div>
                     <p style={{ margin: 0, fontSize: '11.5px', color: '#94a3b8', lineHeight: 1.4 }}>
-                      Create your authorized account using a verified Sovereign Invite Code.
+                      Create your account using an authorized invite code.
                     </p>
                   </div>
 
@@ -4995,7 +4996,7 @@ export default function RymonConnect() {
 
                     <div style={styles.formGroup}>
                       <label style={{ ...styles.formLabel, display: 'flex', justifyContent: 'space-between', color: '#fbbf24' }}>
-                        <span>SOVEREIGN INVITE CODE</span>
+                        <span>INVITE CODE</span>
                         <span style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 800 }}>REQUIRED</span>
                       </label>
                       <input
@@ -5119,7 +5120,11 @@ export default function RymonConnect() {
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    {selfResetBusy ? 'RESETTING HWID...' : '🔄 RESET KEY HWID (2/DAY)'}
+                    {selfResetBusy
+                      ? 'RESETTING HWID...'
+                      : (securityPolicy.client_hwid_limit_per_day ?? 1) > 0
+                      ? `🔄 RESET KEY HWID (${securityPolicy.client_hwid_limit_per_day ?? 1}/DAY)`
+                      : '🔒 RESET HWID (DISABLED)'}
                   </button>
                 </div>
 
@@ -5180,7 +5185,11 @@ export default function RymonConnect() {
                 <div style={styles.formGroup}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <label style={styles.formLabel}>ENTER LICENSE KEY</label>
-                    <span style={{ color: '#05df72', fontSize: '11px', fontWeight: 700 }}>2 RESETS / DAY</span>
+                    <span style={{ color: (securityPolicy.client_hwid_limit_per_day ?? 1) > 0 ? '#05df72' : '#f87171', fontSize: '11px', fontWeight: 700 }}>
+                      {(securityPolicy.client_hwid_limit_per_day ?? 1) > 0
+                        ? `${securityPolicy.client_hwid_limit_per_day ?? 1} ${(securityPolicy.client_hwid_limit_per_day ?? 1) === 1 ? 'RESET' : 'RESETS'} / DAY`
+                        : 'DISABLED (CONTACT SELLER)'}
+                    </span>
                   </div>
                   <input
                     type="text"
@@ -5252,27 +5261,9 @@ export default function RymonConnect() {
                 </div>
               )}
 
-              {/* Instructions Card */}
-              <div
-                style={{
-                  padding: '14px',
-                  borderRadius: '12px',
-                  background: 'rgba(15, 23, 42, 0.65)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  fontSize: '11.5px',
-                  color: '#94a3b8',
-                  lineHeight: '1.5'
-                }}
-              >
-                <div style={{ color: '#05df72', fontWeight: 800, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>📌</span> HOW TO USE:
-                </div>
-                <div>1. Paste your license key above and click <strong>RESET DEVICE HWID NOW</strong>.</div>
-                <div>2. Once reset, open <strong>RYMON STREAMER APK</strong> on your new device and log in.</div>
-                <div>3. Your key will automatically pair to your new phone hardware.</div>
+              {/* Information Note */}
+              <div style={{ textAlign: 'center', fontSize: '12px', color: '#64748b', marginTop: '6px' }}>
+                Once reset, launch your application on the new device to pair hardware automatically.
               </div>
 
               {/* Bottom Quick Links */}
@@ -7138,7 +7129,7 @@ export default function RymonConnect() {
                       }}
                       title="Grant free bonus hours/days to all matching keys"
                     >
-                      🎁 BONUS ALL
+                      <IconPlus size={13} color="#eab308" /> GRANT BONUS
                     </button>
                     <button
                       onClick={handleBulkResetAllHwid}
@@ -7242,6 +7233,38 @@ export default function RymonConnect() {
                     )}
                   </div>
                 </div>
+
+                {keyStatusFilter === 'BANNED' && (
+                  <div style={{
+                    padding: '12px 18px',
+                    background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(15, 23, 42, 0.85) 100%)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: '10px',
+                    fontSize: '12.5px',
+                    color: '#fca5a5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    marginBottom: '14px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '16px' }}>🚫</span>
+                      <span><strong>HWID Blacklist Vault:</strong> Showing all banned hardware signatures &amp; blocked keys. Devices with these HWIDs cannot log into any app.</span>
+                    </div>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      background: 'rgba(239, 68, 68, 0.25)',
+                      color: '#f87171',
+                      fontWeight: 800,
+                      fontSize: '11px'
+                    }}>
+                      {stats.banned} BANNED DEVICES
+                    </span>
+                  </div>
+                )}
 
                 <div className="sg-table-card" style={styles.tableCard}>
                   <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -7903,6 +7926,52 @@ export default function RymonConnect() {
                   </div>
                 </div>
 
+                {/* Supabase Free Tier 500MB Storage Health Gauge */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.85) 100%)',
+                  border: '1px solid rgba(16, 185, 129, 0.28)',
+                  borderRadius: '14px',
+                  padding: '20px 22px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '22px' }}>🛡️</span>
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 800, color: '#f8fafc' }}>
+                          Supabase Free Tier Storage Health
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+                          Quota Cap: 500 MB • Auto-pruning protects your database from bloat and quota exhaustion
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                      color: '#34d399',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      letterSpacing: '0.5px'
+                    }}>
+                      HEALTHY • &lt; 5% USED
+                    </span>
+                  </div>
+                  {/* Progress bar */}
+                  <div style={{ width: '100%', height: '8px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.min(100, Math.max(3, Number((stats.total * 0.015).toFixed(1))))}%`, height: '100%', background: 'linear-gradient(90deg, #10b981, #00d9ff)', borderRadius: '4px' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#64748b' }}>
+                    <span>Estimated usage: ~{(12 + stats.total * 0.02).toFixed(1)} MB ({stats.total} total keys, {stats.expired} expired)</span>
+                    <span>Max Free Quota: 500.0 MB</span>
+                  </div>
+                </div>
+
                 {/* 1-Click Quick Purge Bar */}
                 <div className="sg-stat-grid" style={{ ...styles.statGrid, marginBottom: '24px' }}>
                   <div
@@ -7915,11 +7984,11 @@ export default function RymonConnect() {
                       background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.14) 0%, rgba(13, 17, 26, 0.92) 100%)'
                     }}
                   >
-                    <div className="sg-stat-icon-frame" style={{ ...styles.statIconFrame, color: '#ef4444' }}>🧹</div>
+                    <div className="sg-stat-icon-frame" style={{ ...styles.statIconFrame, color: '#ef4444' }}><IconTrash size={16} color="#ef4444" /></div>
                     <div>
                       <div className="sg-stat-num" style={{ ...styles.statNum, color: '#ef4444' }}>{stats.expired}</div>
                       <div className="sg-stat-label" style={{ ...styles.statLabel, color: '#fca5a5', fontWeight: 700 }}>
-                        1-Click Purge Expired Keys
+                        Purge Expired Keys
                       </div>
                     </div>
                   </div>
@@ -7933,11 +8002,11 @@ export default function RymonConnect() {
                       background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.14) 0%, rgba(13, 17, 26, 0.92) 100%)'
                     }}
                   >
-                    <div className="sg-stat-icon-frame" style={{ ...styles.statIconFrame, color: '#eab308' }}>🗑️</div>
+                    <div className="sg-stat-icon-frame" style={{ ...styles.statIconFrame, color: '#eab308' }}><IconTrash size={16} color="#eab308" /></div>
                     <div>
                       <div className="sg-stat-num" style={{ ...styles.statNum, color: '#eab308' }}>{stats.unused}</div>
                       <div className="sg-stat-label" style={{ ...styles.statLabel, color: '#fde047', fontWeight: 700 }}>
-                        1-Click Purge Unused Keys
+                        Purge Unused Keys
                       </div>
                     </div>
                   </div>
@@ -7952,11 +8021,11 @@ export default function RymonConnect() {
                         background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.22) 0%, rgba(13, 17, 26, 0.95) 100%)'
                       }}
                     >
-                      <div className="sg-stat-icon-frame" style={{ ...styles.statIconFrame, color: '#ffffff' }}>💥</div>
+                      <div className="sg-stat-icon-frame" style={{ ...styles.statIconFrame, color: '#ffffff' }}><IconTrash size={16} color="#ffffff" /></div>
                       <div>
                         <div className="sg-stat-num" style={{ ...styles.statNum, color: '#ffffff' }}>{stats.total}</div>
                         <div className="sg-stat-label" style={{ ...styles.statLabel, color: '#fecaca', fontWeight: 800 }}>
-                          1-Click Wipe ALL Keys (Owner)
+                          Wipe All Keys (Owner)
                         </div>
                       </div>
                     </div>
@@ -8516,7 +8585,7 @@ export default function RymonConnect() {
                     {/* Multi-App Generation & Role Key Restrictions */}
                     <div style={{ ...styles.cardBox, marginTop: '20px' }}>
                       <div style={styles.cardHeader}>
-                        <h4>🎮 Multi-App Generation &amp; Role Key Restrictions</h4>
+                        <h4>Multi-App &amp; Minting Permissions</h4>
                         <span
                           style={{
                             ...styles.cyanMiniBadge,
@@ -8524,7 +8593,7 @@ export default function RymonConnect() {
                             color: '#00d9ff'
                           }}
                         >
-                          APP ACCESS POLICY
+                          APP PERMISSIONS
                         </span>
                       </div>
 
@@ -8615,7 +8684,7 @@ export default function RymonConnect() {
                             fontWeight: 800
                           }}
                         >
-                          <option value={1}>🔒 1 Device Only (Anti-Sharing Strict)</option>
+                          <option value={1}>1 Device Only (Single Binding Strict)</option>
                           <option value={2}>2 Devices Max</option>
                           <option value={5}>5 Devices Max</option>
                           <option value={300}>300 Devices (Unlimited Multi-Device)</option>
@@ -8657,9 +8726,9 @@ export default function RymonConnect() {
                       <div style={styles.settingToggleRow}>
                         <div>
                           <div style={styles.settingTitle}>
-                            <span>👑 Allow Resellers to Generate VIP Web Remote Keys</span>
+                            <span>Allow Resellers to Generate VIP Web Remote Keys</span>
                             {!(securityPolicy.allow_reseller_web_remote ?? false) && (
-                              <span style={{ marginLeft: '8px', fontSize: '10px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                              <span style={{ marginLeft: '8px', fontSize: '10px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#fca5a5', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
                                 STRICT LOCKED
                               </span>
                             )}
@@ -8746,13 +8815,13 @@ export default function RymonConnect() {
                             padding: '8px 14px',
                             fontSize: '12px',
                             fontWeight: 800,
-                            color: '#fbbf24',
-                            border: '1px solid rgba(245, 158, 11, 0.4)'
+                            color: '#05df72',
+                            border: '1px solid rgba(5, 223, 114, 0.4)'
                           }}
                         >
                           <option value={0}>0% (No Surcharge)</option>
                           <option value={25}>+25% VIP Surcharge</option>
-                          <option value={50}>⭐ +50% VIP Surcharge (Standard Recommended)</option>
+                          <option value={50}>+50% VIP Surcharge (Standard Recommended)</option>
                           <option value={75}>+75% VIP Surcharge</option>
                           <option value={100}>+100% VIP Surcharge (2x Price)</option>
                         </select>
@@ -8762,16 +8831,68 @@ export default function RymonConnect() {
                     {/* Sovereign Anti-Sharing, Reseller Expiry & APK Force-Update Policy */}
                     <div style={{ ...styles.cardBox, marginTop: '20px' }}>
                       <div style={styles.cardHeader}>
-                        <h4>🛡️ RYMON Anti-Sharing, Reseller Expiry &amp; APK Force-Update</h4>
+                        <div>
+                          <h4>Security &amp; Device Policies</h4>
+                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                            Hardware unbinding limits, downstream expiration rules, and client build enforcement
+                          </div>
+                        </div>
                         <span
                           style={{
                             ...styles.cyanMiniBadge,
                             background: 'rgba(5, 223, 114, 0.16)',
-                            color: '#05df72'
+                            color: '#05df72',
+                            border: '1px solid rgba(5, 223, 114, 0.35)'
                           }}
                         >
-                          ENTERPRISE POLICY
+                          DEVICE POLICIES
                         </span>
+                      </div>
+
+                      {/* Section: Hardware Unbind Limits */}
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        letterSpacing: '0.1em',
+                        color: '#64748b',
+                        textTransform: 'uppercase',
+                        padding: '12px 0 6px 0',
+                        marginTop: '6px',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+                      }}>
+                        Device Unbind Limits (Anti-Sharing)
+                      </div>
+
+                      <div style={styles.settingToggleRow}>
+                        <div>
+                          <div style={styles.settingTitle}>Client Self-Service Daily HWID Reset Limit</div>
+                          <div style={styles.settingSub}>
+                            Controls how many times end-customers can unbind their key on greenvest.shop per 24 hours without contacting a seller
+                          </div>
+                        </div>
+                        <select
+                          value={securityPolicy.client_hwid_limit_per_day ?? 1}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value)
+                            handleSaveSecurityPolicy({
+                              ...securityPolicy,
+                              client_hwid_limit_per_day: val,
+                              allow_client_self_reset: val > 0
+                            })
+                          }}
+                          style={{
+                            ...styles.selectInput,
+                            width: 'auto',
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: 800
+                          }}
+                        >
+                          <option value={0}>0 (Disabled - Contact Seller Only)</option>
+                          <option value={1}>1 Reset / Day / Key (Strict &amp; Recommended)</option>
+                          <option value={2}>2 Resets / Day / Key</option>
+                          <option value={3}>3 Resets / Day / Key</option>
+                        </select>
                       </div>
 
                       <div style={styles.settingToggleRow}>
@@ -8803,6 +8924,20 @@ export default function RymonConnect() {
                           <option value={5}>5 Resets / Day / Key</option>
                           <option value={999}>Unlimited Resets</option>
                         </select>
+                      </div>
+
+                      {/* Section: Reseller Subscription Rules */}
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        letterSpacing: '0.1em',
+                        color: '#64748b',
+                        textTransform: 'uppercase',
+                        padding: '16px 0 6px 0',
+                        marginTop: '8px',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+                      }}>
+                        Reseller Subscription Rules
                       </div>
 
                       <div style={styles.settingToggleRow}>
@@ -8872,7 +9007,21 @@ export default function RymonConnect() {
                         </div>
                       </div>
 
-                      <div style={{ ...styles.settingToggleRow, marginTop: '12px' }}>
+                      {/* Section: APK Distribution & Target Build */}
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        letterSpacing: '0.1em',
+                        color: '#64748b',
+                        textTransform: 'uppercase',
+                        padding: '16px 0 6px 0',
+                        marginTop: '8px',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+                      }}>
+                        Application Distribution &amp; Target Build
+                      </div>
+
+                      <div style={{ ...styles.settingToggleRow, marginTop: '10px' }}>
                         <div>
                           <div style={styles.settingTitle}>Force Android APK Update on All Devices</div>
                           <div style={styles.settingSub}>
@@ -8912,7 +9061,7 @@ export default function RymonConnect() {
                                 apk_latest_version: e.target.value
                               })
                             }
-                            placeholder="v2.4"
+                            placeholder="v2.5"
                             style={styles.keyInput}
                           />
                         </div>
@@ -8936,9 +9085,32 @@ export default function RymonConnect() {
                       <button
                         type="button"
                         onClick={() => handleSaveSecurityPolicy(securityPolicy)}
-                        style={{ ...styles.submitBtn, marginTop: '16px' }}
+                        style={{
+                          width: '100%',
+                          padding: '13px 20px',
+                          borderRadius: '10px',
+                          backgroundColor: 'rgba(5, 223, 114, 0.12)',
+                          border: '1px solid rgba(5, 223, 114, 0.4)',
+                          color: '#05df72',
+                          fontWeight: 800,
+                          fontSize: '12px',
+                          letterSpacing: '0.08em',
+                          cursor: 'pointer',
+                          marginTop: '18px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          transition: 'all 0.2s ease',
+                          boxShadow: '0 4px 20px rgba(5, 223, 114, 0.12)'
+                        }}
                       >
-                        🛡️ SAVE ENTERPRISE SECURITY &amp; APK POLICY
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                          <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        <span>SAVE SECURITY &amp; DEVICE POLICIES</span>
                       </button>
                     </div>
                   </>
@@ -10140,43 +10312,43 @@ else:
                 <div className="sg-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
                   <div className="sg-management-card" style={{ ...styles.managementCard, padding: '16px 20px' }}>
                     <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      TOTAL CONFIGURED APPS
+                      TOTAL APPLICATIONS
                     </div>
                     <div style={{ fontSize: '26px', fontWeight: 900, color: '#00d9ff', marginTop: '6px' }}>
                       {registeredApps.length}
                     </div>
                     <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
-                      1 Streamer Mod + {Math.max(0, registeredApps.length - 1)} Pure KeyAuth Apps
+                      Configured App Profiles
                     </div>
                   </div>
 
                   <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
                     <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      FREE FIRE MAX STATUS
+                      ACTIVE LICENSES
                     </div>
-                    <div style={{ fontSize: '18px', fontWeight: 900, color: '#05df72', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      🔥 STREAMER REMOTE
+                    <div style={{ fontSize: '26px', fontWeight: 900, color: '#05df72', marginTop: '6px' }}>
+                      {keysList.filter((k) => k.status === 'ACTIVE').length}
                     </div>
                     <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
-                      Dedicated ESP, Aimbot &amp; Telemetry Remote
+                      Currently Valid &amp; Running
                     </div>
                   </div>
 
                   <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
                     <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      OTHER APPS MODE
+                      DEVICE HWID PAIRINGS
                     </div>
-                    <div style={{ fontSize: '18px', fontWeight: 900, color: '#fde047', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      🔑 PURE KEYAUTH
+                    <div style={{ fontSize: '26px', fontWeight: 900, color: '#fde047', marginTop: '6px' }}>
+                      {keysList.filter((k) => Boolean(k.device_hwid && k.device_hwid.trim() !== '')).length}
                     </div>
                     <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '4px' }}>
-                      Login, Device HWID Binding &amp; Expiry Only
+                      Hardware Signatures Locked
                     </div>
                   </div>
 
                   <div style={{ ...styles.managementCard, padding: '16px 20px' }}>
                     <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      CONNECT GATEWAY
+                      API GATEWAY
                     </div>
                     <div style={{ fontSize: '13px', fontWeight: 800, color: '#00d9ff', marginTop: '8px', wordBreak: 'break-all' }}>
                       greenvest.shop/connect
@@ -10189,7 +10361,7 @@ else:
                       }}
                       style={{ ...styles.chipBtn, fontSize: '11px', marginTop: '8px', padding: '4px 10px', width: 'fit-content' }}
                     >
-                      📋 Copy Endpoint
+                      Copy Endpoint
                     </button>
                   </div>
                 </div>

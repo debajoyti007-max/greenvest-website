@@ -1968,8 +1968,10 @@ export async function razorpayAddFunds(
 
 // ============================================================================
 export interface SovereignSecurityPolicy {
-  reseller_hwid_limit_per_day: number // 0 = Unlimited, default 2 per key per 24h
-  auto_pause_keys_on_reseller_expiry: boolean // default true
+  client_hwid_limit_per_day: number // 0 = Disabled, default 1 per key per 24h for end-customers
+  allow_client_self_reset: boolean // default true
+  reseller_hwid_limit_per_day: number // 0 = Unlimited, default 2 per key per 24h for resellers
+  auto_pause_keys_on_reseller_expiry?: boolean // default true
   admin_sub_renew_fee_30d: number // default 0 (₹0 or custom fee for Admin renewing a Reseller for 30D)
   admin_sub_renew_fee_60d: number // default 0 (₹0 or custom fee for Admin renewing a Reseller for 60D)
   apk_latest_version: string // default '2.4'
@@ -1992,6 +1994,8 @@ const PAUSED_TIMESTAMPS_STORAGE_KEY = 'rymon_paused_key_timestamps_v1'
 const HWID_RESET_LOG_STORAGE_KEY = 'rymon_hwid_reset_daily_log_v1'
 
 const DEFAULT_SECURITY_POLICY: SovereignSecurityPolicy = {
+  client_hwid_limit_per_day: 1,
+  allow_client_self_reset: true,
   reseller_hwid_limit_per_day: 2,
   auto_pause_keys_on_reseller_expiry: true,
   admin_sub_renew_fee_30d: 0,
@@ -3769,19 +3773,33 @@ export async function selfServiceResetKeyHwidBackend(
   dailyLimit: number
 }> {
   const cleanKey = (rawKey || '').trim().toUpperCase()
-  const DAILY_LIMIT = 2
+  const policy = getSovereignSecurityPolicy()
+  const clientLimit = policy.client_hwid_limit_per_day !== undefined ? Number(policy.client_hwid_limit_per_day) : 1
+  const isClientResetAllowed = policy.allow_client_self_reset !== false && clientLimit > 0
+  const DAILY_LIMIT = Math.max(1, clientLimit)
   const DAY_WINDOW_MS = 86400000
   const nowMs = Date.now()
   const nowIso = new Date(nowMs).toISOString()
+
+  if (!isOwnerOverride && !isClientResetAllowed) {
+    return {
+      success: false,
+      message: 'Client self-service HWID resets are disabled by the owner. Please contact your seller.',
+      htmlReply: `🔒 <b>Self-Service HWID Resets Disabled</b>\nClient self-service HWID unbinding is currently disabled. Please contact your seller or administrator.`,
+      remainingResets: 0,
+      usedToday: 0,
+      dailyLimit: 0
+    }
+  }
 
   if (!cleanKey) {
     return {
       success: false,
       message: 'Please enter a valid license key.',
-      htmlReply: `ℹ️ <b>Usage:</b> Send <code>/reset RYMON-XXXX-XXXX</code> or simply paste your license key directly!`,
+      htmlReply: `ℹ️ <b>Usage:</b> Paste your license key directly and click Reset HWID!`,
       remainingResets: DAILY_LIMIT,
       usedToday: 0,
-      dailyLimit: DAILY_LIMIT
+      dailyLimit: isClientResetAllowed ? DAILY_LIMIT : 0
     }
   }
 
@@ -3863,15 +3881,15 @@ export async function selfServiceResetKeyHwidBackend(
       const waitStr = formatDurationShort(waitMs)
       return {
         success: false,
-        message: `Daily limit reached (2/2 resets used today for ${exactKey}). Next reset in ~${waitStr}.`,
+        message: `Daily limit reached (${DAILY_LIMIT}/${DAILY_LIMIT} resets used today for ${exactKey}). Next reset in ~${waitStr}.`,
         htmlReply: [
-          `🛡️ <b>DAILY HWID RESET LIMIT REACHED (2/2)</b>`,
+          `🛡️ <b>DAILY HWID RESET LIMIT REACHED (${DAILY_LIMIT}/${DAILY_LIMIT})</b>`,
           ``,
           `• <b>Key:</b> <code>${exactKey}</code>`,
-          `• <b>Resets Used Today:</b> 2 / 2 (Max 2 per day)`,
+          `• <b>Resets Used Today:</b> ${DAILY_LIMIT} / ${DAILY_LIMIT} (Max ${DAILY_LIMIT} per day)`,
           `• <b>Next Reset Available In:</b> ~${waitStr}`,
           ``,
-          `<i>Normal users can reset their key up to 2 times per day. Contact your seller or @montage007pc if you need an emergency override.</i>`
+          `<i>Normal users can reset their key up to ${DAILY_LIMIT} ${DAILY_LIMIT === 1 ? 'time' : 'times'} per day. Contact your seller if you need an emergency override.</i>`
         ].join('\n'),
         remainingResets: 0,
         usedToday: DAILY_LIMIT,
@@ -3916,10 +3934,10 @@ export async function selfServiceResetKeyHwidBackend(
         .eq('license_key', licRecord.license_key)
 
       await supabase.from('rymon_activities').insert({
-        title: isOwnerOverride ? 'Owner Override HWID Reset' : 'User Self-Service HWID Reset',
+        title: isOwnerOverride ? 'Owner Override HWID Reset' : 'Client Self-Service HWID Reset',
         event_type: 'HWID_RESET',
         details: isOwnerOverride
-          ? `Owner override cleared HWID & reset 2/day quota for ${exactKey}`
+          ? `Owner override cleared HWID & reset daily quota (${DAILY_LIMIT}/day) for ${exactKey}`
           : `Device HWID unbound for ${exactKey} (${recentResets.length}/${DAILY_LIMIT} used today) by ${actorLabel}`,
         actor_username: actorLabel,
         status: 'SUCCESS'
@@ -3946,7 +3964,7 @@ export async function selfServiceResetKeyHwidBackend(
         `• <b>Key:</b> <code>${exactKey}</code>`,
         `• <b>Game:</b> ${licRecord.game}`,
         `• <b>Device Lock:</b> Cleared (Unbound)`,
-        `• <b>Customer Daily Quota:</b> Restored to 2 / 2 today`,
+        `• <b>Customer Daily Quota:</b> Restored to ${DAILY_LIMIT} / ${DAILY_LIMIT} today`,
         `• <b>Timer:</b> Preserved`
       ].join('\n')
     : [

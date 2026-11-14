@@ -1,7 +1,5 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
-import RymonIntroVideo from './components/RymonIntroVideo'
-import MontageMascot from './components/MontageMascot'
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>
@@ -85,13 +83,11 @@ function LoadingFallback() {
 export default function App() {
   return (
     <BrowserRouter basename={routerBasename}>
-      <RymonIntroVideo />
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
           <Route path="*" element={<RymonConnect />} />
         </Routes>
       </Suspense>
-      <MontageMascot />
     </BrowserRouter>
   )
 }

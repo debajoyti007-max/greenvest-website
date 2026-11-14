@@ -44,13 +44,15 @@ CREATE TABLE IF NOT EXISTS public.rymon_licenses (
     id                  BIGSERIAL PRIMARY KEY,
     license_key         TEXT UNIQUE NOT NULL,
     game                TEXT NOT NULL DEFAULT 'Free Fire MAX',
-    plan_duration       TEXT NOT NULL DEFAULT '30 Days',
+    plan_duration       TEXT NOT NULL DEFAULT '1 Day',
     creator_username    TEXT NOT NULL,
     devices_used        INT NOT NULL DEFAULT 0,
     devices_max         INT NOT NULL DEFAULT 1,
     device_hwid         TEXT DEFAULT '',
-    status              TEXT NOT NULL DEFAULT 'WAITING' CHECK (status IN ('ACTIVE', 'WAITING', 'EXPIRED', 'BANNED')),
-    expires_at          TIMESTAMPTZ,
+    status              TEXT NOT NULL DEFAULT 'WAITING' CHECK (status IN ('ACTIVE', 'WAITING', 'EXPIRED', 'BANNED', 'PAUSED')),
+    is_paused           BOOLEAN NOT NULL DEFAULT false,
+    paused_at           TIMESTAMPTZ DEFAULT NULL,
+    expires_at          TIMESTAMPTZ DEFAULT NULL,
     last_heartbeat      TIMESTAMPTZ DEFAULT now(),
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -64,6 +66,8 @@ CREATE TABLE IF NOT EXISTS public.rymon_streamer_controls (
     device_hwid         TEXT DEFAULT '',
     is_active           BOOLEAN NOT NULL DEFAULT true,
     is_online           BOOLEAN NOT NULL DEFAULT false,
+    is_paused           BOOLEAN NOT NULL DEFAULT false,
+    paused_at           TIMESTAMPTZ DEFAULT NULL,
     last_heartbeat      TIMESTAMPTZ DEFAULT now(),
     expires_at          TIMESTAMPTZ DEFAULT NULL,
     plan_duration       TEXT DEFAULT '1 Day',
@@ -138,7 +142,10 @@ DROP POLICY IF EXISTS "rymon_accounts_all" ON public.rymon_accounts;
 CREATE POLICY "rymon_accounts_deny_all" ON public.rymon_accounts FOR ALL TO public USING (false);
 
 DROP POLICY IF EXISTS "rymon_licenses_all" ON public.rymon_licenses;
-CREATE POLICY "rymon_licenses_all" ON public.rymon_licenses FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+-- Production Security: Revoke direct public/anon dumping of rymon_licenses;
+-- all key lookups and scoped dashboard listings must use SECURITY DEFINER RPCs (rpc_rymon_verify_license, rpc_rymon_get_licenses).
+REVOKE ALL ON public.rymon_licenses FROM anon, authenticated, public;
+GRANT ALL ON public.rymon_licenses TO service_role;
 
 DROP POLICY IF EXISTS "rymon_streamer_controls_all" ON public.rymon_streamer_controls;
 CREATE POLICY "rymon_streamer_controls_all" ON public.rymon_streamer_controls FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -1580,7 +1587,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.rpc_rymon_create_referral(TEXT, TEXT, NUMERIC, INT, INT, TEXT, TEXT) TO anon, authenticated, service_role;
 
 -- ------------------------------------------------------------------------------
--- RPC 13: GET LICENSES (SCOPED BY ROLE - ZERO BACKDOOR)
+-- RPC 13: GET LICENSES (SCOPED BY RECURSIVE HIERARCHY - ZERO BACKDOOR)
 -- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.rpc_rymon_get_licenses(
     p_actor_username TEXT,
@@ -1589,6 +1596,7 @@ CREATE OR REPLACE FUNCTION public.rpc_rymon_get_licenses(
 RETURNS SETOF public.rymon_licenses
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
     v_actor public.rymon_accounts%ROWTYPE;
@@ -1601,14 +1609,38 @@ BEGIN
         RETURN;
     END IF;
 
-    -- Scoped access: Owners and root owner see all licenses; Resellers see only their created licenses
-    IF v_actor.role = 'owner' OR LOWER(v_actor.username) = 'debajoyti' THEN
+    -- Root founder (debajoyti) sees all platform licenses
+    IF LOWER(v_actor.username) = 'debajoyti' THEN
         RETURN QUERY SELECT * FROM public.rymon_licenses ORDER BY created_at DESC;
-    ELSE
-        RETURN QUERY SELECT * FROM public.rymon_licenses 
-        WHERE LOWER(creator_username) = LOWER(v_actor.username) 
-        ORDER BY created_at DESC;
+        RETURN;
     END IF;
+
+    -- Partner Owner / Admin: recursive downline tree (self + downlines), strictly excluding debajoyti
+    IF v_actor.role IN ('owner', 'admin') THEN
+        RETURN QUERY
+        WITH RECURSIVE downline AS (
+            SELECT LOWER(username) AS uname
+            FROM public.rymon_accounts
+            WHERE LOWER(username) = LOWER(v_actor.username)
+            UNION ALL
+            SELECT LOWER(a.username)
+            FROM public.rymon_accounts a
+            INNER JOIN downline d ON LOWER(a.uplink) = d.uname
+            WHERE LOWER(a.username) != 'debajoyti'
+        )
+        SELECT l.*
+        FROM public.rymon_licenses l
+        WHERE LOWER(l.creator_username) IN (SELECT uname FROM downline)
+          AND LOWER(l.creator_username) != 'debajoyti'
+        ORDER BY l.created_at DESC;
+        RETURN;
+    END IF;
+
+    -- Resellers & other roles: only their own created keys
+    RETURN QUERY
+    SELECT * FROM public.rymon_licenses
+    WHERE LOWER(creator_username) = LOWER(v_actor.username)
+    ORDER BY created_at DESC;
 END;
 $$;
 
@@ -2136,3 +2168,741 @@ VALUES
 ('rymon', 'ROGER', '💼 Reseller Tier Verified', 'Your reseller account has been credited. You can generate PUBG and FreeFire keys directly from the Generate Key panel.', 'INFO', false, now() - interval '1 hour')
 ON CONFLICT DO NOTHING;
 
+
+-- ==============================================================================
+-- MIGRATION v2.1 — paused_at column + schema fixes (2026-11-10)
+-- Run this block on existing databases to bring schema up to date.
+-- ==============================================================================
+
+-- Add paused_at to rymon_licenses (device-agnostic freeze timestamp)
+ALTER TABLE public.rymon_licenses
+  ADD COLUMN IF NOT EXISTS paused_at TIMESTAMPTZ DEFAULT NULL;
+
+ALTER TABLE public.rymon_licenses
+  ADD COLUMN IF NOT EXISTS is_paused BOOLEAN NOT NULL DEFAULT false;
+
+-- Fix status CHECK constraint to include PAUSED (was missing)
+ALTER TABLE public.rymon_licenses
+  DROP CONSTRAINT IF EXISTS rymon_licenses_status_check;
+
+ALTER TABLE public.rymon_licenses
+  ADD CONSTRAINT rymon_licenses_status_check
+  CHECK (status IN ('ACTIVE', 'WAITING', 'EXPIRED', 'BANNED', 'PAUSED'));
+
+-- Fix plan_duration default from '30 Days' to '1 Day'
+ALTER TABLE public.rymon_licenses
+  ALTER COLUMN plan_duration SET DEFAULT '1 Day';
+
+ALTER TABLE public.rymon_licenses
+  ALTER COLUMN expires_at SET DEFAULT NULL;
+
+-- Add paused_at + is_paused to rymon_streamer_controls
+ALTER TABLE public.rymon_streamer_controls
+  ADD COLUMN IF NOT EXISTS is_paused BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE public.rymon_streamer_controls
+  ADD COLUMN IF NOT EXISTS paused_at TIMESTAMPTZ DEFAULT NULL;
+
+-- Backfill paused_at for currently-paused keys using updated_at as best proxy
+UPDATE public.rymon_licenses
+  SET paused_at = updated_at
+  WHERE is_paused = true AND paused_at IS NULL;
+
+UPDATE public.rymon_streamer_controls
+  SET paused_at = updated_at
+  WHERE is_paused = true AND paused_at IS NULL;
+
+-- Index paused_at for fast expiry/status queries
+CREATE INDEX IF NOT EXISTS idx_rymon_licenses_paused_at
+  ON public.rymon_licenses(paused_at)
+  WHERE paused_at IS NOT NULL;
+
+
+-- ==============================================================================
+-- RYMON ENTERPRISE ATOMIC PAUSE / RESUME ENGINE (POSTGRESQL MIGRATION)
+-- ==============================================================================
+
+-- 1. Database Reconciliation: align paused_at and is_paused across both tables
+UPDATE public.rymon_licenses
+SET paused_at = NULL
+WHERE is_paused = false AND paused_at IS NOT NULL;
+
+UPDATE public.rymon_licenses
+SET paused_at = COALESCE(updated_at, now())
+WHERE is_paused = true AND paused_at IS NULL;
+
+UPDATE public.rymon_streamer_controls sc
+SET is_paused = l.is_paused,
+    paused_at = l.paused_at,
+    expires_at = l.expires_at,
+    updated_at = now()
+FROM public.rymon_licenses l
+WHERE sc.license_key = l.license_key
+  AND (sc.is_paused IS DISTINCT FROM l.is_paused 
+       OR sc.paused_at IS DISTINCT FROM l.paused_at
+       OR sc.expires_at IS DISTINCT FROM l.expires_at);
+
+-- 2. Performance Composite Index on Pause Lookups
+CREATE INDEX IF NOT EXISTS idx_rymon_licenses_pause_lookup
+  ON public.rymon_licenses(license_key, is_paused, status);
+
+CREATE INDEX IF NOT EXISTS idx_rymon_sc_pause_lookup
+  ON public.rymon_streamer_controls(license_key, is_paused);
+
+-- 3. RPC: rpc_rymon_toggle_pause_key
+CREATE OR REPLACE FUNCTION public.rpc_rymon_toggle_pause_key(
+    p_license_key TEXT,
+    p_requester TEXT DEFAULT 'debajoyti'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_clean_key TEXT;
+    v_clean_req TEXT;
+    v_role TEXT;
+    v_creator TEXT;
+    v_curr_paused BOOLEAN;
+    v_curr_status TEXT;
+    v_curr_expires TIMESTAMPTZ;
+    v_curr_paused_at TIMESTAMPTZ;
+    v_new_paused BOOLEAN;
+    v_new_status TEXT;
+    v_new_paused_at TIMESTAMPTZ;
+    v_new_expires_at TIMESTAMPTZ;
+    v_frozen_interval INTERVAL;
+    v_restored_seconds BIGINT := 0;
+    v_now TIMESTAMPTZ;
+    v_is_root BOOLEAN := false;
+BEGIN
+    v_clean_key := UPPER(TRIM(p_license_key));
+    v_clean_req := LOWER(TRIM(COALESCE(p_requester, 'debajoyti')));
+    v_now := clock_timestamp();
+
+    IF v_clean_req = 'debajoyti' THEN
+        v_is_root := true;
+        v_role := 'owner';
+    ELSE
+        SELECT role INTO v_role
+        FROM public.rymon_accounts
+        WHERE LOWER(username) = v_clean_req;
+        
+        IF v_role IS NULL THEN
+            RETURN jsonb_build_object('success', false, 'message', 'Requester account not found or unauthorized.');
+        END IF;
+    END IF;
+
+    -- Lookup target license in rymon_licenses
+    SELECT creator_username, is_paused, status, expires_at, paused_at
+    INTO v_creator, v_curr_paused, v_curr_status, v_curr_expires, v_curr_paused_at
+    FROM public.rymon_licenses
+    WHERE UPPER(license_key) = v_clean_key;
+
+    -- Fallback to streamer controls if license table does not have it yet
+    IF v_creator IS NULL THEN
+        SELECT creator, is_paused, expires_at, paused_at
+        INTO v_creator, v_curr_paused, v_curr_expires, v_curr_paused_at
+        FROM public.rymon_streamer_controls
+        WHERE UPPER(license_key) = v_clean_key;
+    END IF;
+
+    IF v_creator IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', 'License key ' || v_clean_key || ' not found.');
+    END IF;
+
+    -- Hierarchy Security Checks
+    IF NOT v_is_root THEN
+        -- No non-root user can touch debajoyti's keys
+        IF LOWER(v_creator) = 'debajoyti' THEN
+            RETURN jsonb_build_object('success', false, 'message', 'Permission Denied: Root Founder keys are protected and cannot be modified.');
+        END IF;
+
+        IF v_role = 'owner' THEN
+            -- Owners can touch anyone except root founder
+            NULL;
+        ELSIF v_role = 'admin' THEN
+            -- Admins cannot modify Owner keys
+            IF EXISTS (SELECT 1 FROM public.rymon_accounts WHERE LOWER(username) = LOWER(v_creator) AND role = 'owner') THEN
+                RETURN jsonb_build_object('success', false, 'message', 'Permission Denied: Admins cannot modify Owner keys.');
+            END IF;
+            -- Must be within downline or self
+            IF NOT EXISTS (
+                WITH RECURSIVE dl AS (
+                    SELECT LOWER(username) AS uname FROM public.rymon_accounts WHERE LOWER(username) = v_clean_req
+                    UNION ALL
+                    SELECT LOWER(a.username) FROM public.rymon_accounts a JOIN dl ON LOWER(a.uplink) = dl.uname
+                )
+                SELECT 1 FROM dl WHERE uname = LOWER(v_creator)
+            ) THEN
+                RETURN jsonb_build_object('success', false, 'message', 'Permission Denied: Target key belongs to an external downline.');
+            END IF;
+        ELSIF v_role = 'reseller' THEN
+            IF LOWER(v_creator) != v_clean_req THEN
+                RETURN jsonb_build_object('success', false, 'message', 'Permission Denied: Resellers can only toggle their own generated keys.');
+            END IF;
+        ELSE
+            RETURN jsonb_build_object('success', false, 'message', 'Permission Denied: Role not authorized to pause keys.');
+        END IF;
+    END IF;
+
+    IF v_curr_status = 'BANNED' THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Cannot pause or resume a BANNED key.');
+    END IF;
+
+    -- Determine new pause state
+    v_new_paused := NOT COALESCE(v_curr_paused, false);
+
+    IF v_new_paused THEN
+        -- PAUSING
+        v_new_status := 'PAUSED';
+        v_new_paused_at := v_now;
+        v_new_expires_at := v_curr_expires;
+        v_restored_seconds := 0;
+    ELSE
+        -- RESUMING (Restoring Frozen Time)
+        v_new_paused_at := NULL;
+        
+        -- Calculate restored frozen time if paused_at is recorded
+        IF v_curr_paused_at IS NOT NULL AND v_curr_expires IS NOT NULL THEN
+            v_frozen_interval := v_now - v_curr_paused_at;
+            IF v_frozen_interval > INTERVAL '1 minute' THEN
+                v_restored_seconds := EXTRACT(EPOCH FROM v_frozen_interval)::BIGINT;
+                -- Safe extension: old expiry + frozen interval, capped at 365 days from now
+                v_new_expires_at := LEAST(v_curr_expires + v_frozen_interval, v_now + INTERVAL '365 days');
+            ELSE
+                v_new_expires_at := v_curr_expires;
+            END IF;
+        ELSE
+            v_new_expires_at := v_curr_expires;
+        END IF;
+
+        IF v_new_expires_at IS NULL THEN
+            v_new_status := 'WAITING';
+        ELSIF v_new_expires_at < v_now THEN
+            v_new_status := 'EXPIRED';
+        ELSE
+            v_new_status := 'ACTIVE';
+        END IF;
+    END IF;
+
+    -- Atomic Update: rymon_licenses
+    UPDATE public.rymon_licenses
+    SET is_paused = v_new_paused,
+        status = v_new_status,
+        paused_at = v_new_paused_at,
+        expires_at = v_new_expires_at,
+        updated_at = v_now
+    WHERE UPPER(license_key) = v_clean_key;
+
+    -- Atomic Update: rymon_streamer_controls
+    UPDATE public.rymon_streamer_controls
+    SET is_paused = v_new_paused,
+        paused_at = v_new_paused_at,
+        expires_at = v_new_expires_at,
+        is_online = CASE WHEN v_new_paused THEN false ELSE is_online END,
+        updated_at = v_now
+    WHERE UPPER(license_key) = v_clean_key;
+
+    -- Activity audit log
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        CASE WHEN v_new_paused THEN 'License Key Paused' ELSE 'License Key Resumed' END,
+        'SECURITY',
+        'Key ' || v_clean_key || ' toggled to ' || v_new_status || 
+        CASE WHEN v_restored_seconds > 60 THEN ' (Restored +' || ROUND(v_restored_seconds / 3600.0, 1) || ' hrs)' ELSE '' END ||
+        ' by ' || p_requester,
+        p_requester,
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'license_key', v_clean_key,
+        'is_paused', v_new_paused,
+        'status', v_new_status,
+        'new_expires_at', v_new_expires_at,
+        'restored_seconds', v_restored_seconds,
+        'message', CASE 
+            WHEN v_new_paused THEN 'Key ' || v_clean_key || ' is now PAUSED (Time Frozen).'
+            WHEN v_restored_seconds > 60 THEN 'Key ' || v_clean_key || ' RESUMED (+' || ROUND(v_restored_seconds / 3600.0, 1) || ' hrs frozen time restored).'
+            ELSE 'Key ' || v_clean_key || ' is now RESUMED.'
+        END
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_toggle_pause_key(TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- 4. RPC: rpc_rymon_bulk_pause_keys
+CREATE OR REPLACE FUNCTION public.rpc_rymon_bulk_pause_keys(
+    p_pause_state BOOLEAN,
+    p_actor_username TEXT DEFAULT 'debajoyti',
+    p_creator_filter TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_clean_actor TEXT;
+    v_clean_filter TEXT;
+    v_role TEXT;
+    v_is_root BOOLEAN := false;
+    v_now TIMESTAMPTZ;
+    v_affected_count INT := 0;
+BEGIN
+    v_clean_actor := LOWER(TRIM(COALESCE(p_actor_username, 'debajoyti')));
+    v_clean_filter := NULLIF(LOWER(TRIM(p_creator_filter)), '');
+    v_now := clock_timestamp();
+
+    IF v_clean_actor = 'debajoyti' THEN
+        v_is_root := true;
+        v_role := 'owner';
+    ELSE
+        SELECT role INTO v_role
+        FROM public.rymon_accounts
+        WHERE LOWER(username) = v_clean_actor;
+        
+        IF v_role IS NULL THEN
+            RETURN jsonb_build_object('success', false, 'count', 0, 'message', 'Requester account not found or unauthorized.');
+        END IF;
+    END IF;
+
+    -- Build temporary table of allowed creators based on role hierarchy
+    CREATE TEMP TABLE tmp_allowed_creators (uname TEXT PRIMARY KEY) ON COMMIT DROP;
+
+    IF v_is_root THEN
+        IF v_clean_filter IS NOT NULL THEN
+            INSERT INTO tmp_allowed_creators (uname) VALUES (v_clean_filter);
+        ELSE
+            INSERT INTO tmp_allowed_creators (uname)
+            SELECT DISTINCT LOWER(creator_username) FROM public.rymon_licenses WHERE creator_username IS NOT NULL;
+        END IF;
+    ELSIF v_role = 'owner' THEN
+        -- Owner sees their downline, strictly excluding debajoyti
+        WITH RECURSIVE dl AS (
+            SELECT LOWER(username) AS uname FROM public.rymon_accounts WHERE LOWER(username) = v_clean_actor
+            UNION ALL
+            SELECT LOWER(a.username) FROM public.rymon_accounts a JOIN dl ON LOWER(a.uplink) = dl.uname
+            WHERE LOWER(a.username) != 'debajoyti'
+        )
+        INSERT INTO tmp_allowed_creators (uname)
+        SELECT uname FROM dl
+        WHERE (v_clean_filter IS NULL OR uname = v_clean_filter)
+          AND uname != 'debajoyti';
+    ELSIF v_role = 'admin' THEN
+        -- Admin sees their downline, excluding debajoyti and any owners
+        WITH RECURSIVE dl AS (
+            SELECT LOWER(username) AS uname FROM public.rymon_accounts WHERE LOWER(username) = v_clean_actor
+            UNION ALL
+            SELECT LOWER(a.username) FROM public.rymon_accounts a JOIN dl ON LOWER(a.uplink) = dl.uname
+            WHERE LOWER(a.username) != 'debajoyti'
+        )
+        INSERT INTO tmp_allowed_creators (uname)
+        SELECT d.uname FROM dl d
+        LEFT JOIN public.rymon_accounts acc ON LOWER(acc.username) = d.uname
+        WHERE (v_clean_filter IS NULL OR d.uname = v_clean_filter)
+          AND d.uname != 'debajoyti'
+          AND COALESCE(acc.role, '') != 'owner';
+    ELSIF v_role = 'reseller' THEN
+        INSERT INTO tmp_allowed_creators (uname) VALUES (v_clean_actor);
+    ELSE
+        RETURN jsonb_build_object('success', false, 'count', 0, 'message', 'Role not permitted to perform bulk actions.');
+    END IF;
+
+    IF p_pause_state THEN
+        -- BULK PAUSE
+        WITH target_keys AS (
+            SELECT l.license_key
+            FROM public.rymon_licenses l
+            JOIN tmp_allowed_creators ac ON LOWER(l.creator_username) = ac.uname
+            WHERE l.status NOT IN ('BANNED', 'EXPIRED')
+              AND l.is_paused = false
+        ),
+        upd_lic AS (
+            UPDATE public.rymon_licenses l
+            SET is_paused = true,
+                status = 'PAUSED',
+                paused_at = COALESCE(l.paused_at, v_now),
+                updated_at = v_now
+            FROM target_keys t
+            WHERE l.license_key = t.license_key
+            RETURNING l.license_key
+        ),
+        upd_sc AS (
+            UPDATE public.rymon_streamer_controls sc
+            SET is_paused = true,
+                paused_at = COALESCE(sc.paused_at, v_now),
+                is_online = false,
+                updated_at = v_now
+            FROM target_keys t
+            WHERE sc.license_key = t.license_key
+            RETURNING sc.license_key
+        )
+        SELECT count(*) INTO v_affected_count FROM upd_lic;
+    ELSE
+        -- BULK RESUME (Restore Frozen Time)
+        WITH target_keys AS (
+            SELECT l.license_key, l.paused_at, l.expires_at
+            FROM public.rymon_licenses l
+            JOIN tmp_allowed_creators ac ON LOWER(l.creator_username) = ac.uname
+            WHERE l.is_paused = true
+              AND l.status != 'BANNED'
+        ),
+        calculated_keys AS (
+            SELECT 
+                license_key,
+                CASE 
+                    WHEN expires_at IS NOT NULL AND paused_at IS NOT NULL AND (v_now - paused_at) > INTERVAL '1 minute' THEN
+                        LEAST(expires_at + (v_now - paused_at), v_now + INTERVAL '365 days')
+                    ELSE expires_at
+                END AS calculated_expires_at
+            FROM target_keys
+        ),
+        upd_lic AS (
+            UPDATE public.rymon_licenses l
+            SET is_paused = false,
+                status = CASE 
+                    WHEN ck.calculated_expires_at IS NULL THEN 'WAITING' 
+                    WHEN ck.calculated_expires_at < v_now THEN 'EXPIRED' 
+                    ELSE 'ACTIVE' 
+                END,
+                paused_at = NULL,
+                expires_at = ck.calculated_expires_at,
+                updated_at = v_now
+            FROM calculated_keys ck
+            WHERE l.license_key = ck.license_key
+            RETURNING l.license_key, l.expires_at
+        ),
+        upd_sc AS (
+            UPDATE public.rymon_streamer_controls sc
+            SET is_paused = false,
+                paused_at = NULL,
+                expires_at = ul.expires_at,
+                updated_at = v_now
+            FROM upd_lic ul
+            WHERE sc.license_key = ul.license_key
+            RETURNING sc.license_key
+        )
+        SELECT count(*) INTO v_affected_count FROM upd_lic;
+    END IF;
+
+    -- Audit Activity Log
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        CASE WHEN p_pause_state THEN 'Bulk License Freeze' ELSE 'Bulk License Resume' END,
+        'SECURITY',
+        (CASE WHEN p_pause_state THEN 'Bulk paused ' ELSE 'Bulk resumed ' END) || v_affected_count || ' keys by ' || p_actor_username,
+        p_actor_username,
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'count', v_affected_count,
+        'message', (CASE WHEN p_pause_state THEN 'Paused ' ELSE 'Resumed ' END) || v_affected_count || ' license key(s) in one atomic transaction.'
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_bulk_pause_keys(BOOLEAN, TEXT, TEXT) TO anon, authenticated, service_role;
+
+
+-- ==============================================================================
+-- RYMON ENTERPRISE BONUS TIME SYSTEM (ATOMIC POSTGRESQL RPCs)
+-- ==============================================================================
+
+-- 1. Single Key Bonus Grant
+CREATE OR REPLACE FUNCTION public.rpc_rymon_grant_bonus_time(
+    p_license_key TEXT,
+    p_bonus_hours NUMERIC,
+    p_actor_username TEXT DEFAULT 'debajoyti'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_clean_key TEXT;
+    v_clean_actor TEXT;
+    v_role TEXT;
+    v_creator TEXT;
+    v_curr_expires TIMESTAMPTZ;
+    v_curr_status TEXT;
+    v_curr_paused BOOLEAN;
+    v_new_expires TIMESTAMPTZ;
+    v_new_status TEXT;
+    v_bonus_interval INTERVAL;
+    v_now TIMESTAMPTZ;
+    v_is_root BOOLEAN := false;
+BEGIN
+    v_clean_key := UPPER(TRIM(p_license_key));
+    v_clean_actor := LOWER(TRIM(COALESCE(p_actor_username, 'debajoyti')));
+    v_now := clock_timestamp();
+
+    IF p_bonus_hours IS NULL OR p_bonus_hours <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Bonus duration must be greater than zero hours.');
+    END IF;
+
+    -- Cap max bonus per operation at 90 days (2160 hours) for safety
+    IF p_bonus_hours > 2160 THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Maximum bonus limit is 90 days (2160 hours) per grant.');
+    END IF;
+
+    v_bonus_interval := (p_bonus_hours || ' hours')::INTERVAL;
+
+    IF v_clean_actor = 'debajoyti' THEN
+        v_is_root := true;
+        v_role := 'owner';
+    ELSE
+        SELECT role INTO v_role
+        FROM public.rymon_accounts
+        WHERE LOWER(username) = v_clean_actor;
+
+        IF v_role IS NULL THEN
+            RETURN jsonb_build_object('success', false, 'message', 'Requester account not found.');
+        END IF;
+    END IF;
+
+    -- Lookup target key
+    SELECT creator_username, expires_at, status, is_paused
+    INTO v_creator, v_curr_expires, v_curr_status, v_curr_paused
+    FROM public.rymon_licenses
+    WHERE UPPER(license_key) = v_clean_key;
+
+    IF v_creator IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', 'License key ' || v_clean_key || ' not found.');
+    END IF;
+
+    IF v_curr_status = 'BANNED' THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Cannot grant bonus time to a BANNED key.');
+    END IF;
+
+    -- Hierarchy Security Checks
+    IF NOT v_is_root THEN
+        IF LOWER(v_creator) = 'debajoyti' THEN
+            RETURN jsonb_build_object('success', false, 'message', 'Permission Denied: Root Founder keys cannot be modified.');
+        END IF;
+
+        IF v_role = 'owner' THEN
+            NULL;
+        ELSIF v_role = 'admin' THEN
+            IF EXISTS (SELECT 1 FROM public.rymon_accounts WHERE LOWER(username) = LOWER(v_creator) AND role = 'owner') THEN
+                RETURN jsonb_build_object('success', false, 'message', 'Permission Denied: Admins cannot modify Owner keys.');
+            END IF;
+            IF NOT EXISTS (
+                WITH RECURSIVE dl AS (
+                    SELECT LOWER(username) AS uname FROM public.rymon_accounts WHERE LOWER(username) = v_clean_actor
+                    UNION ALL
+                    SELECT LOWER(a.username) FROM public.rymon_accounts a JOIN dl ON LOWER(a.uplink) = dl.uname
+                )
+                SELECT 1 FROM dl WHERE uname = LOWER(v_creator)
+            ) THEN
+                RETURN jsonb_build_object('success', false, 'message', 'Permission Denied: Key is outside your downline.');
+            END IF;
+        ELSIF v_role = 'reseller' THEN
+            IF LOWER(v_creator) != v_clean_actor THEN
+                RETURN jsonb_build_object('success', false, 'message', 'Permission Denied: Resellers can only grant bonus to their own keys.');
+            END IF;
+        ELSE
+            RETURN jsonb_build_object('success', false, 'message', 'Role not permitted to grant bonus time.');
+        END IF;
+    END IF;
+
+    -- Calculate New Expiration
+    IF v_curr_expires IS NULL THEN
+        -- Key was unused/waiting: start active from now + bonus
+        v_new_expires := v_now + v_bonus_interval;
+        v_new_status := CASE WHEN v_curr_paused THEN 'PAUSED' ELSE 'ACTIVE' END;
+    ELSIF v_curr_expires < v_now THEN
+        -- Key was expired: revive from now + bonus
+        v_new_expires := v_now + v_bonus_interval;
+        v_new_status := CASE WHEN v_curr_paused THEN 'PAUSED' ELSE 'ACTIVE' END;
+    ELSE
+        -- Key is currently active or paused: extend on top of existing expiry
+        v_new_expires := LEAST(v_curr_expires + v_bonus_interval, v_now + INTERVAL '365 days');
+        v_new_status := CASE WHEN v_curr_paused THEN 'PAUSED' ELSE 'ACTIVE' END;
+    END IF;
+
+    -- Atomic updates across both tables
+    UPDATE public.rymon_licenses
+    SET expires_at = v_new_expires,
+        status = v_new_status,
+        updated_at = v_now
+    WHERE UPPER(license_key) = v_clean_key;
+
+    UPDATE public.rymon_streamer_controls
+    SET expires_at = v_new_expires,
+        updated_at = v_now
+    WHERE UPPER(license_key) = v_clean_key;
+
+    -- Audit Activity Log
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        'Bonus Time Granted',
+        'PROMOTION',
+        'Granted +' || p_bonus_hours || ' hrs bonus to ' || v_clean_key || ' by @' || p_actor_username,
+        p_actor_username,
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'license_key', v_clean_key,
+        'bonus_hours', p_bonus_hours,
+        'new_expires_at', v_new_expires,
+        'status', v_new_status,
+        'message', '🎁 Granted +' || p_bonus_hours || ' hrs bonus to key ' || v_clean_key || '!'
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_grant_bonus_time(TEXT, NUMERIC, TEXT) TO anon, authenticated, service_role;
+
+-- 2. Bulk Bonus Grant
+CREATE OR REPLACE FUNCTION public.rpc_rymon_bulk_grant_bonus_time(
+    p_bonus_hours NUMERIC,
+    p_actor_username TEXT DEFAULT 'debajoyti',
+    p_creator_filter TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_clean_actor TEXT;
+    v_clean_filter TEXT;
+    v_role TEXT;
+    v_is_root BOOLEAN := false;
+    v_now TIMESTAMPTZ;
+    v_bonus_interval INTERVAL;
+    v_affected_count INT := 0;
+BEGIN
+    v_clean_actor := LOWER(TRIM(COALESCE(p_actor_username, 'debajoyti')));
+    v_clean_filter := NULLIF(LOWER(TRIM(p_creator_filter)), '');
+    v_now := clock_timestamp();
+
+    IF p_bonus_hours IS NULL OR p_bonus_hours <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'count', 0, 'message', 'Bonus duration must be greater than zero hours.');
+    END IF;
+
+    IF p_bonus_hours > 2160 THEN
+        RETURN jsonb_build_object('success', false, 'count', 0, 'message', 'Maximum bonus limit is 90 days (2160 hours).');
+    END IF;
+
+    v_bonus_interval := (p_bonus_hours || ' hours')::INTERVAL;
+
+    IF v_clean_actor = 'debajoyti' THEN
+        v_is_root := true;
+        v_role := 'owner';
+    ELSE
+        SELECT role INTO v_role
+        FROM public.rymon_accounts
+        WHERE LOWER(username) = v_clean_actor;
+
+        IF v_role IS NULL THEN
+            RETURN jsonb_build_object('success', false, 'count', 0, 'message', 'Requester account not found.');
+        END IF;
+    END IF;
+
+    CREATE TEMP TABLE tmp_allowed_creators (uname TEXT PRIMARY KEY) ON COMMIT DROP;
+
+    IF v_is_root THEN
+        IF v_clean_filter IS NOT NULL THEN
+            INSERT INTO tmp_allowed_creators (uname) VALUES (v_clean_filter);
+        ELSE
+            INSERT INTO tmp_allowed_creators (uname)
+            SELECT DISTINCT LOWER(creator_username) FROM public.rymon_licenses WHERE creator_username IS NOT NULL;
+        END IF;
+    ELSIF v_role = 'owner' THEN
+        WITH RECURSIVE dl AS (
+            SELECT LOWER(username) AS uname FROM public.rymon_accounts WHERE LOWER(username) = v_clean_actor
+            UNION ALL
+            SELECT LOWER(a.username) FROM public.rymon_accounts a JOIN dl ON LOWER(a.uplink) = dl.uname
+            WHERE LOWER(a.username) != 'debajoyti'
+        )
+        INSERT INTO tmp_allowed_creators (uname)
+        SELECT uname FROM dl
+        WHERE (v_clean_filter IS NULL OR uname = v_clean_filter)
+          AND uname != 'debajoyti';
+    ELSIF v_role = 'admin' THEN
+        WITH RECURSIVE dl AS (
+            SELECT LOWER(username) AS uname FROM public.rymon_accounts WHERE LOWER(username) = v_clean_actor
+            UNION ALL
+            SELECT LOWER(a.username) FROM public.rymon_accounts a JOIN dl ON LOWER(a.uplink) = dl.uname
+            WHERE LOWER(a.username) != 'debajoyti'
+        )
+        INSERT INTO tmp_allowed_creators (uname)
+        SELECT d.uname FROM dl d
+        LEFT JOIN public.rymon_accounts acc ON LOWER(acc.username) = d.uname
+        WHERE (v_clean_filter IS NULL OR d.uname = v_clean_filter)
+          AND d.uname != 'debajoyti'
+          AND COALESCE(acc.role, '') != 'owner';
+    ELSIF v_role = 'reseller' THEN
+        INSERT INTO tmp_allowed_creators (uname) VALUES (v_clean_actor);
+    ELSE
+        RETURN jsonb_build_object('success', false, 'count', 0, 'message', 'Role not permitted to grant bulk bonus.');
+    END IF;
+
+    -- Bulk update all non-banned matching keys
+    WITH target_keys AS (
+        SELECT l.license_key, l.expires_at, l.status, l.is_paused
+        FROM public.rymon_licenses l
+        JOIN tmp_allowed_creators ac ON LOWER(l.creator_username) = ac.uname
+        WHERE l.status != 'BANNED'
+    ),
+    calculated_keys AS (
+        SELECT 
+            license_key,
+            CASE 
+                WHEN expires_at IS NULL THEN v_now + v_bonus_interval
+                WHEN expires_at < v_now THEN v_now + v_bonus_interval
+                ELSE LEAST(expires_at + v_bonus_interval, v_now + INTERVAL '365 days')
+            END AS calculated_expires_at,
+            CASE WHEN is_paused THEN 'PAUSED' ELSE 'ACTIVE' END AS calculated_status
+        FROM target_keys
+    ),
+    upd_lic AS (
+        UPDATE public.rymon_licenses l
+        SET expires_at = ck.calculated_expires_at,
+            status = ck.calculated_status,
+            updated_at = v_now
+        FROM calculated_keys ck
+        WHERE l.license_key = ck.license_key
+        RETURNING l.license_key, l.expires_at
+    ),
+    upd_sc AS (
+        UPDATE public.rymon_streamer_controls sc
+        SET expires_at = ul.expires_at,
+            updated_at = v_now
+        FROM upd_lic ul
+        WHERE sc.license_key = ul.license_key
+        RETURNING sc.license_key
+    )
+    SELECT count(*) INTO v_affected_count FROM upd_lic;
+
+    -- Activity audit log
+    INSERT INTO public.rymon_activities (title, event_type, details, actor_username, status)
+    VALUES (
+        'Bulk Bonus Granted',
+        'PROMOTION',
+        'Granted +' || p_bonus_hours || ' hrs bonus across ' || v_affected_count || ' keys by @' || p_actor_username,
+        p_actor_username,
+        'SUCCESS'
+    );
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'count', v_affected_count,
+        'bonus_hours', p_bonus_hours,
+        'message', '🎁 Successfully granted +' || p_bonus_hours || ' hrs bonus to ' || v_affected_count || ' license key(s)!'
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_bulk_grant_bonus_time(NUMERIC, TEXT, TEXT) TO anon, authenticated, service_role;
