@@ -12329,63 +12329,11 @@ else:
                     </div>
                   </div>
 
-                  {/* Column 3: Kinematics & Themes */}
+                  {/* Column 3: Utilities & Themes */}
                   <div className="sg-column-card" style={styles.columnCard}>
                     <div style={styles.columnHead}>
                       <span style={{ ...styles.columnIcon, display: 'inline-flex', alignItems: 'center' }}><IconPlus size={15} color="#00d9ff" /></span>
-                      <h4>KINEMATICS & THEME</h4>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Kinematic Speed Boost</div>
-                      <div
-                        onClick={() => toggleFeature('speed_hack')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.speed_hack ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.speed_hack ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.sliderBlock}>
-                      <div style={styles.sliderLabelRow}>
-                        <span>Speed Multiplier</span>
-                        <span style={styles.sliderValText}>{record?.speed_multiplier || 1.5}x</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="1"
-                        max="3"
-                        step="0.1"
-                        value={record?.speed_multiplier || 1.5}
-                        onChange={(e) => handleSliderChange('speed_multiplier', parseFloat(e.target.value))}
-                        style={styles.sliderInput}
-                      />
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Ghost Mode (Desync)</div>
-                      <div
-                        onClick={() => toggleFeature('ghost_hack')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.ghost_hack ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.ghost_hack ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
+                      <h4>UTILITIES & THEME</h4>
                     </div>
 
                     <div style={styles.toggleRow}>
