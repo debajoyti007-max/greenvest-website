@@ -1417,11 +1417,33 @@ export function saveUserCustomPriceMap(
   try {
     localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(all))
   } catch {}
-  if (supabase) {
-    supabase
+  const sb = supabase
+  if (sb) {
+    // 1. Direct upsert
+    sb
       .from('rymon_system_config')
       .upsert({ key: 'user_custom_prices', value: all, updated_at: new Date().toISOString() }, { onConflict: 'key' })
       .then(() => {}, () => {})
+
+    // 2. Multi-client safe merge: fetch latest from DB and re-upsert with this user's rate merged
+    sb
+      .from('rymon_system_config')
+      .select('value')
+      .eq('key', 'user_custom_prices')
+      .single()
+      .then(({ data }) => {
+        if (data?.value && typeof data.value === 'object') {
+          const freshFromDb = (data.value as Record<string, Record<string, number>>) || {}
+          const merged = { ...freshFromDb, [existingKey]: cleanMap }
+          try {
+            localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(merged))
+          } catch {}
+          sb
+            .from('rymon_system_config')
+            .upsert({ key: 'user_custom_prices', value: merged, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+            .then(() => {}, () => {})
+        }
+      }, () => {})
   }
   return cleanMap
 }
@@ -1436,11 +1458,33 @@ export function clearUserCustomPriceMap(username: string): void {
     try {
       localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(all))
     } catch {}
-    if (supabase) {
-      supabase
+    const sb = supabase
+    if (sb) {
+      sb
         .from('rymon_system_config')
         .upsert({ key: 'user_custom_prices', value: all, updated_at: new Date().toISOString() }, { onConflict: 'key' })
         .then(() => {}, () => {})
+
+      sb
+        .from('rymon_system_config')
+        .select('value')
+        .eq('key', 'user_custom_prices')
+        .single()
+        .then(({ data }) => {
+          if (data?.value && typeof data.value === 'object') {
+            const freshFromDb = { ...(data.value as Record<string, Record<string, number>>) }
+            delete freshFromDb[existingKey]
+            const lowerMatch = Object.keys(freshFromDb).find((u) => u.toLowerCase() === username.trim().toLowerCase())
+            if (lowerMatch) delete freshFromDb[lowerMatch]
+            try {
+              localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(freshFromDb))
+            } catch {}
+            sb
+              .from('rymon_system_config')
+              .upsert({ key: 'user_custom_prices', value: freshFromDb, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+              .then(() => {}, () => {})
+          }
+        }, () => {})
     }
   }
 }

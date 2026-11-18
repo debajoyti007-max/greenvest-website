@@ -610,6 +610,157 @@ $$;
 GRANT EXECUTE ON FUNCTION public.rpc_rymon_verify_license(TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
 
 -- ------------------------------------------------------------------------------
+-- DYNAMIC KEY PRICING RESOLVER (USER CUSTOM PRICES > GLOBAL PRICES > FACTORY DEFAULTS)
+-- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.fn_rymon_get_key_unit_cost(
+    p_username  TEXT,
+    p_plan      TEXT DEFAULT '1 Day',
+    p_days      INT DEFAULT NULL
+)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_clean_user TEXT;
+    v_custom_all JSONB;
+    v_user_map JSONB;
+    v_global_map JSONB;
+    v_slot TEXT := '1 Day';
+    v_cost NUMERIC := NULL;
+    v_is_vip BOOLEAN := FALSE;
+    v_surcharge NUMERIC := 50;
+    v_days_val INT;
+BEGIN
+    v_clean_user := LOWER(TRIM(COALESCE(p_username, '')));
+    
+    -- If root founder or owner, cost is 0
+    IF v_clean_user IN ('debajoyti', 'ryzen') THEN
+        RETURN 0;
+    END IF;
+
+    -- Determine VIP status from plan string
+    v_is_vip := (COALESCE(p_plan, '') ILIKE '%[VIP]%');
+
+    -- Map duration slot
+    IF p_days IS NOT NULL AND p_days > 0 THEN
+        v_days_val := p_days;
+        IF v_days_val = 1 THEN v_slot := '1 Day';
+        ELSIF v_days_val = 3 THEN v_slot := '3 Days';
+        ELSIF v_days_val = 7 THEN v_slot := '7 Days';
+        ELSIF v_days_val = 15 THEN v_slot := '15 Days';
+        ELSIF v_days_val = 30 THEN v_slot := '30 Days';
+        ELSE v_slot := 'CUSTOM_DAYS';
+        END IF;
+    ELSE
+        IF p_plan ILIKE '%2 Hour%' THEN v_slot := '2 Hours';
+        ELSIF p_plan ILIKE '%1 Day%' THEN v_slot := '1 Day';
+        ELSIF p_plan ILIKE '%3 Day%' THEN v_slot := '3 Days';
+        ELSIF p_plan ILIKE '%7 Day%' THEN v_slot := '7 Days';
+        ELSIF p_plan ILIKE '%15 Day%' THEN v_slot := '15 Days';
+        ELSIF p_plan ILIKE '%30 Day%' THEN v_slot := '30 Days';
+        ELSE v_slot := '1 Day';
+        END IF;
+    END IF;
+
+    -- Fetch user custom prices and global prices from config
+    SELECT value INTO v_custom_all FROM public.rymon_system_config WHERE key = 'user_custom_prices';
+    SELECT value INTO v_global_map FROM public.rymon_system_config WHERE key = 'global_key_prices';
+
+    -- Check case-insensitive match in v_custom_all
+    IF v_custom_all IS NOT NULL AND jsonb_typeof(v_custom_all) = 'object' THEN
+        -- Direct key check
+        v_user_map := v_custom_all->v_clean_user;
+        -- Fallback: case-insensitive key search
+        IF v_user_map IS NULL THEN
+            SELECT value INTO v_user_map
+            FROM jsonb_each(v_custom_all)
+            WHERE LOWER(key) = v_clean_user
+            LIMIT 1;
+        END IF;
+    END IF;
+
+    -- Helper to resolve slot price from user map or global map or defaults
+    IF v_slot = 'CUSTOM_DAYS' THEN
+        -- Get 1 Day cost
+        IF v_user_map IS NOT NULL AND (v_user_map->>'1 Day') IS NOT NULL THEN
+            v_cost := (v_user_map->>'1 Day')::NUMERIC;
+        ELSIF v_global_map IS NOT NULL AND (v_global_map->>'1 Day') IS NOT NULL THEN
+            v_cost := (v_global_map->>'1 Day')::NUMERIC;
+        ELSE
+            v_cost := 35;
+        END IF;
+        v_cost := ROUND(v_cost * v_days_val);
+    ELSE
+        -- Standard slot lookup (check exact slot or singular/plural variants)
+        IF v_user_map IS NOT NULL THEN
+            IF (v_user_map->>v_slot) IS NOT NULL THEN
+                v_cost := (v_user_map->>v_slot)::NUMERIC;
+            ELSIF v_slot = '2 Hours' AND (v_user_map->>'2 Hour') IS NOT NULL THEN
+                v_cost := (v_user_map->>'2 Hour')::NUMERIC;
+            ELSIF v_slot = '1 Day' AND (v_user_map->>'1 Days') IS NOT NULL THEN
+                v_cost := (v_user_map->>'1 Days')::NUMERIC;
+            ELSIF v_slot = '3 Days' AND (v_user_map->>'3 Day') IS NOT NULL THEN
+                v_cost := (v_user_map->>'3 Day')::NUMERIC;
+            ELSIF v_slot = '7 Days' AND (v_user_map->>'7 Day') IS NOT NULL THEN
+                v_cost := (v_user_map->>'7 Day')::NUMERIC;
+            ELSIF v_slot = '15 Days' AND (v_user_map->>'15 Day') IS NOT NULL THEN
+                v_cost := (v_user_map->>'15 Day')::NUMERIC;
+            ELSIF v_slot = '30 Days' AND (v_user_map->>'30 Day') IS NOT NULL THEN
+                v_cost := (v_user_map->>'30 Day')::NUMERIC;
+            END IF;
+        END IF;
+
+        -- If not resolved from user custom map, check global_key_prices
+        IF v_cost IS NULL AND v_global_map IS NOT NULL THEN
+            IF (v_global_map->>v_slot) IS NOT NULL THEN
+                v_cost := (v_global_map->>v_slot)::NUMERIC;
+            ELSIF v_slot = '2 Hours' AND (v_global_map->>'2 Hour') IS NOT NULL THEN
+                v_cost := (v_global_map->>'2 Hour')::NUMERIC;
+            ELSIF v_slot = '1 Day' AND (v_global_map->>'1 Days') IS NOT NULL THEN
+                v_cost := (v_global_map->>'1 Days')::NUMERIC;
+            ELSIF v_slot = '3 Days' AND (v_global_map->>'3 Day') IS NOT NULL THEN
+                v_cost := (v_global_map->>'3 Day')::NUMERIC;
+            ELSIF v_slot = '7 Days' AND (v_global_map->>'7 Day') IS NOT NULL THEN
+                v_cost := (v_global_map->>'7 Day')::NUMERIC;
+            ELSIF v_slot = '15 Days' AND (v_global_map->>'15 Day') IS NOT NULL THEN
+                v_cost := (v_global_map->>'15 Day')::NUMERIC;
+            ELSIF v_slot = '30 Days' AND (v_global_map->>'30 Day') IS NOT NULL THEN
+                v_cost := (v_global_map->>'30 Day')::NUMERIC;
+            END IF;
+        END IF;
+
+        -- If still null, fallback to factory defaults
+        IF v_cost IS NULL THEN
+            IF v_slot = '2 Hours' THEN v_cost := 20;
+            ELSIF v_slot = '1 Day' THEN v_cost := 35;
+            ELSIF v_slot = '3 Days' THEN v_cost := 50;
+            ELSIF v_slot = '7 Days' THEN v_cost := 100;
+            ELSIF v_slot = '15 Days' THEN v_cost := 180;
+            ELSIF v_slot = '30 Days' THEN v_cost := 350;
+            ELSE v_cost := 35;
+            END IF;
+        END IF;
+    END IF;
+
+    -- Apply VIP surcharge if applicable
+    IF v_is_vip THEN
+        SELECT COALESCE((value->>'vip_price_surcharge_percent')::NUMERIC, 50) INTO v_surcharge
+        FROM public.rymon_system_config
+        WHERE key = 'sovereign_security_policy';
+
+        IF v_surcharge IS NULL THEN v_surcharge := 50; END IF;
+        v_cost := ROUND(v_cost * (1.0 + (v_surcharge / 100.0)));
+    END IF;
+
+    RETURN GREATEST(0, v_cost);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.fn_rymon_get_key_unit_cost(TEXT, TEXT, INT) TO anon, authenticated, service_role;
+
+-- ------------------------------------------------------------------------------
 -- RPC 3: ATOMIC KEY GENERATION WITH WALLET BALANCE DEDUCTION
 -- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.rpc_rymon_generate_key(
@@ -678,21 +829,14 @@ BEGIN
         );
     END IF;
 
-    -- 2. Determine price from duration & devices
-    IF p_plan ILIKE '%2 Hour%' THEN v_unit_cost := 20;
-    ELSIF p_plan ILIKE '%1 Day%' THEN v_unit_cost := 35;
-    ELSIF p_plan ILIKE '%3 Day%' THEN v_unit_cost := 50;
-    ELSIF p_plan ILIKE '%7 Day%' THEN v_unit_cost := 100;
-    ELSIF p_plan ILIKE '%15 Day%' THEN v_unit_cost := 180;
-    ELSIF p_plan ILIKE '%30 Day%' THEN v_unit_cost := 350;
-    ELSE v_unit_cost := 35;
+    -- 2. Determine price from duration & devices using dynamic pricing engine
+    IF v_is_owner THEN
+        v_unit_cost := 0;
+        v_total_cost := 0;
+    ELSE
+        v_unit_cost := public.fn_rymon_get_key_unit_cost(v_clean_creator, p_plan, NULL);
+        v_total_cost := (v_unit_cost * v_devices) * v_qty;
     END IF;
-
-    IF p_plan ILIKE '%[VIP]%' THEN
-        v_unit_cost := ROUND(v_unit_cost * 1.5);
-    END IF;
-
-    v_total_cost := (v_unit_cost * v_devices) * v_qty;
 
     -- 3. Balance verification & Atomic Deduction
     IF NOT v_is_owner THEN
@@ -1034,19 +1178,14 @@ BEGIN
         END IF;
     END IF;
 
-    -- 4. Calculate Extension Cost
+    -- 4. Calculate Extension Cost using dynamic pricing engine
     v_devices := GREATEST(1, COALESCE(v_lic.devices_max, 1));
+    v_is_vip := (v_lic.plan_duration ILIKE '%VIP%');
     
     IF v_is_owner THEN
         v_cost := 0;
     ELSE
-        IF v_days = 1 THEN v_unit_cost := 35;
-        ELSIF v_days = 3 THEN v_unit_cost := 50;
-        ELSIF v_days = 7 THEN v_unit_cost := 100;
-        ELSIF v_days = 15 THEN v_unit_cost := 180;
-        ELSIF v_days = 30 THEN v_unit_cost := 350;
-        ELSE v_unit_cost := ROUND(35 * v_days);
-        END IF;
+        v_unit_cost := public.fn_rymon_get_key_unit_cost(v_clean_actor, CASE WHEN v_is_vip THEN '[VIP]' ELSE '' END, v_days);
         v_cost := v_unit_cost * v_devices;
     END IF;
 
@@ -1174,25 +1313,20 @@ BEGIN
 
     v_is_owner := (v_actor.role = 'owner' OR v_clean_actor IN ('debajoyti', 'ryzen'));
 
-    -- Determine unit cost per device
-    IF v_days = 1 THEN v_unit_cost := 35;
-    ELSIF v_days = 3 THEN v_unit_cost := 50;
-    ELSIF v_days = 7 THEN v_unit_cost := 100;
-    ELSIF v_days = 15 THEN v_unit_cost := 180;
-    ELSIF v_days = 30 THEN v_unit_cost := 350;
-    ELSE v_unit_cost := ROUND(35 * v_days);
-    END IF;
-
-    -- 2. First pass: count eligible keys and calculate total cost
+    -- 2. First pass: count eligible keys and calculate total cost using dynamic pricing
     FOR v_lic IN 
-        SELECT id, license_key, creator_username, devices_max, expires_at, is_paused
+        SELECT id, license_key, creator_username, devices_max, plan_duration, expires_at, is_paused
         FROM public.rymon_licenses
         WHERE status != 'BANNED'
           AND (p_creator_filter IS NULL OR p_creator_filter = '' OR LOWER(creator_username) = LOWER(TRIM(p_creator_filter)))
           AND (v_is_owner OR (LOWER(creator_username) = v_clean_actor OR LOWER(creator_username) != 'debajoyti'))
     LOOP
-        v_key_cost := v_unit_cost * GREATEST(1, COALESCE(v_lic.devices_max, 1));
-        IF NOT v_is_owner THEN
+        v_is_vip := (v_lic.plan_duration ILIKE '%VIP%');
+        IF v_is_owner THEN
+            v_key_cost := 0;
+        ELSE
+            v_unit_cost := public.fn_rymon_get_key_unit_cost(v_clean_actor, CASE WHEN v_is_vip THEN '[VIP]' ELSE '' END, v_days);
+            v_key_cost := v_unit_cost * GREATEST(1, COALESCE(v_lic.devices_max, 1));
             v_total_cost := v_total_cost + v_key_cost;
         END IF;
         v_count := v_count + 1;
