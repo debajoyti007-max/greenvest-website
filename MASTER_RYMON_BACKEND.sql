@@ -3040,3 +3040,58 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.rpc_rymon_bulk_grant_bonus_time(NUMERIC, TEXT, TEXT) TO anon, authenticated, service_role;
+
+
+-- ============================================================================
+-- RPC 10: rpc_rymon_increment_apk_downloads
+-- Atomic APK download counter — avoids read-then-write race condition
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.rpc_rymon_increment_apk_downloads(p_id text)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  UPDATE public.rymon_apk_releases
+  SET downloads_count = COALESCE(downloads_count, 0) + 1
+  WHERE id::text = p_id;
+$$;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_increment_apk_downloads(text) TO anon, authenticated;
+
+-- ============================================================================
+-- RPC 11: rpc_rymon_reset_password
+-- Server-side SHA-256 hashed password reset (never stores plaintext)
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.rpc_rymon_reset_password(
+  p_target_username text,
+  p_new_password    text,
+  p_actor_username  text DEFAULT 'debajoyti'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_target_id   uuid;
+  v_hash        text;
+BEGIN
+  SELECT id INTO v_target_id
+  FROM public.rymon_accounts
+  WHERE lower(username) = lower(trim(p_target_username))
+  LIMIT 1;
+
+  IF v_target_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'message', 'User not found.');
+  END IF;
+
+  -- SHA-256 hash using pgcrypto (same as rpc_rymon_login)
+  v_hash := encode(digest(trim(p_new_password), 'sha256'), 'hex');
+
+  UPDATE public.rymon_accounts
+  SET password_hash = v_hash,
+      updated_at    = now()
+  WHERE id = v_target_id;
+
+  RETURN jsonb_build_object('success', true, 'message', 'Password updated.');
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_reset_password(text, text, text) TO anon, authenticated;

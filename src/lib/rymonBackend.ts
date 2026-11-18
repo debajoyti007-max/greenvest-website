@@ -494,8 +494,7 @@ export async function loginWithCredentials(
     const storedPass = localStorage.getItem(`rymon_pw_${matched.username}`) || matched.username.toLowerCase()
     if (
       cleanPass === storedPass ||
-      cleanPass === matched.username.toLowerCase() ||
-      (matched.username.toLowerCase() === 'ryzen' && cleanPass === '909090')
+      cleanPass === matched.username.toLowerCase()
     ) {
       return { success: true, user: matched }
     }
@@ -668,7 +667,10 @@ export async function verifyLicenseKey(
   }
 
   // 2. Hardware Client Path (when hwidInput is explicitly provided, e.g. from APK / daemon)
-  const effectiveHwid = hwidInput || 'DEFAULT-DEVICE'
+  if (!hwidInput || !hwidInput.trim()) {
+    return { valid: false, error: 'Device HWID is required for hardware key verification.' }
+  }
+  const effectiveHwid = hwidInput.trim()
 
   // A. Supabase RPC / Table Verification
   if (supabase) {
@@ -2241,13 +2243,31 @@ export async function resetUserPasswordBackend(
         }
       }
 
-      const { error: updErr } = await supabase
-        .from('rymon_accounts')
-        .update({ password_hash: cleanPass, updated_at: new Date().toISOString() })
-        .eq('id', targetAcc.id)
+      // Use server-side RPC to hash password (SHA-256) — never store plaintext
+      const { data: rpcResult, error: updErr } = await supabase.rpc('rpc_rymon_reset_password', {
+        p_target_username: targetAcc.username,
+        p_new_password: cleanPass,
+        p_actor_username: cleanActor
+      })
 
-      if (updErr) {
+      // Fallback: if RPC doesn't exist yet, hash client-side with SubtleCrypto then store
+      if (updErr && updErr.message?.includes('function') && updErr.message?.includes('does not exist')) {
+        const encoder = new TextEncoder()
+        const data = encoder.encode(cleanPass)
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+        const hashArray = Array.from(new Uint8Array(hashBuffer))
+        const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+        const { error: fallbackErr } = await supabase
+          .from('rymon_accounts')
+          .update({ password_hash: hashHex, updated_at: new Date().toISOString() })
+          .eq('id', targetAcc.id)
+        if (fallbackErr) {
+          return { success: false, message: fallbackErr.message }
+        }
+      } else if (updErr) {
         return { success: false, message: updErr.message }
+      } else if (rpcResult && !rpcResult.success) {
+        return { success: false, message: rpcResult.message || 'Password reset failed.' }
       }
 
       await supabase.from('rymon_activities').insert({
@@ -5140,17 +5160,8 @@ export async function deleteApkReleaseBackend(
 export async function incrementApkDownloadCount(id: string): Promise<void> {
   if (!supabase) return
   try {
-    const { data } = await supabase
-      .from('rymon_apk_releases')
-      .select('downloads_count')
-      .eq('id', id)
-      .single()
-
-    const currentCount = Number(data?.downloads_count || 0)
-    await supabase
-      .from('rymon_apk_releases')
-      .update({ downloads_count: currentCount + 1 })
-      .eq('id', id)
+    // Atomic server-side increment — avoids read-then-write race condition
+    await supabase.rpc('rpc_rymon_increment_apk_downloads', { p_id: id })
   } catch {}
 }
 
