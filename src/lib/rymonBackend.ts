@@ -4783,7 +4783,10 @@ export interface RegisteredApp {
   package_name?: string
   platform?: string
   icon?: string
-  status: 'ACTIVE' | 'INACTIVE'
+  status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE'
+  version?: string
+  download_url?: string
+  announcement?: string
   description?: string
   created_at: string
 }
@@ -4796,7 +4799,8 @@ const DEFAULT_REGISTERED_APPS: RegisteredApp[] = [
     platform: 'Android Mobile',
     icon: '🔥',
     status: 'ACTIVE',
-    description: 'RYMON Streamer Mod & ESP Suite',
+    version: '2.5.0',
+    description: 'Universal RTDev Kernel Engine',
     created_at: '2026-10-11T00:00:00Z'
   }
 ]
@@ -4914,6 +4918,22 @@ export async function deleteRegisteredApp(appIdOrName: string): Promise<Register
   )
   await saveRegisteredApps(filtered)
   return filtered
+}
+
+export async function updateRegisteredApp(
+  appIdOrName: string,
+  updates: Partial<RegisteredApp>
+): Promise<RegisteredApp[]> {
+  const current = await fetchRegisteredApps()
+  const target = appIdOrName.trim().toLowerCase()
+  const updated = current.map((a) => {
+    if (String(a?.id || '').toLowerCase() === target || String(a?.name || '').toLowerCase() === target) {
+      return { ...a, ...updates }
+    }
+    return a
+  })
+  await saveRegisteredApps(updated)
+  return updated
 }
 
 // ============================================================================

@@ -57,6 +57,7 @@ import {
   getLocalRegisteredApps,
   fetchRegisteredApps,
   addRegisteredApp,
+  updateRegisteredApp,
   deleteRegisteredApp,
   saveStoredAccounts,
 } from '../lib/rymonBackend'
@@ -541,7 +542,13 @@ export default function RymonConnect() {
   const [testConnectHwid, setTestConnectHwid] = useState('DEVICE-SIM-ANDROID-9981')
   const [testConnectLoading, setTestConnectLoading] = useState(false)
   const [testConnectResult, setTestConnectResult] = useState<string>('')
-  const [codeSnippetTab, setCodeSnippetTab] = useState<'cpp' | 'java' | 'python' | 'curl'>('cpp')
+  const [codeSnippetTab, setCodeSnippetTab] = useState<'cpp' | 'csharp' | 'java' | 'python' | 'curl'>('cpp')
+  const [editingApp, setEditingApp] = useState<RegisteredApp | null>(null)
+  const [editAppVersion, setEditAppVersion] = useState('')
+  const [editAppDownloadUrl, setEditAppDownloadUrl] = useState('')
+  const [editAppAnnouncement, setEditAppAnnouncement] = useState('')
+  const [editAppStatus, setEditAppStatus] = useState<'ACTIVE' | 'INACTIVE' | 'MAINTENANCE'>('ACTIVE')
+  const [editAppLoading, setEditAppLoading] = useState(false)
   const [connectSelectedApp, setConnectSelectedApp] = useState<string>(() => localStorage.getItem('rymon_connect_selected_app') || 'Free Fire MAX')
   const [connectCustomAppName, setConnectCustomAppName] = useState('Tool X')
 
@@ -8967,6 +8974,161 @@ int main() {
     return 0;
 }`;
 
+              const csharpSnippet = `/*
+ * KeyAuth C# (.NET / WinForms / WPF / Unity) Client
+ * Application: ${effectiveConnectAppName}
+ * Owner ID:    ${ownerUsername}
+ * Gateway:     https://greenvest.shop/connect
+ */
+
+using System;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Security.Cryptography;
+using System.Management; // Add Reference: System.Management
+
+namespace KeyAuth
+{
+    public class Response
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public string Expiry { get; set; }
+        public string Announcement { get; set; }
+        public bool UpdateRequired { get; set; }
+        public string DownloadUrl { get; set; }
+    }
+
+    public class Api
+    {
+        public string Name { get; }
+        public string OwnerId { get; }
+        public string Secret { get; }
+        public string Version { get; }
+        private readonly string _gatewayUrl = "https://greenvest.shop/connect";
+        private static readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+
+        public Response Response { get; private set; } = new Response();
+
+        public Api(string name, string ownerId, string secret, string version)
+        {
+            Name = name;
+            OwnerId = ownerId;
+            Secret = secret;
+            Version = version;
+        }
+
+        // Automatic Hardware ID (Motherboard UUID + CPU ID)
+        public static string GetHWID()
+        {
+            try
+            {
+                string cpuId = "";
+                string mbUuid = "";
+
+                using (var mc = new ManagementClass("Win32_Processor"))
+                foreach (ManagementObject mo in mc.GetInstances())
+                {
+                    cpuId = mo.Properties["ProcessorId"]?.Value?.ToString() ?? "";
+                    break;
+                }
+
+                using (var mc = new ManagementClass("Win32_ComputerSystemProduct"))
+                foreach (ManagementObject mo in mc.GetInstances())
+                {
+                    mbUuid = mo.Properties["UUID"]?.Value?.ToString() ?? "";
+                    break;
+                }
+
+                using (var sha = SHA256.Create())
+                {
+                    byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(cpuId + "#" + mbUuid));
+                    return BitConverter.ToString(bytes).Replace("-", "").ToLower();
+                }
+            }
+            catch
+            {
+                return Environment.MachineName + "-" + Environment.UserName;
+            }
+        }
+
+        public async Task<bool> License(string key, string hwid = null)
+        {
+            hwid = string.IsNullOrEmpty(hwid) ? GetHWID() : hwid;
+            try
+            {
+                var payload = new
+                {
+                    user_key = key,
+                    serial = hwid,
+                    app = Name,
+                    version = Version
+                };
+
+                var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                var res = await _http.PostAsync(_gatewayUrl, content);
+                string json = await res.Content.ReadAsStringAsync();
+
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                bool isStatus = root.TryGetProperty("status", out var s) && s.GetBoolean();
+                bool isSuccess = root.TryGetProperty("success", out var sc) && sc.GetBoolean();
+
+                Response.Success = isStatus || isSuccess;
+                Response.Message = root.TryGetProperty("message", out var m) ? m.GetString() :
+                                  (root.TryGetProperty("reason", out var r) ? r.GetString() : "Unknown");
+
+                if (root.TryGetProperty("data", out var data))
+                {
+                    Response.Expiry = data.TryGetProperty("expiry", out var ex) ? ex.GetString() : "";
+                    Response.Announcement = data.TryGetProperty("announcement", out var an) ? an.GetString() : "";
+                    Response.UpdateRequired = data.TryGetProperty("update_required", out var ur) && ur.GetBoolean();
+                    Response.DownloadUrl = data.TryGetProperty("download_url", out var dl) ? dl.GetString() : "";
+                }
+
+                return Response.Success;
+            }
+            catch (Exception ex)
+            {
+                Response.Success = false;
+                Response.Message = "Connection failed: " + ex.Message;
+                return false;
+            }
+        }
+    }
+}
+
+// =================== USAGE IN YOUR APPLICATION ===================
+/*
+var auth = new KeyAuth.Api(
+    "${effectiveConnectAppName}",
+    "${ownerUsername}",
+    "${currentSecret}",
+    "1.0"
+);
+
+bool ok = await auth.License("YOUR_LICENSE_KEY");
+if (ok)
+{
+    Console.WriteLine("[+] Welcome! License valid until: " + auth.Response.Expiry);
+    if (!string.IsNullOrEmpty(auth.Response.Announcement))
+    {
+        Console.WriteLine("[📢 Broadcast]: " + auth.Response.Announcement);
+    }
+    if (auth.Response.UpdateRequired)
+    {
+        Console.WriteLine("[!] Update Available: " + auth.Response.DownloadUrl);
+    }
+}
+else
+{
+    Console.WriteLine("[-] Access Denied: " + auth.Response.Message);
+}
+*/`;
+
               const javaSnippet = `// Safe Streamer - KeyAuth Android Java Client
 package com.rymon.keyauth;
 
@@ -9513,6 +9675,20 @@ else:
                           </button>
                           <button
                             type="button"
+                            onClick={() => setCodeSnippetTab('csharp')}
+                            style={{
+                              ...styles.chipBtn,
+                              background: codeSnippetTab === 'csharp' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                              color: codeSnippetTab === 'csharp' ? '#38bdf8' : '#94a3b8',
+                              border: codeSnippetTab === 'csharp' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
+                              fontWeight: 700
+                            }}
+                          >
+                            🔷 C# (.NET / Unity / WPF)
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => setCodeSnippetTab('java')}
                             style={{
                               ...styles.chipBtn,
@@ -9557,7 +9733,8 @@ else:
                           <button
                             onClick={() => {
                               let textToCopy = cppSnippet;
-                              if (codeSnippetTab === 'java') textToCopy = javaSnippet;
+                              if (codeSnippetTab === 'csharp') textToCopy = csharpSnippet;
+                              else if (codeSnippetTab === 'java') textToCopy = javaSnippet;
                               else if (codeSnippetTab === 'python') textToCopy = pythonSnippet;
                               else if (codeSnippetTab === 'curl') textToCopy = curlSnippet;
                               navigator.clipboard.writeText(textToCopy);
@@ -9594,6 +9771,7 @@ else:
                             maxHeight: '440px'
                           }}>
                             {codeSnippetTab === 'cpp' && cppSnippet}
+                            {codeSnippetTab === 'csharp' && csharpSnippet}
                             {codeSnippetTab === 'java' && javaSnippet}
                             {codeSnippetTab === 'python' && pythonSnippet}
                             {codeSnippetTab === 'curl' && curlSnippet}
@@ -9845,15 +10023,25 @@ else:
                                       <span style={{ fontSize: '17px', fontWeight: 800, color: '#f8fafc' }}>
                                         {app.name}
                                       </span>
-                                      {isFf ? (
-                                        <span style={{ ...styles.cyanMiniBadge, background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', border: '1px solid rgba(5, 223, 114, 0.4)' }}>
-                                          🔥 STREAMER REMOTE + KEYAUTH
-                                        </span>
-                                      ) : (
-                                        <span style={{ ...styles.cyanMiniBadge, background: 'rgba(250, 204, 21, 0.15)', color: '#fde047', border: '1px solid rgba(250, 204, 21, 0.4)' }}>
-                                          🔑 PURE KEYAUTH ONLY
-                                        </span>
-                                      )}
+                                      <span style={{
+                                        ...styles.cyanMiniBadge,
+                                        background: app.status === 'MAINTENANCE' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(5, 223, 114, 0.15)',
+                                        color: app.status === 'MAINTENANCE' ? '#ef4444' : '#05df72',
+                                        border: `1px solid ${app.status === 'MAINTENANCE' ? '#ef4444' : 'rgba(5, 223, 114, 0.4)'}`
+                                      }}>
+                                        {app.status === 'MAINTENANCE' ? '🛑 MAINTENANCE (PAUSED)' : '🟢 ONLINE'}
+                                      </span>
+                                      <span style={{
+                                        fontSize: '11px',
+                                        fontWeight: 800,
+                                        color: '#00d9ff',
+                                        background: 'rgba(0, 217, 255, 0.1)',
+                                        border: '1px solid rgba(0, 217, 255, 0.25)',
+                                        padding: '2px 8px',
+                                        borderRadius: '4px'
+                                      }}>
+                                        v{app.version || '1.0.0'}
+                                      </span>
                                       <span style={{ fontSize: '11px', color: '#64748b', background: 'rgba(15, 23, 42, 0.9)', padding: '2px 8px', borderRadius: '4px' }}>
                                         {app.platform || 'Android Mobile'}
                                       </span>
@@ -9866,6 +10054,25 @@ else:
                                     {app.description && (
                                       <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
                                         {app.description}
+                                      </div>
+                                    )}
+                                    {app.announcement && (
+                                      <div style={{
+                                        marginTop: '6px',
+                                        padding: '6px 10px',
+                                        borderRadius: '6px',
+                                        background: 'rgba(234, 179, 8, 0.1)',
+                                        border: '1px solid rgba(234, 179, 8, 0.3)',
+                                        color: '#fde047',
+                                        fontSize: '11.5px',
+                                        fontWeight: 600
+                                      }}>
+                                        📢 Broadcast: {app.announcement}
+                                      </div>
+                                    )}
+                                    {app.download_url && (
+                                      <div style={{ marginTop: '4px', fontSize: '11px', color: '#94a3b8' }}>
+                                        🔗 Update Download: <a href={app.download_url} target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>{app.download_url}</a>
                                       </div>
                                     )}
                                   </div>
@@ -9929,6 +10136,57 @@ else:
                                   }}
                                 >
                                   🔑 View Keys ({appKeys.length})
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const nextSt = app.status === 'MAINTENANCE' ? 'ACTIVE' : 'MAINTENANCE'
+                                    try {
+                                      const updated = await updateRegisteredApp(app.id || app.name, { status: nextSt })
+                                      setRegisteredApps(updated)
+                                      showToast(nextSt === 'MAINTENANCE' ? `🛑 ${app.name} placed in MAINTENANCE (logins blocked)!` : `🟢 ${app.name} is now ONLINE!`)
+                                    } catch (err: unknown) {
+                                      const msg = err instanceof Error ? err.message : 'Error updating status'
+                                      showToast(msg)
+                                    }
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    background: app.status === 'MAINTENANCE' ? 'rgba(5, 223, 114, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                    border: `1px solid ${app.status === 'MAINTENANCE' ? '#05df72' : '#ef4444'}`,
+                                    color: app.status === 'MAINTENANCE' ? '#05df72' : '#ef4444'
+                                  }}
+                                  title="Toggle maintenance mode to pause/resume all client logins"
+                                >
+                                  {app.status === 'MAINTENANCE' ? '🟢 Resume Online' : '🛑 Killswitch'}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingApp(app)
+                                    setEditAppVersion(app.version || '1.0.0')
+                                    setEditAppDownloadUrl(app.download_url || '')
+                                    setEditAppAnnouncement(app.announcement || '')
+                                    setEditAppStatus(app.status || 'ACTIVE')
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    background: 'rgba(56, 189, 248, 0.15)',
+                                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                                    color: '#38bdf8'
+                                  }}
+                                >
+                                  ✏️ Edit Config
                                 </button>
 
                                 <button
@@ -10729,7 +10987,137 @@ else:
         )
       })()}
 
-      {/* ── GRANT BONUS TIME MODAL ───────────────────────────────────────── */}
+              {/* ── EDIT APP PROFILE & KILLSWITCH MODAL ─────────────────────────── */}
+        {editingApp && (
+          <div className="sg-modal-overlay" style={styles.modalOverlay} onClick={() => !editAppLoading && setEditingApp(null)}>
+            <div
+              className="sg-modal-card"
+              style={{
+                ...styles.modalCard,
+                maxWidth: '480px',
+                width: '92%',
+                textAlign: 'left',
+                padding: '24px',
+                border: '1px solid rgba(0, 217, 255, 0.35)',
+                boxShadow: '0 20px 50px rgba(0, 0, 0, 0.85), 0 0 28px rgba(0, 217, 255, 0.15)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '24px' }}>{editingApp.icon || '⚙️'}</span>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc', fontWeight: 800 }}>
+                      Configure {editingApp.name}
+                    </h3>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>App Versioning &amp; Live Killswitch</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingApp(null)}
+                  disabled={editAppLoading}
+                  style={styles.modalCloseBtn}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={styles.formLabel}>STATUS &amp; KILLSWITCH</label>
+                  <select
+                    value={editAppStatus}
+                    onChange={(e) => setEditAppStatus(e.target.value as any)}
+                    style={{ ...styles.selectInput, width: '100%' }}
+                  >
+                    <option value="ACTIVE">🟢 ONLINE (Accept all valid logins)</option>
+                    <option value="MAINTENANCE">🛑 MAINTENANCE (Emergency Killswitch - Block all logins)</option>
+                    <option value="INACTIVE">⚪ DISABLED</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={styles.formLabel}>LATEST VERSION (e.g. 1.2.0)</label>
+                  <input
+                    type="text"
+                    value={editAppVersion}
+                    onChange={(e) => setEditAppVersion(e.target.value)}
+                    placeholder="1.0.0"
+                    style={{ ...styles.keyInput, width: '100%' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={styles.formLabel}>MANDATORY UPDATE DOWNLOAD URL</label>
+                  <input
+                    type="url"
+                    value={editAppDownloadUrl}
+                    onChange={(e) => setEditAppDownloadUrl(e.target.value)}
+                    placeholder="https://example.com/update-loader.exe"
+                    style={{ ...styles.keyInput, width: '100%' }}
+                  />
+                  <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '3px' }}>
+                    Sent to clients when client version does not match latest version.
+                  </div>
+                </div>
+
+                <div>
+                  <label style={styles.formLabel}>BROADCAST ANNOUNCEMENT BANNER</label>
+                  <textarea
+                    value={editAppAnnouncement}
+                    onChange={(e) => setEditAppAnnouncement(e.target.value)}
+                    placeholder="e.g. Servers updated! Enjoy new features in v1.2"
+                    rows={2}
+                    style={{ ...styles.textarea, width: '100%' }}
+                  />
+                  <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '3px' }}>
+                    Displayed live inside client loaders upon authentication.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingApp(null)}
+                  disabled={editAppLoading}
+                  style={styles.modalCancelBtn}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={editAppLoading}
+                  onClick={async () => {
+                    setEditAppLoading(true);
+                    try {
+                      const updated = await updateRegisteredApp(editingApp.id || editingApp.name, {
+                        version: editAppVersion.trim() || '1.0.0',
+                        download_url: editAppDownloadUrl.trim(),
+                        announcement: editAppAnnouncement.trim(),
+                        status: editAppStatus
+                      });
+                      setRegisteredApps(updated);
+                      setEditingApp(null);
+                      showToast(`✅ Updated ${editingApp.name} settings successfully!`);
+                    } catch (err: unknown) {
+                      const msg = err instanceof Error ? err.message : 'Failed to update app';
+                      showToast(msg);
+                    } finally {
+                      setEditAppLoading(false);
+                    }
+                  }}
+                  style={{ ...styles.submitBtn, width: 'auto', background: 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)', color: '#07090e' }}
+                >
+                  {editAppLoading ? 'SAVING...' : 'SAVE APP CONFIG'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── GRANT BONUS TIME MODAL ───────────────────────────────────────── */}
       {bonusModalKey && (
         <div className="sg-modal-overlay" style={styles.modalOverlay} onClick={() => !bonusLoading && setBonusModalKey(null)}>
           <div
