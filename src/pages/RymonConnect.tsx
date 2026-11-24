@@ -46,9 +46,7 @@ import {
   fetchAllStreamerControls,
   isStreamerKeyActivelyPlaying,
   buildDefaultStreamerControlPayload,
-  fetchRenderVipState,
   warmRenderVipBridge,
-  sendRenderVipCommand,
   sendRenderVipPatch,
   type SovereignSecurityPolicy,
   getSovereignSecurityPolicy,
@@ -67,7 +65,7 @@ import { FairytaleRealm } from '../components/FairytaleRealm'
 
 type TabType =
   | 'overview'
-  | 'remote'
+  | 'license'
   | 'generate'
   | 'keys'
   | 'users'
@@ -79,7 +77,7 @@ type TabType =
   | 'extend'
   | 'advance'
 
-const THEME_NAMES = ['Cyber Blue', 'Neon Pink', 'Emerald', 'Violet', 'Amber']
+// Theme presets removed
 
 const DEFAULT_ANON_STREAMER: RymonAccount = {
   id: 'usr-streamer',
@@ -131,12 +129,6 @@ const IconPlus = ({ size = 18, color }: IconProps = {}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="12" y1="5" x2="12" y2="19" />
     <line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-)
-
-const IconRemote = ({ size = 18, color }: IconProps = {}) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
   </svg>
 )
 
@@ -395,7 +387,7 @@ export default function RymonConnect() {
   const isAdmin = currentUser?.role === 'admin'
   const isReseller = currentUser?.role === 'reseller'
   const isStreamer = currentUser?.role === 'streamer'
-  const isStaff = isOwner || isAdmin || isReseller
+
   const [currentKey, setCurrentKey] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
@@ -407,8 +399,7 @@ export default function RymonConnect() {
   const [countdown, setCountdown] = useState('--d --h --m --s')
   const [ping, setPing] = useState(28)
   const [isLiveConnected, setIsLiveConnected] = useState(false)
-  const [showPurgeModal, setShowPurgeModal] = useState(false)
-  const sliderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const isLoggingOutRef = useRef(false)
 
   // Local UI interval ticker for live countdowns (Zero Supabase network egress)
@@ -455,7 +446,7 @@ export default function RymonConnect() {
   const [genError, setGenError] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [copiedDeliverySlip, setCopiedDeliverySlip] = useState<string | null>(null)
-  const [vipPingMs, setVipPingMs] = useState<number | null>(null)
+
 
   // Top Up Balance Form State
   const [topUpTargetUser, setTopUpTargetUser] = useState('')
@@ -660,7 +651,7 @@ export default function RymonConnect() {
         } catch {}
         setCurrentKey(queryKey)
         setIsAuthenticated(true)
-        setActiveTab('remote')
+        setActiveTab('license')
         if (!savedUserJson) {
           setCurrentUser(DEFAULT_ANON_STREAMER)
         }
@@ -735,7 +726,7 @@ export default function RymonConnect() {
       if (!queryKey) {
         setCurrentUser(DEFAULT_ANON_STREAMER)
       }
-      setActiveTab('remote')
+      setActiveTab('license')
     }
   }, [])
 
@@ -1059,7 +1050,6 @@ export default function RymonConnect() {
     let isMounted = true
     let cachedCtrl: Partial<StreamerControlRecord> | null = null
     let cachedLic: Partial<RymonLicense> | null = null
-    let lastDbSyncTime = 0
     let isDbSyncing = false
 
     async function syncFromSupabase() {
@@ -1097,7 +1087,6 @@ export default function RymonConnect() {
             return
           }
 
-          lastDbSyncTime = Date.now()
           if (ctrlData) cachedCtrl = ctrlData
           if (licData) cachedLic = licData
 
@@ -1127,140 +1116,7 @@ export default function RymonConnect() {
     }
 
     async function fastPulseTelemetry() {
-      if (!isMounted || sliderTimerRef.current) return
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
-      // Senior Dev Zero-Overhead Optimization: only poll 1000ms Render RAM when actively viewing the Remote tab
-      if (activeTabRef.current !== 'remote') return
-
-      const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
-      const isKeyVip = Boolean(
-        targetLic?.plan_duration?.includes('[VIP]') ||
-        (cachedCtrl as Partial<StreamerControlRecord> | null)?.streamer_name?.includes('VIP_REALTIME') ||
-        (cachedCtrl as Partial<StreamerControlRecord> | null)?.streamer_name?.startsWith('VIP|') ||
-        record?.streamer_name?.includes('VIP_REALTIME') ||
-        record?.streamer_name?.startsWith('VIP|')
-      )
-
-      if (!isKeyVip) {
-        if (isMounted) {
-          setIsLiveConnected(false)
-          setVipPingMs(null)
-          if (cachedLic) {
-            const activelyPlaying = Boolean(cachedLic?.last_heartbeat && (Date.now() - new Date(cachedLic.last_heartbeat).getTime() < 30000))
-            setRecord((prev) => ({
-              ...(prev || ({} as StreamerControlRecord)),
-              license_key: currentKey,
-              streamer_name: 'Standard Mobile APK (In-Game Only)',
-              game_name: cachedLic?.game || 'Free Fire MAX',
-              is_online: activelyPlaying,
-              is_active: cachedLic?.status !== 'BANNED' && cachedLic?.status !== 'EXPIRED',
-              is_paused: cachedLic?.is_paused ?? false,
-              device_hwid: cachedLic?.device_hwid || '',
-              devices_used: cachedLic?.devices_used ?? 0,
-              devices_max: cachedLic?.devices_max ?? 1,
-              last_heartbeat: cachedLic?.last_heartbeat
-            } as StreamerControlRecord))
-          }
-        }
-        return
-      }
-
-      // Gentle 60-second background refresh for license status / expiry without spamming DB
-      if (Date.now() - lastDbSyncTime > 60000) {
-        syncFromSupabase()
-      }
-
-      const defaults = buildDefaultStreamerControlPayload({
-        license_key: currentKey,
-        streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer',
-        game_name: cachedLic?.game || 'Free Fire MAX',
-        is_online: false,
-        is_active: cachedLic?.status !== 'BANNED' && cachedLic?.status !== 'EXPIRED',
-        is_paused: cachedLic?.is_paused ?? false,
-        device_hwid: cachedLic?.device_hwid || '',
-        devices_used: cachedLic?.devices_used ?? 0,
-        devices_max: cachedLic?.devices_max ?? 1
-      })
-
-      const baseRecord: StreamerControlRecord = {
-        ...defaults,
-        ...(cachedCtrl as StreamerControlRecord),
-        aim_silent: Boolean(cachedCtrl?.aim_silent ?? defaults.aim_silent),
-        hit_rate: Number(cachedCtrl?.hit_rate ?? defaults.hit_rate),
-        ignore_knocked: Boolean(cachedCtrl?.ignore_knocked ?? defaults.ignore_knocked),
-        show_aim_line: Boolean(cachedCtrl?.show_aim_line ?? defaults.show_aim_line),
-        show_aim_fov: Boolean(cachedCtrl?.show_aim_fov ?? defaults.show_aim_fov),
-        aim_fov: Number(cachedCtrl?.aim_fov ?? defaults.aim_fov),
-        esp_box: Boolean(cachedCtrl?.esp_box ?? defaults.esp_box),
-        esp_line: Boolean(cachedCtrl?.esp_line ?? defaults.esp_line),
-        esp_skeleton: Boolean(cachedCtrl?.esp_skeleton ?? defaults.esp_skeleton),
-        esp_name: Boolean(cachedCtrl?.esp_name ?? defaults.esp_name),
-        esp_distance: Boolean(cachedCtrl?.esp_distance ?? defaults.esp_distance),
-        esp_health: Boolean(cachedCtrl?.esp_health ?? defaults.esp_health),
-        esp_count: Boolean(cachedCtrl?.esp_count ?? defaults.esp_count),
-        esp_radar: Boolean(cachedCtrl?.esp_radar ?? defaults.esp_radar),
-        speed_hack: Boolean(cachedCtrl?.speed_hack ?? defaults.speed_hack),
-        speed_multiplier: Number(cachedCtrl?.speed_multiplier ?? defaults.speed_multiplier),
-        ghost_hack: Boolean(cachedCtrl?.ghost_hack ?? defaults.ghost_hack),
-        no_reload: Boolean(cachedCtrl?.no_reload ?? defaults.no_reload),
-        no_recoil: Boolean(cachedCtrl?.no_recoil ?? defaults.no_recoil),
-        theme_color_index: Number(cachedCtrl?.theme_color_index ?? defaults.theme_color_index),
-        emergency_purge: Boolean(cachedCtrl?.emergency_purge ?? defaults.emergency_purge),
-        device_hwid: cachedLic?.device_hwid || cachedCtrl?.device_hwid || '',
-        devices_used: cachedLic?.devices_used ?? cachedCtrl?.devices_used ?? 0,
-        devices_max: cachedLic?.devices_max ?? cachedCtrl?.devices_max ?? 1,
-        last_heartbeat: cachedCtrl?.last_heartbeat || cachedLic?.last_heartbeat,
-        is_paused: Boolean(cachedCtrl?.is_paused || cachedLic?.is_paused)
-      }
-
-      // 1. Ultra-fast direct Render RAM query (<30ms, zero Supabase database queries)
-      try {
-        const t0 = performance.now()
-        const vipState = await fetchRenderVipState(currentKey)
-        if (vipState && isMounted) {
-          const pingCalc = Math.max(1, Math.round(performance.now() - t0))
-          setVipPingMs(pingCalc)
-          setPing(pingCalc)
-          const mergedVip: StreamerControlRecord = {
-            ...baseRecord,
-            aim_silent: vipState.aim_silent ?? baseRecord.aim_silent,
-            hit_rate: vipState.hit_rate ?? baseRecord.hit_rate,
-            aim_fov: vipState.aim_fov ?? baseRecord.aim_fov,
-            esp_box: vipState.esp_box ?? baseRecord.esp_box,
-            esp_line: vipState.esp_line ?? baseRecord.esp_line,
-            esp_skeleton: vipState.esp_skeleton ?? baseRecord.esp_skeleton,
-            esp_name: vipState.esp_name ?? baseRecord.esp_name,
-            esp_distance: vipState.esp_distance ?? baseRecord.esp_distance,
-            esp_health: vipState.esp_health ?? baseRecord.esp_health,
-            esp_count: vipState.esp_count ?? baseRecord.esp_count,
-            esp_radar: vipState.esp_radar ?? baseRecord.esp_radar,
-            speed_hack: vipState.speed_hack ?? baseRecord.speed_hack,
-            speed_multiplier: vipState.speed_multiplier ?? baseRecord.speed_multiplier,
-            ghost_hack: vipState.ghost_hack ?? baseRecord.ghost_hack,
-            no_reload: vipState.no_reload ?? baseRecord.no_reload,
-            no_recoil: vipState.no_recoil ?? baseRecord.no_recoil,
-            theme_color_index: vipState.theme_color_index ?? baseRecord.theme_color_index,
-            streamer_name: vipState.streamer_name || baseRecord.streamer_name,
-            is_online: vipState.is_online ?? baseRecord.is_online,
-            is_paused: Boolean(vipState.is_paused ?? baseRecord.is_paused),
-            last_heartbeat: vipState.last_heartbeat || baseRecord.last_heartbeat
-          }
-          const activelyPlaying = isStreamerKeyActivelyPlaying(mergedVip)
-          setRecord({ ...mergedVip, is_online: activelyPlaying })
-          setIsLiveConnected(true)
-          return
-        }
-      } catch {}
-
-      // 2. Render Fallback: If Render bridge is cold or network jitter, fallback to cached DB data
-      if (Date.now() - lastDbSyncTime > 60000) {
-        await syncFromSupabase()
-      }
-      if (isMounted) {
-        const activelyPlaying = isStreamerKeyActivelyPlaying(baseRecord)
-        setRecord({ ...baseRecord, is_online: activelyPlaying })
-        setIsLiveConnected(true)
-      }
+      // Pure KeyAuth mode: no cheat RAM polling
     }
 
     // Initial load: fetch DB baseline, then start high-speed Render RAM pulse
@@ -1525,7 +1381,7 @@ export default function RymonConnect() {
       localStorage.setItem('rymon_remote_expiry', exp.toISOString())
 
       showToast(`Connected license ${cleanKey}!`)
-      setActiveTab('remote')
+      setActiveTab('license')
     } else {
       const failed = recordRymonFailedAttempt(throttleKey, 5, 5 * 60 * 1000)
       if (failed.locked) {
@@ -1952,276 +1808,6 @@ export default function RymonConnect() {
   }
 
   // 9. TELEMETRY MUTATIONS
-  const canControlCurrentKey = (): boolean => {
-    if (!currentKey) {
-      showToast('⚠️ Please select a Target License Key above to control.')
-      return false
-    }
-    const targetLic = keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())
-    const isVip = Boolean(
-      targetLic?.plan_duration?.includes('[VIP]') ||
-      record?.streamer_name?.includes('VIP_REALTIME') ||
-      record?.streamer_name?.startsWith('VIP|')
-    )
-    if (!isVip) {
-      showToast('🔒 Web Remote is disabled for Standard Mobile APK keys (In-Game Only).')
-      return false
-    }
-    if (isRootOwner || isStreamer) return true
-    if (keysList.length > 0 && !keysList.some((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())) {
-      showToast('❌ Access Denied: Key is outside your downline.')
-      return false
-    }
-    return true
-  }
-
-  const toggleFeature = async (field: keyof StreamerControlRecord) => {
-    if (!canControlCurrentKey()) return
-    const baseRecord =
-      record ||
-      buildDefaultStreamerControlPayload({
-        license_key: currentKey,
-        streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer'
-      })
-    if (baseRecord.is_paused) {
-      showToast('⏸️ License key is PAUSED. Toggles and features are frozen until unpaused by staff.')
-      return
-    }
-    const newVal = !baseRecord[field]
-    const nowIso = new Date().toISOString()
-    const nextRecord: StreamerControlRecord = {
-      ...baseRecord,
-      license_key: currentKey,
-      [field]: newVal,
-      ...(field === 'esp_radar' ? { esp_count: newVal } : {}),
-      updated_at: nowIso
-    }
-    setRecord(nextRecord)
-    setStreamerControls((prev) => {
-      const exists = prev.some((c) => c.license_key === currentKey)
-      if (!exists) return [nextRecord, ...prev]
-      return prev.map((c) =>
-        c.license_key === currentKey
-          ? { ...c, [field]: newVal, ...(field === 'esp_radar' ? { esp_count: newVal } : {}), updated_at: nowIso }
-          : c
-      )
-    })
-
-    // Instant sub-50ms dispatch to Render VIP Bridge
-    sendRenderVipCommand(currentKey, field as string, newVal)
-    if (field === 'esp_radar') {
-      sendRenderVipCommand(currentKey, 'esp_count', newVal)
-    }
-
-    if (supabase) {
-      try {
-        const updatePayload: Record<string, any> = {
-          [field]: newVal,
-          updated_at: nowIso
-        }
-        if (field === 'esp_radar') {
-          updatePayload.esp_count = newVal
-        }
-        const { error } = await supabase
-          .from('rymon_streamer_controls')
-          .update(updatePayload)
-          .eq('license_key', currentKey)
-        if (error) {
-          console.warn('Sync update warning:', error)
-        }
-      } catch (err) {
-        console.warn('Sync warning:', err)
-      }
-    }
-  }
-
-  const handleSliderChange = (field: keyof StreamerControlRecord, val: number) => {
-    if (!canControlCurrentKey()) return
-    const baseRecord =
-      record ||
-      buildDefaultStreamerControlPayload({
-        license_key: currentKey,
-        streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer'
-      })
-    if (baseRecord.is_paused) {
-      showToast('⏸️ License key is PAUSED. Slider adjustments are locked until unpaused by staff.')
-      return
-    }
-    const nowIso = new Date().toISOString()
-    const nextRecord: StreamerControlRecord = {
-      ...baseRecord,
-      license_key: currentKey,
-      [field]: val,
-      updated_at: nowIso
-    }
-    setRecord(nextRecord)
-
-    sendRenderVipCommand(currentKey, field as string, val)
-
-    if (sliderTimerRef.current) clearTimeout(sliderTimerRef.current)
-    sliderTimerRef.current = setTimeout(async () => {
-      if (supabase && currentKey) {
-        try {
-          const ts = new Date().toISOString()
-          await supabase
-            .from('rymon_streamer_controls')
-            .update({ [field]: val, updated_at: ts })
-            .eq('license_key', currentKey)
-        } catch (err) {
-          console.warn('Sync warning:', err)
-        }
-      }
-    }, 150)
-  }
-
-  const setThemePreset = async (idx: number) => {
-    if (!canControlCurrentKey()) return
-    const baseRecord =
-      record ||
-      buildDefaultStreamerControlPayload({
-        license_key: currentKey,
-        streamer_name: currentUser?.role === 'owner' ? 'Owner Console' : 'VIP Streamer'
-      })
-    if (baseRecord.is_paused) {
-      showToast('⏸️ License key is PAUSED. Theme presets are locked until unpaused by staff.')
-      return
-    }
-    const nowIso = new Date().toISOString()
-    const nextRecord: StreamerControlRecord = {
-      ...baseRecord,
-      license_key: currentKey,
-      theme_color_index: idx,
-      updated_at: nowIso
-    }
-    setRecord(nextRecord)
-
-    sendRenderVipCommand(currentKey, 'theme_color_index', idx)
-
-    if (supabase && currentKey) {
-      try {
-        await supabase
-          .from('rymon_streamer_controls')
-          .update({ theme_color_index: idx, updated_at: nowIso })
-          .eq('license_key', currentKey)
-      } catch {}
-    }
-  }
-
-  const handleEmergencyPurge = async () => {
-    setShowPurgeModal(false)
-    if (!canControlCurrentKey()) return
-    if (currentKey) {
-      sendRenderVipPatch(currentKey, { emergency_purge: true, is_online: false })
-    }
-
-    if (supabase && currentKey) {
-      try {
-        await supabase
-          .from('rymon_streamer_controls')
-          .update({ emergency_purge: true, is_online: false, updated_at: new Date().toISOString() })
-          .eq('license_key', currentKey)
-      } catch {}
-    }
-    alert(
-      '🚨 Emergency Purge Dispatched!\nTarget device instructed to kill Stranger daemon and wipe /data/local/tmp.'
-    )
-  }
-
-  const handleToggleRemotePanelMode = async () => {
-    if (!canControlCurrentKey()) return
-    const curName = record?.streamer_name || 'VIP|P:1|E:0|B:0'
-    const isOverlayOn = !curName.includes('P:0')
-    const nextOverlayOn = !isOverlayOn
-    const eVal = curName.match(/E:(\d+)/)?.[1] || '0'
-    const bVal = curName.match(/B:(\d+)/)?.[1] || '0'
-    const nextName = `VIP|P:${nextOverlayOn ? '1' : '0'}|E:${eVal}|B:${bVal}`
-    const nowIso = new Date().toISOString()
-
-    setRecord((prev) => (prev ? { ...prev, streamer_name: nextName, updated_at: nowIso } : null))
-
-    // Always send patch to Render VIP bridge (ensures in-memory zero-latency update)
-    sendRenderVipPatch(currentKey, { streamer_name: nextName, in_game_panel: nextOverlayOn })
-
-    if (supabase) {
-      try {
-        await supabase
-          .from('rymon_streamer_controls')
-          .update({ streamer_name: nextName, updated_at: nowIso })
-          .eq('license_key', currentKey)
-      } catch {}
-    }
-    showToast(
-      nextOverlayOn
-        ? '👁️ Mode: WEB + IN-GAME OVERLAY'
-        : '🕶️ Mode: WEB ONLY (In-Game Overlay Hidden)'
-    )
-  }
-
-  const handleToggleStealthFreeze = async () => {
-    if (!canControlCurrentKey()) return
-    // Prevent double-tap while request is in-flight
-    if (pauseLoadingKeys.has(currentKey)) return
-    setPauseLoadingKeys((prev) => new Set(prev).add(currentKey))
-
-    const wasPaused = Boolean(record?.is_paused)
-    const nextPaused = !wasPaused
-    const nextStatus = nextPaused ? 'PAUSED' : 'ACTIVE'
-    const nowIso = new Date().toISOString()
-
-    // 1. Optimistic UI update: 0ms visual flip
-    setRecord((prev) => (prev ? { ...prev, is_paused: nextPaused, updated_at: nowIso } : null))
-    setKeysList((prev) =>
-      prev.map((k) =>
-        k.license_key.toUpperCase() === currentKey.toUpperCase()
-          ? { ...k, is_paused: nextPaused, status: nextStatus as any }
-          : k
-      )
-    )
-
-    // 2. Immediately patch Render VIP bridge for zero-latency in-memory sync
-    sendRenderVipPatch(currentKey, { is_paused: nextPaused })
-
-    try {
-      const res = await togglePauseLicenseBackend(currentKey, currentUser?.username || 'debajoyti')
-      if (res.success) {
-        showToast(nextPaused ? '❄️ Stealth Freeze Active (Visuals Hidden)' : `▶️ Resumed Live Controls${res.message.includes('hrs') ? ' • Frozen Time Restored' : ''}`)
-        if (res.newExpiresAt) {
-          setExpiryDate(new Date(res.newExpiresAt))
-        }
-      } else {
-        // Revert optimistic state on backend failure
-        setRecord((prev) => (prev ? { ...prev, is_paused: wasPaused } : null))
-        setKeysList((prev) =>
-          prev.map((k) =>
-            k.license_key.toUpperCase() === currentKey.toUpperCase()
-              ? { ...k, is_paused: wasPaused, status: (wasPaused ? 'PAUSED' : 'ACTIVE') as any }
-              : k
-          )
-        )
-        sendRenderVipPatch(currentKey, { is_paused: wasPaused })
-        alert(res.message)
-      }
-    } catch (err: any) {
-      // Revert optimistic state on error
-      setRecord((prev) => (prev ? { ...prev, is_paused: wasPaused } : null))
-      setKeysList((prev) =>
-        prev.map((k) =>
-          k.license_key.toUpperCase() === currentKey.toUpperCase()
-            ? { ...k, is_paused: wasPaused, status: (wasPaused ? 'PAUSED' : 'ACTIVE') as any }
-            : k
-        )
-      )
-      sendRenderVipPatch(currentKey, { is_paused: wasPaused })
-      alert(`Error toggling freeze: ${err?.message || err}`)
-    } finally {
-      setPauseLoadingKeys((prev) => {
-        const next = new Set(prev)
-        next.delete(currentKey)
-        return next
-      })
-    }
-  }
-
   const handleCopyKey = (keyString: string) => {
     navigator.clipboard.writeText(keyString)
     setCopiedKey(keyString)
@@ -3490,12 +3076,12 @@ export default function RymonConnect() {
 
   // Sovereign RBAC tab isolation guard
   useEffect(() => {
-    const streamerAllowed = ['remote']
+    const streamerAllowed = ['license']
     if (isStreamer && !streamerAllowed.includes(activeTab)) {
-      setActiveTab('remote')
+      setActiveTab('license')
     } else if (
       isReseller &&
-      !['remote', 'overview', 'generate', 'keys', 'extend', 'advance'].includes(activeTab)
+      !['license', 'overview', 'generate', 'keys', 'extend', 'advance'].includes(activeTab)
     ) {
       setActiveTab('overview')
     } else if (
@@ -5257,7 +4843,7 @@ export default function RymonConnect() {
                     padding: '4px 8px'
                   }}
                 >
-                  <span>⚡</span> Go to Streamer Remote
+                  <span>🔑</span> Go to License Portal
                 </button>
               </div>
             </div>
@@ -5356,18 +4942,22 @@ export default function RymonConnect() {
             {/* Nav Categories */}
             <nav style={styles.navStack}>
               {/* Telemetry Remote */}
-              <div style={styles.navCategoryHeader}>REMOTE CONTROL</div>
-              <button
-                onClick={() => handleSelectTab('remote')}
-                style={{
-                  ...styles.navItem,
-                  ...(activeTab === 'remote' ? styles.navItemActive : {})
-                }}
-              >
-                <span style={styles.navIcon}><IconRemote /></span>
-                <span>Streamer Remote</span>
-                <span style={styles.cyanMiniBadge}>LIVE</span>
-              </button>
+              {isStreamer && (
+                <>
+                  <div style={styles.navCategoryHeader}>MY LICENSE</div>
+                  <button
+                    onClick={() => handleSelectTab('license')}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'license' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}><IconKey /></span>
+                    <span>License Status</span>
+                    <span style={styles.cyanMiniBadge}>ACTIVE</span>
+                  </button>
+                </>
+              )}
 
               {/* Streamer-Specific Utilities */}
               {isStreamer && (
@@ -5764,7 +5354,7 @@ export default function RymonConnect() {
                           key={k.license_key}
                           onClick={() => {
                             if (handleSelectRemoteKey(k.license_key)) {
-                              handleSelectTab('remote')
+                              handleSelectTab('license')
                             }
                           }}
                           style={{
@@ -5795,11 +5385,11 @@ export default function RymonConnect() {
                     </div>
                     <div className="sg-quick-grid" style={styles.quickGrid}>
                       <button
-                        onClick={() => handleSelectTab('remote')}
+                        onClick={() => handleSelectTab('keys')}
                         style={styles.quickActionCard}
                       >
-                        <div style={styles.quickActionIcon}><IconRemote /></div>
-                        <div style={styles.quickActionTitle}>Streamer Remote</div>
+                        <div style={styles.quickActionIcon}><IconKey /></div>
+                        <div style={styles.quickActionTitle}>Manage Licenses</div>
                       </button>
                       <button
                         onClick={() => handleSelectTab('generate')}
@@ -7347,14 +6937,13 @@ export default function RymonConnect() {
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                   <button
                                     onClick={() => {
-                                      if (handleSelectRemoteKey(k.license_key)) {
-                                        handleSelectTab('remote')
-                                      }
+                                      setCurrentKey(k.license_key)
+                                      handleSelectTab('license')
                                     }}
                                     style={{ ...styles.actionIconBtn, color: '#00d9ff' }}
-                                    title="Open Streamer Remote for this Key"
+                                    title="View License Status & HWID"
                                   >
-                                    <IconRemote size={13} color="#00d9ff" />
+                                    <IconKey size={13} color="#00d9ff" />
                                   </button>
                                   <button
                                     onClick={() => handleTogglePauseKey(k.license_key)}
@@ -10724,847 +10313,258 @@ else:
 
 
             {/* 13. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
-            {activeTab === 'remote' && (() => {
+            {/* 13. KEYAUTH STANDALONE — LICENSE STATUS & HARDWARE PORTAL */}
+            {activeTab === 'license' && (() => {
               const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
-              const isCurrentVip = Boolean(
-                targetLic?.plan_duration?.includes('[VIP]') ||
-                record?.streamer_name?.includes('VIP_REALTIME') ||
-                record?.streamer_name?.startsWith('VIP|')
-              )
+              const isPaused = Boolean(targetLic?.is_paused || targetLic?.status === 'PAUSED')
+              const isExpired = targetLic?.status === 'EXPIRED'
+              const isWaiting = targetLic?.status === 'WAITING'
+              const isActive = !isPaused && !isExpired && !isWaiting
+              const boundHwid = targetLic?.device_hwid || ''
+              const clientLimit = securityPolicy.client_hwid_limit_per_day ?? 1
+
               return (
-              <div className="sg-view-container" style={styles.viewContainer}>
-                {/* Compact Executive Action Header */}
-                <div className="sg-banner-row" style={{ ...styles.bannerRow, marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <h2 style={{ ...styles.pageTitle, margin: 0, fontSize: '20px' }}>Streamer Remote</h2>
-                    <span
-                      style={{
-                        ...styles.greenPulseBadge,
-                        padding: '5px 10px',
-                        fontSize: '11px',
-                        background: isStreamerKeyActivelyPlaying(record)
-                          ? 'rgba(5, 223, 114, 0.18)'
-                          : 'rgba(148, 163, 184, 0.12)',
-                        color: isStreamerKeyActivelyPlaying(record) ? '#05df72' : '#cbd5e1',
-                        border: isStreamerKeyActivelyPlaying(record)
-                          ? '1px solid rgba(5, 223, 114, 0.45)'
-                          : '1px solid rgba(148, 163, 184, 0.28)'
-                      }}
-                    >
-                      {isStreamerKeyActivelyPlaying(record) ? '🟢 IN-GAME' : '⚪ IDLE'}
-                    </span>
-
-                    {/* Live Radar Telemetry Badge (Enemies / Bots) - VIP Only */}
-                    {isCurrentVip && (() => {
-                      const playing = isStreamerKeyActivelyPlaying(record)
-                      const liveEnemies = playing ? Number(record?.streamer_name?.match(/E:(\d+)/)?.[1] || 0) : 0
-                      const liveBots = playing ? Number(record?.streamer_name?.match(/B:(\d+)/)?.[1] || 0) : 0
-                      const hasThreat = liveEnemies + liveBots > 0
-                      return (
-                        <span
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: '8px',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            letterSpacing: '0.3px',
-                            background: hasThreat
-                              ? 'rgba(239, 68, 68, 0.18)'
-                              : 'rgba(15, 23, 42, 0.75)',
-                            border: hasThreat
-                              ? '1px solid rgba(239, 68, 68, 0.5)'
-                              : '1px solid rgba(255, 255, 255, 0.1)',
-                            color: hasThreat ? '#fca5a5' : '#94a3b8'
-                          }}
-                        >
-                          🎯 {liveEnemies} ENEMIES • 🤖 {liveBots} BOTS
-                        </span>
-                      )
-                    })()}
-
-                    {/* Live Ping & VIP Bridge Latency Meter */}
-                    {!isCurrentVip ? (
-                      <span
-                        style={{
-                          padding: '5px 10px',
-                          borderRadius: '8px',
-                          fontSize: '11px',
-                          fontWeight: 800,
-                          letterSpacing: '0.3px',
-                          background: 'rgba(56, 189, 248, 0.15)',
-                          border: '1px solid rgba(56, 189, 248, 0.45)',
-                          color: '#38bdf8',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        <span>🔒</span>
-                        <span>APK ONLY (IN-GAME)</span>
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          padding: '5px 10px',
-                          borderRadius: '8px',
-                          fontSize: '11px',
-                          fontWeight: 800,
-                          letterSpacing: '0.3px',
-                          background: isLiveConnected ? 'rgba(5, 223, 114, 0.15)' : 'rgba(234, 179, 8, 0.15)',
-                          border: isLiveConnected ? '1px solid rgba(5, 223, 114, 0.4)' : '1px solid rgba(234, 179, 8, 0.4)',
-                          color: isLiveConnected ? '#05df72' : '#facc15',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                        title="Realtime latency between Web Controller and Direct RYMON Mesh"
-                      >
-                        <span
-                          style={{
-                            width: '7px',
-                            height: '7px',
-                            borderRadius: '50%',
-                            backgroundColor: isLiveConnected ? '#05df72' : '#facc15',
-                            boxShadow: isLiveConnected ? '0 0 8px #05df72' : '0 0 8px #facc15'
-                          }}
-                        />
-                        {vipPingMs !== null ? (vipPingMs > 1200 ? '⚡ WARMING MESH...' : `${vipPingMs}ms VIP BRIDGE`) : isLiveConnected ? `${ping}ms VIP BRIDGE` : '🟡 VIP BRIDGE (CONNECTING...)'}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="sg-remote-actions" style={{ ...styles.badgeCluster, gap: '8px' }}>
-                    {/* Hourly Web Control Limit / VIP Realtime Badge */}
-                    {(() => {
-                      if (isOwner) {
-                        return (
-                          <span
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: '8px',
-                              fontSize: '11px',
-                              fontWeight: 800,
-                              background: 'rgba(250, 204, 21, 0.15)',
-                              border: '1px solid rgba(250, 204, 21, 0.45)',
-                              color: '#fde047'
-                            }}
-                            title="Owner: Automatic VIP Realtime (<50ms Render RAM Bridge) • Unlimited Keys"
-                          >
-                            👑 OWNER (VIP REALTIME &bull; &lt;50ms)
-                          </span>
-                        )
-                      }
-                      if (currentUser?.role === 'admin' || currentUser?.role === 'reseller') {
-                        return (
-                          <span
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: '8px',
-                              fontSize: '11px',
-                              fontWeight: 800,
-                              background: 'rgba(0, 217, 255, 0.15)',
-                              border: '1px solid rgba(0, 217, 255, 0.45)',
-                              color: '#00d9ff'
-                            }}
-                            title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms Render RAM Bridge)"
-                          >
-                            ⚡ VIP REALTIME ({currentUser?.role === 'admin' ? 'ADMIN' : 'RESELLER'} &bull; &lt;50ms)
-                          </span>
-                        )
-                      }
-                      const isVipKey = Boolean(
-                        keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase())?.plan_duration?.includes('[VIP]') ||
-                        record?.streamer_name?.includes('VIP_REALTIME') ||
-                        record?.streamer_name?.startsWith('VIP|')
-                      )
-                      if (isVipKey) {
-                        return (
-                          <span
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: '8px',
-                              fontSize: '11px',
-                              fontWeight: 800,
-                              background: 'rgba(0, 217, 255, 0.15)',
-                              border: '1px solid rgba(0, 217, 255, 0.45)',
-                              color: '#00d9ff'
-                            }}
-                            title="VIP Realtime: Direct RYMON Ultra-Low Latency Pipeline (<50ms Render RAM Bridge)"
-                          >
-                            ⚡ VIP REALTIME (RENDER RAM &bull; &lt;50ms)
-                          </span>
-                        )
-                      }
-                      const recentKeys = getControlledKeysThisHour()
-                      const count = recentKeys.length
-                      return (
-                        <span
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: '8px',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            background: count >= 3 ? 'rgba(239, 68, 68, 0.18)' : 'rgba(5, 223, 114, 0.15)',
-                            border: count >= 3 ? '1px solid rgba(239, 68, 68, 0.45)' : '1px solid rgba(5, 223, 114, 0.4)',
-                            color: count >= 3 ? '#ef4444' : '#05df72'
-                          }}
-                          title={`Standard accounts: max 3 keys per hour. Active: ${recentKeys.join(', ') || 'None'}`}
-                        >
-                          1-HR LIMIT: {count}/3 KEYS USED
-                        </span>
-                      )
-                    })()}
-
-                    {currentKey && isCurrentVip && (
-                      <>
-                        {/* 1-Click Remote Overlay vs Web-Only Switch */}
-                        <button
-                          onClick={handleToggleRemotePanelMode}
-                          style={{
-                            backgroundColor: record?.streamer_name?.includes('P:0')
-                              ? 'rgba(168, 85, 247, 0.18)'
-                              : 'rgba(0, 217, 255, 0.15)',
-                            border: record?.streamer_name?.includes('P:0')
-                              ? '1px solid #c084fc'
-                              : '1px solid #00d9ff',
-                            color: record?.streamer_name?.includes('P:0') ? '#e9d5ff' : '#00d9ff',
-                            borderRadius: '8px',
-                            padding: '6px 11px',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            cursor: 'pointer'
-                          }}
-                          title="Switch phone between Web + In-Game Overlay and Web-Only Stealth Mode"
-                        >
-                          {record?.streamer_name?.includes('P:0') ? 'WEB ONLY' : 'OVERLAY ON'}
-                        </button>
-
-                        {/* 1-Click Stealth Freeze (Boss Key) */}
-                        <button
-                          onClick={handleToggleStealthFreeze}
-                          disabled={pauseLoadingKeys.has(currentKey)}
-                          style={{
-                            backgroundColor: record?.is_paused
-                              ? 'rgba(5, 223, 114, 0.18)'
-                              : 'rgba(255, 183, 0, 0.16)',
-                            border: record?.is_paused ? '1px solid #05df72' : '1px solid #ffb700',
-                            color: record?.is_paused ? '#05df72' : '#ffb700',
-                            borderRadius: '8px',
-                            padding: '6px 11px',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            cursor: pauseLoadingKeys.has(currentKey) ? 'not-allowed' : 'pointer',
-                            opacity: pauseLoadingKeys.has(currentKey) ? 0.5 : 1,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                          title="Instant Stealth Freeze / Resume without killing daemon"
-                        >
-                          {pauseLoadingKeys.has(currentKey)
-                            ? '⏳'
-                            : record?.is_paused ? <><IconPlay size={11} color="#05df72" /> RESUME</> : <><IconPause size={11} color="#ffb700" /> FREEZE</>}
-                        </button>
-
-                        {/* 1-Click HWID Reset */}
-                        <button
-                          onClick={() => handleCustomerSelfResetHwid(currentKey)}
-                          disabled={selfResetBusy}
-                          style={{
-                            backgroundColor: 'rgba(5, 223, 114, 0.14)',
-                            border: '1px solid rgba(5, 223, 114, 0.5)',
-                            color: '#05df72',
-                            borderRadius: '8px',
-                            padding: '6px 11px',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          {selfResetBusy ? '...' : <><IconRefresh size={11} color="#05df72" /> HWID</>}
-                        </button>
-                      </>
-                    )}
-                    <button
-                      onClick={() => setShowPurgeModal(true)}
-                      style={{ ...styles.emergencyPurgeBtn, padding: '6px 11px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <IconAlert size={11} color="#ef4444" /> PURGE
-                    </button>
-                  </div>
-                </div>
-
-                {/* Unified Single-Line Compact Telemetry Bar */}
-                <div
-                  className="sg-telemetry-bar"
-                  style={{
-                    background: 'rgba(13, 17, 26, 0.92)',
-                    border: isStreamerKeyActivelyPlaying(record)
-                      ? '1px solid rgba(5, 223, 114, 0.38)'
-                      : '1px solid rgba(0, 217, 255, 0.22)',
-                    borderRadius: '10px',
-                    padding: '9px 14px',
-                    marginBottom: '14px',
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px'
-                  }}
-                >
-                  <div className="sg-key-select-box" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: isStaff ? '1 1 280px' : '0 1 auto' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', letterSpacing: '0.5px' }}>
-                      KEY:
-                    </span>
-                    {isStaff ? (
-                      <select
-                        value={currentKey}
-                        onChange={(e) => handleSelectRemoteKey(e.target.value)}
-                        style={{
-                          ...styles.selectInput,
-                          padding: '5px 10px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          color: '#f8fafc',
-                          maxWidth: '380px'
-                        }}
-                      >
-                        <option value="">-- Select Target Key (Free Fire MAX Only) --</option>
-                        {keysList
-                          .filter(
-                            (k) =>
-                              !k.game ||
-                              String(k.game || '').toLowerCase().includes('free fire')
-                          )
-                          .map((k) => {
-                            const isKeyPlaying = onlineKeySet.has(k.license_key.toUpperCase())
-                            const isVip = Boolean(k.plan_duration?.includes('[VIP]'))
-                            const icon = isKeyPlaying ? '🟢 ' : isVip ? '👑 ' : '📱 '
-                            const editionLabel = isVip ? 'VIP REMOTE' : 'APK ONLY'
-                            return (
-                              <option key={k.license_key} value={k.license_key}>
-                                {icon}{k.license_key} [{editionLabel}] ({k.plan_duration?.replace(' [VIP]', '')} • @{k.creator_username})
-                              </option>
-                            )
-                          })}
-                      </select>
-                    ) : (
-                      <span style={{ fontFamily: 'monospace', fontSize: '12px', fontWeight: 800, color: '#00d9ff' }}>
-                        {currentKey || 'NONE'}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="sg-telemetry-meta-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', fontSize: '11px' }}>
+                <div className="sg-view-container" style={styles.viewContainer}>
+                  {/* Header Banner */}
+                  <div className="sg-banner-row" style={styles.bannerRow}>
                     <div>
-                      <span style={{ color: '#64748b', marginRight: '5px' }}>HWID:</span>
-                      <strong style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>
-                        {record?.device_hwid ? record.device_hwid.slice(0, 22) : 'Unbound'}
-                      </strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748b', marginRight: '5px' }}>SLOTS:</span>
-                      <strong style={{ color: '#38bdf8' }}>
-                        {record?.devices_used || (record?.device_hwid ? 1 : 0)}/{record?.devices_max || 1}
-                      </strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748b', marginRight: '5px' }}>SYNC:</span>
-                      <strong style={{ color: isStreamerKeyActivelyPlaying(record) ? '#05df72' : '#94a3b8' }}>
-                        {record?.last_heartbeat
-                          ? new Date(record.last_heartbeat).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                          : 'Idle'}
-                      </strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748b', marginRight: '5px' }}>EXPIRY:</span>
-                      <strong style={{ color: '#00d9ff', fontFamily: 'monospace' }}>{countdown}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                {!currentKey ? (
-                  <div
-                    style={{
-                      background: 'rgba(15, 23, 42, 0.65)',
-                      border: '1px dashed rgba(148, 163, 184, 0.25)',
-                      borderRadius: '16px',
-                      padding: '40px 20px',
-                      textAlign: 'center',
-                      marginTop: '8px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
-                      <IconRemote size={32} color="#64748b" />
-                    </div>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc', marginBottom: '6px' }}>
-                      No License Key Selected
-                    </h3>
-                    <p style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '420px', margin: '0 auto' }}>
-                      Select a license key from the dropdown above to view device status.
-                    </p>
-                  </div>
-                ) : !isCurrentVip ? (
-                  /* Cyber-Glassmorphic Locked Screen for Standard Mobile APK */
-                  <div
-                    style={{
-                      background: 'radial-gradient(ellipse at top, rgba(14, 165, 233, 0.12) 0%, rgba(10, 15, 29, 0.96) 70%)',
-                      border: '1px solid rgba(56, 189, 248, 0.35)',
-                      borderRadius: '16px',
-                      padding: '42px 24px',
-                      textAlign: 'center',
-                      boxShadow: '0 12px 36px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
-                      backdropFilter: 'blur(16px)',
-                      marginTop: '8px'
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        background: 'rgba(56, 189, 248, 0.15)',
-                        border: '1px solid rgba(56, 189, 248, 0.5)',
-                        borderRadius: '999px',
-                        padding: '6px 16px',
-                        marginBottom: '18px'
-                      }}
-                    >
-                      <IconKey size={13} color="#38bdf8" />
-                      <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '1px', color: '#38bdf8' }}>
-                        STANDARD MOBILE APK EDITION
-                      </span>
-                    </div>
-
-                    <h3
-                      style={{
-                        fontSize: '18px',
-                        fontWeight: 800,
-                        color: '#f8fafc',
-                        marginBottom: '8px'
-                      }}
-                    >
-                      Standard Mobile APK Key
-                    </h3>
-
-                    <p
-                      style={{
-                        maxWidth: '520px',
-                        margin: '0 auto 20px auto',
-                        fontSize: '12.5px',
-                        color: '#94a3b8'
-                      }}
-                    >
-                      Key <code style={{ color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>{currentKey}</code> operates directly via in-game floating menu. Web remote is exclusive to VIP edition.
-                    </p>
-
-                    {(isOwner || isAdmin) ? (
-                      <button
-                        onClick={() => handleToggleVipKey(currentKey, true)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          padding: '12px 28px',
-                          background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                          border: 'none',
-                          borderRadius: '10px',
-                          color: '#000',
-                          fontSize: '12.5px',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          boxShadow: '0 0 24px rgba(245, 158, 11, 0.45)',
-                          transition: 'transform 0.15s ease'
-                        }}
-                      >
-                        <IconRemote size={14} color="#000" />
-                        <span>UPGRADE THIS KEY TO VIP WEB REMOTE (+50%)</span>
-                      </button>
-                    ) : (
-                      <div style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
-                        Contact Owner or Administrator to upgrade this license key to VIP Web Remote.
+                      <h2 style={styles.pageTitle}>KeyAuth License Portal</h2>
+                      <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
+                        Real-time license validity, hardware binding (HWID), and client integration details.
                       </div>
-                    )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        background: isPaused ? 'rgba(255, 183, 0, 0.15)' : isExpired ? 'rgba(239, 68, 68, 0.15)' : isWaiting ? 'rgba(234, 179, 8, 0.15)' : 'rgba(5, 223, 114, 0.15)',
+                        border: `1px solid ${isPaused ? '#ffb700' : isExpired ? '#ef4444' : isWaiting ? '#eab308' : '#05df72'}`,
+                        color: isPaused ? '#ffb700' : isExpired ? '#ef4444' : isWaiting ? '#eab308' : '#05df72',
+                        fontSize: '12px',
+                        fontWeight: 900,
+                        letterSpacing: '0.5px'
+                      }}>
+                        {isPaused ? '⏸️ PAUSED' : isExpired ? '🔴 EXPIRED' : isWaiting ? '⏳ UNUSED (WAITING)' : '🟢 ACTIVE & ONLINE'}
+                      </span>
+                    </div>
                   </div>
-                ) : (
-                  <>
-                    {/* Compact Freeze Indicator (Only when Paused) */}
-                    {record?.is_paused && (
-                      <div
-                        style={{
-                          background: 'rgba(255, 183, 0, 0.12)',
-                          border: '1px solid rgba(255, 183, 0, 0.45)',
-                          borderRadius: '8px',
-                          padding: '8px 14px',
-                          marginBottom: '12px',
+
+                  {/* Main Grid: License Details & Hardware Management */}
+                  <div className="sg-dual-grid" style={{ ...styles.dualGrid, marginBottom: '24px' }}>
+                    {/* Card 1: License Information */}
+                    <div className="sg-card-box" style={styles.cardBox}>
+                      <div style={styles.cardHeader}>
+                        <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <IconKey size={16} color="#05df72" /> License Key Credentials
+                        </h4>
+                      </div>
+                      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
+                            Current License Key
+                          </div>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 14px',
+                            background: '#07090e',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(255, 255, 255, 0.1)'
+                          }}>
+                            <code style={{ fontSize: '14px', color: '#00d9ff', fontWeight: 800, letterSpacing: '1px' }}>
+                              {currentKey || 'NO-KEY-LOADED'}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (currentKey) {
+                                  navigator.clipboard.writeText(currentKey)
+                                  showToast('📋 License key copied to clipboard!')
+                                }
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                background: 'rgba(0, 217, 255, 0.15)',
+                                border: '1px solid #00d9ff',
+                                color: '#00d9ff',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              COPY
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                          <div style={{ padding: '12px', background: '#07090e', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                            <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Plan Duration</div>
+                            <div style={{ fontSize: '13.5px', color: '#f8fafc', fontWeight: 800, marginTop: '4px' }}>
+                              {(targetLic?.plan_duration || '30 Days').replace(' [VIP]', '').replace('[VIP]', '')}
+                            </div>
+                          </div>
+                          <div style={{ padding: '12px', background: '#07090e', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                            <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Time Remaining</div>
+                            <div style={{ fontSize: '13.5px', color: isActive ? '#05df72' : '#94a3b8', fontWeight: 800, marginTop: '4px' }}>
+                              {countdown || '--d --h --m --s'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                          <div style={{ padding: '12px', background: '#07090e', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                            <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Expires At</div>
+                            <div style={{ fontSize: '12px', color: '#f8fafc', fontWeight: 700, marginTop: '4px' }}>
+                              {targetLic?.expires_at ? new Date(targetLic.expires_at).toLocaleString() : 'Not activated yet'}
+                            </div>
+                          </div>
+                          <div style={{ padding: '12px', background: '#07090e', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                            <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Application</div>
+                            <div style={{ fontSize: '12px', color: '#00d9ff', fontWeight: 800, marginTop: '4px' }}>
+                              {targetLic?.game || 'Universal Client'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card 2: Hardware ID (HWID) Binding & Self-Reset */}
+                    <div className="sg-card-box" style={styles.cardBox}>
+                      <div style={styles.cardHeader}>
+                        <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <IconKey size={16} color="#00d9ff" /> Hardware ID (HWID) Binding
+                        </h4>
+                      </div>
+                      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
+                            Bound Device Serial
+                          </div>
+                          <div style={{
+                            padding: '12px 14px',
+                            background: '#07090e',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            wordBreak: 'break-all'
+                          }}>
+                            {boundHwid ? (
+                              <code style={{ fontSize: '13px', color: '#f8fafc', fontWeight: 700 }}>
+                                💻 {boundHwid}
+                              </code>
+                            ) : (
+                              <span style={{ fontSize: '12.5px', color: '#eab308', fontWeight: 700 }}>
+                                ⏳ Unbound — Ready to bind to the next device that authenticates
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: '1.5' }}>
+                          Each license is locked to 1 unique hardware identifier. Resetting HWID allows you to transfer your license to a new phone or computer.
+                        </div>
+
+                        <div style={{
+                          padding: '12px 14px',
+                          background: 'rgba(0, 217, 255, 0.05)',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(0, 217, 255, 0.2)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          color: '#ffb700'
-                        }}
-                      >
-                        <span>STEALTH FREEZE ACTIVE — All in-game visuals &amp; memory hooks temporarily suspended</span>
-                        <button
-                          onClick={handleToggleStealthFreeze}
-                          disabled={pauseLoadingKeys.has(currentKey)}
-                          style={{
-                            background: pauseLoadingKeys.has(currentKey) ? '#334155' : '#05df72',
-                            color: '#07090e',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '4px 10px',
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            cursor: pauseLoadingKeys.has(currentKey) ? 'not-allowed' : 'pointer',
-                            opacity: pauseLoadingKeys.has(currentKey) ? 0.5 : 1,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          {pauseLoadingKeys.has(currentKey) ? '⏳' : <><IconPlay size={11} color="#07090e" /> RESUME</>}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* 3 Telemetry Column Control Grid */}
-                    <div className="sg-control-grid" style={styles.controlGrid3Col}>
-                  {/* Column 1: Aim Matrix */}
-                  <div className="sg-column-card" style={styles.columnCard}>
-                    <div style={styles.columnHead}>
-                      <span style={{ ...styles.columnIcon, display: 'inline-flex', alignItems: 'center' }}><IconRemote size={15} color="#00d9ff" /></span>
-                      <h4>AIM ASSIST MATRIX</h4>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Silent Aim</div>
-                      <div
-                        onClick={() => toggleFeature('aim_silent')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.aim_silent ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.aim_silent ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.sliderBlock}>
-                      <div style={styles.sliderLabelRow}>
-                        <span>Hit Rate Percentage</span>
-                        <span style={styles.sliderValText}>{record?.hit_rate || 80}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="20"
-                        max="100"
-                        value={record?.hit_rate || 80}
-                        onChange={(e) => handleSliderChange('hit_rate', parseInt(e.target.value))}
-                        style={styles.sliderInput}
-                      />
-                    </div>
-
-                    <div style={styles.sliderBlock}>
-                      <div style={styles.sliderLabelRow}>
-                        <span>Aim FOV Radius</span>
-                        <span style={styles.sliderValText}>{record?.aim_fov || 90}°</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="30"
-                        max="360"
-                        value={record?.aim_fov || 90}
-                        onChange={(e) => handleSliderChange('aim_fov', parseInt(e.target.value))}
-                        style={styles.sliderInput}
-                      />
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>FOV Target Ring</div>
-                      <div
-                        onClick={() => toggleFeature('show_aim_fov')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.show_aim_fov ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.show_aim_fov ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Aim Snap Line</div>
-                      <div
-                        onClick={() => toggleFeature('show_aim_line')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.show_aim_line ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.show_aim_line ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Ignore Knocked</div>
-                      <div
-                        onClick={() => toggleFeature('ignore_knocked')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.ignore_knocked ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.ignore_knocked ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Column 2: ESP Visuals */}
-                  <div className="sg-column-card" style={styles.columnCard}>
-                    <div style={styles.columnHead}>
-                      <span style={{ ...styles.columnIcon, display: 'inline-flex', alignItems: 'center' }}><IconOverview size={15} color="#00d9ff" /></span>
-                      <h4>ESP VISUAL OVERLAY</h4>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>3D Bounding Box</div>
-                      <div
-                        onClick={() => toggleFeature('esp_box')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.esp_box ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.esp_box ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Skeleton Bone Structure</div>
-                      <div
-                        onClick={() => toggleFeature('esp_skeleton')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.esp_skeleton ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.esp_skeleton ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Player Nicknames</div>
-                      <div
-                        onClick={() => toggleFeature('esp_name')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.esp_name ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.esp_name ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Tracer Snaplines</div>
-                      <div
-                        onClick={() => toggleFeature('esp_line')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.esp_line ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.esp_line ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Distance Indicator</div>
-                      <div
-                        onClick={() => toggleFeature('esp_distance')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.esp_distance ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.esp_distance ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Health Bar Visual</div>
-                      <div
-                        onClick={() => toggleFeature('esp_health')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.esp_health ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.esp_health ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Enemy Alert Count</div>
-                      <div
-                        onClick={() => toggleFeature('esp_count')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.esp_count ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.esp_count ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Tactical 360° Radar</div>
-                      <div
-                        onClick={() => toggleFeature('esp_radar')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.esp_radar ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.esp_radar ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Column 3: Utilities & Themes */}
-                  <div className="sg-column-card" style={styles.columnCard}>
-                    <div style={styles.columnHead}>
-                      <span style={{ ...styles.columnIcon, display: 'inline-flex', alignItems: 'center' }}><IconPlus size={15} color="#00d9ff" /></span>
-                      <h4>UTILITIES & THEME</h4>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Instant No-Reload</div>
-                      <div
-                        onClick={() => toggleFeature('no_reload')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.no_reload ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.no_reload ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={styles.toggleRow}>
-                      <div style={styles.toggleTitle}>Recoil Suppression</div>
-                      <div
-                        onClick={() => toggleFeature('no_recoil')}
-                        style={{
-                          ...styles.switchPill,
-                          background: record?.no_recoil ? '#00d9ff' : 'rgba(30,36,50,0.8)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...styles.switchKnob,
-                            transform: record?.no_recoil ? 'translateX(20px)' : 'translateX(0)'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: '20px' }}>
-                      <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600, marginBottom: '10px' }}>
-                        OVERLAY COLOR PALETTE
-                      </div>
-                      <div style={styles.themePaletteGrid}>
-                        {THEME_NAMES.map((themeName, idx) => (
+                          gap: '12px'
+                        }}>
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: 800, color: '#f8fafc' }}>
+                              Reset Hardware Binding
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748b' }}>
+                              Daily Limit: {clientLimit > 0 ? `${clientLimit} reset/day` : 'Admin Only'}
+                            </div>
+                          </div>
                           <button
-                            key={themeName}
-                            onClick={() => setThemePreset(idx)}
+                            type="button"
+                            disabled={selfResetBusy || !currentKey}
+                            onClick={() => handleCustomerSelfResetHwid(currentKey)}
                             style={{
-                              ...styles.themePillBtn,
-                              ...(record?.theme_color_index === idx ? styles.themePillBtnActive : {})
+                              padding: '8px 14px',
+                              borderRadius: '8px',
+                              background: selfResetBusy ? '#334155' : 'linear-gradient(135deg, #00d9ff 0%, #0077b6 100%)',
+                              border: 'none',
+                              color: '#07090e',
+                              fontSize: '12px',
+                              fontWeight: 900,
+                              cursor: selfResetBusy ? 'not-allowed' : 'pointer'
                             }}
                           >
-                            {themeName}
+                            {selfResetBusy ? 'RESETTING...' : 'RESET HWID'}
                           </button>
-                        ))}
+                        </div>
+
+                        {selfResetMsg && (
+                          <div style={{
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            background: selfResetMsg.includes('✅') || selfResetMsg.includes('Reset') ? 'rgba(5, 223, 114, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            border: `1px solid ${selfResetMsg.includes('✅') || selfResetMsg.includes('Reset') ? 'rgba(5, 223, 114, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                            color: selfResetMsg.includes('✅') || selfResetMsg.includes('Reset') ? '#05df72' : '#ef4444',
+                            fontSize: '12px',
+                            fontWeight: 700
+                          }}>
+                            {selfResetMsg}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Connect API Integration Instructions */}
+                  <div className="sg-card-box" style={{ ...styles.cardBox, marginBottom: '24px' }}>
+                    <div style={styles.cardHeader}>
+                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <IconApi size={16} color="#05df72" /> Client Authentication Endpoint (KeyAuth Edge Gateway)
+                      </h4>
+                    </div>
+                    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ fontSize: '12.5px', color: '#94a3b8' }}>
+                        Authenticate your software (C++, C#, Python, Java/Android, or AutoIt loaders) by sending an HTTP POST to the official KeyAuth edge gateway:
+                      </div>
+                      <div style={{
+                        padding: '12px 14px',
+                        background: '#07090e',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(5, 223, 114, 0.25)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}>
+                        <code style={{ fontSize: '13px', color: '#05df72', fontWeight: 800 }}>
+                          POST https://greenvest.shop/connect
+                        </code>
+                        <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>
+                          HTTPS / JSON &amp; URL-ENCODED
+                        </span>
+                      </div>
+                      <div style={{
+                        padding: '12px 14px',
+                        background: '#0a0d14',
+                        borderRadius: '8px',
+                        fontFamily: 'monospace',
+                        fontSize: '11.5px',
+                        color: '#cbd5e1',
+                        lineHeight: '1.6'
+                      }}>
+                        <span style={{ color: '#64748b' }}>// Parameters:</span><br />
+                        <span style={{ color: '#00d9ff' }}>"key"</span>: <span style={{ color: '#05df72' }}>"{currentKey || 'YOUR_LICENSE_KEY'}"</span>,<br />
+                        <span style={{ color: '#00d9ff' }}>"hwid"</span>: <span style={{ color: '#05df72' }}>"DEVICE_UNIQUE_HWID_OR_SERIAL"</span>
                       </div>
                     </div>
                   </div>
                 </div>
-              </>
-            )}
-          </div>
-        )
-      })()}
+              )
+            })()}
           </main>
         </div>
       )}
@@ -11728,37 +10728,6 @@ else:
           </div>
         )
       })()}
-
-      {/* ── EMERGENCY REMOTE PURGE MODAL ────────────────────────────────────── */}
-      {showPurgeModal && (
-        <div className="sg-modal-overlay" style={styles.modalOverlay}>
-          <div className="sg-modal-card" style={styles.modalCard}>
-            <div style={{ ...styles.modalIcon, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <IconAlert size={30} color="#ef4444" />
-            </div>
-            <h3 style={styles.modalTitle}>Confirm Emergency Remote Wipe</h3>
-            <p style={styles.modalText}>
-              Are you sure you want to trigger a remote purge on target device running key <code>{currentKey}</code>?<br /><br />
-              All background processes will be killed immediately, and <code>/data/local/tmp</code> will be wiped completely.
-            </p>
-            <div style={styles.modalActions}>
-              <button
-                onClick={() => setShowPurgeModal(false)}
-                style={styles.modalCancelBtn}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEmergencyPurge}
-                style={styles.modalConfirmPurgeBtn}
-              >
-                Yes, Wipe Device Now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
 
       {/* ── GRANT BONUS TIME MODAL ───────────────────────────────────────── */}
       {bonusModalKey && (
@@ -12316,11 +11285,11 @@ else:
             <>
               <button
                 type="button"
-                className={`sg-mobile-bottom-tab ${activeTab === 'remote' ? 'active' : ''}`}
-                onClick={() => handleSelectTab('remote')}
+                className={`sg-mobile-bottom-tab ${activeTab === 'license' ? 'active' : ''}`}
+                onClick={() => handleSelectTab('license')}
               >
-                <IconRemote />
-                <span>Remote</span>
+                <IconKey />
+                <span>License</span>
               </button>
               <button
                 type="button"
@@ -12335,11 +11304,11 @@ else:
             <>
               <button
                 type="button"
-                className={`sg-mobile-bottom-tab ${activeTab === 'remote' ? 'active' : ''}`}
-                onClick={() => handleSelectTab('remote')}
+                className={`sg-mobile-bottom-tab ${activeTab === 'overview' ? 'active' : ''}`}
+                onClick={() => handleSelectTab('overview')}
               >
-                <IconRemote />
-                <span>Remote</span>
+                <IconOverview />
+                <span>Dashboard</span>
               </button>
               <button
                 type="button"
