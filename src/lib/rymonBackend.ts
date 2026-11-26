@@ -28,6 +28,56 @@ export interface RymonAccount {
     allow_multi_device?: boolean
     allow_web_remote?: boolean
   }
+  session_token?: string
+}
+
+export function getStoredSessionToken(): string {
+  try {
+    const raw = localStorage.getItem('rymon_session_user')
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed.session_token === 'string') {
+        return parsed.session_token.trim()
+      }
+    }
+  } catch {}
+  return ''
+}
+
+export async function logoutBackend(): Promise<void> {
+  const token = getStoredSessionToken()
+  if (!supabase || !token) return
+  try {
+    await supabase.rpc('rpc_rymon_logout', { p_session_token: token })
+  } catch {}
+}
+
+async function setSystemConfigRemote(key: string, value: unknown): Promise<void> {
+  if (!supabase) return
+  try {
+    await supabase.rpc('rpc_rymon_set_system_config', {
+      p_key: key,
+      p_value: value,
+      p_session_token: getStoredSessionToken()
+    })
+  } catch {}
+}
+
+function generateCryptoCodeSegment(length: number = 4): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const out: string[] = []
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(length)
+    crypto.getRandomValues(bytes)
+    for (let i = 0; i < length; i++) {
+      out.push(chars[bytes[i] % chars.length])
+    }
+  } else {
+    for (let i = 0; i < length; i++) {
+      out.push(chars[Math.floor(Math.random() * chars.length)])
+    }
+  }
+  return out.join('')
 }
 
 export interface RymonLicense {
@@ -233,49 +283,17 @@ export function warmRenderVipBridge(): void {
   } catch {}
 }
 
-export async function fetchRenderVipState(key: string): Promise<StreamerControlRecord | null> {
-  const normKey = String(key || '').trim().toUpperCase()
-  if (!normKey) return null
-  try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 5000)
-    const res = await fetch(`${RENDER_VIP_BRIDGE_URL}/api/vip/state?key=${encodeURIComponent(normKey)}`, {
-      signal: controller.signal
-    })
-    clearTimeout(timer)
-    if (!res.ok) return null
-    const json = await res.json()
-    if (json && json.ok && json.state) {
-      return json.state as StreamerControlRecord
-    }
-  } catch {
-    // Render bridge cold-boot or network jitter
-  }
-  return null
-}
-
-export async function sendRenderVipCommand(key: string, toggle: string, value: any): Promise<boolean> {
-  const normKey = String(key || '').trim().toUpperCase()
-  if (!normKey) return false
-  try {
-    const res = await fetch(`${RENDER_VIP_BRIDGE_URL}/api/vip/command`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: normKey, toggle, value })
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
 export async function sendRenderVipPatch(key: string, patch: Partial<StreamerControlRecord>): Promise<boolean> {
   const normKey = String(key || '').trim().toUpperCase()
   if (!normKey) return false
+  const token = getStoredSessionToken()
   try {
     const res = await fetch(`${RENDER_VIP_BRIDGE_URL}/api/vip/patch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-Session-Token': token } : {})
+      },
       body: JSON.stringify({ license_key: normKey, ...patch })
     })
     return res.ok
@@ -491,14 +509,11 @@ export async function loginWithCredentials(
         error: `Your ${matched.role.toUpperCase()} subscription expired on ${new Date(matched.expires_at).toLocaleDateString()}. Contact your Admin/Owner to renew (30 Days / 60 Days).`
       }
     }
-    const storedPass = localStorage.getItem(`rymon_pw_${matched.username}`) || matched.username.toLowerCase()
-    if (
-      cleanPass === storedPass ||
-      cleanPass === matched.username.toLowerCase()
-    ) {
+    const storedPass = localStorage.getItem(`rymon_pw_${matched.username}`)
+    if (storedPass && cleanPass === storedPass) {
       return { success: true, user: matched }
     }
-    return { success: false, error: 'Invalid password. Please try again.' }
+    return { success: false, error: 'Invalid password or offline server connection unavailable.' }
   }
 
   return { success: false, error: 'Account not found. Check username or contact Administrator.' }
@@ -508,23 +523,19 @@ export async function loginWithCredentials(
 /**
  * Checks whether two hardware IDs match, normalizing across legacy and modern formats:
  * - Strips prefixes like 'android_id:', 'install_id:', 'boot_fallback:', etc.
- * - Performs case-insensitive comparison
- * - Substring containment for 12+ char IDs
+ * - Performs case-insensitive exact match across single or '|'-delimited multi-device entries.
  */
 export function areHwidsMatching(dbHwid?: string, reqHwid?: string): boolean {
   if (!dbHwid || !reqHwid) return false
-  const cleanDb = dbHwid.trim().toLowerCase()
-  const cleanReq = reqHwid.trim().toLowerCase()
-  if (cleanDb === cleanReq) return true
-
-  const normDb = cleanDb.replace(/^(android_id:|install_id:|boot_fallback:|hwid:|device:)/, '')
-  const normReq = cleanReq.replace(/^(android_id:|install_id:|boot_fallback:|hwid:|device:)/, '')
-  if (normDb === normReq) return true
-
-  if (normDb.length >= 12 && normReq.length >= 12) {
-    if (normDb.includes(normReq) || normReq.includes(normDb)) return true
-  }
-  return false
+  const normalize = (val: string) =>
+    val.trim().toLowerCase().replace(/^(android_id:|install_id:|boot_fallback:|hwid:|device:)/, '')
+  const normReq = normalize(reqHwid)
+  if (!normReq) return false
+  return dbHwid
+    .split('|')
+    .map((part) => normalize(part))
+    .filter(Boolean)
+    .some((part) => part === normReq)
 }
 
 // 3. PER-KEY VERIFICATION & HWID BINDING (STREAMER LOGIN)
@@ -532,16 +543,22 @@ export function areHwidsMatching(dbHwid?: string, reqHwid?: string): boolean {
 export async function verifyLicenseKey(
   keyInput: string,
   hwidInput?: string,
-  isWebConsole: boolean = true
+  isWebConsole: boolean = true,
+  appNameInput?: string,
+  appSecretInput?: string
 ): Promise<{
   valid: boolean
   key?: string
   game?: string
   plan?: string
   status?: string
+  isPaused?: boolean
+  deviceHwid?: string
   expiresAt?: string
   devicesUsed?: number
   devicesMax?: number
+  createdAt?: string
+  lastHeartbeat?: string
   isMaster?: boolean
   error?: string
 }> {
@@ -551,89 +568,36 @@ export async function verifyLicenseKey(
     return { valid: false, error: 'Master key login is disabled. Use a valid generated license key.' }
   }
 
-  // 1. Web Dashboard / Streamer Remote Console Login:
-  // The web dashboard is used to control telemetry & aim settings remotely — it is NOT a gaming client!
-  // It must verify license validity without checking HWID and without consuming a gaming device slot.
+  // 1. Web KeyAuth License & HWID Reset Portal Login (Unlocked for ALL registered/custom apps):
   if (isWebConsole && !hwidInput) {
     if (supabase) {
       try {
-        const { data: licRow, error: licErr } = await supabase
-          .from('rymon_licenses')
-          .select('*')
-          .eq('license_key', cleanKey)
-          .maybeSingle()
-
-        if (licRow && !licErr) {
-          if (licRow.status === 'BANNED') {
-            return { valid: false, error: 'License key has been banned by Administrator.' }
-          }
-          if (licRow.expires_at && new Date(licRow.expires_at).getTime() < Date.now()) {
-            return { valid: false, error: `License key expired on ${new Date(licRow.expires_at).toLocaleDateString()}` }
-          }
-
-          // Strict Cross-App Enforcement: Web Streamer Remote is exclusively for Free Fire MAX!
-          const licGame = (licRow.game || 'Free Fire MAX').trim()
-          const isFf = licGame.toLowerCase().includes('free fire') || ['universal', 'all', 'any', 'global'].includes(licGame.toLowerCase())
-          if (!isFf) {
+        const { data: webRes, error: webErr } = await supabase.rpc('rpc_rymon_verify_web_key', {
+          p_license_key: cleanKey
+        })
+        if (!webErr && webRes) {
+          if (webRes.valid) {
             return {
-              valid: false,
-              error: `App Mismatch: This key is registered for "${licGame}" (Pure KeyAuth). The Streamer Remote HUD is exclusively available for Free Fire MAX.`
+              valid: true,
+              key: webRes.key,
+              game: webRes.game || 'Free Fire MAX',
+              plan: webRes.plan || '30 Days',
+              status: webRes.status,
+              isPaused: Boolean(webRes.is_paused),
+              deviceHwid: webRes.device_hwid || '',
+              expiresAt: webRes.expires_at || undefined,
+              devicesUsed: webRes.devices_used || 0,
+              devicesMax: webRes.devices_max || 1,
+              createdAt: webRes.created_at || undefined,
+              lastHeartbeat: webRes.last_heartbeat || undefined
             }
           }
-
-          // Check if a streamer controls record already exists so we don't wipe toggle columns
-          const { data: existingCtrl } = await supabase
-            .from('rymon_streamer_controls')
-            .select('license_key')
-            .eq('license_key', licRow.license_key)
-            .maybeSingle()
-
-          if (existingCtrl) {
-            await supabase
-              .from('rymon_streamer_controls')
-              .update({
-                is_active: licRow.status !== 'BANNED' && licRow.status !== 'EXPIRED',
-                is_paused: Boolean(licRow.is_paused),
-                emergency_purge: false,
-                plan_duration: licRow.plan_duration,
-                creator: licRow.creator_username,
-                devices_max: licRow.devices_max || 1,
-                devices_used: licRow.devices_used || 0
-              })
-              .eq('license_key', licRow.license_key)
-          } else {
-            await supabase
-              .from('rymon_streamer_controls')
-              .insert(
-                buildDefaultStreamerControlPayload({
-                  license_key: licRow.license_key,
-                  game_name: licRow.game || 'Free Fire MAX',
-                  plan_duration: licRow.plan_duration || '1 Day',
-                  creator: licRow.creator_username,
-                  devices_max: licRow.devices_max || 1,
-                  devices_used: licRow.devices_used || 0,
-                  is_active: licRow.status !== 'BANNED' && licRow.status !== 'EXPIRED',
-                  is_paused: Boolean(licRow.is_paused),
-                  expires_at: licRow.expires_at || undefined
-                })
-              )
-          }
-
-          return {
-            valid: true,
-            key: licRow.license_key,
-            game: licRow.game || 'Free Fire MAX',
-            plan: licRow.plan_duration || '30 Days',
-            status: licRow.status,
-            expiresAt: licRow.expires_at || undefined,
-            devicesUsed: licRow.devices_used || 0,
-            devicesMax: licRow.devices_max || 1
-          }
+          return { valid: false, error: webRes.error || 'Invalid license key.' }
         }
       } catch {}
     }
 
-    // Local fallback check for offline / memory demo
+    // Local fallback check for offline / memory demo (supports any registered/custom app)
     const localLicenses = getStoredLicenses()
     const matched = localLicenses.find((l) => l.license_key.toUpperCase() === cleanKey)
     if (matched) {
@@ -643,41 +607,48 @@ export async function verifyLicenseKey(
       if (matched.expires_at && new Date(matched.expires_at).getTime() < Date.now()) {
         return { valid: false, error: 'License key has expired.' }
       }
-      const matchedGame = (matched.game || 'Free Fire MAX').trim()
-      const isFf = matchedGame.toLowerCase().includes('free fire') || ['universal', 'all', 'any', 'global'].includes(matchedGame.toLowerCase())
-      if (!isFf) {
-        return {
-          valid: false,
-          error: `App Mismatch: This key is registered for "${matchedGame}" (Pure KeyAuth). The Streamer Remote HUD is exclusively available for Free Fire MAX.`
-        }
-      }
       return {
         valid: true,
         key: matched.license_key,
-        game: matched.game,
+        game: matched.game || 'Free Fire MAX',
         plan: matched.plan_duration,
-        status: matched.status,
+        status: matched.is_paused ? 'PAUSED' : matched.status,
+        isPaused: Boolean(matched.is_paused),
+        deviceHwid: matched.device_hwid || '',
         expiresAt: matched.expires_at || undefined,
         devicesUsed: matched.devices_used,
-        devicesMax: matched.devices_max
+        devicesMax: matched.devices_max,
+        createdAt: matched.created_at,
+        lastHeartbeat: matched.last_heartbeat
       }
     }
 
     return { valid: false, error: 'Invalid license key. Check key string or generate a new key.' }
   }
 
-  // 2. Hardware Client Path (when hwidInput is explicitly provided, e.g. from APK / daemon)
+  // 2. Hardware Client Path (when hwidInput is explicitly provided, e.g. from external loader / client)
   if (!hwidInput || !hwidInput.trim()) {
     return { valid: false, error: 'Device HWID is required for hardware key verification.' }
   }
   const effectiveHwid = hwidInput.trim()
+  const effectiveApp = (appNameInput || '').trim()
+  const effectiveSecret = (appSecretInput || '').trim()
 
-  // A. Supabase RPC / Table Verification
+  if (!effectiveApp) {
+    return { valid: false, error: 'Application name (app) is required for hardware key verification.' }
+  }
+  if (!effectiveSecret) {
+    return { valid: false, error: 'App Secret (secret) is required for hardware key verification.' }
+  }
+
+  // A. Supabase RPC Verification
   if (supabase) {
     try {
       const { data, error } = await supabase.rpc('rpc_rymon_verify_license', {
         p_license_key: cleanKey,
-        p_hwid: effectiveHwid
+        p_hwid: effectiveHwid,
+        p_game: effectiveApp,
+        p_secret: effectiveSecret
       })
 
       if (!error && data) {
@@ -688,6 +659,7 @@ export async function verifyLicenseKey(
             game: data.game,
             plan: data.plan,
             status: data.status,
+            isPaused: Boolean(data.is_paused),
             expiresAt: data.expires_at,
             devicesUsed: data.devices_used,
             devicesMax: data.devices_max,
@@ -696,57 +668,8 @@ export async function verifyLicenseKey(
         }
         return { valid: false, error: data.error || 'License invalid' }
       }
-
-      // Direct Table query fallback
-      const { data: licRow, error: licErr } = await supabase
-        .from('rymon_licenses')
-        .select('*')
-        .eq('license_key', cleanKey)
-        .maybeSingle()
-
-      if (licRow && !licErr) {
-        if (licRow.status === 'BANNED') {
-          return { valid: false, error: 'License key has been banned by Administrator.' }
-        }
-        if (licRow.expires_at && new Date(licRow.expires_at).getTime() < Date.now()) {
-          return { valid: false, error: `License key expired on ${new Date(licRow.expires_at).toLocaleDateString()}` }
-        }
-        if (licRow.device_hwid && !areHwidsMatching(licRow.device_hwid, effectiveHwid) && licRow.devices_used >= licRow.devices_max) {
-          return { valid: false, error: 'HWID mismatch! Key is locked to another device. Reset via Telegram @Rymon007bot.' }
-        }
-
-        // Parse plan_duration to compute proper fallback expiry (not a hard-coded 30 days)
-        let fallbackMs = 30 * 86400000 // safe default
-        const pd = (licRow.plan_duration || '').toLowerCase()
-        if (pd.includes('2 hour')) fallbackMs = 2 * 3600000
-        else if (pd.includes('1 day')) fallbackMs = 1 * 86400000
-        else if (pd.includes('3 day')) fallbackMs = 3 * 86400000
-        else if (pd.includes('7 day')) fallbackMs = 7 * 86400000
-        else if (pd.includes('15 day')) fallbackMs = 15 * 86400000
-        else if (pd.includes('30 day')) fallbackMs = 30 * 86400000
-
-        const exp = licRow.expires_at || new Date(Date.now() + fallbackMs).toISOString()
-        await supabase
-          .from('rymon_licenses')
-          .update({
-            device_hwid: effectiveHwid,
-            devices_used: Math.max(1, licRow.devices_used),
-            status: 'ACTIVE',
-            expires_at: exp,
-            last_heartbeat: new Date().toISOString()
-          })
-          .eq('license_key', cleanKey)
-
-        return {
-          valid: true,
-          key: licRow.license_key,
-          game: licRow.game,
-          plan: licRow.plan_duration,
-          status: 'ACTIVE',
-          expiresAt: exp,
-          devicesUsed: Math.max(1, licRow.devices_used),
-          devicesMax: licRow.devices_max
-        }
+      if (error) {
+        return { valid: false, error: error.message || 'Verification service unavailable.' }
       }
     } catch {}
   }
@@ -758,6 +681,15 @@ export async function verifyLicenseKey(
   if (matched) {
     if (matched.status === 'BANNED') {
       return { valid: false, error: 'License key has been revoked/banned by administrator.' }
+    }
+    const localApps = getLocalRegisteredApps()
+    const expectedSec = getAppSecret(effectiveApp, localApps)
+    if (effectiveSecret !== expectedSec) {
+      return { valid: false, error: `Invalid App Secret for "${effectiveApp}".` }
+    }
+    const licGame = (matched.game || 'Free Fire MAX').trim()
+    if (!['UNIVERSAL', 'ALL', 'ANY', 'GLOBAL'].includes(licGame.toUpperCase()) && licGame.toLowerCase() !== effectiveApp.toLowerCase()) {
+      return { valid: false, error: `App Mismatch! This key is only valid for "${licGame}", not "${effectiveApp}".` }
     }
     if (matched.expires_at && new Date(matched.expires_at).getTime() < Date.now()) {
       return { valid: false, error: 'License key has expired.' }
@@ -797,22 +729,6 @@ export async function verifyLicenseKey(
   return { valid: false, error: 'Invalid license key. Check key string or generate a new key.' }
 }
 
-// ============================================================================
-// ASYNC & EVENT LOOP PERFORMANCE UTILITIES (Guide 2 & 3 Senior Dev Upgrades)
-// ============================================================================
-
-/**
- * Event Loop Cooperative Yielding:
- * Breaks long JavaScript tasks (> 50ms) and yields execution back to the browser's
- * Event Loop, preventing UI frame drops and keeping Interaction to Next Paint (INP) fast.
- */
-export async function yieldToMain(): Promise<void> {
-  if (typeof (globalThis as any).scheduler?.yield === 'function') {
-    return (globalThis as any).scheduler.yield()
-  }
-  return new Promise((resolve) => setTimeout(resolve, 0))
-}
-
 // In-flight Promise memoization for downline tree resolutions (saves network roundtrips)
 const downlinePromiseCache = new Map<string, { promise: Promise<Set<string>>; expires: number }>()
 
@@ -842,16 +758,11 @@ async function getDownlineUsernames(
 
     if (supabase) {
       try {
-        const { data, error } = await supabase.rpc('rpc_rymon_get_accounts')
+        const { data, error } = await supabase.rpc('rpc_rymon_get_accounts', {
+          p_session_token: getStoredSessionToken()
+        })
         if (!error && Array.isArray(data)) {
           accounts = data
-        } else {
-          const { data: tableData, error: tableErr } = await supabase
-            .from('rymon_accounts')
-            .select('username, uplink')
-          if (!tableErr && Array.isArray(tableData)) {
-            accounts = tableData
-          }
         }
       } catch {}
     }
@@ -965,38 +876,12 @@ export async function fetchAllLicenses(user?: RymonAccount | null): Promise<Rymo
 
       const { data: rpcRows, error: rpcErr } = await supabase.rpc('rpc_rymon_get_licenses', {
         p_actor_username: user?.username || 'debajoyti',
-        p_actor_password: ''
+        p_actor_password: '',
+        p_session_token: getStoredSessionToken()
       })
 
-      if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
+      if (!rpcErr && Array.isArray(rpcRows)) {
         allRows = rpcRows as RymonLicense[]
-      } else {
-        let tableQuery = supabase
-          .from('rymon_licenses')
-          .select('*')
-          .order('created_at', { ascending: false })
-
-        if (!isRootUser) {
-          if (user.role === 'reseller') {
-            tableQuery = tableQuery.ilike('creator_username', user.username)
-          } else if (user.role === 'admin' || user.role === 'owner') {
-            const allowedSet = await getDownlineUsernames(user.username, true)
-            const allowedArr = Array.from(allowedSet)
-            if (allowedArr.length > 0) {
-              tableQuery = tableQuery.in('creator_username', allowedArr)
-            } else {
-              tableQuery = tableQuery.ilike('creator_username', user.username)
-            }
-            if (user.role === 'owner') {
-              tableQuery = tableQuery.neq('creator_username', 'debajoyti')
-            }
-          }
-        }
-
-        const { data: tableRows, error: tableErr } = await tableQuery
-        if (!tableErr && Array.isArray(tableRows)) {
-          allRows = tableRows as RymonLicense[]
-        }
       }
 
       if (allRows && Array.isArray(allRows)) {
@@ -1043,89 +928,33 @@ export async function fetchAllAccounts(user?: RymonAccount | null): Promise<Rymo
   const max60DaysMs = nowMs + 60 * 86400000
   const default30DaysIso = new Date(nowMs + 30 * 86400000).toISOString()
   const max60DaysIso = new Date(max60DaysMs).toISOString()
-  const policy = getSovereignSecurityPolicy()
 
   const isRootUser = !user || user.username.toLowerCase() === 'debajoyti'
 
   const normalizeAccountSubscriptions = (rows: RymonAccount[]): RymonAccount[] => {
-    const expiredResellerUsernames: string[] = []
-    const mapped = rows.map((u) => {
+    return rows.map((u) => {
       if (u.role === 'owner') return u
       if (!u.expires_at) {
-        if (supabase && u.id && isRootUser) {
-          supabase
-            .from('rymon_accounts')
-            .update({ expires_at: default30DaysIso })
-            .eq('id', u.id)
-            .then(() => {}, () => {})
-        }
         return { ...u, expires_at: default30DaysIso }
       }
       const expMs = new Date(u.expires_at).getTime()
-      if (expMs <= nowMs) {
-        expiredResellerUsernames.push(u.username)
-      }
       if (expMs > max60DaysMs) {
-        if (supabase && u.id && isRootUser) {
-          supabase
-            .from('rymon_accounts')
-            .update({ expires_at: max60DaysIso })
-            .eq('id', u.id)
-            .then(() => {}, () => {})
-        }
         return { ...u, expires_at: max60DaysIso }
       }
       return u
     })
-
-    // Auto-pause active keys created by expired Resellers if policy is enabled (only Root founder fires writes)
-    if (isRootUser && policy.auto_pause_keys_on_reseller_expiry && expiredResellerUsernames.length > 0 && supabase) {
-      const nowIso = new Date().toISOString()
-      for (const expUser of expiredResellerUsernames) {
-        supabase
-          .from('rymon_licenses')
-          .update({ is_paused: true, status: 'PAUSED', updated_at: nowIso })
-          .ilike('creator_username', expUser)
-          .eq('status', 'ACTIVE')
-          .then(() => {}, () => {})
-        supabase
-          .from('rymon_streamer_controls')
-          .update({ is_paused: true, is_online: false, updated_at: nowIso })
-          .ilike('creator', expUser)
-          .eq('is_paused', false)
-          .then(() => {}, () => {})
-      }
-    }
-
-    return mapped
   }
 
   if (supabase) {
     try {
       let allRows: RymonAccount[] | null = null
 
-      // Primary Sovereign Path: Call rpc_rymon_get_accounts (SECURITY DEFINER, bypasses anon RLS block)
-      const { data: rpcRows, error: rpcErr } = await supabase.rpc('rpc_rymon_get_accounts')
-      if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
+      // Primary Sovereign Path: Call session-enforced rpc_rymon_get_accounts
+      const { data: rpcRows, error: rpcErr } = await supabase.rpc('rpc_rymon_get_accounts', {
+        p_session_token: getStoredSessionToken()
+      })
+      if (!rpcErr && Array.isArray(rpcRows)) {
         allRows = rpcRows as RymonAccount[]
-      } else {
-        // Fallback: direct table select
-        let accQuery = supabase
-          .from('rymon_accounts')
-          .select('id, username, email, role, balance, uplink, referral_code, status, expires_at, permissions')
-          .order('balance', { ascending: false })
-
-        if (user?.role === 'admin') {
-          const myName = (user.username || '').toLowerCase()
-          accQuery = accQuery.or(`username.ilike.${myName},uplink.ilike.${myName}`)
-        } else if (user?.role === 'owner' && !isRootUser) {
-          accQuery = accQuery.neq('username', 'debajoyti')
-        }
-
-        const { data, error } = await accQuery
-        if (!error && Array.isArray(data)) {
-          allRows = data as RymonAccount[]
-        }
       }
 
       if (allRows && Array.isArray(allRows)) {
@@ -1187,31 +1016,13 @@ export async function fetchAllActivities(user?: RymonAccount | null): Promise<Ry
   const userLower = String(user?.username || '').toLowerCase()
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from('rymon_activities')
-        .select('id, title, event_type, game, details, actor_username, status, created_at')
-        .order('created_at', { ascending: false })
-        .limit(30)
+      const { data, error } = await supabase.rpc('rpc_rymon_get_activities', {
+        p_session_token: getStoredSessionToken(),
+        p_limit: 30
+      })
 
       if (!error && Array.isArray(data)) {
-        const acts = data as RymonActivity[]
-        const isRootUser = !user || userLower === 'debajoyti'
-        if (isRootUser) {
-          return acts.slice(0, 30)
-        }
-        if (user.role === 'reseller') {
-          return acts
-            .filter((a) => (a.actor_username || '').toLowerCase() === userLower)
-            .slice(0, 20)
-        }
-        // Partner Owner (RYZEN) or Admin: only see activities from self + downline tree
-        const allowedDownlines = await getDownlineUsernames(user.username || '', true)
-        return acts
-          .filter((a) => {
-            const actor = (a.actor_username || '').toLowerCase()
-            return actor !== 'debajoyti' && allowedDownlines.has(actor)
-          })
-          .slice(0, 30)
+        return data as RymonActivity[]
       }
     } catch {}
   }
@@ -1376,10 +1187,7 @@ export function saveGlobalPriceMap(prices: Record<string, number>): Record<strin
     localStorage.setItem(GLOBAL_PRICE_STORAGE_KEY, JSON.stringify(clean))
   } catch {}
   if (supabase) {
-    supabase
-      .from('rymon_system_config')
-      .upsert({ key: 'global_key_prices', value: clean, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-      .then(() => {}, () => {})
+    void setSystemConfigRemote('global_key_prices', clean)
   }
   return clean
 }
@@ -1421,31 +1229,23 @@ export function saveUserCustomPriceMap(
   } catch {}
   const sb = supabase
   if (sb) {
-    // 1. Direct upsert
-    sb
-      .from('rymon_system_config')
-      .upsert({ key: 'user_custom_prices', value: all, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-      .then(() => {}, () => {})
-
-    // 2. Multi-client safe merge: fetch latest from DB and re-upsert with this user's rate merged
     sb
       .from('rymon_system_config')
       .select('value')
       .eq('key', 'user_custom_prices')
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
-        if (data?.value && typeof data.value === 'object') {
-          const freshFromDb = (data.value as Record<string, Record<string, number>>) || {}
-          const merged = { ...freshFromDb, [existingKey]: cleanMap }
-          try {
-            localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(merged))
-          } catch {}
-          sb
-            .from('rymon_system_config')
-            .upsert({ key: 'user_custom_prices', value: merged, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-            .then(() => {}, () => {})
-        }
-      }, () => {})
+        const freshFromDb = (data?.value && typeof data.value === 'object'
+          ? data.value
+          : all) as Record<string, Record<string, number>>
+        const merged = { ...freshFromDb, [existingKey]: cleanMap }
+        try {
+          localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(merged))
+        } catch {}
+        void setSystemConfigRemote('user_custom_prices', merged)
+      }, () => {
+        void setSystemConfigRemote('user_custom_prices', all)
+      })
   }
   return cleanMap
 }
@@ -1464,29 +1264,23 @@ export function clearUserCustomPriceMap(username: string): void {
     if (sb) {
       sb
         .from('rymon_system_config')
-        .upsert({ key: 'user_custom_prices', value: all, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-        .then(() => {}, () => {})
-
-      sb
-        .from('rymon_system_config')
         .select('value')
         .eq('key', 'user_custom_prices')
-        .single()
+        .maybeSingle()
         .then(({ data }) => {
-          if (data?.value && typeof data.value === 'object') {
-            const freshFromDb = { ...(data.value as Record<string, Record<string, number>>) }
-            delete freshFromDb[existingKey]
-            const lowerMatch = Object.keys(freshFromDb).find((u) => u.toLowerCase() === username.trim().toLowerCase())
-            if (lowerMatch) delete freshFromDb[lowerMatch]
-            try {
-              localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(freshFromDb))
-            } catch {}
-            sb
-              .from('rymon_system_config')
-              .upsert({ key: 'user_custom_prices', value: freshFromDb, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-              .then(() => {}, () => {})
+          const freshFromDb = {
+            ...((data?.value && typeof data.value === 'object' ? data.value : all) as Record<string, Record<string, number>>)
           }
-        }, () => {})
+          delete freshFromDb[existingKey]
+          const lowerMatch = Object.keys(freshFromDb).find((u) => u.toLowerCase() === username.trim().toLowerCase())
+          if (lowerMatch) delete freshFromDb[lowerMatch]
+          try {
+            localStorage.setItem(USER_CUSTOM_PRICE_STORAGE_KEY, JSON.stringify(freshFromDb))
+          } catch {}
+          void setSystemConfigRemote('user_custom_prices', freshFromDb)
+        }, () => {
+          void setSystemConfigRemote('user_custom_prices', all)
+        })
     }
   }
 }
@@ -1539,6 +1333,7 @@ export async function generateLicenseKeyBackend(params: {
   keys?: string[]
   remainingBalance?: number
   license?: RymonLicense
+  authError?: boolean
   error?: string
 }> {
   const { creator, game, duration: rawDuration, customPrefix, devicesMax = 1, quantity = 1 } = params
@@ -1557,7 +1352,7 @@ export async function generateLicenseKeyBackend(params: {
     35
 
   const isFf = !game || game.toLowerCase().includes('free fire')
-  const isRealtime = isFf && params.isVipRealtime !== false
+  const isRealtime = false
   const policy = getSovereignSecurityPolicy()
 
   // 1A. Exclusive Permission Enforcement: Custom App Generation (Debajoyti Authorization Engine)
@@ -1636,8 +1431,8 @@ export async function generateLicenseKeyBackend(params: {
   const generatedKeys: string[] = []
   const usedSet = new Set<string>()
   while (generatedKeys.length < safeQuantity) {
-    const b1 = Math.random().toString(36).substring(2, 6).toUpperCase()
-    const b2 = Math.random().toString(36).substring(2, 6).toUpperCase()
+    const b1 = generateCryptoCodeSegment(4)
+    const b2 = generateCryptoCodeSegment(4)
     const candidate = `${prefix}-${gameTag}-${b1}-${b2}`
     if (!usedSet.has(candidate)) {
       usedSet.add(candidate)
@@ -1646,18 +1441,18 @@ export async function generateLicenseKeyBackend(params: {
   }
   const newKey = generatedKeys[0]
 
-  // A. Direct Supabase Database Transaction (Respects Dynamic Default & Individual User Pricing)
+  // A. Direct Supabase Database Transaction (Session-enforced + Atomic wallet deduction)
   if (supabase) {
     try {
-      const isRealtime = params.isVipRealtime !== false
-      const effectivePlanDuration = isRealtime ? `${duration} [VIP]` : duration
+      const effectivePlanDuration = duration
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_generate_key', {
         p_creator_username: creator.username,
         p_game: game,
         p_plan: effectivePlanDuration,
         p_custom_prefix: prefix,
         p_devices_max: safeDevices,
-        p_quantity: safeQuantity
+        p_quantity: safeQuantity,
+        p_session_token: getStoredSessionToken()
       })
 
       if (rpcErr) {
@@ -1666,7 +1461,11 @@ export async function generateLicenseKeyBackend(params: {
 
       if (rpcRes) {
         if (!rpcRes.success) {
-          return { success: false, error: rpcRes.error || 'Failed to generate key.' }
+          return {
+            success: false,
+            authError: Boolean(rpcRes.auth_error),
+            error: rpcRes.error || 'Failed to generate key.'
+          }
         }
 
         const remainingBalance = rpcRes.remaining_balance !== undefined ? Number(rpcRes.remaining_balance) : undefined
@@ -1733,8 +1532,7 @@ export async function generateLicenseKeyBackend(params: {
     }
   }
 
-  const isRealtimeFallback = isFf && params.isVipRealtime !== false
-  const effectivePlanDurationFallback = isRealtimeFallback ? `${duration} [VIP]` : duration
+  const effectivePlanDurationFallback = duration
 
   const newLics: RymonLicense[] = generatedKeys.map((k, idx) => ({
     id: Math.floor(38508 + Math.random() * 1000) + idx,
@@ -1802,13 +1600,15 @@ export async function topUpUserBalanceBackend(
 
   if (supabase) {
     try {
+      const sessionToken = getStoredSessionToken()
       const { data: targetResp } = await supabase.rpc('rpc_rymon_get_account', {
-        p_username: cleanTarget
+        p_username: cleanTarget,
+        p_session_token: sessionToken
       })
       const targetUser = targetResp?.found ? targetResp : null
 
       if (!targetUser) {
-        return { success: false, error: `User @${cleanTarget} not found in database.` }
+        return { success: false, error: targetResp?.error || `User @${cleanTarget} not found in database.` }
       }
 
       if (amount < 0 || (!isRootOwner && amount <= 0) || (mode === 'add' && amount <= 0)) {
@@ -1829,7 +1629,8 @@ export async function topUpUserBalanceBackend(
         p_sender_username: cleanActor,
         p_target_username: cleanTarget,
         p_amount: amount,
-        p_mode: isRootOwner ? mode : 'add'
+        p_mode: isRootOwner ? mode : 'add',
+        p_session_token: sessionToken
       })
 
       if (rpcErr) {
@@ -1912,107 +1713,6 @@ export async function topUpUserBalanceBackend(
 }
 
 // ============================================================================
-// 6A. RAZORPAY WALLET TOP-UP (Self-Service — Any logged-in user)
-// ============================================================================
-const RENDER_BASE_URL = 'https://rymon-telegram-bot.onrender.com'
-
-export async function razorpayAddFunds(
-  username: string,
-  amountInRupees: number,
-  userEmail: string = ''
-): Promise<void> {
-  if (!username || amountInRupees < 1) {
-    throw new Error('Invalid username or amount.')
-  }
-
-  // Step 1: Create Razorpay order on server (keeps KEY_SECRET off frontend)
-  const orderRes = await fetch(`${RENDER_BASE_URL}/api/payment/create-order`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: amountInRupees, username })
-  })
-  const orderData = await orderRes.json()
-  if (!orderData.ok) {
-    throw new Error(orderData.error || 'Failed to create payment order.')
-  }
-
-  const { order_id, amount: orderAmountPaise, currency } = orderData
-
-  // Step 2: Open Razorpay checkout popup
-  return new Promise((resolve, reject) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const Razorpay = (window as any).Razorpay
-    if (!Razorpay) {
-      reject(new Error('Razorpay SDK not loaded. Please refresh the page.'))
-      return
-    }
-
-    const rzp = new Razorpay({
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: orderAmountPaise,
-      currency: currency || 'INR',
-      name: 'RYMON SOVEREIGN',
-      description: `Wallet Top-Up — @${username}`,
-      image: '/logo.png',
-      order_id,
-      prefill: {
-        name: username,
-        email: userEmail || `${username}@greenvest.shop`,
-        contact: ''
-      },
-      notes: { username },
-      theme: { color: '#00d9ff' },
-      modal: {
-        ondismiss: () => {
-          reject(new Error('Payment cancelled by user.'))
-        }
-      },
-      handler: async (response: {
-        razorpay_order_id: string
-        razorpay_payment_id: string
-        razorpay_signature: string
-      }) => {
-        try {
-          // Step 3: Verify signature server-side and credit wallet
-          const verifyRes = await fetch(`${RENDER_BASE_URL}/api/payment/verify`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              username,
-              amount: amountInRupees
-            })
-          })
-          const verifyData = await verifyRes.json()
-          if (!verifyData.ok) {
-            reject(new Error(verifyData.error || 'Payment verification failed.'))
-            return
-          }
-
-          // Update cached session balance
-          try {
-            const raw = localStorage.getItem('rymon_session_user')
-            if (raw) {
-              const u = JSON.parse(raw)
-              u.balance = verifyData.new_balance ?? ((u.balance || 0) + amountInRupees)
-              localStorage.setItem('rymon_session_user', JSON.stringify(u))
-            }
-          } catch { /* non-critical */ }
-
-          resolve()
-        } catch (err) {
-          reject(err instanceof Error ? err : new Error('Payment verification error.'))
-        }
-      }
-    })
-    rzp.open()
-  })
-}
-
-
-// ============================================================================
 export interface SovereignSecurityPolicy {
   client_hwid_limit_per_day: number // 0 = Disabled, default 1 per key per 24h for end-customers
   allow_client_self_reset: boolean // default true
@@ -2092,13 +1792,7 @@ export function saveSovereignSecurityPolicy(
     localStorage.setItem(SECURITY_POLICY_STORAGE_KEY, JSON.stringify(next))
   } catch {}
   if (supabase) {
-    supabase
-      .from('rymon_system_config')
-      .upsert(
-        { key: 'sovereign_security_policy', value: next, updated_at: new Date().toISOString() },
-        { onConflict: 'key' }
-      )
-      .then(() => {}, () => {})
+    void setSystemConfigRemote('sovereign_security_policy', next)
   }
   return next
 }
@@ -2157,13 +1851,7 @@ function savePausedKeyTimestamps(map: Record<string, number>): void {
     localStorage.setItem(PAUSED_TIMESTAMPS_STORAGE_KEY, JSON.stringify(map))
   } catch {}
   if (supabase) {
-    supabase
-      .from('rymon_system_config')
-      .upsert(
-        { key: 'paused_key_timestamps', value: map, updated_at: new Date().toISOString() },
-        { onConflict: 'key' }
-      )
-      .then(() => {}, () => {})
+    void setSystemConfigRemote('paused_key_timestamps', map)
   }
 }
 
@@ -2184,13 +1872,7 @@ function saveHwidResetLog(map: Record<string, number[]>): void {
     localStorage.setItem(HWID_RESET_LOG_STORAGE_KEY, JSON.stringify(map))
   } catch {}
   if (supabase) {
-    supabase
-      .from('rymon_system_config')
-      .upsert(
-        { key: 'hwid_reset_daily_log', value: map, updated_at: new Date().toISOString() },
-        { onConflict: 'key' }
-      )
-      .then(() => {}, () => {})
+    void setSystemConfigRemote('hwid_reset_daily_log', map)
   }
 }
 
@@ -2223,14 +1905,15 @@ export async function resetUserPasswordBackend(
 
   if (supabase) {
     try {
-      const { data: targetAcc } = await supabase
-        .from('rymon_accounts')
-        .select('*')
-        .ilike('username', cleanTarget)
-        .maybeSingle()
+      const sessionToken = getStoredSessionToken()
+      const { data: targetResp } = await supabase.rpc('rpc_rymon_get_account', {
+        p_username: cleanTarget,
+        p_session_token: sessionToken
+      })
+      const targetAcc = targetResp?.found ? targetResp : null
 
       if (!targetAcc) {
-        return { success: false, message: `User @${cleanTarget} not found.` }
+        return { success: false, message: targetResp?.error || `User @${cleanTarget} not found.` }
       }
 
       if (!isRootOwner) {
@@ -2243,40 +1926,20 @@ export async function resetUserPasswordBackend(
         }
       }
 
-      // Use server-side RPC to hash password (SHA-256) — never store plaintext
+      // Server-side Salted Bcrypt & session enforcement
       const { data: rpcResult, error: updErr } = await supabase.rpc('rpc_rymon_reset_password', {
         p_target_username: targetAcc.username,
         p_new_password: cleanPass,
-        p_actor_username: cleanActor
+        p_actor_username: cleanActor,
+        p_session_token: sessionToken
       })
 
-      // Fallback: if RPC doesn't exist yet, hash client-side with SubtleCrypto then store
-      if (updErr && updErr.message?.includes('function') && updErr.message?.includes('does not exist')) {
-        const encoder = new TextEncoder()
-        const data = encoder.encode(cleanPass)
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-        const hashArray = Array.from(new Uint8Array(hashBuffer))
-        const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
-        const { error: fallbackErr } = await supabase
-          .from('rymon_accounts')
-          .update({ password_hash: hashHex, updated_at: new Date().toISOString() })
-          .eq('id', targetAcc.id)
-        if (fallbackErr) {
-          return { success: false, message: fallbackErr.message }
-        }
-      } else if (updErr) {
+      if (updErr) {
         return { success: false, message: updErr.message }
-      } else if (rpcResult && !rpcResult.success) {
+      }
+      if (rpcResult && !rpcResult.success) {
         return { success: false, message: rpcResult.message || 'Password reset failed.' }
       }
-
-      await supabase.from('rymon_activities').insert({
-        title: 'User Password Reset',
-        event_type: 'PASSWORD_RESET',
-        details: `Password reset for @${targetAcc.username} (${String(targetAcc.role).toUpperCase()}) by @${cleanActor}`,
-        actor_username: cleanActor,
-        status: 'SUCCESS'
-      })
 
       return {
         success: true,
@@ -2318,7 +1981,8 @@ export async function updateUserPermissionsBackend(
       const { data, error } = await supabase.rpc('rpc_rymon_update_permissions', {
         p_username: cleanTarget,
         p_permissions: permissions || {},
-        p_actor_username: cleanActor
+        p_actor_username: cleanActor,
+        p_session_token: getStoredSessionToken()
       })
       if (!error && data?.success) {
         return { success: true }
@@ -2375,7 +2039,8 @@ export async function renewUserSubscriptionBackend(
         p_target_username: cleanTarget,
         p_days: safeDays,
         p_actor_username: cleanActor,
-        p_fee: adminFee
+        p_fee: adminFee,
+        p_session_token: getStoredSessionToken()
       })
 
       if (rpcErr) {
@@ -2510,44 +2175,29 @@ export async function resetHwidBackend(
 
   if (supabase) {
     try {
-      const { data: existing } = await supabase
-        .from('rymon_licenses')
-        .select('expires_at, status, is_paused, creator_username')
-        .eq('license_key', cleanKey)
-        .maybeSingle()
-
-      if (!isRootOwner && existing) {
-        const creator = (existing.creator_username || '').toLowerCase()
-        const allowedDownlines = await getDownlineUsernames(cleanActor, true)
-        if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
-          return {
-            success: false,
-            message: 'Permission Denied: Cannot reset HWID on keys outside your downline.'
-          }
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_reset_hwid', {
+        p_license_key: cleanKey,
+        p_actor_username: cleanActor,
+        p_session_token: getStoredSessionToken()
+      })
+      if (rpcErr) {
+        return { success: false, message: rpcErr.message || 'Database error resetting HWID.' }
+      }
+      if (rpcRes && !rpcRes.success) {
+        return {
+          success: false,
+          remainingResets: rpcRes.remaining_resets ?? 0,
+          message: rpcRes.message || 'HWID reset denied.'
         }
       }
-
-      const nextStatus = existing?.is_paused
-        ? 'PAUSED'
-        : existing?.expires_at
-        ? 'ACTIVE'
-        : 'WAITING'
-
-      await supabase
-        .from('rymon_licenses')
-        .update({ device_hwid: '', devices_used: 0, status: nextStatus, updated_at: new Date().toISOString() })
-        .eq('license_key', cleanKey)
-      await supabase
-        .from('rymon_streamer_controls')
-        .update({ device_hwid: '', devices_used: 0, is_online: false, updated_at: new Date().toISOString() })
-        .eq('license_key', cleanKey)
-      await supabase.from('rymon_activities').insert({
-        title: 'HWID Reset',
-        event_type: 'HWID_RESET',
-        details: `Device binding cleared for ${cleanKey} by @${cleanActor}`,
-        actor_username: cleanActor,
-        status: 'SUCCESS'
-      })
+      if (rpcRes?.remaining_resets !== undefined && rpcRes.remaining_resets !== null) {
+        const srvRemaining = Number(rpcRes.remaining_resets)
+        return {
+          success: true,
+          remainingResets: srvRemaining,
+          message: `🔄 HWID cleared for ${cleanKey}! (${srvRemaining}/${dailyLimit} daily resets remaining today)`
+        }
+      }
     } catch {}
   }
 
@@ -2590,23 +2240,16 @@ export async function deleteLicenseBackend(
 
   if (supabase) {
     try {
-      if (!isRootOwner) {
-        const { data: lic } = await supabase
-          .from('rymon_licenses')
-          .select('creator_username')
-          .eq('license_key', cleanKey)
-          .maybeSingle()
-
-        const creator = (lic?.creator_username || '').toLowerCase()
-        const allowedDownlines = await getDownlineUsernames(cleanActor, true)
-        if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
-          return false
-        }
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_delete_single_key', {
+        p_license_key: cleanKey,
+        p_session_token: getStoredSessionToken()
+      })
+      if (rpcErr || (rpcRes && !rpcRes.success)) {
+        return false
       }
-
-      await supabase.from('rymon_licenses').delete().eq('license_key', cleanKey)
-      await supabase.from('rymon_streamer_controls').delete().eq('license_key', cleanKey)
-    } catch {}
+    } catch {
+      return false
+    }
   }
 
   const licenses = getStoredLicenses()
@@ -2647,16 +2290,16 @@ export async function deleteAccountBackend(
     return { success: false, error: 'Unauthorized: Only Owner or Admin can delete accounts.' }
   }
 
-  // 1. Fetch Target Account
+  // 1. Fetch Target Account via authenticated RPC
+  const sessionToken = getStoredSessionToken()
   let targetRow: RymonAccount | null = null
   if (supabase) {
     try {
-      const { data } = await supabase
-        .from('rymon_accounts')
-        .select('*')
-        .ilike('username', cleanTarget)
-        .maybeSingle()
-      if (data) targetRow = data as RymonAccount
+      const { data } = await supabase.rpc('rpc_rymon_get_account', {
+        p_username: cleanTarget,
+        p_session_token: sessionToken
+      })
+      if (data?.found) targetRow = data as RymonAccount
     } catch {}
   }
   if (!targetRow) {
@@ -2683,28 +2326,20 @@ export async function deleteAccountBackend(
     }
   }
 
-  // 3. Supabase Deletion
+  // 3. Supabase Deletion via session-authenticated SECURITY DEFINER RPC
   if (supabase) {
     try {
-      // 1. Primary Sovereign Path: Call rpc_rymon_delete_account (SECURITY DEFINER)
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_delete_account', {
         p_target_username: cleanTarget,
-        p_actor_username: actor?.username || cleanActor || 'debajoyti'
+        p_actor_username: actor?.username || cleanActor || 'debajoyti',
+        p_session_token: sessionToken
       })
 
-      if (!rpcErr && rpcRes) {
-        if (!rpcRes.success) {
-          return { success: false, error: rpcRes.error || 'Failed to delete account' }
-        }
-      } else {
-        const { error: delErr } = await supabase
-          .from('rymon_accounts')
-          .delete()
-          .ilike('username', cleanTarget)
-
-        if (delErr) {
-          return { success: false, error: delErr.message }
-        }
+      if (rpcErr) {
+        return { success: false, error: rpcErr.message || 'Database deletion error' }
+      }
+      if (rpcRes && !rpcRes.success) {
+        return { success: false, error: rpcRes.error || 'Failed to delete account' }
       }
     } catch (e: any) {
       return { success: false, error: e?.message || 'Database deletion error' }
@@ -2733,49 +2368,18 @@ export async function bulkDeleteKeysBackend(
 
   if (supabase) {
     try {
-      const { data: allRows } = await supabase
-        .from('rymon_licenses')
-        .select('license_key, creator_username, status, devices_used, expires_at')
-
-      if (allRows && allRows.length > 0) {
-        let allowedCreators: Set<string> | null = null
-        if (!isRootOwner) {
-          allowedCreators = await getDownlineUsernames(cleanActor, true)
-          allowedCreators.delete('debajoyti')
-        }
-
-        const nowMs = Date.now()
-        const keysToDelete = allRows
-          .filter((r) => {
-            const cName = (r.creator_username || '').toLowerCase()
-            if (allowedCreators && !allowedCreators.has(cName)) return false
-            if (!isAllScope && cName !== cleanTarget.toLowerCase()) return false
-
-            if (keyType === 'expired') {
-              return r.status === 'EXPIRED' || Boolean(r.expires_at && new Date(r.expires_at).getTime() < nowMs)
-            }
-            if (keyType === 'unused') {
-              return r.status === 'WAITING' && Number(r.devices_used || 0) === 0
-            }
-            // keyType === 'all': Root Owner can delete all; Admin/Reseller can delete all of their own/team keys
-            return true
-          })
-          .map((r) => r.license_key)
-
-        if (keysToDelete.length > 0) {
-          await supabase.from('rymon_licenses').delete().in('license_key', keysToDelete)
-          await supabase.from('rymon_streamer_controls').delete().in('license_key', keysToDelete)
-          await supabase.from('rymon_activities').insert({
-            title: `Keys Purged (${keyType.toUpperCase()})`,
-            event_type: 'CLEANUP',
-            details: `Purged ${keysToDelete.length} ${keyType} key(s) (${isAllScope ? 'All Scoped Keys' : `@${cleanTarget}`})`,
-            actor_username: cleanActor,
-            status: 'SUCCESS'
-          })
-        }
-        return keysToDelete.length
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_bulk_delete_keys', {
+        p_creator_username: cleanTarget,
+        p_key_type: keyType,
+        p_session_token: getStoredSessionToken()
+      })
+      if (!rpcErr && rpcRes?.success) {
+        return Number(rpcRes.count || 0)
       }
-    } catch {}
+      return 0
+    } catch {
+      return 0
+    }
   }
 
   const licenses = getStoredLicenses()
@@ -2820,66 +2424,23 @@ export async function toggleBanStatusBackend(
 
   if (supabase) {
     try {
-      if (type === 'user') {
-        const { data: targetAcc } = await supabase
-          .from('rymon_accounts')
-          .select('*')
-          .ilike('username', cleanTarget)
-          .maybeSingle()
-
-        if (!targetAcc) {
-          return { success: false, message: `User @${cleanTarget} not found.` }
-        }
-
-        if (!isRootOwner) {
-          const allowedDownlines = await getDownlineUsernames(cleanActor, false)
-          if (!allowedDownlines.has(String(targetAcc?.username || '').toLowerCase())) {
-            return {
-              success: false,
-              message: 'Power restriction: You can only Ban/Unban accounts in your downline.'
-            }
-          }
-        }
-
-        await supabase
-          .from('rymon_accounts')
-          .update({ status, updated_at: new Date().toISOString() })
-          .eq('id', targetAcc.id)
-      } else {
-        const cleanKey = cleanTarget.toUpperCase()
-        if (!isRootOwner) {
-          const { data: lic } = await supabase
-            .from('rymon_licenses')
-            .select('creator_username')
-            .eq('license_key', cleanKey)
-            .maybeSingle()
-          const creator = (lic?.creator_username || '').toLowerCase()
-          const allowedDownlines = await getDownlineUsernames(cleanActor, true)
-          if (creator === 'debajoyti' || !allowedDownlines.has(creator)) {
-            return {
-              success: false,
-              message: 'Permission Denied: You can only ban keys generated in your downline.'
-            }
-          }
-        }
-        await supabase
-          .from('rymon_licenses')
-          .update({ status, updated_at: new Date().toISOString() })
-          .eq('license_key', cleanKey)
-        await supabase
-          .from('rymon_streamer_controls')
-          .update({ is_active: !isBan, updated_at: new Date().toISOString() })
-          .eq('license_key', cleanKey)
-      }
-      await supabase.from('rymon_activities').insert({
-        title: `Status Change (${isBan ? 'BAN' : 'UNBAN'})`,
-        event_type: 'MODERATION',
-        details: `${type} ${cleanTarget} marked as ${status} by @${cleanActor}`,
-        actor_username: cleanActor,
-        status: 'SUCCESS'
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_ban_unban', {
+        p_target: cleanTarget,
+        p_type: type,
+        p_action: isBan ? 'ban' : 'unban',
+        p_actor_username: cleanActor,
+        p_session_token: getStoredSessionToken()
       })
-      return { success: true, message: `${cleanTarget} has been ${isBan ? 'BANNED' : 'UNBANNED'}.` }
-    } catch {}
+      if (rpcErr) {
+        return { success: false, message: rpcErr.message || 'Moderation failed.' }
+      }
+      if (rpcRes && !rpcRes.success) {
+        return { success: false, message: rpcRes.message || 'Moderation denied.' }
+      }
+      return { success: true, message: rpcRes?.message || `${cleanTarget} has been ${status}.` }
+    } catch (e: any) {
+      return { success: false, message: e?.message || 'Database error during moderation.' }
+    }
   }
 
   if (type === 'user') {
@@ -2942,7 +2503,8 @@ export async function extendLicenseBackend(
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_extend_key', {
         p_license_key: cleanKey,
         p_days: days,
-        p_actor_username: cleanActor
+        p_actor_username: cleanActor,
+        p_session_token: getStoredSessionToken()
       })
 
       if (rpcErr) {
@@ -3071,7 +2633,8 @@ export async function togglePauseLicenseBackend(
     try {
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_toggle_pause_key', {
         p_license_key: cleanKey,
-        p_requester: requesterUsername || 'debajoyti'
+        p_requester: requesterUsername || 'debajoyti',
+        p_session_token: getStoredSessionToken()
       })
       if (!rpcErr && rpcRes && typeof rpcRes === 'object') {
         const res = rpcRes as {
@@ -3292,7 +2855,8 @@ export async function bulkTogglePauseAllKeysBackend(
       const { data: bulkRes, error: bulkErr } = await supabase.rpc('rpc_rymon_bulk_pause_keys', {
         p_pause_state: pauseState,
         p_actor_username: actorUsername || 'debajoyti',
-        p_creator_filter: creatorFilter || null
+        p_creator_filter: creatorFilter || null,
+        p_session_token: getStoredSessionToken()
       })
       if (!bulkErr && bulkRes && typeof bulkRes === 'object') {
         const res = bulkRes as { success: boolean; count: number; message: string }
@@ -3446,29 +3010,23 @@ export async function bulkResetAllHwidBackend(
 
   if (supabase) {
     try {
-      let licQuery = supabase
-        .from('rymon_licenses')
-        .update({ device_hwid: '', devices_used: 0, updated_at: nowIso })
-        .neq('status', 'BANNED')
-      if (creatorFilter) {
-        licQuery = licQuery.ilike('creator_username', creatorFilter)
-      } else if (allowedCreators) {
-        licQuery = licQuery.in('creator_username', Array.from(allowedCreators))
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_bulk_reset_hwid', {
+        p_creator_filter: creatorFilter || null,
+        p_session_token: getStoredSessionToken()
+      })
+      if (rpcErr || (rpcRes && !rpcRes.success)) {
+        return {
+          success: false,
+          message: rpcErr?.message || rpcRes?.message || 'Permission Denied: Failed to reset HWIDs.'
+        }
       }
-      await licQuery
-
-      let ctrlQuery = supabase
-        .from('rymon_streamer_controls')
-        .update({ device_hwid: '', devices_used: 0, is_online: false, updated_at: nowIso })
-      if (creatorFilter) {
-        ctrlQuery = ctrlQuery.ilike('creator', creatorFilter)
-      } else if (allowedCreators) {
-        ctrlQuery = ctrlQuery.in('creator', Array.from(allowedCreators))
-      } else {
-        ctrlQuery = ctrlQuery.neq('license_key', '')
+      return {
+        success: true,
+        message: rpcRes?.message || 'All scoped hardware ID (HWID) bindings have been reset.'
       }
-      await ctrlQuery
-    } catch {}
+    } catch (e: any) {
+      return { success: false, message: e?.message || 'Database error during bulk HWID reset.' }
+    }
   }
 
   const stored = getStoredLicenses()
@@ -3530,7 +3088,8 @@ export async function bulkExtendAllKeysBackend(
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_bulk_extend_keys', {
         p_days: days,
         p_actor_username: cleanActor,
-        p_creator_filter: creatorFilter || null
+        p_creator_filter: creatorFilter || null,
+        p_session_token: getStoredSessionToken()
       })
 
       if (rpcErr) {
@@ -3667,7 +3226,8 @@ export async function grantBonusTimeToKeyBackend(
       const { data, error } = await supabase.rpc('rpc_rymon_grant_bonus_time', {
         p_license_key: cleanKey,
         p_bonus_hours: bonusHours,
-        p_actor_username: cleanActor
+        p_actor_username: cleanActor,
+        p_session_token: getStoredSessionToken()
       })
       if (!error && data && typeof data === 'object') {
         const res = data as {
@@ -3729,7 +3289,8 @@ export async function bulkGrantBonusTimeBackend(
       const { data, error } = await supabase.rpc('rpc_rymon_bulk_grant_bonus_time', {
         p_bonus_hours: bonusHours,
         p_actor_username: cleanActor,
-        p_creator_filter: creatorFilter || null
+        p_creator_filter: creatorFilter || null,
+        p_session_token: getStoredSessionToken()
       })
       if (!error && data && typeof data === 'object') {
         const res = data as { success: boolean; count: number; message: string }
@@ -3827,7 +3388,7 @@ export const OFFICIAL_OWNER_CHAT_ID = '5831800759'
 export async function selfServiceResetKeyHwidBackend(
   rawKey: string,
   isOwnerOverride: boolean = false,
-  actorLabel: string = 'Customer'
+  _actorLabel: string = 'Customer'
 ): Promise<{
   success: boolean
   message: string
@@ -3843,7 +3404,6 @@ export async function selfServiceResetKeyHwidBackend(
   const DAILY_LIMIT = Math.max(1, clientLimit)
   const DAY_WINDOW_MS = 86400000
   const nowMs = Date.now()
-  const nowIso = new Date(nowMs).toISOString()
 
   if (!isOwnerOverride && !isClientResetAllowed) {
     return {
@@ -3867,24 +3427,64 @@ export async function selfServiceResetKeyHwidBackend(
     }
   }
 
-  // 1. Fetch key from Supabase (or local fallback)
-  let licRecord: RymonLicense | null = null
+  // Primary Sovereign RPC Path (atomic limit + HWID clear + audit log)
   if (supabase) {
     try {
-      const { data } = await supabase
-        .from('rymon_licenses')
-        .select('*')
-        .ilike('license_key', cleanKey)
-        .maybeSingle()
-      if (data) licRecord = data as RymonLicense
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_self_reset_hwid', {
+        p_license_key: cleanKey,
+        p_session_token: isOwnerOverride ? getStoredSessionToken() : ''
+      })
+      if (!rpcErr && rpcRes) {
+        if (!rpcRes.success) {
+          return {
+            success: false,
+            message: rpcRes.message || `Failed to reset ${cleanKey}.`,
+            htmlReply: `❌ <b>HWID Reset Rejected:</b> ${rpcRes.message || 'Unable to reset key.'}`,
+            remainingResets: Number(rpcRes.remainingResets ?? 0),
+            usedToday: Number(rpcRes.usedToday ?? DAILY_LIMIT),
+            dailyLimit: Number(rpcRes.dailyLimit ?? DAILY_LIMIT)
+          }
+        }
+        const exactKey = String(rpcRes.key || cleanKey).toUpperCase()
+        const usedToday = Number(rpcRes.usedToday ?? 0)
+        const remainingResets = Number(rpcRes.remainingResets ?? DAILY_LIMIT)
+        const effectiveLimit = Number(rpcRes.dailyLimit ?? DAILY_LIMIT)
+        const overrideDone = Boolean(rpcRes.isOverride)
+        const htmlReply = overrideDone
+          ? [
+              `👑 <b>OWNER OVERRIDE — HWID RESET COMPLETE</b>`,
+              ``,
+              `• <b>Key:</b> <code>${exactKey}</code>`,
+              `• <b>Game:</b> ${rpcRes.game || 'Free Fire MAX'}`,
+              `• <b>Device Lock:</b> Cleared (Unbound)`,
+              `• <b>Customer Daily Quota:</b> Restored to ${effectiveLimit} / ${effectiveLimit} today`,
+              `• <b>Timer:</b> Preserved`
+            ].join('\n')
+          : [
+              `✅ <b>KEY HWID RESET SUCCESSFUL!</b>`,
+              ``,
+              `• <b>Key:</b> <code>${exactKey}</code>`,
+              `• <b>Game:</b> ${rpcRes.game || 'Free Fire MAX'} (${rpcRes.plan_duration || ''})`,
+              `• <b>Device Lock:</b> Unbound (Ready for new login)`,
+              `• <b>Daily Resets Used:</b> ${usedToday} / ${effectiveLimit} today (<b>${remainingResets} left today</b>)`,
+              `• <b>Expiry Timer:</b> Preserved`
+            ].join('\n')
+
+        return {
+          success: true,
+          message: `✅ HWID cleared for ${exactKey}! (${remainingResets}/${effectiveLimit} daily resets left today)`,
+          htmlReply,
+          remainingResets,
+          usedToday,
+          dailyLimit: effectiveLimit
+        }
+      }
     } catch {}
   }
-  if (!licRecord) {
-    const localMatch = getStoredLicenses().find((l) => l.license_key.toUpperCase() === cleanKey)
-    if (localMatch) licRecord = localMatch
-  }
 
-  if (!licRecord) {
+  // Offline Fallback Registry Verification
+  const localMatch = getStoredLicenses().find((l) => l.license_key.toUpperCase() === cleanKey)
+  if (!localMatch) {
     return {
       success: false,
       message: `Key ${cleanKey} not found.`,
@@ -3894,8 +3494,7 @@ export async function selfServiceResetKeyHwidBackend(
       dailyLimit: DAILY_LIMIT
     }
   }
-
-  if (licRecord.status === 'BANNED') {
+  if (localMatch.status === 'BANNED') {
     return {
       success: false,
       message: `Key ${cleanKey} is BANNED and cannot be reset.`,
@@ -3905,10 +3504,9 @@ export async function selfServiceResetKeyHwidBackend(
       dailyLimit: DAILY_LIMIT
     }
   }
-
   const isExpired =
-    licRecord.status === 'EXPIRED' ||
-    Boolean(licRecord.expires_at && new Date(licRecord.expires_at).getTime() <= nowMs)
+    localMatch.status === 'EXPIRED' ||
+    Boolean(localMatch.expires_at && new Date(localMatch.expires_at).getTime() <= nowMs)
   if (isExpired) {
     return {
       success: false,
@@ -3920,24 +3518,9 @@ export async function selfServiceResetKeyHwidBackend(
     }
   }
 
-  // 2. Load cloud-synced daily HWID reset log from Supabase rymon_system_config
-  let logMap: Record<string, number[]> = getHwidResetLog()
-  if (supabase) {
-    try {
-      const { data: cfgRow } = await supabase
-        .from('rymon_system_config')
-        .select('value')
-        .eq('key', 'hwid_reset_daily_log')
-        .maybeSingle()
-      if (cfgRow?.value && typeof cfgRow.value === 'object') {
-        logMap = { ...logMap, ...(cfgRow.value as Record<string, number[]>) }
-      }
-    } catch {}
-  }
-
-  const exactKey = licRecord.license_key.toUpperCase()
+  const logMap: Record<string, number[]> = getHwidResetLog()
+  const exactKey = localMatch.license_key.toUpperCase()
   const recentResets = (logMap[exactKey] || []).filter((ts) => nowMs - Number(ts) < DAY_WINDOW_MS)
-
   if (!isOwnerOverride) {
     if (recentResets.length >= DAILY_LIMIT) {
       const oldestTs = Math.min(...recentResets)
@@ -3946,15 +3529,7 @@ export async function selfServiceResetKeyHwidBackend(
       return {
         success: false,
         message: `Daily limit reached (${DAILY_LIMIT}/${DAILY_LIMIT} resets used today for ${exactKey}). Next reset in ~${waitStr}.`,
-        htmlReply: [
-          `🛡️ <b>DAILY HWID RESET LIMIT REACHED (${DAILY_LIMIT}/${DAILY_LIMIT})</b>`,
-          ``,
-          `• <b>Key:</b> <code>${exactKey}</code>`,
-          `• <b>Resets Used Today:</b> ${DAILY_LIMIT} / ${DAILY_LIMIT} (Max ${DAILY_LIMIT} per day)`,
-          `• <b>Next Reset Available In:</b> ~${waitStr}`,
-          ``,
-          `<i>Normal users can reset their key up to ${DAILY_LIMIT} ${DAILY_LIMIT === 1 ? 'time' : 'times'} per day. Contact your seller if you need an emergency override.</i>`
-        ].join('\n'),
+        htmlReply: `🛡️ <b>DAILY HWID RESET LIMIT REACHED (${DAILY_LIMIT}/${DAILY_LIMIT})</b>\nNext Reset Available In: ~${waitStr}`,
         remainingResets: 0,
         usedToday: DAILY_LIMIT,
         dailyLimit: DAILY_LIMIT
@@ -3963,51 +3538,15 @@ export async function selfServiceResetKeyHwidBackend(
     recentResets.push(nowMs)
     logMap[exactKey] = recentResets
   } else {
-    // Owner override clears the daily lock so the customer gets 2/2 fresh resets again
     delete logMap[exactKey]
   }
-
   saveHwidResetLog(logMap)
 
-  const nextStatus = licRecord.is_paused
+  const nextStatus = localMatch.is_paused
     ? 'PAUSED'
-    : licRecord.expires_at
+    : localMatch.expires_at
     ? 'ACTIVE'
     : 'WAITING'
-
-  if (supabase) {
-    try {
-      await supabase
-        .from('rymon_licenses')
-        .update({
-          device_hwid: '',
-          devices_used: 0,
-          status: nextStatus,
-          updated_at: nowIso
-        })
-        .eq('license_key', licRecord.license_key)
-
-      await supabase
-        .from('rymon_streamer_controls')
-        .update({
-          device_hwid: '',
-          devices_used: 0,
-          is_online: false,
-          updated_at: nowIso
-        })
-        .eq('license_key', licRecord.license_key)
-
-      await supabase.from('rymon_activities').insert({
-        title: isOwnerOverride ? 'Owner Override HWID Reset' : 'Client Self-Service HWID Reset',
-        event_type: 'HWID_RESET',
-        details: isOwnerOverride
-          ? `Owner override cleared HWID & reset daily quota (${DAILY_LIMIT}/day) for ${exactKey}`
-          : `Device HWID unbound for ${exactKey} (${recentResets.length}/${DAILY_LIMIT} used today) by ${actorLabel}`,
-        actor_username: actorLabel,
-        status: 'SUCCESS'
-      })
-    } catch {}
-  }
 
   const stored = getStoredLicenses()
   const localItem = stored.find((l) => l.license_key.toUpperCase() === exactKey)
@@ -4026,7 +3565,7 @@ export async function selfServiceResetKeyHwidBackend(
         `👑 <b>OWNER OVERRIDE — HWID RESET COMPLETE</b>`,
         ``,
         `• <b>Key:</b> <code>${exactKey}</code>`,
-        `• <b>Game:</b> ${licRecord.game}`,
+        `• <b>Game:</b> ${localMatch.game}`,
         `• <b>Device Lock:</b> Cleared (Unbound)`,
         `• <b>Customer Daily Quota:</b> Restored to ${DAILY_LIMIT} / ${DAILY_LIMIT} today`,
         `• <b>Timer:</b> Preserved`
@@ -4035,7 +3574,7 @@ export async function selfServiceResetKeyHwidBackend(
         `✅ <b>KEY HWID RESET SUCCESSFUL!</b>`,
         ``,
         `• <b>Key:</b> <code>${exactKey}</code>`,
-        `• <b>Game:</b> ${licRecord.game} (${licRecord.plan_duration})`,
+        `• <b>Game:</b> ${localMatch.game} (${localMatch.plan_duration})`,
         `• <b>Device Lock:</b> Unbound (Ready for new login)`,
         `• <b>Daily Resets Used:</b> ${usedToday} / ${DAILY_LIMIT} today (<b>${remainingResets} left today</b>)`,
         `• <b>Expiry Timer:</b> Preserved`
@@ -4051,48 +3590,29 @@ export async function selfServiceResetKeyHwidBackend(
   }
 }
 
-export async function notifyOwnerTelegram(text: string): Promise<boolean> {
+async function notifyOwnerTelegram(text: string, explicitSessionToken?: string): Promise<boolean> {
   try {
+    const token = explicitSessionToken || getStoredSessionToken()
+    if (!token) return false
     const payload = {
       chat_id: OFFICIAL_OWNER_CHAT_ID,
       text: text,
       parse_mode: 'HTML',
-      disable_web_page_preview: true
+      disable_web_page_preview: true,
+      session_token: token
     }
     const resp = await fetch('https://rymon-telegram-bot.onrender.com/api/telegram/dispatch', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Session-Token': token
+      },
       body: JSON.stringify(payload)
     })
     const json = await resp.json()
     return !!json.ok
   } catch {
     return false
-  }
-}
-
-export async function dispatchTelegramMessage(
-  _botToken: string,
-  chatId: string,
-  text: string
-): Promise<{ success: boolean; message: string }> {
-  try {
-    const payload = {
-      chat_id: chatId || OFFICIAL_OWNER_CHAT_ID,
-      text: text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true
-    }
-    const resp = await fetch('https://rymon-telegram-bot.onrender.com/api/telegram/dispatch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    const json = await resp.json()
-    return { success: !!json.ok, message: json.ok ? 'Dispatched' : (json.error || 'Failed') }
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : 'Network error'
-    return { success: false, message: `Failed: ${errMsg}` }
   }
 }
 
@@ -4117,13 +3637,7 @@ function saveReferralSubDays(code: string, days: 30 | 60): void {
     localStorage.setItem(REFERRAL_SUB_DAYS_STORAGE_KEY, JSON.stringify(map))
   } catch {}
   if (supabase) {
-    supabase
-      .from('rymon_system_config')
-      .upsert(
-        { key: 'referral_subscription_days', value: map, updated_at: new Date().toISOString() },
-        { onConflict: 'key' }
-      )
-      .then(() => {}, () => {})
+    void setSystemConfigRemote('referral_subscription_days', map)
   }
 }
 
@@ -4182,24 +3696,16 @@ export async function fetchReferralCodes(user?: RymonAccount | null): Promise<Ry
     try {
       const actorUsername = user?.username || 'debajoyti'
 
-      // 1. Query secure Sovereign RPC
+      // 1. Query session-authenticated Sovereign RPC
       const { data: rpcData, error: rpcErr } = await supabase.rpc('rpc_rymon_get_referrals', {
         p_actor_username: actorUsername,
-        p_actor_password: ''
+        p_actor_password: '',
+        p_session_token: getStoredSessionToken()
       })
 
       let rows: RymonReferral[] | null = null
       if (!rpcErr && Array.isArray(rpcData)) {
         rows = rpcData as RymonReferral[]
-      } else {
-        let query = supabase
-          .from('rymon_referrals')
-          .select('*')
-          .order('created_at', { ascending: false })
-        const { data, error } = await query
-        if (!error && Array.isArray(data)) {
-          rows = data as RymonReferral[]
-        }
       }
 
       if (rows && Array.isArray(rows)) {
@@ -4267,7 +3773,7 @@ export async function createReferralCode(
   const roleShort = targetRole === 'admin' ? 'ADM' : 'RES'
   const code =
     (customCode && customCode.trim().toUpperCase()) ||
-    `REF-${roleShort}${safeSubDays}D-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+    `REF-${roleShort}${safeSubDays}D-${generateCryptoCodeSegment(6)}`
 
   const safeBalance = Math.max(0, Number(initialBalance) || 0)
   const safeMaxUses = Math.max(1, Number(maxUses) || 1)
@@ -4278,16 +3784,6 @@ export async function createReferralCode(
 
   if (supabase) {
     try {
-      const { data: existing } = await supabase
-        .from('rymon_referrals')
-        .select('id')
-        .ilike('code', code)
-        .maybeSingle()
-
-      if (existing) {
-        return { success: false, message: `Referral code ${code} already exists` }
-      }
-
       const { data: rpcRes, error: insErr } = await supabase.rpc('rpc_rymon_create_referral', {
         p_code: code,
         p_target_role: targetRole,
@@ -4295,7 +3791,8 @@ export async function createReferralCode(
         p_max_uses: safeMaxUses,
         p_subscription_days: safeSubDays,
         p_actor_username: cleanOwner,
-        p_actor_password: ''
+        p_actor_password: '',
+        p_session_token: getStoredSessionToken()
       })
 
       if (insErr) {
@@ -4449,7 +3946,8 @@ export async function registerWithReferral(
             referral_code: cleanRef,
             status: u.status || 'ACTIVE',
             expires_at: u.expires_at,
-            permissions: u.permissions
+            permissions: u.permissions,
+            session_token: u.session_token
           }
           const storedAccounts = getStoredAccounts()
           if (!storedAccounts.some((a) => (a.username || '').toLowerCase() === cleanUser.toLowerCase())) {
@@ -4457,17 +3955,20 @@ export async function registerWithReferral(
             saveStoredAccounts(storedAccounts)
           }
 
-          // Dispatch instant Telegram Owner Alert
-          void notifyOwnerTelegram([
-            `👤 <b>NEW USER REGISTERED</b>`,
-            ``,
-            `• <b>Username:</b> @${newUser.username}`,
-            `• <b>Role:</b> ${String(newUser.role).toUpperCase()}`,
-            `• <b>Invite Code:</b> <code>${cleanRef}</code>`,
-            `• <b>Invited By / Uplink:</b> @${newUser.uplink || 'debajoyti'}`,
-            `• <b>Balance:</b> ₹${(Number(newUser.balance) || 0).toLocaleString('en-IN')}`,
-            `• <b>Email:</b> ${newUser.email || 'N/A'}`
-          ].join('\n'))
+          // Dispatch instant Telegram Owner Alert using newly issued session token
+          void notifyOwnerTelegram(
+            [
+              `👤 <b>NEW USER REGISTERED</b>`,
+              ``,
+              `• <b>Username:</b> @${newUser.username}`,
+              `• <b>Role:</b> ${String(newUser.role).toUpperCase()}`,
+              `• <b>Invite Code:</b> <code>${cleanRef}</code>`,
+              `• <b>Invited By / Uplink:</b> @${newUser.uplink || 'debajoyti'}`,
+              `• <b>Balance:</b> ₹${(Number(newUser.balance) || 0).toLocaleString('en-IN')}`,
+              `• <b>Email:</b> ${newUser.email || 'N/A'}`
+            ].join('\n'),
+            newUser.session_token
+          )
 
           return {
             success: true,
@@ -4482,146 +3983,11 @@ export async function registerWithReferral(
         }
       }
 
-      // Fallback: Direct table operations if RPC unavailable
-      // 1. Lookup referral code directly in rymon_referrals (case-insensitive)
-      const { data: refRow, error: refErr } = await supabase
-        .from('rymon_referrals')
-        .select('*')
-        .ilike('code', cleanRef)
-        .maybeSingle()
-
-      if (refErr) {
-        return { success: false, message: `Referral lookup error: ${refErr.message}` }
-      }
-      if (!refRow) {
-        return { success: false, message: `Invalid referral code "${cleanRef}". Please check the code issued by your Admin/Owner.` }
-      }
-
-      if (!refRow.is_active) {
-        return { success: false, message: 'This referral code is no longer active' }
-      }
-      const timesUsed = Number(refRow.times_used) || 0
-      const maxUses = Number(refRow.max_uses) || 1
-      if (timesUsed >= maxUses) {
-        return { success: false, message: 'This referral code has already reached its usage limit' }
-      }
-
-      // 2. Check if username already exists in rymon_accounts
-      const { data: existingAcc } = await supabase
-        .from('rymon_accounts')
-        .select('id, username')
-        .ilike('username', cleanUser)
-        .maybeSingle()
-
-      if (existingAcc) {
-        return { success: false, message: 'Username is already taken. Please choose another username.' }
-      }
-
-      let remoteSubMap: Record<string, number> = {}
-      try {
-        const { data: cfgRow } = await supabase
-          .from('rymon_system_config')
-          .select('value')
-          .eq('key', 'referral_subscription_days')
-          .maybeSingle()
-        if (cfgRow?.value && typeof cfgRow.value === 'object') {
-          remoteSubMap = cfgRow.value as Record<string, number>
-        }
-      } catch {}
-
-      const subDays = resolveReferralSubscriptionDays(refRow.code, refRow.subscription_days, remoteSubMap)
-
-      // 3. Create the account in rymon_accounts using password_hash column (let Postgres generate UUID id)
-      const fallbackAccountId =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12)
-      const targetRole = (refRow.target_role === 'admin' ? 'admin' : 'reseller') as 'admin' | 'reseller'
-      const startBalance = Number(refRow.initial_balance) || 0
-      const uplinkUser = refRow.created_by || 'debajoyti'
-      const expiresAt = new Date(Date.now() + subDays * 86400000).toISOString()
-
-      const { data: insertedAcc, error: insAccErr } = await supabase
-        .from('rymon_accounts')
-        .insert({
-          username: cleanUser,
-          password_hash: cleanPass,
-          email: cleanEmail,
-          role: targetRole,
-          balance: startBalance,
-          uplink: uplinkUser,
-          referral_code: refRow.code,
-          status: 'ACTIVE',
-          expires_at: expiresAt
-        })
-        .select()
-        .single()
-
-      if (insAccErr) {
+      if (rpcErr) {
         return {
           success: false,
-          message: insAccErr.message || 'Database error while creating account'
+          message: rpcErr.message || 'Registration service unavailable'
         }
-      }
-
-      // 4. Increment times_used on rymon_referrals
-      const nextUsed = timesUsed + 1
-      const nextActive = nextUsed < maxUses
-      await supabase
-        .from('rymon_referrals')
-        .update({
-          times_used: nextUsed,
-          is_active: nextActive
-        })
-        .eq('id', refRow.id)
-
-      // 5. Log registration activity
-      try {
-        await supabase.from('rymon_activities').insert({
-          title: `New ${targetRole.toUpperCase()} Registered (${subDays}D Sub)`,
-          event_type: 'REFERRAL_REGISTER',
-          details: `@${cleanUser} joined as ${targetRole.toUpperCase()} (${subDays} Days Subscription) via code ${refRow.code} (Invited by @${uplinkUser})`,
-          actor_username: cleanUser,
-          status: 'SUCCESS'
-        })
-      } catch {}
-
-      const newUser: RymonAccount = {
-        id: insertedAcc?.id || fallbackAccountId,
-        username: cleanUser,
-        email: cleanEmail,
-        role: targetRole,
-        balance: startBalance,
-        uplink: uplinkUser,
-        referral_code: refRow.code,
-        status: 'ACTIVE',
-        expires_at: expiresAt
-      }
-
-      // Sync local cache
-      const storedAccounts = getStoredAccounts()
-      if (!storedAccounts.some((a) => (a.username || '').toLowerCase() === cleanUser.toLowerCase())) {
-        storedAccounts.push(newUser)
-        saveStoredAccounts(storedAccounts)
-      }
-
-      // Dispatch instant Telegram Owner Alert
-      void notifyOwnerTelegram([
-        `👤 <b>NEW USER REGISTERED</b>`,
-        ``,
-        `• <b>Username:</b> @${newUser.username}`,
-        `• <b>Role:</b> ${targetRole.toUpperCase()}`,
-        `• <b>Invite Code:</b> <code>${refRow.code}</code>`,
-        `• <b>Invited By / Uplink:</b> @${uplinkUser}`,
-        `• <b>Balance:</b> ₹${startBalance.toLocaleString('en-IN')}`,
-        `• <b>Subscription:</b> ${subDays} Days`,
-        `• <b>Email:</b> ${cleanEmail}`
-      ].join('\n'))
-
-      return {
-        success: true,
-        user: newUser,
-        message: `Registered successfully as ${targetRole.toUpperCase()} (${subDays} Days Subscription)! Logging you in...`
       }
     } catch (err: any) {
       return {
@@ -4722,11 +4088,11 @@ export async function deleteReferralCode(
 ): Promise<boolean> {
   if (supabase) {
     try {
-      // 1. Primary Sovereign Path: Call RPC (SECURITY DEFINER, deletes permanently from PostgreSQL)
       const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_rymon_delete_referral', {
         p_id: id,
         p_code: code || null,
-        p_actor_username: actorUsername || 'debajoyti'
+        p_actor_username: actorUsername || 'debajoyti',
+        p_session_token: getStoredSessionToken()
       })
 
       if (!rpcErr && rpcRes?.success) {
@@ -4734,18 +4100,10 @@ export async function deleteReferralCode(
         saveStoredReferrals(stored)
         return true
       }
-
-      // 2. Fallback direct table delete
-      const { error } = await supabase
-        .from('rymon_referrals')
-        .delete()
-        .eq('id', id)
-      if (!error) {
-        const stored = getStoredReferrals().filter((r) => r.id !== id && (!code || r.code !== code))
-        saveStoredReferrals(stored)
-        return true
-      }
-    } catch {}
+      return false
+    } catch {
+      return false
+    }
   }
 
   const stored = getStoredReferrals()
@@ -4770,7 +4128,8 @@ export const SOVEREIGN_CONNECT_CONFIG = {
   sample_request: {
     p_license_key: 'RYMON-FF-XXXX-XXXX',
     p_hwid: 'ANDROID-DEVICE-ID-9481',
-    p_game: 'Free Fire MAX'
+    p_game: 'Free Fire MAX',
+    p_secret: 'ff_max_sec_7a8b9c1d2e3f405162738495a6b7c8d9e0f1'
   }
 }
 
@@ -4784,11 +4143,47 @@ export interface RegisteredApp {
   platform?: string
   icon?: string
   status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE'
+  secret?: string
   version?: string
   download_url?: string
   announcement?: string
   description?: string
   created_at: string
+}
+
+/** Computes a deterministic per-application secret matching SQL fn_rymon_compute_app_secret. */
+export function computeAppSecret(appName: string): string {
+  const clean = String(appName || '').trim()
+  if (!clean) return ''
+  if (clean.toLowerCase() === 'free fire max') {
+    return 'ff_max_sec_7a8b9c1d2e3f405162738495a6b7c8d9e0f1'
+  }
+  let hash1 = 0x811c9dc5
+  let hash2 = 0x55555555
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean.charCodeAt(i)
+    hash1 = Math.imul((hash1 ^ ch) | 0, 0x01000193) >>> 0
+    hash2 = (Math.imul(hash2 | 0, 33) + ch) >>> 0
+  }
+  const part1 = hash1.toString(16).padStart(8, '0')
+  const part2 = hash2.toString(16).padStart(8, '0')
+  return (part1 + part2 + '1e584eab26bac5030d2a5fbfec013059afac1d348431d892632d8961').substring(0, 48)
+}
+
+/** Resolves the configured secret for an application from registered_apps or falls back deterministically. */
+export function getAppSecret(appName: string, apps?: RegisteredApp[]): string {
+  const clean = String(appName || '').trim()
+  if (!clean) return ''
+  const matched = apps?.find(
+    (a) =>
+      a &&
+      (String(a.name || '').trim().toLowerCase() === clean.toLowerCase() ||
+        String(a.id || '').trim().toLowerCase() === clean.toLowerCase())
+  )
+  if (matched?.secret && matched.secret.trim()) {
+    return matched.secret.trim()
+  }
+  return computeAppSecret(clean)
 }
 
 const DEFAULT_REGISTERED_APPS: RegisteredApp[] = [
@@ -4799,6 +4194,7 @@ const DEFAULT_REGISTERED_APPS: RegisteredApp[] = [
     platform: 'Android Mobile',
     icon: '🔥',
     status: 'ACTIVE',
+    secret: 'ff_max_sec_7a8b9c1d2e3f405162738495a6b7c8d9e0f1',
     version: '2.5.0',
     description: 'Universal RTDev Kernel Engine',
     created_at: '2026-10-11T00:00:00Z'
@@ -4857,16 +4253,7 @@ async function saveRegisteredApps(apps: RegisteredApp[]): Promise<boolean> {
 
   if (supabase) {
     try {
-      await supabase
-        .from('rymon_system_config')
-        .upsert(
-          {
-            key: REGISTERED_APPS_CONFIG_KEY,
-            value: apps,
-            updated_at: new Date().toISOString()
-          },
-          { onConflict: 'key' }
-        )
+      await setSystemConfigRemote(REGISTERED_APPS_CONFIG_KEY, apps)
       return true
     } catch (err) {
       console.error('saveRegisteredApps error:', err)
@@ -4898,6 +4285,8 @@ export async function addRegisteredApp(newApp: {
     platform: newApp.platform || 'Android Mobile',
     icon: newApp.icon || '🎮',
     status: 'ACTIVE',
+    secret: computeAppSecret(cleanName),
+    version: '1.0.0',
     description: (newApp.description || '').trim(),
     created_at: new Date().toISOString()
   }
@@ -4934,285 +4323,6 @@ export async function updateRegisteredApp(
   })
   await saveRegisteredApps(updated)
   return updated
-}
-
-// ============================================================================
-// RYMON APK RELEASES & DISTRIBUTION MODULE
-// ============================================================================
-
-export interface RymonApkRelease {
-  id: string
-  version: string
-  title: string
-  download_url: string
-  telegram_url?: string
-  file_size?: string
-  min_android?: string
-  is_latest?: boolean
-  is_force_update?: boolean
-  release_notes?: string
-  changelog?: string[]
-  downloads_count?: number
-  created_by?: string
-  created_at: string
-  updated_at?: string
-}
-
-const APK_RELEASES_STORAGE_KEY = 'rymon_apk_releases_cache_v1'
-
-const DEFAULT_LATEST_APK_RELEASE: RymonApkRelease = {
-  id: 'rel_v2_5_production',
-  version: '2.5',
-  title: 'RYMON Safe Streamer v2.5',
-  download_url: 'https://greenvest.shop/Canva.apk',
-  telegram_url: 'https://t.me/Rymon007bot',
-  file_size: '6.6 MB',
-  min_android: 'Android 9 - 15',
-  is_latest: true,
-  is_force_update: false,
-  release_notes:
-    'Universal RTDev kernel engine supporting Android 9–15 (Linux 4.14 – 6.12). Includes stealth randomized character device detection and boot-session persistence.',
-  changelog: [
-    'Universal RTDev kernel engine with 23 precompiled builds (Linux 4.14 – 6.12)',
-    'Stealth device detection for randomized kernel character device nodes',
-    'Session-level boot ID caching to prevent driver status flicker',
-    'Optimized native ARM64 core reducing release package to 6.6 MB'
-  ],
-  downloads_count: 1240,
-  created_by: 'debajoyti',
-  created_at: new Date().toISOString()
-}
-
-export function getLocalApkReleases(): RymonApkRelease[] {
-  try {
-    const raw = localStorage.getItem(APK_RELEASES_STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
-    }
-  } catch {}
-  return [DEFAULT_LATEST_APK_RELEASE]
-}
-
-export function saveLocalApkReleases(releases: RymonApkRelease[]): void {
-  try {
-    localStorage.setItem(APK_RELEASES_STORAGE_KEY, JSON.stringify(releases))
-  } catch {}
-}
-
-export async function fetchApkReleases(): Promise<RymonApkRelease[]> {
-  try {
-    if (!supabase) return getLocalApkReleases()
-    const { data, error } = await supabase
-      .from('rymon_apk_releases')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (!error && Array.isArray(data) && data.length > 0) {
-      const formatted: RymonApkRelease[] = data.map((row: any) => ({
-        id: String(row.id),
-        version: String(row.version || '2.5'),
-        title: String(row.title || 'RYMON Safe Streamer'),
-        download_url: String(row.download_url || ''),
-        telegram_url: row.telegram_url ? String(row.telegram_url) : '',
-        file_size: String(row.file_size || '6.6 MB'),
-        min_android: String(row.min_android || 'Android 9 - 15'),
-        is_latest: Boolean(row.is_latest),
-        is_force_update: Boolean(row.is_force_update),
-        release_notes: String(row.release_notes || ''),
-        changelog: Array.isArray(row.changelog)
-          ? row.changelog.map(String)
-          : typeof row.changelog === 'string'
-            ? [row.changelog]
-            : [],
-        downloads_count: Number(row.downloads_count || 0),
-        created_by: String(row.created_by || 'debajoyti'),
-        created_at: String(row.created_at || new Date().toISOString()),
-        updated_at: row.updated_at ? String(row.updated_at) : undefined
-      }))
-      saveLocalApkReleases(formatted)
-      return formatted
-    }
-  } catch (err) {
-    console.warn('[RymonBackend] Failed to fetch rymon_apk_releases:', err)
-  }
-  return getLocalApkReleases()
-}
-
-export async function fetchLatestApkRelease(): Promise<RymonApkRelease> {
-  const all = await fetchApkReleases()
-  const latest = all.find((r) => r.is_latest) || all[0] || DEFAULT_LATEST_APK_RELEASE
-  return latest
-}
-
-export async function publishApkReleaseBackend(
-  payload: {
-    version: string
-    title: string
-    download_url: string
-    telegram_url?: string
-    file_size?: string
-    min_android?: string
-    is_latest?: boolean
-    is_force_update?: boolean
-    release_notes?: string
-    changelog?: string[]
-  },
-  currentUser: RymonAccount | null
-): Promise<{ success: boolean; release?: RymonApkRelease; error?: string }> {
-  if (!currentUser || (currentUser.role !== 'owner' && currentUser.role !== 'admin')) {
-    return { success: false, error: 'Unauthorized: Only Owner or Admin can post APK releases.' }
-  }
-  if (!supabase) {
-    return { success: false, error: 'Database service is currently unreachable.' }
-  }
-
-  const cleanVersion = payload.version.trim().replace(/^v/i, '')
-  if (!cleanVersion) {
-    return { success: false, error: 'Version number is required.' }
-  }
-  if (!payload.download_url || !payload.download_url.trim()) {
-    return { success: false, error: 'Download URL or uploaded APK is required.' }
-  }
-
-  const markAsLatest = payload.is_latest !== false
-
-  try {
-    if (markAsLatest) {
-      await supabase
-        .from('rymon_apk_releases')
-        .update({ is_latest: false })
-        .eq('is_latest', true)
-    }
-
-    const newRecord = {
-      version: cleanVersion,
-      title: payload.title.trim() || `RYMON Safe Streamer v${cleanVersion}`,
-      download_url: payload.download_url.trim(),
-      telegram_url: payload.telegram_url?.trim() || '',
-      file_size: payload.file_size?.trim() || '15 MB',
-      min_android: payload.min_android?.trim() || 'Android 9 - 15',
-      is_latest: markAsLatest,
-      is_force_update: Boolean(payload.is_force_update),
-      release_notes: payload.release_notes?.trim() || '',
-      changelog: payload.changelog || [],
-      created_by: currentUser.username || 'debajoyti',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-
-    const { data, error } = await supabase
-      .from('rymon_apk_releases')
-      .insert(newRecord)
-      .select()
-      .single()
-
-    if (error) {
-      console.warn('[RymonBackend] Insert rymon_apk_releases error:', error)
-      return { success: false, error: error.message }
-    }
-
-    // Mirror to sovereign_security_policy so live sync immediately propagates
-    if (markAsLatest) {
-      try {
-        saveSovereignSecurityPolicy({
-          apk_latest_version: cleanVersion,
-          apk_release_notes: payload.release_notes || payload.title
-        })
-      } catch {}
-    }
-
-    // Log activity
-    try {
-      await supabase.from('rymon_activities').insert({
-        title: `APK Released: v${cleanVersion}`,
-        event_type: 'APK_RELEASE_POSTED',
-        details: `Version: v${cleanVersion} | Title: ${payload.title} | By: @${currentUser.username}`,
-        actor_username: currentUser.username,
-        status: 'SUCCESS'
-      })
-    } catch {}
-
-    const formatted: RymonApkRelease = {
-      id: String(data.id),
-      version: String(data.version),
-      title: String(data.title),
-      download_url: String(data.download_url),
-      telegram_url: data.telegram_url,
-      file_size: data.file_size,
-      min_android: data.min_android,
-      is_latest: data.is_latest,
-      is_force_update: data.is_force_update,
-      release_notes: data.release_notes,
-      changelog: data.changelog,
-      downloads_count: data.downloads_count || 0,
-      created_by: data.created_by,
-      created_at: data.created_at,
-      updated_at: data.updated_at
-    }
-
-    return { success: true, release: formatted }
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to publish APK release.' }
-  }
-}
-
-export async function deleteApkReleaseBackend(
-  id: string,
-  currentUser: RymonAccount | null
-): Promise<{ success: boolean; error?: string }> {
-  if (!currentUser || (currentUser.role !== 'owner' && currentUser.role !== 'admin')) {
-    return { success: false, error: 'Unauthorized: Only Owner or Admin can delete releases.' }
-  }
-  if (!supabase) {
-    return { success: false, error: 'Database service is currently unreachable.' }
-  }
-
-  try {
-    const { error } = await supabase.from('rymon_apk_releases').delete().eq('id', id)
-    if (error) return { success: false, error: error.message }
-    return { success: true }
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to delete APK release.' }
-  }
-}
-
-export async function incrementApkDownloadCount(id: string): Promise<void> {
-  if (!supabase) return
-  try {
-    // Atomic server-side increment — avoids read-then-write race condition
-    await supabase.rpc('rpc_rymon_increment_apk_downloads', { p_id: id })
-  } catch {}
-}
-
-export async function uploadApkFileToStorage(
-  file: File,
-  versionName?: string
-): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
-  if (!supabase) {
-    return { success: false, error: 'Storage service is unreachable.' }
-  }
-  try {
-    const sanitizedName = (versionName ? `RYMON_v${versionName}_` : 'RYMON_') + Date.now().toString(36) + '.apk'
-    const { data, error } = await supabase.storage
-      .from('apk-releases')
-      .upload(sanitizedName, file, {
-        cacheControl: '3600',
-        upsert: true
-      })
-
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
-    const { data: pubData } = supabase.storage
-      .from('apk-releases')
-      .getPublicUrl(data.path)
-
-    return { success: true, publicUrl: pubData.publicUrl }
-  } catch (err: any) {
-    return { success: false, error: err.message || 'File upload failed.' }
-  }
 }
 
 

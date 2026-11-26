@@ -130,6 +130,11 @@ CREATE TABLE IF NOT EXISTS public.rymon_system_config (
 -- RLS POLICIES (Hardened Production Security: Deny all direct public table access to accounts)
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.rymon_accounts ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.rymon_accounts FROM anon, authenticated, public;
+GRANT ALL ON public.rymon_accounts TO service_role;
+ALTER TABLE public.rymon_sessions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.rymon_sessions FROM anon, authenticated, public;
+GRANT ALL ON public.rymon_sessions TO service_role;
 ALTER TABLE public.rymon_licenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rymon_streamer_controls ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rymon_activities ENABLE ROW LEVEL SECURITY;
@@ -141,6 +146,9 @@ DROP POLICY IF EXISTS "rymon_accounts_deny_all" ON public.rymon_accounts;
 DROP POLICY IF EXISTS "rymon_accounts_all" ON public.rymon_accounts;
 CREATE POLICY "rymon_accounts_deny_all" ON public.rymon_accounts FOR ALL TO public USING (false);
 
+DROP POLICY IF EXISTS "rymon_sessions_deny_all" ON public.rymon_sessions;
+CREATE POLICY "rymon_sessions_deny_all" ON public.rymon_sessions FOR ALL TO public USING (false);
+
 DROP POLICY IF EXISTS "rymon_licenses_all" ON public.rymon_licenses;
 -- Production Security: Revoke direct public/anon dumping of rymon_licenses;
 -- all key lookups and scoped dashboard listings must use SECURITY DEFINER RPCs (rpc_rymon_verify_license, rpc_rymon_get_licenses).
@@ -151,29 +159,39 @@ DROP POLICY IF EXISTS "rymon_streamer_controls_all" ON public.rymon_streamer_con
 CREATE POLICY "rymon_streamer_controls_all" ON public.rymon_streamer_controls FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "rymon_activities_all" ON public.rymon_activities;
-CREATE POLICY "rymon_activities_all" ON public.rymon_activities FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "rymon_activities_deny_direct" ON public.rymon_activities;
+REVOKE INSERT, UPDATE, DELETE ON public.rymon_activities FROM anon, authenticated, public;
+GRANT ALL ON public.rymon_activities TO service_role;
+CREATE POLICY "rymon_activities_deny_direct" ON public.rymon_activities FOR ALL TO public USING (false);
 
 DROP POLICY IF EXISTS "rymon_system_config_all" ON public.rymon_system_config;
-CREATE POLICY "rymon_system_config_all" ON public.rymon_system_config FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "rymon_system_config_public_read" ON public.rymon_system_config;
+REVOKE ALL ON public.rymon_system_config FROM anon, authenticated, public;
+GRANT SELECT (key, value, updated_at) ON public.rymon_system_config TO anon, authenticated;
+GRANT ALL ON public.rymon_system_config TO service_role;
+CREATE POLICY "rymon_system_config_public_read" ON public.rymon_system_config
+FOR SELECT TO anon, authenticated
+USING (
+    key IN (
+        'global_key_prices',
+        'user_custom_prices',
+        'sovereign_security_policy',
+        'registered_apps',
+        'paused_key_timestamps',
+        'referral_subscription_days',
+        'hwid_reset_daily_log',
+        'site_branding',
+        'single_device_login',
+        'trial_key_settings'
+    )
+);
 
 -- ------------------------------------------------------------------------------
--- ENABLE REALTIME ON TABLES
+-- ENABLE REALTIME ON TABLES (excluding sensitive account/session/license tables)
 -- ------------------------------------------------------------------------------
 DO $$
 BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.rymon_streamer_controls;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.rymon_licenses;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.rymon_accounts;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
@@ -258,16 +276,15 @@ BEGIN
             extensions.crypt(TRIM(p_password), v_acc.password_hash) = v_acc.password_hash
         );
     ELSE
-        -- SHA-256 & Legacy Plaintext match
+        -- SHA-256 hash match (automatically upgraded to Bcrypt below)
         v_input_hash := encode(sha256(TRIM(p_password)::bytea), 'hex');
         v_input_hash_raw := encode(sha256(p_password::bytea), 'hex');
 
         v_is_valid := (
-            v_acc.password_hash = v_input_hash OR
-            v_acc.password_hash = v_input_hash_raw OR
-            v_acc.password_hash = TRIM(p_password) OR
-            v_acc.password_hash = p_password OR
-            v_acc.password_hash = LOWER(p_password)
+            v_acc.password_hash ~ '^[0-9a-fA-F]{64}$' AND (
+                LOWER(v_acc.password_hash) = LOWER(v_input_hash) OR
+                LOWER(v_acc.password_hash) = LOWER(v_input_hash_raw)
+            )
         );
     END IF;
 
@@ -348,26 +365,80 @@ BEGIN
     );
 END;
 $$;
-            'referral_code', v_acc.referral_code,
-            'status', v_acc.status,
-            'expires_at', v_acc.expires_at,
-            'permissions', v_acc.permissions
-        )
-    );
-END;
-$$;
 
 GRANT EXECUTE ON FUNCTION public.rpc_rymon_login(TEXT, TEXT) TO anon, authenticated;
 
 -- ------------------------------------------------------------------------------
 -- RPC 2: PER-KEY VERIFICATION & DEVICE HWID BINDING (UNIVERSAL & CROSS-APP)
 -- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.fn_rymon_compute_app_secret(p_app_name TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+    v_name TEXT := TRIM(COALESCE(p_app_name, ''));
+    v_h1   BIGINT := 2166136261;
+    v_h2   BIGINT := 1431655765;
+    v_i    INT;
+    v_ch   INT;
+    v_p1   TEXT;
+    v_p2   TEXT;
+BEGIN
+    IF v_name = '' THEN RETURN ''; END IF;
+    IF LOWER(v_name) = 'free fire max' THEN
+        RETURN 'ff_max_sec_7a8b9c1d2e3f405162738495a6b7c8d9e0f1';
+    END IF;
+    FOR v_i IN 1..char_length(v_name) LOOP
+        v_ch := ascii(substr(v_name, v_i, 1));
+        v_h1 := ((v_h1 # v_ch::BIGINT) * 16777619::BIGINT) & 4294967295::BIGINT;
+        v_h2 := ((v_h2 * 33::BIGINT) + v_ch::BIGINT) & 4294967295::BIGINT;
+    END LOOP;
+    v_p1 := lpad(to_hex(v_h1), 8, '0');
+    v_p2 := lpad(to_hex(v_h2), 8, '0');
+    RETURN substring(v_p1 || v_p2 || '1e584eab26bac5030d2a5fbfec013059afac1d348431d892632d8961' FROM 1 FOR 48);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.fn_rymon_compute_app_secret(TEXT) FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.fn_rymon_expected_app_secret(p_app_name TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_name   TEXT := TRIM(COALESCE(p_app_name, ''));
+    v_apps   JSONB;
+    v_elem   JSONB;
+    v_stored TEXT;
+BEGIN
+    IF v_name = '' THEN RETURN ''; END IF;
+    SELECT value INTO v_apps FROM public.rymon_system_config WHERE key = 'registered_apps' LIMIT 1;
+    IF v_apps IS NOT NULL AND jsonb_typeof(v_apps) = 'array' THEN
+        FOR v_elem IN SELECT * FROM jsonb_array_elements(v_apps) LOOP
+            IF LOWER(TRIM(COALESCE(v_elem->>'name', ''))) = LOWER(v_name)
+               OR LOWER(TRIM(COALESCE(v_elem->>'id', ''))) = LOWER(v_name) THEN
+                v_stored := TRIM(COALESCE(v_elem->>'secret', ''));
+                IF v_stored != '' THEN RETURN v_stored; END IF;
+            END IF;
+        END LOOP;
+    END IF;
+    RETURN public.fn_rymon_compute_app_secret(v_name);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.fn_rymon_expected_app_secret(TEXT) FROM PUBLIC, anon, authenticated;
+
 DROP FUNCTION IF EXISTS public.rpc_rymon_verify_license(text, text);
+DROP FUNCTION IF EXISTS public.rpc_rymon_verify_license(text, text, text);
+DROP FUNCTION IF EXISTS public.rpc_rymon_verify_license(text, text, text, text);
 
 CREATE OR REPLACE FUNCTION public.rpc_rymon_verify_license(
     p_license_key TEXT,
     p_hwid TEXT DEFAULT ''::TEXT,
-    p_game TEXT DEFAULT ''::TEXT
+    p_game TEXT DEFAULT ''::TEXT,
+    p_secret TEXT DEFAULT ''::TEXT
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -375,32 +446,51 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-    v_clean_key TEXT;
-    v_clean_hwid TEXT;
-    v_lic public.rymon_licenses%ROWTYPE;
-    v_calc_expiry TIMESTAMPTZ;
+    v_clean_key         TEXT;
+    v_clean_hwid        TEXT;
+    v_clean_secret      TEXT;
+    v_expected_secret   TEXT;
+    v_lic               public.rymon_licenses%ROWTYPE;
+    v_calc_expiry       TIMESTAMPTZ;
     v_duration_interval INTERVAL := INTERVAL '30 days';
-    v_req_game TEXT;
-    v_lic_game TEXT;
-    v_gf TEXT := '0xAD68E18';
+    v_req_game          TEXT;
+    v_lic_game          TEXT;
+    v_effective_app     TEXT;
+    v_is_legacy_ff      BOOLEAN := false;
+    v_gf                TEXT := '0xAD68E18';
+    v_apps              JSONB;
+    v_app_elem          JSONB;
+    v_app_status        TEXT;
+    v_app_announcement  TEXT;
 BEGIN
-    v_clean_key := UPPER(TRIM(COALESCE(p_license_key, '')));
-    v_clean_hwid := TRIM(COALESCE(p_hwid, ''));
-    v_req_game  := TRIM(COALESCE(p_game, ''));
+    v_clean_key    := UPPER(TRIM(COALESCE(p_license_key, '')));
+    v_clean_hwid   := TRIM(COALESCE(p_hwid, ''));
+    v_req_game     := TRIM(COALESCE(p_game, ''));
+    v_clean_secret := TRIM(COALESCE(p_secret, ''));
 
     IF v_clean_key = '' THEN
-        RETURN jsonb_build_object(
-            'valid', false,
-            'error', 'License key cannot be empty.'
-        );
+        RETURN jsonb_build_object('valid', false, 'error', 'License key cannot be empty.');
     END IF;
 
     -- Reject any attempts to use revoked master key bypasses
     IF v_clean_key = 'RYMON-MASTER-KEY' OR v_clean_key LIKE '%MASTER%' OR v_clean_key LIKE '%OWNER%' THEN
-        RETURN jsonb_build_object(
-            'valid', false,
-            'error', 'Invalid license key. Master key bypass has been permanently revoked.'
-        );
+        RETURN jsonb_build_object('valid', false, 'error', 'Invalid license key. Master key bypass has been permanently revoked.');
+    END IF;
+
+    IF v_clean_hwid = '' THEN
+        RETURN jsonb_build_object('valid', false, 'error', 'Device HWID is required for license verification.');
+    END IF;
+
+    IF v_clean_secret != '' THEN
+        IF v_req_game = '' THEN
+            RETURN jsonb_build_object('valid', false, 'error', 'Application name (app) is required. Keys cannot be used without specifying a target app.');
+        END IF;
+        v_expected_secret := public.fn_rymon_expected_app_secret(v_req_game);
+        IF v_expected_secret = '' OR v_clean_secret != v_expected_secret THEN
+            RETURN jsonb_build_object('valid', false, 'error', 'Invalid App Secret! Please verify your application secret credential.');
+        END IF;
+    ELSIF v_req_game != '' AND LOWER(v_req_game) != 'free fire max' THEN
+        RETURN jsonb_build_object('valid', false, 'error', 'Invalid App Secret! Custom applications must pass a valid secret credential.');
     END IF;
 
     -- 2. Lookup License Record (with Self-Healing from Streamer Controls)
@@ -409,7 +499,6 @@ BEGIN
     WHERE license_key = v_clean_key;
 
     IF NOT FOUND THEN
-        -- Check Streamer Controls table fallback: self-heal into rymon_licenses
         IF EXISTS (SELECT 1 FROM public.rymon_streamer_controls WHERE license_key = v_clean_key) THEN
             INSERT INTO public.rymon_licenses (
                 license_key, game, plan_duration, creator_username,
@@ -418,7 +507,7 @@ BEGIN
             SELECT
                 sc.license_key,
                 COALESCE(NULLIF(sc.game_name, ''), 'Free Fire MAX'),
-                COALESCE(NULLIF(sc.plan_duration, ''), '1 Day [VIP]'),
+                COALESCE(NULLIF(sc.plan_duration, ''), '1 Day'),
                 COALESCE(NULLIF(sc.creator, ''), 'debajoyti'),
                 0,
                 GREATEST(COALESCE(sc.devices_max, 1), 1),
@@ -441,44 +530,58 @@ BEGIN
         END IF;
     END IF;
 
-    -- 3. Check Banned / Revoked Status
-    IF v_lic.status = 'BANNED' THEN
-        RETURN jsonb_build_object(
-            'valid', false,
-            'error', 'License key has been revoked/banned by administrator.'
-        );
-    END IF;
-
-    -- 4. Check Paused Status
-    IF COALESCE(v_lic.is_paused, false) THEN
-        RETURN jsonb_build_object(
-            'valid', false,
-            'is_paused', true,
-            'error', 'License key is paused by administrator.'
-        );
-    END IF;
-
-    -- 5. Cross-App Isolation Enforcement (Two-Way Strict Enforcement)
     v_lic_game := TRIM(COALESCE(v_lic.game, 'Free Fire MAX'));
     IF v_lic_game = '' THEN v_lic_game := 'Free Fire MAX'; END IF;
 
-    IF v_req_game = '' THEN
-        IF UPPER(v_lic_game) NOT IN ('UNIVERSAL', 'ALL', 'ANY', 'GLOBAL') 
-           AND NOT (v_lic_game ILIKE '%Free Fire%') THEN
-            RETURN jsonb_build_object(
-                'valid', false,
-                'error', 'App Mismatch! This key is reserved for "' || v_lic_game || '" (Pure KeyAuth) and cannot be used in Free Fire MAX.'
-            );
+    v_is_legacy_ff := (v_clean_secret = '')
+                      AND (v_req_game = '' OR LOWER(v_req_game) = 'free fire max')
+                      AND (LOWER(v_lic_game) = 'free fire max' OR UPPER(v_lic_game) IN ('UNIVERSAL', 'ALL', 'ANY', 'GLOBAL'));
+
+    IF v_clean_secret = '' AND NOT v_is_legacy_ff THEN
+        IF v_req_game = '' THEN
+            RETURN jsonb_build_object('valid', false, 'error', 'Application name (app) is required. Custom-app keys cannot be used without app & secret credentials.');
         END IF;
-    ELSE
-        IF UPPER(v_lic_game) NOT IN ('UNIVERSAL', 'ALL', 'ANY', 'GLOBAL') 
-           AND NOT (v_lic_game ILIKE '%Free Fire%' AND v_req_game ILIKE '%Free Fire%')
-           AND LOWER(v_lic_game) != LOWER(v_req_game) THEN
-            RETURN jsonb_build_object(
-                'valid', false,
-                'error', 'App Mismatch! This key is only valid for "' || v_lic_game || '", not "' || v_req_game || '". Contact administrator for access.'
-            );
-        END IF;
+        RETURN jsonb_build_object('valid', false, 'error', 'Invalid App Secret! Please verify your application secret credential.');
+    END IF;
+
+    v_effective_app := COALESCE(NULLIF(v_req_game, ''), v_lic_game);
+
+    SELECT value INTO v_apps FROM public.rymon_system_config WHERE key = 'registered_apps' LIMIT 1;
+    IF v_apps IS NOT NULL AND jsonb_typeof(v_apps) = 'array' THEN
+        FOR v_app_elem IN SELECT * FROM jsonb_array_elements(v_apps) LOOP
+            IF LOWER(TRIM(COALESCE(v_app_elem->>'name', ''))) = LOWER(v_effective_app)
+               OR LOWER(TRIM(COALESCE(v_app_elem->>'id', ''))) = LOWER(v_effective_app) THEN
+                v_app_status := UPPER(TRIM(COALESCE(v_app_elem->>'status', 'ACTIVE')));
+                v_app_announcement := TRIM(COALESCE(v_app_elem->>'announcement', ''));
+                IF v_app_status IN ('MAINTENANCE', 'INACTIVE') THEN
+                    RETURN jsonb_build_object(
+                        'valid', false,
+                        'maintenance', true,
+                        'announcement', v_app_announcement,
+                        'error', '🛠️ ' || COALESCE(NULLIF(v_app_elem->>'name', ''), v_effective_app) || ' is currently under maintenance. Please try again later.'
+                    );
+                END IF;
+                EXIT;
+            END IF;
+        END LOOP;
+    END IF;
+
+    IF v_lic.status = 'BANNED' THEN
+        RETURN jsonb_build_object('valid', false, 'error', 'License key has been revoked/banned by administrator.');
+    END IF;
+
+    IF COALESCE(v_lic.is_paused, false) THEN
+        RETURN jsonb_build_object('valid', false, 'is_paused', true, 'error', 'License key is paused by administrator.');
+    END IF;
+
+    -- 5. Cross-App Isolation Enforcement (Strict exact app match unless Universal)
+    IF v_req_game != ''
+       AND UPPER(v_lic_game) NOT IN ('UNIVERSAL', 'ALL', 'ANY', 'GLOBAL')
+       AND LOWER(v_lic_game) != LOWER(v_req_game) THEN
+        RETURN jsonb_build_object(
+            'valid', false,
+            'error', 'App Mismatch! This key is only valid for "' || v_lic_game || '", not "' || v_req_game || '". Contact administrator for access.'
+        );
     END IF;
 
     -- 6. Parse Duration Interval dynamically (supports 1 Day, 3 Days, 7 Days, 15 Days, 30 Days, 60 Days, 90 Days, 365 Days)
@@ -495,9 +598,6 @@ BEGIN
     -- 7. First-time Activation (WAITING -> ACTIVE)
     IF v_lic.status = 'WAITING' OR v_lic.expires_at IS NULL THEN
         v_calc_expiry := now() + v_duration_interval;
-        IF v_clean_hwid = '' THEN
-            v_clean_hwid := 'ANDROID-DEVICE-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 8));
-        END IF;
 
         UPDATE public.rymon_licenses
         SET status = 'ACTIVE',
@@ -578,10 +678,10 @@ BEGIN
         WHERE license_key = v_clean_key;
     END IF;
 
-    -- 11. Resolve Keystone GameFacade offset dynamically (supports instant zero-recompile game updates)
+    -- 11. Resolve Keystone GameFacade offset dynamically
     BEGIN
         SELECT value->>'game_facade' INTO v_gf
-        FROM public.rymon_settings
+        FROM public.rymon_system_config
         WHERE key = 'sovereign_security_policy';
     EXCEPTION WHEN OTHERS THEN
         v_gf := '0xAD68E18';
@@ -607,7 +707,62 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.rpc_rymon_verify_license(TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_verify_license(TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- Web KeyAuth License & HWID Reset Portal (Unlocked for ALL registered/custom apps)
+CREATE OR REPLACE FUNCTION public.rpc_rymon_verify_web_key(
+    p_license_key TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_clean_key TEXT := UPPER(TRIM(COALESCE(p_license_key, '')));
+    v_lic       public.rymon_licenses%ROWTYPE;
+    v_lic_game  TEXT;
+BEGIN
+    IF v_clean_key = '' THEN
+        RETURN jsonb_build_object('valid', false, 'error', 'License key is required.');
+    END IF;
+    IF v_clean_key = 'RYMON-MASTER-KEY' OR v_clean_key LIKE '%MASTER%' OR v_clean_key LIKE '%OWNER%' THEN
+        RETURN jsonb_build_object('valid', false, 'error', 'Master key login is disabled. Use a valid generated license key.');
+    END IF;
+
+    SELECT * INTO v_lic FROM public.rymon_licenses WHERE UPPER(license_key) = v_clean_key LIMIT 1;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('valid', false, 'error', 'Invalid license key. Check key string or generate a new key.');
+    END IF;
+
+    IF v_lic.status = 'BANNED' THEN
+        RETURN jsonb_build_object('valid', false, 'error', 'License key has been banned by Administrator.');
+    END IF;
+    IF v_lic.expires_at IS NOT NULL AND v_lic.expires_at < now() THEN
+        RETURN jsonb_build_object('valid', false, 'error', 'License key expired on ' || to_char(v_lic.expires_at, 'DD/MM/YYYY'));
+    END IF;
+
+    v_lic_game := TRIM(COALESCE(v_lic.game, 'Free Fire MAX'));
+    IF v_lic_game = '' THEN v_lic_game := 'Free Fire MAX'; END IF;
+
+    RETURN jsonb_build_object(
+        'valid', true,
+        'key', v_lic.license_key,
+        'game', v_lic_game,
+        'plan', v_lic.plan_duration,
+        'status', CASE WHEN COALESCE(v_lic.is_paused, false) THEN 'PAUSED' ELSE v_lic.status END,
+        'is_paused', COALESCE(v_lic.is_paused, false),
+        'device_hwid', COALESCE(v_lic.device_hwid, ''),
+        'expires_at', v_lic.expires_at,
+        'devices_used', v_lic.devices_used,
+        'devices_max', v_lic.devices_max,
+        'created_at', v_lic.created_at,
+        'last_heartbeat', v_lic.last_heartbeat
+    );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.rpc_rymon_verify_web_key(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_verify_web_key(TEXT) TO anon, authenticated, service_role;
 
 -- ------------------------------------------------------------------------------
 -- DYNAMIC KEY PRICING RESOLVER (USER CUSTOM PRICES > GLOBAL PRICES > FACTORY DEFAULTS)
@@ -1911,7 +2066,8 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.rpc_rymon_register_account(TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TEXT, INT) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rpc_rymon_register_account(TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TEXT, INT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_register_account(TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TEXT, INT) TO service_role;
 
 -- ------------------------------------------------------------------------------
 -- RPC 17: REGISTER WITH REFERRAL (SALTED BCRYPT VIA PGCRYPTO)
@@ -2133,16 +2289,20 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.rpc_rymon_credit_payment(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+ALTER TABLE public.rymon_payments ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.rymon_payments FROM anon, authenticated, public;
+GRANT ALL ON public.rymon_payments TO service_role;
+REVOKE ALL ON FUNCTION public.rpc_rymon_credit_payment(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_credit_payment(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) TO service_role;
 
 -- ------------------------------------------------------------------------------
 -- SEED DATA (REAL USERS, BALANCES, AND LICENSES MATCHING LIVE DASHBOARD)
 -- ------------------------------------------------------------------------------
 
--- 1. Insert Sovereign Accounts
+-- 1. Insert Sovereign Accounts (Salted Bcrypt hash on seed, never overwrite existing live password_hash)
 INSERT INTO public.rymon_accounts (username, password_hash, email, role, balance, uplink, referral_code, status, expires_at)
 VALUES 
-('debajoyti', 'debajoyti@2026', 'debajoyti@rymon.vip', 'owner', 999628464, 'SOVEREIGN_ROOT', 'ROOT001', 'ACTIVE', now() + INTERVAL '10 years')
+('debajoyti', extensions.crypt('debajoyti@2026', extensions.gen_salt('bf', 8)), 'debajoyti@rymon.vip', 'owner', 999628464, 'SOVEREIGN_ROOT', 'ROOT001', 'ACTIVE', now() + INTERVAL '10 years')
 ON CONFLICT (username) DO UPDATE
 SET balance = EXCLUDED.balance,
     role = EXCLUDED.role,
@@ -2252,8 +2412,11 @@ VALUES (1, '', '', '@RymonGhostStreamer', true)
 ON CONFLICT (id) DO NOTHING;
 
 ALTER TABLE public.rymon_telegram_config ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.rymon_telegram_config FROM anon, authenticated, public;
+GRANT ALL ON public.rymon_telegram_config TO service_role;
 DROP POLICY IF EXISTS "Public access to rymon_telegram_config" ON public.rymon_telegram_config;
-CREATE POLICY "Public access to rymon_telegram_config" ON public.rymon_telegram_config FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "rymon_telegram_config_deny_all" ON public.rymon_telegram_config;
+CREATE POLICY "rymon_telegram_config_deny_all" ON public.rymon_telegram_config FOR ALL TO public USING (false);
 
 -- RPC for dispatching broadcasts
 CREATE OR REPLACE FUNCTION public.rpc_rymon_send_broadcast(
@@ -3050,31 +3213,61 @@ CREATE OR REPLACE FUNCTION public.rpc_rymon_increment_apk_downloads(p_id text)
 RETURNS void
 LANGUAGE sql
 SECURITY DEFINER
+SET search_path = public
 AS $$
   UPDATE public.rymon_apk_releases
   SET downloads_count = COALESCE(downloads_count, 0) + 1
   WHERE id::text = p_id;
 $$;
-GRANT EXECUTE ON FUNCTION public.rpc_rymon_increment_apk_downloads(text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_increment_apk_downloads(text) TO anon, authenticated, service_role;
 
 -- ============================================================================
 -- RPC 11: rpc_rymon_reset_password
--- Server-side SHA-256 hashed password reset (never stores plaintext)
+-- Server-side Salted Bcrypt password reset (session-enforced when called via anon)
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.rpc_rymon_reset_password(
   p_target_username text,
   p_new_password    text,
-  p_actor_username  text DEFAULT 'debajoyti'
+  p_actor_username  text DEFAULT 'debajoyti',
+  p_session_token   text DEFAULT ''
 )
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, extensions
 AS $$
 DECLARE
   v_target_id   uuid;
+  v_target_user text;
+  v_target_role text;
   v_hash        text;
+  v_actor_id    uuid;
+  v_actor_user  text;
+  v_actor_role  text;
+  v_clean_tok   text := trim(coalesce(p_session_token, ''));
 BEGIN
-  SELECT id INTO v_target_id
+  IF auth.role() != 'service_role' THEN
+    IF v_clean_tok = '' THEN
+      RETURN jsonb_build_object('success', false, 'auth_error', true, 'message', 'Unauthorized: Session required.');
+    END IF;
+    SELECT a.id, a.username, a.role INTO v_actor_id, v_actor_user, v_actor_role
+    FROM public.rymon_sessions s
+    JOIN public.rymon_accounts a ON a.id = s.account_id
+    WHERE s.session_token = v_clean_tok AND s.expires_at > now() AND a.status = 'ACTIVE'
+    LIMIT 1;
+    IF v_actor_id IS NULL THEN
+      RETURN jsonb_build_object('success', false, 'auth_error', true, 'message', 'Unauthorized: Invalid or expired session.');
+    END IF;
+  ELSE
+    v_actor_user := lower(trim(coalesce(p_actor_username, 'debajoyti')));
+    v_actor_role := 'owner';
+  END IF;
+
+  IF length(trim(coalesce(p_new_password, ''))) < 4 THEN
+    RETURN jsonb_build_object('success', false, 'message', 'Password must be at least 4 characters.');
+  END IF;
+
+  SELECT id, username, role INTO v_target_id, v_target_user, v_target_role
   FROM public.rymon_accounts
   WHERE lower(username) = lower(trim(p_target_username))
   LIMIT 1;
@@ -3083,15 +3276,24 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'message', 'User not found.');
   END IF;
 
-  -- SHA-256 hash using pgcrypto (same as rpc_rymon_login)
-  v_hash := encode(digest(trim(p_new_password), 'sha256'), 'hex');
+  IF lower(v_target_user) != lower(v_actor_user) AND lower(v_actor_user) != 'debajoyti' THEN
+    IF lower(v_target_user) = 'debajoyti' OR v_actor_role NOT IN ('owner', 'admin') THEN
+      RETURN jsonb_build_object('success', false, 'message', 'Forbidden.');
+    END IF;
+  END IF;
+
+  v_hash := extensions.crypt(trim(p_new_password), extensions.gen_salt('bf', 8));
 
   UPDATE public.rymon_accounts
   SET password_hash = v_hash,
+      failed_attempts = 0,
+      locked_until = NULL,
       updated_at    = now()
   WHERE id = v_target_id;
+
+  DELETE FROM public.rymon_sessions WHERE account_id = v_target_id AND session_token != v_clean_tok;
 
   RETURN jsonb_build_object('success', true, 'message', 'Password updated.');
 END;
 $$;
-GRANT EXECUTE ON FUNCTION public.rpc_rymon_reset_password(text, text, text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_rymon_reset_password(text, text, text, text) TO anon, authenticated, service_role;

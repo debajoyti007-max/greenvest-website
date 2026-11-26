@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import http from 'http'
 import ws from 'ws'
@@ -38,9 +39,14 @@ if (!BOT_TOKEN && ENABLE_TELEGRAM_BOT) {
 const OWNER_CHAT_ID = resolveSecret('OWNER_CHAT_ID', '5831800759') // @montage007pc (Montage)
 const SUPABASE_URL = resolveSecret('VITE_SUPABASE_URL', 'https://zvjqpigduyvczidzafus.supabase.co')
 const SUPABASE_SERVICE_KEY = resolveSecret('SUPABASE_SERVICE_ROLE_KEY') || resolveSecret('SUPABASE_SECRET_KEY')
-const SUPABASE_KEY = SUPABASE_SERVICE_KEY || resolveSecret('VITE_SUPABASE_ANON_KEY', 'sb_publishable_sLfTUi9HAd2Nu9OAIYWGwQ_FjGYcoVR')
+const RELAY_SECRET = resolveSecret('RYMON_RELAY_SECRET')
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+if (!SUPABASE_SERVICE_KEY) {
+  console.error('❌ [CRITICAL] SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY) is required. Refusing to boot with anon key.')
+  process.exit(1)
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
   realtime: { transport: ws }
 })
@@ -113,19 +119,21 @@ async function syncAndValidateVipLicense(normKey, state) {
     try {
       const { data, error } = await supabase
         .from('rymon_licenses')
-        .select('status, expires_at, is_paused, creator_username')
+        .select('status, expires_at, is_paused, creator_username, device_hwid')
         .eq('license_key', normKey)
         .maybeSingle()
 
       state._lastVerified = now
 
       if (error || !data) {
-        // Key not found in DB or deleted/purged -> strictly expired/inactive
+        state._notFound = true
         state.is_active = false
         state.is_paused = true
         state.is_online = false
         state.status = 'EXPIRED'
       } else {
+        state._notFound = false
+        state._boundHwid = data.device_hwid || ''
         state.status = data.status || 'ACTIVE'
         state.expires_at = data.expires_at || null
         if (data.creator_username) state.creator = data.creator_username
@@ -162,11 +170,179 @@ async function syncAndValidateVipLicense(normKey, state) {
   return state
 }
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, X-License-Key',
-  'Content-Type': 'application/json'
+const ALLOWED_ORIGINS = new Set(
+  [
+    'https://greenvest.shop',
+    'https://www.greenvest.shop',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    ...(resolveSecret('ALLOWED_ORIGIN') ? resolveSecret('ALLOWED_ORIGIN').split(',').map((s) => s.trim()) : [])
+  ].filter(Boolean)
+)
+
+function buildCorsHeaders(req) {
+  const origin = req?.headers?.origin
+  const headers = {
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, X-License-Key, X-Session-Token, X-Rymon-Secret',
+    'Content-Type': 'application/json',
+    'X-Content-Type-Options': 'nosniff'
+  }
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin
+    headers['Vary'] = 'Origin'
+  }
+  return headers
+}
+
+const MAX_BODY_BYTES = 64 * 1024
+
+function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
+  return new Promise((resolve, reject) => {
+    const contentLength = Number(req.headers['content-length'] || 0)
+    if (contentLength > maxBytes) {
+      reject(Object.assign(new Error('Payload too large'), { statusCode: 413 }))
+      req.destroy()
+      return
+    }
+    const chunks = []
+    let totalBytes = 0
+    req.on('data', (chunk) => {
+      totalBytes += chunk.length
+      if (totalBytes > maxBytes) {
+        reject(Object.assign(new Error('Payload too large'), { statusCode: 413 }))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8')
+        resolve(raw ? JSON.parse(raw) : {})
+      } catch {
+        reject(Object.assign(new Error('Malformed JSON payload'), { statusCode: 400 }))
+      }
+    })
+    req.on('error', (err) => reject(Object.assign(err, { statusCode: 400 })))
+  })
+}
+
+async function verifyDaemonSessionOrSecret(req, payload = {}) {
+  const secretHeader = String(req.headers['x-rymon-secret'] || '').trim()
+  const authHeader = String(req.headers['authorization'] || '').trim()
+  const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+
+  if (RELAY_SECRET && ((secretHeader && secretHeader === RELAY_SECRET) || (bearer && bearer === RELAY_SECRET))) {
+    return { ok: true, mode: 'secret', role: 'owner' }
+  }
+
+  const sessionToken = String(req.headers['x-session-token'] || payload?.session_token || bearer || '').trim()
+  if (!sessionToken || sessionToken.length < 16) {
+    return { ok: false }
+  }
+
+  try {
+    const { data: sess } = await supabase
+      .from('rymon_sessions')
+      .select('account_id, expires_at')
+      .eq('session_token', sessionToken)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+
+    if (!sess?.account_id) return { ok: false }
+
+    const { data: acc } = await supabase
+      .from('rymon_accounts')
+      .select('id, username, role, status')
+      .eq('id', sess.account_id)
+      .eq('status', 'ACTIVE')
+      .maybeSingle()
+
+    if (!acc) return { ok: false }
+    return { ok: true, mode: 'session', account: acc, role: acc.role }
+  } catch {
+    return { ok: false }
+  }
+}
+
+const VIP_BOOLEAN_FIELDS = new Set([
+  'is_online',
+  'is_paused',
+  'is_active',
+  'in_game_panel',
+  'aim_silent',
+  'ignore_knocked',
+  'show_aim_line',
+  'show_aim_fov',
+  'esp_box',
+  'esp_line',
+  'esp_skeleton',
+  'esp_name',
+  'esp_distance',
+  'esp_health',
+  'esp_count',
+  'esp_radar',
+  'speed_hack',
+  'ghost_hack',
+  'no_reload',
+  'no_recoil',
+  'emergency_purge'
+])
+
+const VIP_STAFF_ONLY_FIELDS = new Set(['is_paused', 'is_active', 'emergency_purge'])
+
+const VIP_NUMERIC_BOUNDS = {
+  hit_rate: [0, 100],
+  aim_fov: [10, 360],
+  speed_multiplier: [0.5, 10],
+  theme_color_index: [0, 10],
+  enemies: [0, 200],
+  bots: [0, 200]
+}
+
+function applySafeVipField(state, key, value, isStaffAuthenticated) {
+  if (typeof key !== 'string' || !key) return
+  if (VIP_STAFF_ONLY_FIELDS.has(key) && !isStaffAuthenticated) return
+  if (VIP_BOOLEAN_FIELDS.has(key)) {
+    state[key] = Boolean(value)
+    return
+  }
+  if (Object.hasOwn(VIP_NUMERIC_BOUNDS, key)) {
+    const num = Number(value)
+    if (Number.isFinite(num)) {
+      const [min, max] = VIP_NUMERIC_BOUNDS[key]
+      state[key] = Math.min(max, Math.max(min, num))
+    }
+    return
+  }
+  if (key === 'streamer_name' && typeof value === 'string') {
+    state.streamer_name = value.slice(0, 64)
+    if (state.streamer_name.includes('P:0')) state.in_game_panel = false
+    if (state.streamer_name.includes('P:1')) state.in_game_panel = true
+    const eMatch = state.streamer_name.match(/E:(\d+)/)
+    const bMatch = state.streamer_name.match(/B:(\d+)/)
+    if (eMatch) state.enemies = Math.min(200, parseInt(eMatch[1], 10))
+    if (bMatch) state.bots = Math.min(200, parseInt(bMatch[1], 10))
+  }
+}
+
+function sanitizeVipStateForResponse(state) {
+  const out = {}
+  for (const [k, v] of Object.entries(state)) {
+    if (!k.startsWith('_')) out[k] = v
+  }
+  return out
+}
+
+function normalizeHwidMatch(dbHwid, reqHwid) {
+  const cleanReq = String(reqHwid || '').trim().toLowerCase().replace(/^(android_id:|install_id:|boot_fallback:|hwid:|device:)/, '')
+  if (!cleanReq || !dbHwid) return false
+  return String(dbHwid)
+    .split('|')
+    .map((p) => p.trim().toLowerCase().replace(/^(android_id:|install_id:|boot_fallback:|hwid:|device:)/, ''))
+    .filter(Boolean)
+    .some((p) => p === cleanReq)
 }
 
 // Lightweight HTTP server for Render Cloud Web Service, Health Checks & VIP Bridge
@@ -174,177 +350,183 @@ const PORT = parseInt(process.env.PORT, 10) || 10000
 const healthServer = http.createServer(async (req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
   const pathname = urlObj.pathname
+  const corsHeaders = buildCorsHeaders(req)
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, CORS_HEADERS)
+    res.writeHead(204, corsHeaders)
     return res.end()
   }
 
   // 1. VIP Realtime State Query: GET /api/vip/state?key=RYMON-XXXX
   if (req.method === 'GET' && pathname === '/api/vip/state') {
     const key = urlObj.searchParams.get('key')
-    const state = getVipState(key)
+    const normKey = String(key || '').trim().toUpperCase()
+    const state = getVipState(normKey)
     if (!state) {
-      res.writeHead(400, CORS_HEADERS)
+      res.writeHead(400, corsHeaders)
       return res.end(JSON.stringify({ ok: false, error: 'Missing key parameter' }))
     }
-    await syncAndValidateVipLicense(String(key || '').trim().toUpperCase(), state)
-    res.writeHead(200, CORS_HEADERS)
-    return res.end(JSON.stringify({ ok: true, state }))
+    await syncAndValidateVipLicense(normKey, state)
+    if (state._notFound) {
+      vipStates.delete(normKey)
+      res.writeHead(404, corsHeaders)
+      return res.end(JSON.stringify({ ok: false, error: 'License key not found' }))
+    }
+    res.writeHead(200, corsHeaders)
+    return res.end(JSON.stringify({ ok: true, state: sanitizeVipStateForResponse(state) }))
   }
 
   // 2. VIP Realtime Patch: POST/PATCH /api/vip/patch
   if ((req.method === 'POST' || req.method === 'PATCH') && pathname === '/api/vip/patch') {
-    let body = ''
-    req.on('data', (chunk) => { body += chunk })
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}')
-        const key = payload.license_key || payload.key || urlObj.searchParams.get('key')
-        const state = getVipState(key)
-        if (!state) {
-          res.writeHead(400, CORS_HEADERS)
-          return res.end(JSON.stringify({ ok: false, error: 'Invalid or missing key' }))
-        }
-
-        await syncAndValidateVipLicense(String(key || '').trim().toUpperCase(), state)
-
-        // Strict expiration / revocation protection: expired or banned keys cannot be enabled
-        if (state.status === 'EXPIRED' || state.status === 'BANNED' || (state.expires_at && new Date(state.expires_at).getTime() <= Date.now())) {
-          state.is_active = false
-          state.is_paused = true
-          state.is_online = false
-          state.status = 'EXPIRED'
-          state.updated_at = new Date().toISOString()
-          res.writeHead(200, CORS_HEADERS)
-          return res.end(JSON.stringify({ ok: true, state }))
-        }
-
-        // Apply incoming fields
-        const allowed = [
-          'is_online', 'is_paused', 'is_active', 'in_game_panel',
-          'aim_silent', 'hit_rate', 'ignore_knocked', 'show_aim_line', 'show_aim_fov', 'aim_fov',
-          'esp_box', 'esp_line', 'esp_skeleton', 'esp_name', 'esp_distance', 'esp_health', 'esp_count', 'esp_radar',
-          'speed_hack', 'speed_multiplier', 'ghost_hack', 'no_reload', 'no_recoil',
-          'theme_color_index', 'enemies', 'bots', 'emergency_purge', 'streamer_name'
-        ]
-        for (const f of allowed) {
-          if (payload[f] !== undefined) {
-            state[f] = payload[f]
-          }
-        }
-        if (payload.streamer_name) {
-          state.streamer_name = payload.streamer_name
-          if (payload.streamer_name.includes('P:0')) state.in_game_panel = false
-          if (payload.streamer_name.includes('P:1')) state.in_game_panel = true
-          const eMatch = payload.streamer_name.match(/E:(\d+)/)
-          const bMatch = payload.streamer_name.match(/B:(\d+)/)
-          if (eMatch) state.enemies = parseInt(eMatch[1], 10)
-          if (bMatch) state.bots = parseInt(bMatch[1], 10)
-        }
-        state.last_heartbeat = new Date().toISOString()
-        state.updated_at = new Date().toISOString()
-        state.version = (state.version || 1) + 1
-        state._dirty = true
-
-        res.writeHead(200, CORS_HEADERS)
-        return res.end(JSON.stringify({ ok: true, state }))
-      } catch {
-        res.writeHead(400, CORS_HEADERS)
-        return res.end(JSON.stringify({ ok: false, error: 'Malformed JSON payload' }))
+    try {
+      const payload = await readJsonBody(req)
+      const key = payload.license_key || payload.key || urlObj.searchParams.get('key')
+      const normKey = String(key || '').trim().toUpperCase()
+      const state = getVipState(normKey)
+      if (!state) {
+        res.writeHead(400, corsHeaders)
+        return res.end(JSON.stringify({ ok: false, error: 'Invalid or missing key' }))
       }
-    })
-    return
+
+      await syncAndValidateVipLicense(normKey, state)
+      if (state._notFound) {
+        vipStates.delete(normKey)
+        res.writeHead(404, corsHeaders)
+        return res.end(JSON.stringify({ ok: false, error: 'License key not found' }))
+      }
+
+      const authRes = await verifyDaemonSessionOrSecret(req, payload)
+      const hwid = payload.hwid || payload.device_hwid || urlObj.searchParams.get('hwid')
+      const hwidAuthorized = Boolean(state._boundHwid && hwid && normalizeHwidMatch(state._boundHwid, hwid))
+      if (!authRes.ok && !hwidAuthorized) {
+        res.writeHead(401, corsHeaders)
+        return res.end(JSON.stringify({ ok: false, error: 'Unauthorized: Valid session or bound HWID required' }))
+      }
+
+      // Strict expiration / revocation protection: expired or banned keys cannot be enabled
+      if (state.status === 'EXPIRED' || state.status === 'BANNED' || (state.expires_at && new Date(state.expires_at).getTime() <= Date.now())) {
+        state.is_active = false
+        state.is_paused = true
+        state.is_online = false
+        state.status = state.status === 'BANNED' ? 'BANNED' : 'EXPIRED'
+        state.updated_at = new Date().toISOString()
+        res.writeHead(200, corsHeaders)
+        return res.end(JSON.stringify({ ok: true, state: sanitizeVipStateForResponse(state) }))
+      }
+
+      for (const [k, v] of Object.entries(payload)) {
+        applySafeVipField(state, k, v, authRes.ok)
+      }
+      state.last_heartbeat = new Date().toISOString()
+      state.updated_at = new Date().toISOString()
+      state.version = (state.version || 1) + 1
+      state._dirty = true
+
+      res.writeHead(200, corsHeaders)
+      return res.end(JSON.stringify({ ok: true, state: sanitizeVipStateForResponse(state) }))
+    } catch (err) {
+      res.writeHead(err.statusCode || 400, corsHeaders)
+      return res.end(JSON.stringify({ ok: false, error: err.message || 'Malformed JSON payload' }))
+    }
   }
 
   // 3. VIP Command Toggle: POST /api/vip/command
   if (req.method === 'POST' && pathname === '/api/vip/command') {
-    let body = ''
-    req.on('data', (chunk) => { body += chunk })
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}')
-        const key = payload.key || payload.license_key
-        const state = getVipState(key)
-        if (!state) {
-          res.writeHead(400, CORS_HEADERS)
-          return res.end(JSON.stringify({ ok: false, error: 'Invalid or missing key' }))
-        }
-
-        await syncAndValidateVipLicense(String(key || '').trim().toUpperCase(), state)
-
-        if (state.status === 'EXPIRED' || state.status === 'BANNED' || (state.expires_at && new Date(state.expires_at).getTime() <= Date.now())) {
-          state.is_active = false
-          state.is_paused = true
-          state.is_online = false
-          state.status = 'EXPIRED'
-          res.writeHead(403, CORS_HEADERS)
-          return res.end(JSON.stringify({ ok: false, error: 'License key has expired or is invalid.' }))
-        }
-
-        if (payload.toggle !== undefined) {
-          state[payload.toggle] = payload.value
-          if (payload.toggle === 'esp_radar') {
-            state.esp_count = Boolean(payload.value)
-          }
-        }
-        if (payload.patch && typeof payload.patch === 'object') {
-          Object.assign(state, payload.patch)
-        }
-        state.updated_at = new Date().toISOString()
-        state.version = (state.version || 1) + 1
-        state._dirty = true
-
-        res.writeHead(200, CORS_HEADERS)
-        return res.end(JSON.stringify({ ok: true, state }))
-      } catch {
-        res.writeHead(400, CORS_HEADERS)
-        return res.end(JSON.stringify({ ok: false, error: 'Malformed JSON payload' }))
+    try {
+      const payload = await readJsonBody(req)
+      const key = payload.key || payload.license_key
+      const normKey = String(key || '').trim().toUpperCase()
+      const state = getVipState(normKey)
+      if (!state) {
+        res.writeHead(400, corsHeaders)
+        return res.end(JSON.stringify({ ok: false, error: 'Invalid or missing key' }))
       }
-    })
-    return
+
+      await syncAndValidateVipLicense(normKey, state)
+      if (state._notFound) {
+        vipStates.delete(normKey)
+        res.writeHead(404, corsHeaders)
+        return res.end(JSON.stringify({ ok: false, error: 'License key not found' }))
+      }
+
+      const authRes = await verifyDaemonSessionOrSecret(req, payload)
+      if (!authRes.ok) {
+        res.writeHead(401, corsHeaders)
+        return res.end(JSON.stringify({ ok: false, error: 'Unauthorized: Valid staff session required' }))
+      }
+
+      if (state.status === 'EXPIRED' || state.status === 'BANNED' || (state.expires_at && new Date(state.expires_at).getTime() <= Date.now())) {
+        state.is_active = false
+        state.is_paused = true
+        state.is_online = false
+        state.status = state.status === 'BANNED' ? 'BANNED' : 'EXPIRED'
+        res.writeHead(403, corsHeaders)
+        return res.end(JSON.stringify({ ok: false, error: 'License key has expired or is invalid.' }))
+      }
+
+      if (payload.toggle !== undefined) {
+        applySafeVipField(state, String(payload.toggle), payload.value, true)
+        if (payload.toggle === 'esp_radar') {
+          state.esp_count = Boolean(payload.value)
+        }
+      }
+      if (payload.patch && typeof payload.patch === 'object') {
+        for (const [k, v] of Object.entries(payload.patch)) {
+          applySafeVipField(state, k, v, true)
+        }
+      }
+      state.updated_at = new Date().toISOString()
+      state.version = (state.version || 1) + 1
+      state._dirty = true
+
+      res.writeHead(200, corsHeaders)
+      return res.end(JSON.stringify({ ok: true, state: sanitizeVipStateForResponse(state) }))
+    } catch (err) {
+      res.writeHead(err.statusCode || 400, corsHeaders)
+      return res.end(JSON.stringify({ ok: false, error: err.message || 'Malformed JSON payload' }))
+    }
   }
 
-  // 4. Secure Telegram Message Dispatch Relay (Prevents exposing BOT_TOKEN to web clients)
+  // 4. Authenticated Telegram Owner Notification Relay (Locked to OWNER_CHAT_ID only)
   if (req.method === 'POST' && pathname === '/api/telegram/dispatch') {
-    let body = ''
-    req.on('data', (chunk) => { body += chunk })
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}')
-        const targetChatId = payload.chat_id || OWNER_CHAT_ID
-        const messageText = payload.text || ''
-        const replyMarkup = payload.reply_markup
-
-        if (!messageText) {
-          res.writeHead(400, CORS_HEADERS)
-          return res.end(JSON.stringify({ ok: false, error: 'Missing text parameter' }))
-        }
-
-        const tgResp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: targetChatId,
-            text: messageText,
-            parse_mode: 'HTML',
-            disable_web_page_preview: true,
-            ...(replyMarkup ? { reply_markup: replyMarkup } : {})
-          })
-        })
-        const tgJson = await tgResp.json()
-        res.writeHead(200, CORS_HEADERS)
-        return res.end(JSON.stringify(tgJson))
-      } catch (err) {
-        res.writeHead(500, CORS_HEADERS)
-        return res.end(JSON.stringify({ ok: false, error: err.message || 'Telegram relay failed' }))
+    try {
+      const payload = await readJsonBody(req)
+      const authRes = await verifyDaemonSessionOrSecret(req, payload)
+      if (!authRes.ok) {
+        res.writeHead(401, corsHeaders)
+        return res.end(JSON.stringify({ ok: false, error: 'Unauthorized: Session required' }))
       }
-    })
-    return
+
+      const messageText = String(payload.text || '').slice(0, 4096)
+      const replyMarkup = payload.reply_markup
+
+      if (!messageText) {
+        res.writeHead(400, corsHeaders)
+        return res.end(JSON.stringify({ ok: false, error: 'Missing text parameter' }))
+      }
+
+      const tgResp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: OWNER_CHAT_ID,
+          text: messageText,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {})
+        })
+      })
+      const tgJson = await tgResp.json()
+      res.writeHead(200, corsHeaders)
+      return res.end(JSON.stringify(tgJson))
+    } catch (err) {
+      res.writeHead(err.statusCode || 500, corsHeaders)
+      return res.end(JSON.stringify({ ok: false, error: 'Telegram relay failed' }))
+    }
   }
 
   // 5. Default Health Check
-  res.writeHead(200, CORS_HEADERS)
+  res.writeHead(200, corsHeaders)
   res.end(
     JSON.stringify({
       status: 'online',
@@ -605,15 +787,24 @@ async function saveSystemConfigValue(key, value) {
   } catch {}
 }
 
+function generateCryptoSegment(len = 4) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const bytes = crypto.randomBytes(len)
+  let out = ''
+  for (let i = 0; i < len; i++) out += chars[bytes[i] % chars.length]
+  return out
+}
+
 async function getResellerPriceMap(username) {
   const [globalPrices, userCustomMaps] = await Promise.all([
-    getSystemConfigValue('global_default_key_prices', DEFAULT_PRICES),
-    getSystemConfigValue('user_custom_key_prices', {})
+    getSystemConfigValue('global_key_prices', DEFAULT_PRICES),
+    getSystemConfigValue('user_custom_prices', {})
   ])
   const base = { ...DEFAULT_PRICES, ...globalPrices }
   const clean = (username || '').toLowerCase()
-  if (userCustomMaps[clean] && typeof userCustomMaps[clean] === 'object') {
-    return { ...base, ...userCustomMaps[clean] }
+  const matchedKey = Object.keys(userCustomMaps || {}).find((k) => k.toLowerCase() === clean)
+  if (matchedKey && userCustomMaps[matchedKey] && typeof userCustomMaps[matchedKey] === 'object') {
+    return { ...base, ...userCustomMaps[matchedKey] }
   }
   return base
 }
@@ -654,7 +845,7 @@ async function grantResellerByChatId({
     existingBinding?.username ||
     `reseller_${suffix}`
   ).toLowerCase()
-  const generatedPassword = customPassword?.trim() || `Rymon@${suffix}`
+  const generatedPassword = customPassword?.trim() || `Rym#${crypto.randomBytes(6).toString('base64url')}`
 
   let finalUsername = desiredUsername
   let finalBalance = addBal
@@ -683,25 +874,20 @@ async function grantResellerByChatId({
       .eq('id', existingAcc.id)
   } else {
     createdNew = true
-    const { data: inserted } = await supabase
-      .from('rymon_accounts')
-      .insert({
-        username: desiredUsername,
-        password_hash: generatedPassword,
-        email: `${desiredUsername}@rymon.vip`,
-        role: 'reseller',
-        balance: addBal,
-        uplink: 'debajoyti',
-        devices_used: 0,
-        devices_max: 500,
-        status: 'ACTIVE',
-        expires_at: expiresAtIso
-      })
-      .select('username, balance')
-      .maybeSingle()
-    if (inserted) {
-      finalUsername = inserted.username
-      finalBalance = Number(inserted.balance || addBal)
+    // Register via SQL RPC so password_hash is always Salted Bcrypt (never plaintext)
+    const { data: regRes } = await supabase.rpc('rpc_rymon_register_account', {
+      p_username: desiredUsername,
+      p_password: generatedPassword,
+      p_email: `${desiredUsername}@rymon.vip`,
+      p_role: 'reseller',
+      p_initial_balance: addBal,
+      p_uplink: 'debajoyti',
+      p_referral_code: '',
+      p_subscription_days: safeDays
+    })
+    if (regRes?.success) {
+      finalUsername = regRes.username || desiredUsername
+      finalBalance = addBal
     }
   }
 
@@ -740,9 +926,8 @@ async function grantResellerByChatId({
   }
 }
 
-async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel) {
+async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel, chatId = '', linkedReseller = null) {
   const cleanKey = (rawKey || '').trim().toUpperCase()
-  const DAILY_LIMIT = 2
   const DAY_WINDOW_MS = 86400000
   const nowMs = Date.now()
   const nowIso = new Date(nowMs).toISOString()
@@ -751,11 +936,22 @@ async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel) {
     return `ℹ️ <b>Usage:</b> Send <code>/reset RYMON-XXXX-XXXX</code> or simply paste your license key directly!`
   }
 
-  const { data: licRecord } = await supabase
-    .from('rymon_licenses')
-    .select('license_key, status, expires_at, is_paused, game, plan_duration')
-    .ilike('license_key', cleanKey)
-    .maybeSingle()
+  const [policy, { data: licRecord }] = await Promise.all([
+    getSystemConfigValue('sovereign_security_policy', {}),
+    supabase
+      .from('rymon_licenses')
+      .select('license_key, status, expires_at, is_paused, game, plan_duration, creator_username')
+      .ilike('license_key', cleanKey)
+      .maybeSingle()
+  ])
+
+  const allowClientSelfReset = policy.allow_client_self_reset !== false
+  const configLimit = Number(policy.client_hwid_limit_per_day)
+  const DAILY_LIMIT = Number.isFinite(configLimit) ? Math.max(0, configLimit) : 2
+
+  if (!isOwnerOverride && !linkedReseller && (!allowClientSelfReset || DAILY_LIMIT === 0)) {
+    return `🔒 <b>Self-Service HWID Resets Disabled</b>\nClient self-service resets are currently turned off by the Owner. Contact your seller.`
+  }
 
   if (!licRecord) {
     return `❌ <b>Key Not Found:</b> <code>${cleanKey}</code>\nPlease double-check your license key and try again.`
@@ -772,8 +968,27 @@ async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel) {
     return `⏰ <b>Key Expired:</b> <code>${cleanKey}</code> has expired. Please contact your seller to renew.`
   }
 
-  const logMap = await getSystemConfigValue('hwid_reset_daily_log', {})
   const exactKey = licRecord.license_key.toUpperCase()
+  const isCreatorReseller = Boolean(
+    linkedReseller?.username &&
+      licRecord.creator_username &&
+      linkedReseller.username.toLowerCase() === licRecord.creator_username.toLowerCase()
+  )
+
+  // Ownership binding guard: prevent strangers from burning/unbinding another buyer's key
+  if (chatId && !isOwnerOverride && !isCreatorReseller) {
+    const ownerMap = await getSystemConfigValue('key_telegram_owners', {})
+    const boundChatId = ownerMap[exactKey] ? String(ownerMap[exactKey]) : ''
+    if (boundChatId && boundChatId !== String(chatId)) {
+      return `🛡️ <b>Key Ownership Protection</b>\n\nThis key is bound to another buyer's Telegram account. Please contact your seller (@${licRecord.creator_username}) for transfer or override.`
+    }
+    if (!boundChatId) {
+      ownerMap[exactKey] = String(chatId)
+      await saveSystemConfigValue('key_telegram_owners', ownerMap)
+    }
+  }
+
+  const logMap = await getSystemConfigValue('hwid_reset_daily_log', {})
   const recentResets = (logMap[exactKey] || []).filter((ts) => nowMs - Number(ts) < DAY_WINDOW_MS)
 
   if (!isOwnerOverride) {
@@ -782,13 +997,13 @@ async function handleKeyHwidReset(rawKey, isOwnerOverride, actorLabel) {
       const waitMs = Math.max(60000, DAY_WINDOW_MS - (nowMs - oldestTs))
       const waitStr = formatDurationShort(waitMs)
       return [
-        `🛡️ <b>DAILY HWID RESET LIMIT REACHED (2/2)</b>`,
+        `🛡️ <b>DAILY HWID RESET LIMIT REACHED (${DAILY_LIMIT}/${DAILY_LIMIT})</b>`,
         ``,
         `• <b>Key:</b> <code>${exactKey}</code>`,
-        `• <b>Resets Used Today:</b> 2 / 2 (Max 2 per day)`,
+        `• <b>Resets Used Today:</b> ${DAILY_LIMIT} / ${DAILY_LIMIT} (Max ${DAILY_LIMIT} per day)`,
         `• <b>Next Reset Available In:</b> ~${waitStr}`,
         ``,
-        `<i>Normal users can reset their key up to 2 times per day. Contact your seller or @montage007pc if you need an emergency override.</i>`
+        `<i>Normal users can reset their key up to ${DAILY_LIMIT} time(s) per day. Contact your seller or @montage007pc if you need an emergency override.</i>`
       ].join('\n')
     }
     recentResets.push(nowMs)
@@ -1066,15 +1281,15 @@ async function processUpdate(upd) {
       )
       return
     }
-    const { data: userRow } = await supabase
-      .from('rymon_accounts')
-      .select('id, username, role, balance, password_hash')
-      .ilike('username', uName)
-      .maybeSingle()
-    if (!userRow || userRow.password_hash !== uPass) {
-      await sendTelegramReply(chatId, `❌ Invalid username or password.`)
+    const { data: loginRes, error: loginErr } = await supabase.rpc('rpc_rymon_login', {
+      p_username: uName,
+      p_password: uPass
+    })
+    if (loginErr || !loginRes?.success || !loginRes?.user) {
+      await sendTelegramReply(chatId, `❌ ${loginRes?.error || 'Invalid username or password.'}`)
       return
     }
+    const userRow = loginRes.user
     const bindings = await getSystemConfigValue('telegram_reseller_bindings', {})
     bindings[chatId] = {
       chat_id: chatId,
@@ -1192,66 +1407,28 @@ async function processUpdate(upd) {
         return
       }
 
-      const basePrice = priceMap[rawDuration] ?? 35
-      const unitPrice = isVipRequested ? Math.round(basePrice * 1.5) : basePrice
-      const totalCost = unitPrice * qty
-      const liveBal = Number(activeAccount.balance || 0)
+      const { data: genRes, error: genErr } = await supabase.rpc('rpc_rymon_generate_key', {
+        p_creator_username: activeAccount.username,
+        p_game: 'Free Fire MAX',
+        p_plan: planDuration,
+        p_custom_prefix: 'RYMON',
+        p_devices_max: 1,
+        p_quantity: qty
+      })
 
-      if (activeAccount.role !== 'owner' && liveBal < totalCost) {
+      if (genErr || !genRes?.success) {
         await sendTelegramReply(
           chatId,
-          `❌ <b>Insufficient Wallet Balance!</b>\n• <b>Cost:</b> ₹${totalCost.toLocaleString('en-IN')} (${qty}x ${planDuration} @ ₹${unitPrice})\n• <b>Your Wallet:</b> ₹${liveBal.toLocaleString('en-IN')}\n\nTap <b>💳 Top-Up</b> below to request wallet credit from Owner!`,
+          `❌ ${genRes?.error || genErr?.message || 'Unable to generate key.'}`,
           buildResellerInlineKeyboard(priceMap)
         )
         return
       }
 
-      const nextBalance = activeAccount.role === 'owner' ? liveBal : Math.max(0, liveBal - totalCost)
-      if (activeAccount.role !== 'owner') {
-        await supabase
-          .from('rymon_accounts')
-          .update({ balance: nextBalance, updated_at: new Date().toISOString() })
-          .eq('id', activeAccount.id)
-      }
-
-      const generatedKeys = []
-      for (let i = 0; i < qty; i++) {
-        const b1 = Math.random().toString(36).substring(2, 6).toUpperCase()
-        const b2 = Math.random().toString(36).substring(2, 6).toUpperCase()
-        generatedKeys.push(`RYMON-FF-${b1}-${b2}`)
-      }
-
-      const licPayloads = generatedKeys.map((k) => ({
-        license_key: k,
-        game: 'Free Fire MAX',
-        plan_duration: planDuration,
-        creator_username: activeAccount.username,
-        devices_used: 0,
-        devices_max: 1,
-        device_hwid: '',
-        status: 'WAITING',
-        is_paused: false,
-        expires_at: null
-      }))
-      await supabase.from('rymon_licenses').insert(licPayloads)
-
-      // Lazy Creation: Only insert into rymon_streamer_controls if VIP Streamer Key
-      if (isVipRequested) {
-        const ctrlPayloads = generatedKeys.map((k) => ({
-          license_key: k,
-          game_name: 'Free Fire MAX',
-          plan_duration: planDuration,
-          creator: activeAccount.username,
-          devices_max: 1,
-          devices_used: 0,
-          device_hwid: '',
-          is_active: true,
-          is_paused: false,
-          is_online: false,
-          updated_at: new Date().toISOString()
-        }))
-        await supabase.from('rymon_streamer_controls').upsert(ctrlPayloads, { onConflict: 'license_key' })
-      }
+      const generatedKeys = Array.isArray(genRes.keys) && genRes.keys.length > 0 ? genRes.keys : [genRes.key]
+      const totalCost = Number(genRes.total_cost ?? 0)
+      const nextBalance =
+        genRes.remaining_balance !== undefined ? Number(genRes.remaining_balance) : Number(activeAccount.balance || 0)
 
       const keyLines = generatedKeys.map((k, idx) => `${idx + 1}. <code>${k}</code>`).join('\n')
       const reply = [
@@ -1345,12 +1522,35 @@ async function processUpdate(upd) {
       )
       return
     }
+    if (lowerText.startsWith('/extend')) {
+      const parts = text.split(/\s+/)
+      const targetKey = (parts[1] || '').trim().toUpperCase()
+      const addDays = Math.min(30, Math.max(1, parseInt(parts[2] || '1', 10) || 1))
+      if (!targetKey) {
+        await sendTelegramReply(chatId, `ℹ️ <b>Usage:</b> <code>/extend RYMON-XXXX-XXXX 7</code>`)
+        return
+      }
+      const { data: extRes, error: extErr } = await supabase.rpc('rpc_rymon_extend_key', {
+        p_license_key: targetKey,
+        p_days: addDays,
+        p_actor_username: activeAccount.username
+      })
+      if (extErr || !extRes?.success) {
+        await sendTelegramReply(chatId, `❌ ${extRes?.error || extErr?.message || 'Failed to extend key.'}`)
+      } else {
+        await sendTelegramReply(
+          chatId,
+          `✅ <b>Extended <code>${targetKey}</code> by +${addDays} Day(s)!</b>\n• <b>Cost:</b> ${activeAccount.role === 'owner' ? 'FREE' : `₹${extRes.cost || 0}`}\n• <b>New Balance:</b> ₹${Number(extRes.remaining_balance ?? activeAccount.balance).toLocaleString('en-IN')}`
+        )
+      }
+      return
+    }
   }
 
   if (lowerText.startsWith('/reset')) {
     const parts = text.split(/\s+/)
     const targetKey = (parts[1] || '').trim().toUpperCase()
-    const reply = await handleKeyHwidReset(targetKey, isOwnerChat, senderUser)
+    const reply = await handleKeyHwidReset(targetKey, isOwnerChat, senderUser, chatId, linkedReseller)
     await sendTelegramReply(chatId, reply)
     return
   }
@@ -1375,6 +1575,14 @@ async function processUpdate(upd) {
     const recent = (logMap[exactKey] || []).filter((ts) => Date.now() - Number(ts) < 86400000)
     const leftToday = Math.max(0, 2 - recent.length)
     const playing = isActivelyPlaying(ctrl)
+    const isCreator =
+      isOwnerChat ||
+      Boolean(linkedReseller?.username && found.creator_username && linkedReseller.username.toLowerCase() === found.creator_username.toLowerCase())
+    const hwidDisplay = found.device_hwid
+      ? isCreator
+        ? found.device_hwid
+        : `${String(found.device_hwid).slice(0, 4)}****${String(found.device_hwid).slice(-4)}`
+      : 'Unbound (Ready for Login)'
     const reply = [
       `🔍 <b>KEY INSPECTION:</b> <code>${found.license_key}</code>`,
       ``,
@@ -1382,7 +1590,7 @@ async function processUpdate(upd) {
       `• <b>Game:</b> ${found.game}`,
       `• <b>Plan:</b> ${found.plan_duration} (Max 30D)`,
       `• <b>Seller:</b> @${found.creator_username}`,
-      `• <b>HWID:</b> <code>${found.device_hwid || 'Unbound (Ready for Login)'}</code>`,
+      `• <b>HWID:</b> <code>${hwidDisplay}</code>`,
       `• <b>Daily Resets Left:</b> <b>${leftToday} / 2 today</b>`,
       `• <b>Expires:</b> ${found.expires_at ? new Date(found.expires_at).toLocaleString('en-IN') : 'Starts on 1st APK Login'}`
     ].join('\n')
@@ -1547,8 +1755,8 @@ async function processUpdate(upd) {
         ? 'FF'
         : (finalGameName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'APP')
 
-      const b1 = Math.random().toString(36).substring(2, 6).toUpperCase()
-      const b2 = Math.random().toString(36).substring(2, 6).toUpperCase()
+      const b1 = generateCryptoSegment(4)
+      const b2 = generateCryptoSegment(4)
       const newKey = `RYMON-${gameTag}-${b1}-${b2}`
 
       const { error } = await supabase.from('rymon_licenses').insert({
@@ -1601,7 +1809,7 @@ async function processUpdate(upd) {
       return
     }
 
-    if (lowerText.startsWith('/givereseller')) {
+    if (lowerText.startsWith('/givereseller') || lowerText.startsWith('/addreseller')) {
       const parts = text.split(/\s+/)
       const targetChatId = (parts[1] || '').trim()
       const subArg = (parts[2] || '30d').toLowerCase()
@@ -1764,7 +1972,7 @@ async function processUpdate(upd) {
       const parts = text.split(/\s+/)
       const subDays = (parts[1] || '30d').includes('60') ? 60 : 30
       const initBal = Math.max(0, parseInt(parts[2] || '0') || 0)
-      const rand = Math.random().toString(36).substring(2, 6).toUpperCase()
+      const rand = generateCryptoSegment(6)
       const code = `RYMON-RES-${subDays}D-${rand}`
       await supabase.from('rymon_referrals').insert({
         code,
@@ -1858,11 +2066,59 @@ async function processUpdate(upd) {
       }
       return
     }
+
+    if (lowerText.startsWith('/banuser') || lowerText.startsWith('/unbanuser')) {
+      const wantBan = lowerText.startsWith('/banuser')
+      const parts = text.split(/\s+/)
+      const targetIdOrUser = (parts[1] || '').trim()
+      if (!targetIdOrUser) {
+        await sendTelegramReply(chatId, `ℹ️ Usage: <code>/${wantBan ? 'banuser' : 'unbanuser'} &lt;CHAT_ID_OR_USERNAME&gt;</code>`)
+        return
+      }
+      const bindings = await getSystemConfigValue('telegram_reseller_bindings', {})
+      const resolvedUser = bindings[targetIdOrUser]?.username || targetIdOrUser
+      const { data: banRes, error: banErr } = await supabase.rpc('rpc_rymon_ban_unban', {
+        p_target: resolvedUser,
+        p_type: 'user',
+        p_action: wantBan ? 'ban' : 'unban',
+        p_actor_username: 'debajoyti'
+      })
+      await sendTelegramReply(
+        chatId,
+        banErr || !banRes?.success
+          ? `❌ ${banRes?.message || banErr?.message || 'Failed'}`
+          : `✅ <b>${banRes.message}</b>`,
+        buildOwnerInlineKeyboard()
+      )
+      return
+    }
+
+    if (lowerText.startsWith('/broadcast')) {
+      const msgBody = text.replace(/^\/broadcast\s*/i, '').trim()
+      if (!msgBody) {
+        await sendTelegramReply(chatId, `ℹ️ Usage: <code>/broadcast Your announcement message</code>`)
+        return
+      }
+      const { data: bcRes, error: bcErr } = await supabase.rpc('rpc_rymon_send_broadcast', {
+        p_sender: 'debajoyti',
+        p_recipient: 'ALL',
+        p_title: 'System Announcement',
+        p_message: msgBody,
+        p_type: 'UPDATE',
+        p_is_pinned: false
+      })
+      await sendTelegramReply(
+        chatId,
+        bcErr || !bcRes?.success ? `❌ Broadcast failed: ${bcErr?.message || bcRes?.error}` : `📢 Broadcast posted to all dashboard users!`,
+        buildOwnerInlineKeyboard()
+      )
+      return
+    }
   }
 
-  // Direct license key paste (e.g. RYMON-FF-XXXX-XXXX) -> Self-Service 2/Day HWID Reset!
+  // Direct license key paste (e.g. RYMON-FF-XXXX-XXXX) -> Self-Service HWID Reset!
   if (/^[A-Za-z0-9]{2,12}-[A-Za-z0-9-]+$/.test(text)) {
-    const reply = await handleKeyHwidReset(text, isOwnerChat, senderUser)
+    const reply = await handleKeyHwidReset(text, isOwnerChat, senderUser, chatId, linkedReseller)
     await sendTelegramReply(chatId, reply)
     return
   }

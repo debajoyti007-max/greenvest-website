@@ -724,5 +724,101 @@ describe('Cumulative License Key Duration Extension (Fresh vs Active Keys)', () 
   })
 })
 
+describe('Backend Security Hardening Guards', async () => {
+  const { default: connectHandler } = await import('../api/connect.js')
 
+  function createMockRes() {
+    const headers = {}
+    return {
+      statusCode: 200,
+      headers,
+      body: null,
+      ended: false,
+      setHeader(k, v) { headers[k] = v },
+      status(code) { this.statusCode = code; return this },
+      json(data) { this.body = data; this.ended = true; return this },
+      end() { this.ended = true; return this }
+    }
+  }
+
+  test('Connect gateway rejects missing hardware serial instead of using shared fallback', async () => {
+    const req = {
+      method: 'POST',
+      headers: { origin: 'https://greenvest.shop' },
+      body: { user_key: 'RYMON-FF-ABCD-EF12', serial: '' },
+      query: {}
+    }
+    const res = createMockRes()
+    await connectHandler(req, res)
+    assert.equal(res.statusCode, 400)
+    assert.equal(res.body.status, false)
+    assert.match(res.body.reason, /Hardware ID is required/i)
+    assert.equal(res.headers['Access-Control-Allow-Origin'], 'https://greenvest.shop')
+  })
+
+  test('Connect gateway blocks revoked master/owner key patterns and untrusted CORS origins', async () => {
+    const req = {
+      method: 'POST',
+      headers: { origin: 'https://evil-site.example' },
+      body: { user_key: 'RYMON-MASTER-KEY', serial: 'HWID-123456' },
+      query: {}
+    }
+    const res = createMockRes()
+    await connectHandler(req, res)
+    assert.equal(res.statusCode, 403)
+    assert.equal(res.body.status, false)
+    assert.equal(res.headers['Access-Control-Allow-Origin'], undefined)
+  })
+
+  test('Connect gateway rejects empty or missing app parameter (Catch B)', async () => {
+    const req = {
+      method: 'POST',
+      headers: { origin: 'https://greenvest.shop' },
+      body: { user_key: 'RYMON-FF-ABCD-EF12', serial: 'HWID-123456', app: '   ' },
+      query: {}
+    }
+    const res = createMockRes()
+    await connectHandler(req, res)
+    assert.equal(res.statusCode, 400)
+    assert.equal(res.body.status, false)
+    assert.match(res.body.reason, /Application name is required/i)
+  })
+
+  test('Connect gateway rejects missing or mismatched app secret (Catch A)', async () => {
+    const reqMissingSecret = {
+      method: 'POST',
+      headers: { origin: 'https://greenvest.shop' },
+      body: { user_key: 'RYMON-FF-ABCD-EF12', serial: 'HWID-123456', app: 'Free Fire MAX' },
+      query: {}
+    }
+    const resMissing = createMockRes()
+    await connectHandler(reqMissingSecret, resMissing)
+    assert.equal(resMissing.statusCode, 401)
+    assert.equal(resMissing.body.status, false)
+    assert.match(resMissing.body.reason, /App Secret is required/i)
+
+    const origFetch = globalThis.fetch
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('registered_apps')) {
+        return { ok: true, json: async () => ([{ value: [{ id: 'ff_max', name: 'Free Fire MAX', secret: 'ff_max_sec_7a8b9c1d2e3f405162738495a6b7c8d9e0f1', status: 'ACTIVE' }] }]) }
+      }
+      throw new Error('Unexpected fetch in secret rejection test')
+    }
+    try {
+      const reqWrongSecret = {
+        method: 'POST',
+        headers: { origin: 'https://greenvest.shop' },
+        body: { user_key: 'RYMON-FF-ABCD-EF12', serial: 'HWID-123456', app: 'Free Fire MAX', secret: 'wrong-secret-1234' },
+        query: {}
+      }
+      const resWrong = createMockRes()
+      await connectHandler(reqWrongSecret, resWrong)
+      assert.equal(resWrong.statusCode, 401)
+      assert.equal(resWrong.body.status, false)
+      assert.match(resWrong.body.reason, /Invalid App Secret/i)
+    } finally {
+      globalThis.fetch = origFetch
+    }
+  })
+})
 

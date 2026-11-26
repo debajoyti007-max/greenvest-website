@@ -82,32 +82,37 @@ export const FairytaleRealm: React.FC<FairytaleRealmProps> = ({ isDashboard = fa
         }}
       />
 
-      {/* ── 3. 120 FPS GPU-COMPOSITED SPIRIT EMBERS (ZERO CPU OVERHEAD) ──────── */}
-      {!isDashboard && (
-        <div style={{ position: 'absolute', inset: 0 }}>
-          {embers.map((e) => (
-            <span
-              key={e.id}
-              className="spirit-ember"
-              style={{
-                position: 'absolute',
-                left: e.left,
-                bottom: '-20px',
-                width: e.size,
-                height: e.size,
-                borderRadius: '50%',
-                background: e.color,
-                boxShadow: e.boxShadow,
-                opacity: e.opacity,
-                animation: `floatSpiritEmber ${e.duration} linear infinite`,
-                animationDelay: e.delay,
-                willChange: 'transform, opacity',
-                '--drift-x': e.driftX,
-              } as React.CSSProperties}
-            />
-          ))}
-        </div>
-      )}
+      {/* ── 3. 120 FPS GPU-COMPOSITED SPIRIT EMBERS (CALMER IN DASHBOARD) ────── */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          opacity: isDashboard ? 0.28 : 1,
+          transition: 'opacity 0.8s ease',
+        }}
+      >
+        {(isDashboard ? embers.slice(0, 14) : embers).map((e) => (
+          <span
+            key={e.id}
+            className="spirit-ember"
+            style={{
+              position: 'absolute',
+              left: e.left,
+              bottom: '-20px',
+              width: e.size,
+              height: e.size,
+              borderRadius: '50%',
+              background: e.color,
+              boxShadow: e.boxShadow,
+              opacity: e.opacity,
+              animation: `floatSpiritEmber ${e.duration} linear infinite`,
+              animationDelay: e.delay,
+              willChange: 'transform, opacity',
+              '--drift-x': e.driftX,
+            } as React.CSSProperties}
+          />
+        ))}
+      </div>
 
       {/* ── 4. PURE COMPOSITOR KEYFRAMES (LOCKED 120 FPS) ────────────────────── */}
       <style>{`

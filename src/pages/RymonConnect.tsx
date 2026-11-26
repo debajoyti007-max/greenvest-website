@@ -45,7 +45,6 @@ import {
   calculateExtensionCost,
   fetchAllStreamerControls,
   isStreamerKeyActivelyPlaying,
-  buildDefaultStreamerControlPayload,
   warmRenderVipBridge,
   sendRenderVipPatch,
   type SovereignSecurityPolicy,
@@ -59,10 +58,20 @@ import {
   addRegisteredApp,
   updateRegisteredApp,
   deleteRegisteredApp,
+  getAppSecret,
   saveStoredAccounts,
+  getStoredSessionToken,
+  logoutBackend,
 } from '../lib/rymonBackend'
 import RymonAnimatedLogo from '../components/RymonAnimatedLogo'
 import { FairytaleRealm } from '../components/FairytaleRealm'
+import CyberCoreCanvas from '../components/CyberCoreCanvas'
+import {
+  AnimatedCounter,
+  AudioWaveformBars,
+  LiveTelemetryTicker,
+  SpotlightTracker
+} from '../components/HolographicHud'
 
 type TabType =
   | 'overview'
@@ -77,8 +86,6 @@ type TabType =
   | 'delete'
   | 'extend'
   | 'advance'
-
-// Theme presets removed
 
 const DEFAULT_ANON_STREAMER: RymonAccount = {
   id: 'usr-streamer',
@@ -436,7 +443,6 @@ export default function RymonConnect() {
   // Generate Key Form State
   const [genGame, setGenGame] = useState<string>(() => localStorage.getItem('rymon_selected_gen_game') || 'Free Fire MAX')
   const [genCreatedGame, setGenCreatedGame] = useState<string>(() => localStorage.getItem('rymon_selected_gen_game') || 'Free Fire MAX')
-  const [genEdition, setGenEdition] = useState<'normal' | 'vip'>('normal')
   const [isCustomAppMode, setIsCustomAppMode] = useState(false)
   const [customAppNameInput, setCustomAppNameInput] = useState('')
   const [genDuration, setGenDuration] = useState('1 Day')
@@ -460,7 +466,6 @@ export default function RymonConnect() {
   const [keyStatusFilter, setKeyStatusFilter] = useState<
     'ALL' | 'PLAYING' | 'ACTIVE' | 'PAUSED' | 'WAITING' | 'EXPIRED' | 'BANNED'
   >('ALL')
-  const [keyEditionFilter, setKeyEditionFilter] = useState<'ALL' | 'NORMAL' | 'VIP'>('ALL')
   const [keyCreatorFilter, setKeyCreatorFilter] = useState<string>('ALL')
   const [keyGameFilter, setKeyGameFilter] = useState<string>('ALL')
   const [searchUserQuery, setSearchUserQuery] = useState('')
@@ -668,6 +673,11 @@ export default function RymonConnect() {
     if (savedUserJson) {
       try {
         let u = JSON.parse(savedUserJson) as RymonAccount
+        if (supabase && u.role !== 'streamer' && (!u.session_token || !String(u.session_token).trim())) {
+          localStorage.removeItem('rymon_session_user')
+          setAuthError('🔒 Security update: please sign in again to activate a verified session.')
+          return
+        }
         // Immediate Sovereign Role Enforcement for Root Founder & Owner:
         if (u.username && (u.username.toLowerCase() === 'ryzen' || u.username.toLowerCase() === 'debajoyti')) {
           u.role = 'owner'
@@ -684,20 +694,22 @@ export default function RymonConnect() {
         if (supabase && u.username) {
           ;(async () => {
             try {
-              let liveAcc: any = null
+              const token = u.session_token || getStoredSessionToken()
               const { data: rpcAcc, error: rpcErr } = await supabase.rpc('rpc_rymon_get_account', {
-                p_username: u.username
+                p_username: u.username,
+                p_session_token: token
               })
-              if (!rpcErr && rpcAcc && rpcAcc.found) {
-                liveAcc = rpcAcc
-              } else {
-                const { data } = await supabase
-                  .from('rymon_accounts')
-                  .select('*')
-                  .ilike('username', u.username)
-                  .maybeSingle()
-                liveAcc = data
+
+              if (!rpcErr && rpcAcc?.auth_error) {
+                if (!isLoggingOutRef.current) {
+                  localStorage.removeItem('rymon_session_user')
+                  setIsAuthenticated(false)
+                  setCurrentUser(null)
+                }
+                return
               }
+
+              const liveAcc = !rpcErr && rpcAcc && rpcAcc.found ? rpcAcc : null
 
               if (liveAcc && !isLoggingOutRef.current && localStorage.getItem('rymon_session_user')) {
                 const isSovereignOwner =
@@ -713,7 +725,8 @@ export default function RymonConnect() {
                   uplink: liveAcc.uplink || u.uplink,
                   status: liveAcc.status || u.status,
                   expires_at: liveAcc.expires_at || u.expires_at,
-                  permissions: liveAcc.permissions || u.permissions
+                  permissions: liveAcc.permissions || u.permissions,
+                  session_token: token || u.session_token
                 }
                 setCurrentUser(refreshedUser)
                 setWalletBalance(Number(refreshedUser.balance) || 0)
@@ -784,7 +797,35 @@ export default function RymonConnect() {
         const ctrls: StreamerControlRecord[] = ctrlsRes.status === 'fulfilled' ? ctrlsRes.value : []
         const refs: RymonReferral[] = refsRes.status === 'fulfilled' ? refsRes.value : []
 
-        setKeysList(lcs)
+        if (isStreamerRole && currentKey) {
+          const verified = await verifyLicenseKey(currentKey)
+          if (isMounted && !isLoggingOutRef.current && verified.valid && verified.key) {
+            const hydratedLic: RymonLicense = {
+              id: verified.key,
+              license_key: verified.key,
+              game: verified.game || 'Free Fire MAX',
+              plan_duration: verified.plan || '30 Days',
+              creator_username: 'debajoyti',
+              devices_used: verified.devicesUsed ?? 0,
+              devices_max: verified.devicesMax ?? 1,
+              device_hwid: verified.deviceHwid || '',
+              status: (verified.status as RymonLicense['status']) || 'ACTIVE',
+              is_paused: Boolean(verified.isPaused),
+              expires_at: verified.expiresAt || null,
+              last_heartbeat: verified.lastHeartbeat,
+              created_at: verified.createdAt
+            }
+            setKeysList([hydratedLic])
+            if (verified.expiresAt) {
+              setExpiryDate(new Date(verified.expiresAt))
+            } else if (verified.status === 'WAITING') {
+              setExpiryDate(null)
+              setCountdown('Starts on 1st Login')
+            }
+          }
+        } else {
+          setKeysList(lcs)
+        }
         setUsersList(usrs)
         setActivities(acts)
         setStreamerControls(ctrls)
@@ -834,7 +875,8 @@ export default function RymonConnect() {
             // Sync live account & permissions directly from rpc_rymon_get_account
             try {
               const { data: myAcc } = await supabase.rpc('rpc_rymon_get_account', {
-                p_username: currentUser.username
+                p_username: currentUser.username,
+                p_session_token: currentUser.session_token || getStoredSessionToken()
               })
               if (myAcc && myAcc.found && !isLoggingOutRef.current) {
                 setWalletBalance(Number(myAcc.balance) || 0)
@@ -857,7 +899,8 @@ export default function RymonConnect() {
                       role: myAcc.role || prev.role,
                       status: myAcc.status || prev.status,
                       expires_at: myAcc.expires_at || prev.expires_at,
-                      permissions: myAcc.permissions || prev.permissions
+                      permissions: myAcc.permissions || prev.permissions,
+                      session_token: prev.session_token || getStoredSessionToken()
                     }
                     localStorage.setItem('rymon_session_user', JSON.stringify(updatedUser))
                     return updatedUser
@@ -1277,6 +1320,46 @@ export default function RymonConnect() {
   }, [])
 
   // 6. REAL AUTHENTICATION HANDLERS
+  const beginAuthAttempt = (
+    throttleKey: string,
+    setLockSeconds: React.Dispatch<React.SetStateAction<number>>,
+    lockPrefix: string
+  ): boolean => {
+    const currentThrottle = getRymonThrottle(throttleKey)
+    if (currentThrottle.lockedUntil && currentThrottle.lockedUntil > Date.now()) {
+      const rem = Math.ceil((currentThrottle.lockedUntil - Date.now()) / 1000)
+      setLockSeconds(rem)
+      setAuthError(`🔒 ${lockPrefix} Please wait ${formatLockCountdown(rem)} before trying again.`)
+      return false
+    }
+    const now = Date.now()
+    if (now - lastAuthSubmitTime < 2000) {
+      setAuthError('⚠️ Please wait a moment before trying again.')
+      return false
+    }
+    setLastAuthSubmitTime(now)
+    return true
+  }
+
+  const completeAuthSession = (
+    throttleKey: string,
+    setLockSeconds: React.Dispatch<React.SetStateAction<number>>,
+    user: RymonAccount,
+    nextTab: TabType
+  ) => {
+    isLoggingOutRef.current = false
+    try {
+      sessionStorage.removeItem('rymon_explicit_logout')
+    } catch {}
+    clearRymonThrottle(throttleKey)
+    setLockSeconds(0)
+    setCurrentUser(user)
+    setWalletBalance(user.balance)
+    setIsAuthenticated(true)
+    localStorage.setItem('rymon_session_user', JSON.stringify(user))
+    setActiveTab(nextTab)
+  }
+
   const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setAuthError('')
@@ -1288,49 +1371,28 @@ export default function RymonConnect() {
     }
 
     const throttleKey = `rymon_auth_lock_${cleanUser}`
-    const currentThrottle = getRymonThrottle(throttleKey)
-    if (currentThrottle.lockedUntil && currentThrottle.lockedUntil > Date.now()) {
-      const rem = Math.ceil((currentThrottle.lockedUntil - Date.now()) / 1000)
-      setStaffLockSeconds(rem)
-      setAuthError(`🔒 Security Lockout: Too many failed login attempts. Please wait ${formatLockCountdown(rem)} before trying again.`)
+    if (!beginAuthAttempt(throttleKey, setStaffLockSeconds, 'Security Lockout: Too many failed login attempts.')) {
       return
     }
-
-    // Debounce rapid submits (2 seconds)
-    const now = Date.now()
-    if (now - lastAuthSubmitTime < 2000) {
-      setAuthError('⚠️ Please wait a moment before trying again.')
-      return
-    }
-    setLastAuthSubmitTime(now)
 
     setAuthLoading(true)
     const res = await loginWithCredentials(staffUsername, staffPassword)
     setAuthLoading(false)
 
     if (res.success && res.user) {
-      isLoggingOutRef.current = false
-      try {
-        sessionStorage.removeItem('rymon_explicit_logout')
-      } catch {}
-      clearRymonThrottle(throttleKey)
-      setStaffLockSeconds(0)
-      setCurrentUser(res.user)
-      setWalletBalance(res.user.balance)
-      setIsAuthenticated(true)
-      localStorage.setItem('rymon_session_user', JSON.stringify(res.user))
-
+      completeAuthSession(throttleKey, setStaffLockSeconds, res.user, 'overview')
       showToast(`Welcome back, ${res.user.username} (${res.user.role.toUpperCase()})!`)
-      setActiveTab('overview')
     } else {
       const failed = recordRymonFailedAttempt(throttleKey, 5, 5 * 60 * 1000)
       if (failed.locked) {
         setStaffLockSeconds(failed.waitSecs)
         setAuthError(`🔒 Account locked for 5 minutes due to 5 consecutive failed login attempts. Please wait ${formatLockCountdown(failed.waitSecs)}.`)
-      } else if (failed.remaining === 1) {
-        setAuthError(`❌ ${res.error || 'Authentication failed. Please verify credentials.'} (⚠️ 1 attempt remaining before 5-minute security lockout).`)
       } else {
-        setAuthError(`❌ ${res.error || 'Authentication failed. Please verify credentials.'} (${failed.remaining} attempts remaining before 5-minute security lockout).`)
+        setAuthError(
+          `❌ ${res.error || 'Authentication failed. Please verify credentials.'} (${
+            failed.remaining === 1 ? '⚠️ 1 attempt' : `${failed.remaining} attempts`
+          } remaining before 5-minute security lockout).`
+        )
       }
     }
   }
@@ -1340,37 +1402,36 @@ export default function RymonConnect() {
     setAuthError('')
 
     const throttleKey = 'rymon_keyauth_lock'
-    const currentThrottle = getRymonThrottle(throttleKey)
-    if (currentThrottle.lockedUntil && currentThrottle.lockedUntil > Date.now()) {
-      const rem = Math.ceil((currentThrottle.lockedUntil - Date.now()) / 1000)
-      setKeyLockSeconds(rem)
-      setAuthError(`🔒 Key authentication locked. Too many invalid attempts. Please wait ${formatLockCountdown(rem)}.`)
+    if (!beginAuthAttempt(throttleKey, setKeyLockSeconds, 'Key authentication locked. Too many invalid attempts.')) {
       return
     }
-
-    const now = Date.now()
-    if (now - lastAuthSubmitTime < 2000) {
-      setAuthError('⚠️ Please wait a moment before trying again.')
-      return
-    }
-    setLastAuthSubmitTime(now)
 
     setAuthLoading(true)
     const res = await verifyLicenseKey(keyInput)
     setAuthLoading(false)
 
     if (res.valid && res.key) {
-      isLoggingOutRef.current = false
-      try {
-        sessionStorage.removeItem('rymon_explicit_logout')
-      } catch {}
-      clearRymonThrottle(throttleKey)
-      setKeyLockSeconds(0)
       const cleanKey = res.key
       setCurrentKey(cleanKey)
       const exp = res.expiresAt ? new Date(res.expiresAt) : new Date(Date.now() + 30 * 86400000)
       setExpiryDate(exp)
-      setIsAuthenticated(true)
+      setKeysList([
+        {
+          id: cleanKey,
+          license_key: cleanKey,
+          game: res.game || 'Free Fire MAX',
+          plan_duration: res.plan || '30 Days',
+          creator_username: 'debajoyti',
+          devices_used: res.devicesUsed ?? 0,
+          devices_max: res.devicesMax ?? 1,
+          device_hwid: res.deviceHwid || '',
+          status: (res.status as RymonLicense['status']) || 'ACTIVE',
+          is_paused: Boolean(res.isPaused),
+          expires_at: res.expiresAt || null,
+          last_heartbeat: res.lastHeartbeat,
+          created_at: res.createdAt
+        }
+      ])
 
       const streamerUser: RymonAccount = {
         id: 'usr-streamer',
@@ -1381,14 +1442,10 @@ export default function RymonConnect() {
         uplink: 'debajoyti',
         status: 'ACTIVE'
       }
-      setCurrentUser(streamerUser)
-      setWalletBalance(streamerUser.balance)
-      localStorage.setItem('rymon_session_user', JSON.stringify(streamerUser))
+      completeAuthSession(throttleKey, setKeyLockSeconds, streamerUser, 'license')
       localStorage.setItem('rymon_remote_key', cleanKey)
       localStorage.setItem('rymon_remote_expiry', exp.toISOString())
-
       showToast(`Connected license ${cleanKey}!`)
-      setActiveTab('license')
     } else {
       const failed = recordRymonFailedAttempt(throttleKey, 5, 5 * 60 * 1000)
       if (failed.locked) {
@@ -1402,6 +1459,7 @@ export default function RymonConnect() {
 
   const handleLogout = () => {
     isLoggingOutRef.current = true
+    void logoutBackend()
     try {
       localStorage.removeItem('rymon_session_user')
       localStorage.removeItem('rymon_remote_key')
@@ -1500,56 +1558,6 @@ export default function RymonConnect() {
     return true
   }
 
-  const handleToggleVipKey = async (licenseKey: string, makeVip: boolean) => {
-    if ((!isOwner && currentUser?.role !== 'admin') || !supabase) return
-    const keyRecord = keysList.find((k) => k.license_key === licenseKey)
-    if (!keyRecord) return
-    const curPlan = keyRecord.plan_duration || '30 Days'
-    const newPlan = makeVip
-      ? (curPlan.includes('[VIP]') ? curPlan : `${curPlan} [VIP]`)
-      : curPlan.replace(' [VIP]', '').replace('[VIP]', '').trim()
-
-    const { error } = await supabase
-      .from('rymon_licenses')
-      .update({ plan_duration: newPlan })
-      .eq('license_key', licenseKey)
-
-    if (!error) {
-      if (makeVip) {
-        const { data: existingCtrl } = await supabase
-          .from('rymon_streamer_controls')
-          .select('id')
-          .eq('license_key', licenseKey)
-          .maybeSingle()
-
-        if (!existingCtrl) {
-          await supabase.from('rymon_streamer_controls').insert(
-            buildDefaultStreamerControlPayload({
-              license_key: licenseKey,
-              streamer_name: 'VIP_REALTIME',
-              plan_duration: newPlan
-            })
-          )
-        } else {
-          await supabase
-            .from('rymon_streamer_controls')
-            .update({ streamer_name: 'VIP_REALTIME', plan_duration: newPlan })
-            .eq('license_key', licenseKey)
-        }
-      } else {
-        await supabase
-          .from('rymon_streamer_controls')
-          .update({ streamer_name: 'VIP Streamer', plan_duration: newPlan })
-          .eq('license_key', licenseKey)
-      }
-
-      showToast(`Key ${licenseKey} ${makeVip ? 'upgraded to 👑 VIP Streamer Remote' : 'set to 📱 Standard APK'}!`)
-      fetchAllLicenses(currentUser).then(setKeysList)
-    } else {
-      showToast(`Failed to update key tier: ${error.message}`)
-    }
-  }
-
   // 7. KEY GENERATION ENGINE WITH DYNAMIC DEFAULT + INDIVIDUAL USER PRICING
   const effectiveUserPrices = useMemo(() => {
     return getEffectivePriceMap(currentUser?.username, currentUser?.role)
@@ -1562,21 +1570,8 @@ export default function RymonConnect() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.username, allCustomUserMaps])
 
-  const canGenerateVipRemote = useMemo(() => {
-    if (isOwner) return true
-    const userPerm = currentUser?.permissions?.allow_web_remote
-    if (userPerm !== undefined) return Boolean(userPerm)
-    if (isAdmin) return securityPolicy.allow_admin_web_remote ?? true
-    if (isReseller) return securityPolicy.allow_reseller_web_remote ?? false
-    return false
-  }, [isOwner, isAdmin, isReseller, currentUser?.permissions?.allow_web_remote, securityPolicy.allow_admin_web_remote, securityPolicy.allow_reseller_web_remote])
-
   const basePlanPrice = effectiveUserPrices[genDuration] ?? 35
-  const vipSurchargePercent = Math.max(0, Number(securityPolicy.vip_price_surcharge_percent ?? 50))
-  const isVipSelected = genEdition === 'vip' && !isCustomAppMode
-  const unitPlanPrice = isVipSelected
-    ? Math.round(basePlanPrice * (1 + vipSurchargePercent / 100))
-    : basePlanPrice
+  const unitPlanPrice = basePlanPrice
   const singleKeyPrice = unitPlanPrice * Math.max(1, genDevicesMax)
   const projectedInvoice = singleKeyPrice * Math.max(1, genQuantity)
 
@@ -1668,12 +1663,6 @@ export default function RymonConnect() {
       }
     }
 
-    // Strict Reseller & Role Permission Check: VIP Web Remote
-    if (isVipSelected && !canGenerateVipRemote) {
-      setGenError('Permission Denied: Your account is locked to Standard APK keys by default. Owner permission is required to generate VIP Web Remote keys.')
-      return
-    }
-
     // If custom name was entered and is not yet in registered apps, save it automatically
     if (isCustomAppMode && customAppNameInput.trim()) {
       const trimmed = customAppNameInput.trim()
@@ -1705,7 +1694,7 @@ export default function RymonConnect() {
       customPrefix: genCustomPrefix,
       devicesMax: genDevicesMax,
       quantity: genQuantity,
-      isVipRealtime: isVipSelected
+      isVipRealtime: false
     })
     setAuthLoading(false)
 
@@ -1722,13 +1711,21 @@ export default function RymonConnect() {
       const createdCount = mintedKeys.length
       showToast(
         createdCount > 1
-          ? `⚡ Generated ${createdCount} keys (${genDuration}${isVipSelected ? ' • VIP Web Remote' : ' • Standard APK'})! Wallet updated.`
+          ? `⚡ Generated ${createdCount} keys (${genDuration})! Wallet updated.`
           : `Key ${res.key} generated! Wallet balance updated.`
       )
       // Refresh list
       fetchAllLicenses(currentUser).then(setKeysList)
       fetchAllAccounts(currentUser).then(setUsersList)
       fetchAllActivities(currentUser).then(setActivities)
+    } else if (res.authError) {
+      try {
+        localStorage.removeItem('rymon_session_user')
+      } catch {}
+      setIsAuthenticated(false)
+      setCurrentUser(null)
+      setAuthError('🔒 Session expired or missing server token. Please sign in again to generate keys.')
+      showToast('Session expired — please sign in again.')
     } else {
       setGenError(res.error || 'Failed to generate key.')
     }
@@ -1822,33 +1819,17 @@ export default function RymonConnect() {
   }
 
   const formatDeliverySlip = (key: string, duration?: string, gameName?: string) => {
-    const isVip = Boolean(duration?.includes('[VIP]'))
     const cleanDuration = (duration || '30 Days').replace(' [VIP]', '').replace('[VIP]', '').trim()
     const cleanGame = gameName || 'Free Fire MAX'
 
-    if (isVip) {
-      return [
-        '👑 PAYMENT SUCCESSFUL — RYMON VIP STREAMER EDITION',
-        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-        `🎮 GAME : ${cleanGame}`,
-        `⏳ DURATION : ${cleanDuration} [VIP WEB REMOTE]`,
-        `🔑 LICENSE KEY : ${key}`,
-        '📱 APP LOGIN : Enter key in Android APK to authenticate',
-        `💻 WEB REMOTE CONSOLE : https://greenvest.shop/connect?key=${encodeURIComponent(key)}`,
-        '✨ VIP PERKS : 100% Invisible on screen • Live Remote Aimbot & ESP',
-        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-        '❤️ Thank you for choosing RYMON VIP!'
-      ].join('\n')
-    }
-
     return [
-      '📱 PAYMENT SUCCESSFUL — RYMON STANDARD APK LICENSE',
+      '🔑 PAYMENT SUCCESSFUL — KEYAUTH LICENSE DELIVERY',
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      `🎮 GAME : ${cleanGame}`,
-      `⏳ DURATION : ${cleanDuration} (Standard Mobile)`,
+      `📦 APPLICATION : ${cleanGame}`,
+      `⏳ DURATION : ${cleanDuration}`,
       `🔑 LICENSE KEY : ${key}`,
-      '📲 HOW TO USE : Login directly inside your APK game menu on your phone',
-      'ℹ️ NOTE : Standard APK license for mobile use (Web Remote disabled)',
+      '📲 ACTIVATION : Enter your license key inside the application (HWID locked on 1st login)',
+      `🌐 PORTAL : https://greenvest.shop/connect?key=${encodeURIComponent(key)}`,
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       '❤️ Thank you for your purchase!'
     ].join('\n')
@@ -2498,6 +2479,24 @@ export default function RymonConnect() {
 
     setPauseLoadingKeys((prev) => new Set(prev).add(keyString))
 
+    const revertPauseOptimistic = () => {
+      setKeysList((prev) =>
+        prev.map((k) =>
+          k.license_key === keyString
+            ? {
+                ...k,
+                is_paused: wasPaused,
+                status: (existingKey?.status || 'ACTIVE') as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED'
+              }
+            : k
+        )
+      )
+      if (record && record.license_key === keyString) {
+        setRecord((prev) => (prev ? { ...prev, is_paused: wasPaused } : null))
+      }
+      sendRenderVipPatch(keyString, { is_paused: wasPaused })
+    }
+
     try {
       const res = await togglePauseLicenseBackend(keyString, currentUser?.username || 'debajoyti')
       if (res.success) {
@@ -2523,41 +2522,11 @@ export default function RymonConnect() {
           setRecord((prev) => (prev ? { ...prev, is_paused: res.is_paused } : null))
         }
       } else {
-        // Revert optimistic update
-        setKeysList((prev) =>
-          prev.map((k) =>
-            k.license_key === keyString
-              ? {
-                  ...k,
-                  is_paused: wasPaused,
-                  status: (existingKey?.status || 'ACTIVE') as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED'
-                }
-              : k
-          )
-        )
-        if (record && record.license_key === keyString) {
-          setRecord((prev) => (prev ? { ...prev, is_paused: wasPaused } : null))
-        }
-        sendRenderVipPatch(keyString, { is_paused: wasPaused })
+        revertPauseOptimistic()
         alert(`Error: ${res.message}`)
       }
     } catch (err: any) {
-      // Revert optimistic update
-      setKeysList((prev) =>
-        prev.map((k) =>
-          k.license_key === keyString
-            ? {
-                ...k,
-                is_paused: wasPaused,
-                status: (existingKey?.status || 'ACTIVE') as 'ACTIVE' | 'WAITING' | 'EXPIRED' | 'BANNED' | 'PAUSED'
-              }
-            : k
-        )
-      )
-      if (record && record.license_key === keyString) {
-        setRecord((prev) => (prev ? { ...prev, is_paused: wasPaused } : null))
-      }
-      sendRenderVipPatch(keyString, { is_paused: wasPaused })
+      revertPauseOptimistic()
       alert(`Error toggling key pause: ${err?.message || err}`)
     } finally {
       // Always unblock the button, success or failure
@@ -2734,6 +2703,7 @@ export default function RymonConnect() {
     setTestConnectLoading(true)
     setTestConnectResult('')
     const targetApp = (connectSelectedApp === 'Custom' || connectSelectedApp === '__CUSTOM__') ? (connectCustomAppName.trim() || 'Tool X') : connectSelectedApp
+    const targetSecret = getAppSecret(targetApp, registeredApps)
     try {
       // 1. Primary: Edge Gateway (zero headers required, SSL cloud-synced)
       const res = await fetch('https://greenvest.shop/connect', {
@@ -2744,7 +2714,8 @@ export default function RymonConnect() {
         body: JSON.stringify({
           user_key: testConnectKey.trim(),
           serial: testConnectHwid.trim(),
-          app: targetApp
+          app: targetApp,
+          secret: targetSecret
         })
       })
       const json = await res.json()
@@ -2767,7 +2738,8 @@ export default function RymonConnect() {
           body: JSON.stringify({
             p_license_key: testConnectKey.trim(),
             p_hwid: testConnectHwid.trim(),
-            p_game: targetApp
+            p_game: targetApp,
+            p_secret: targetSecret
           })
         })
         const jsonRpc = await resRpc.json()
@@ -2897,12 +2869,6 @@ export default function RymonConnect() {
       ) {
         return false
       }
-      if (keyEditionFilter === 'VIP' && !k.plan_duration?.includes('[VIP]')) {
-        return false
-      }
-      if (keyEditionFilter === 'NORMAL' && k.plan_duration?.includes('[VIP]')) {
-        return false
-      }
       if (!searchKeyQuery.trim()) return true
       const q = searchKeyQuery.toLowerCase()
       return (
@@ -2912,7 +2878,7 @@ export default function RymonConnect() {
         hwid.includes(q)
       )
     })
-  }, [keysList, searchKeyQuery, keyStatusFilter, keyEditionFilter, keyCreatorFilter, keyGameFilter, onlineKeySet])
+  }, [keysList, searchKeyQuery, keyStatusFilter, keyCreatorFilter, keyGameFilter, onlineKeySet])
 
   const filteredUsers = useMemo(() => {
     if (!searchUserQuery.trim()) return usersList
@@ -2941,9 +2907,7 @@ export default function RymonConnect() {
       (k) => !k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(String(k.license_key || '').toUpperCase())
     ).length
     const notPlaying = Math.max(0, total - playingNow)
-    const vipCount = validKeys.filter((k) => k.plan_duration?.includes('[VIP]')).length
-    const normalCount = Math.max(0, total - vipCount)
-    return { total, active, paused, unused, expired, banned, reset, playingNow, notPlaying, vipCount, normalCount }
+    return { total, active, paused, unused, expired, banned, reset, playingNow, notPlaying }
   }, [keysList, onlineKeySet])
 
   // Cross-App & Custom App Permission Engine (Debajoyti Authorization Engine)
@@ -3012,75 +2976,6 @@ export default function RymonConnect() {
     }
   }
 
-  const handleToggleUserCustomApps = async (targetUsername: string, allow: boolean) => {
-    try {
-      const updated = usersList.map((u) => {
-        if ((u.username || '').toLowerCase() === (targetUsername || '').toLowerCase()) {
-          return {
-            ...u,
-            permissions: {
-              ...(u.permissions || {}),
-              allow_custom_apps: allow
-            }
-          }
-        }
-        return u
-      })
-      setUsersList(updated)
-      saveStoredAccounts(updated)
-
-      if (supabase) {
-        const targetObj = updated.find((u) => (u.username || '').toLowerCase() === (targetUsername || '').toLowerCase())
-        if (targetObj) {
-          await updateUserPermissionsBackend(targetUsername, targetObj.permissions, currentUser?.username || 'debajoyti')
-        }
-      }
-      showToast(`Updated @${targetUsername}: ${allow ? '✨ Custom Allowed' : '🔒 FF MAX Only'}`)
-    } catch {
-      showToast('Failed to update user app permissions')
-    }
-  }
-  void handleToggleUserCustomApps
-
-  const isUserVipRemoteAllowed = (user?: RymonAccount | null) => {
-    if (!user) return false
-    if (user.role === 'owner') return true
-    const perm = user.permissions?.allow_web_remote
-    if (perm !== undefined) return Boolean(perm)
-    if (user.role === 'admin') return securityPolicy.allow_admin_web_remote ?? true
-    if (user.role === 'reseller') return securityPolicy.allow_reseller_web_remote ?? false
-    return false
-  }
-
-  const handleToggleUserVipRemote = async (targetUsername: string, allow: boolean) => {
-    try {
-      const updated = usersList.map((u) => {
-        if ((u.username || '').toLowerCase() === (targetUsername || '').toLowerCase()) {
-          return {
-            ...u,
-            permissions: {
-              ...(u.permissions || {}),
-              allow_web_remote: allow
-            }
-          }
-        }
-        return u
-      })
-      setUsersList(updated)
-      saveStoredAccounts(updated)
-
-      if (supabase) {
-        const targetObj = updated.find((u) => (u.username || '').toLowerCase() === (targetUsername || '').toLowerCase())
-        if (targetObj) {
-          await updateUserPermissionsBackend(targetUsername, targetObj.permissions, currentUser?.username || 'debajoyti')
-        }
-      }
-      showToast(`Updated @${targetUsername}: ${allow ? '👑 VIP Web Remote Permitted' : '🔒 APK Only'}`)
-    } catch {
-      showToast('Failed to update user VIP remote permissions')
-    }
-  }
-
   // Sovereign RBAC tab isolation guard
   useEffect(() => {
     const streamerAllowed = ['license']
@@ -3113,7 +3008,7 @@ export default function RymonConnect() {
   }, [isStreamer, isReseller, isAdmin, isOwner, isRootOwner, activeTab])
 
   return (
-    <div style={styles.appShell}>
+    <div className="sg-app-shell" style={styles.appShell}>
       {/* Premium Minimal Charcoal Responsive Engine */}
       <style>{`
         @keyframes sgLivePulse {
@@ -3190,19 +3085,6 @@ export default function RymonConnect() {
         }
 
         /* Desktop & Global Glass Surface Classes */
-        .sg-glass-card {
-          background: rgba(15, 23, 42, 0.65) !important;
-          backdrop-filter: blur(16px) saturate(180%) !important;
-          -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-          border: 1px solid rgba(255, 255, 255, 0.1) !important;
-          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36), inset 0 1px 0 0 rgba(255, 255, 255, 0.14) !important;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
-        }
-        .sg-glass-card:hover {
-          border-color: rgba(167, 139, 250, 0.5) !important;
-          box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.45), 0 0 24px rgba(139, 92, 246, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.25) !important;
-          transform: translateY(-2px);
-        }
         .sg-live-beacon {
           animation: sgLivePulse 2s infinite ease-in-out;
         }
@@ -3225,10 +3107,10 @@ export default function RymonConnect() {
           transform: translateY(-2px);
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 16px rgba(139, 92, 246, 0.2) !important;
         }
-        .sg-card-box, .sg-management-card, .sg-column-card, .sg-table-card {
+        .sg-card-box, .sg-management-card, .sg-table-card {
           transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease !important;
         }
-        .sg-card-box:hover, .sg-management-card:hover, .sg-column-card:hover {
+        .sg-card-box:hover, .sg-management-card:hover {
           border-color: rgba(255, 255, 255, 0.16) !important;
           box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.45), 0 0 20px rgba(139, 92, 246, 0.12), inset 0 1px 0 0 rgba(255, 255, 255, 0.18) !important;
         }
@@ -3558,101 +3440,14 @@ export default function RymonConnect() {
             font-size: 12px !important;
             touch-action: manipulation !important;
           }
-          .sg-auth-head {
-            font-size: 18px !important;
-            margin-bottom: 10px !important;
-          }
 
-          /* 5. Streamer Remote HUD & Controls (Glassmorphic) */
+          /* 5. Section Banner & Player Status Bar */
           .sg-banner-row {
             flex-direction: column !important;
             align-items: flex-start !important;
             gap: 6px !important;
             margin-bottom: 12px !important;
             width: 100% !important;
-            box-sizing: border-box !important;
-          }
-          .sg-remote-actions {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 6px !important;
-            width: 100% !important;
-            box-sizing: border-box !important;
-          }
-          .sg-remote-actions > span {
-            flex: 1 1 100% !important;
-            width: 100% !important;
-            text-align: center !important;
-            justify-content: center !important;
-            min-height: 36px !important;
-            box-sizing: border-box !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            backdrop-filter: blur(10px) !important;
-            -webkit-backdrop-filter: blur(10px) !important;
-          }
-          .sg-remote-actions > button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-height: 44px !important;
-            font-size: 12px !important;
-            font-weight: 700 !important;
-            text-align: center !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            padding: 8px !important;
-            box-sizing: border-box !important;
-            touch-action: manipulation !important;
-            backdrop-filter: blur(10px) !important;
-            -webkit-backdrop-filter: blur(10px) !important;
-          }
-          .sg-telemetry-bar {
-            flex-direction: column !important;
-            align-items: stretch !important;
-            gap: 10px !important;
-            padding: 12px 10px !important;
-            box-sizing: border-box !important;
-            background: rgba(10, 15, 28, 0.72) !important;
-            backdrop-filter: blur(16px) !important;
-            -webkit-backdrop-filter: blur(16px) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-          }
-          .sg-key-select-box {
-            width: 100% !important;
-            max-width: 100% !important;
-          }
-          .sg-key-select-box select {
-            width: 100% !important;
-            max-width: 100% !important;
-          }
-          .sg-telemetry-meta-row {
-            display: grid !important;
-            grid-template-columns: repeat(2, 1fr) !important;
-            gap: 8px !important;
-            width: 100% !important;
-            box-sizing: border-box !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-            padding-top: 8px !important;
-          }
-          .sg-telemetry-meta-row > div:first-child {
-            grid-column: span 2 !important;
-            word-break: break-all !important;
-          }
-          .sg-control-grid {
-            grid-template-columns: 1fr !important;
-            gap: 12px !important;
-            width: 100% !important;
-            box-sizing: border-box !important;
-          }
-          .sg-column-card {
-            padding: 14px 12px !important;
-            border-radius: 12px !important;
-            background: rgba(15, 23, 42, 0.65) !important;
-            backdrop-filter: blur(16px) saturate(180%) !important;
-            -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
             box-sizing: border-box !important;
           }
           .sg-player-status-bar {
@@ -4036,14 +3831,16 @@ export default function RymonConnect() {
         }
       `}</style>
 
-      {/* ── 120 FPS GPU-COMPOSITED FAIRYTALE REALM ──────────────────────────── */}
+      {/* ── 120 FPS GPU-COMPOSITED FAIRYTALE REALM + 3D CYBER CORE ENGINE ─── */}
+      <SpotlightTracker />
       <FairytaleRealm isDashboard={isAuthenticated} />
+      <CyberCoreCanvas isDashboard={isAuthenticated} />
 
       {/* Background Cyber Ambient */}
       <div
         style={{
           ...styles.ambientGrid,
-          backgroundColor: isAuthenticated ? '#070b14' : 'transparent',
+          backgroundColor: isAuthenticated ? 'rgba(7, 11, 20, 0.35)' : 'transparent',
           transition: 'background-color 0.8s ease'
         }}
       />
@@ -4140,6 +3937,7 @@ export default function RymonConnect() {
           {/* Database & WebSocket Link Status */}
           <div className="sg-telemetry-pill" style={styles.telemetryPill}>
             <span
+              className={isLiveConnected ? 'sg-live-beacon' : undefined}
               style={{
                 ...styles.pulseDot,
                 background: isLiveConnected ? '#10b981' : '#64748b'
@@ -4148,6 +3946,11 @@ export default function RymonConnect() {
             <span className="sg-telemetry-text" style={styles.telemetryText}>
               {isLiveConnected ? 'LIVE' : 'STANDBY'}
             </span>
+            <AudioWaveformBars
+              color={isLiveConnected ? '#00f5ff' : '#64748b'}
+              bars={4}
+              height={12}
+            />
             <span className="sg-ping-text" style={styles.pingText}>
               {ping > 1200 ? 'CONNECTING' : `${ping}ms`}
             </span>
@@ -4203,12 +4006,21 @@ export default function RymonConnect() {
 
       {/* ── CONDITIONAL VIEW: AUTH GATEWAY VS MAIN WORKSPACE ────────────────── */}
       {!isAuthenticated ? (
-        <div className="sg-auth-gate-box" style={styles.authGateBox}>
-          {/* Ornate Gold Filigree Corner Accents */}
-          <div className="sg-corner-flourish sg-corner-tl" />
-          <div className="sg-corner-flourish sg-corner-tr" />
-          <div className="sg-corner-flourish sg-corner-bl" />
-          <div className="sg-corner-flourish sg-corner-br" />
+        <div className="sg-gateway-stage">
+          <LiveTelemetryTicker />
+          <div
+            className="sg-auth-gate-box sg-beam-card sg-spotlight-card sg-scanline-overlay"
+            style={{
+              ...styles.authGateBox,
+              margin: '0 auto',
+              width: '100%'
+            }}
+          >
+            {/* Ornate Gold Filigree Corner Accents */}
+            <div className="sg-corner-flourish sg-corner-tl" />
+            <div className="sg-corner-flourish sg-corner-tr" />
+            <div className="sg-corner-flourish sg-corner-bl" />
+            <div className="sg-corner-flourish sg-corner-br" />
 
           {/* Celestial Mythic Emblem Crest */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '14px' }}>
@@ -4427,6 +4239,7 @@ export default function RymonConnect() {
                     <button
                       type="submit"
                       disabled={authLoading || staffLockSeconds > 0}
+                      className={staffLockSeconds > 0 ? undefined : 'sg-cta-glow'}
                       style={{
                         ...styles.submitBtn,
                         ...(staffLockSeconds > 0
@@ -4577,6 +4390,7 @@ export default function RymonConnect() {
                     <button
                       type="submit"
                       disabled={regLoading}
+                      className="sg-cta-glow"
                       style={{
                         ...styles.submitBtn,
                         background: 'linear-gradient(135deg, #00d9ff 0%, #0284c7 100%)',
@@ -4614,6 +4428,7 @@ export default function RymonConnect() {
                 <button
                   type="submit"
                   disabled={authLoading || keyLockSeconds > 0}
+                  className={keyLockSeconds > 0 ? undefined : 'sg-cta-glow'}
                   style={{
                     ...styles.submitBtn,
                     ...(keyLockSeconds > 0
@@ -4856,6 +4671,44 @@ export default function RymonConnect() {
             </div>
           )}
 
+            {/* Holographic Gateway Telemetry Footer */}
+            <div
+              style={{
+                marginTop: '20px',
+                paddingTop: '14px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '10px',
+                flexWrap: 'wrap'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AudioWaveformBars color={isLiveConnected ? '#00f5ff' : '#f59e0b'} bars={5} height={14} />
+                <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em' }}>
+                  {isLiveConnected ? `MESH ONLINE · ${ping}ms` : 'CORE STANDBY'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('replay_rymon_intro'))}
+                style={{
+                  background: 'rgba(0, 245, 255, 0.08)',
+                  border: '1px solid rgba(0, 245, 255, 0.3)',
+                  color: '#00f5ff',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
+                  padding: '5px 10px',
+                  borderRadius: '999px',
+                  cursor: 'pointer'
+                }}
+              >
+                ▶ REPLAY 3D INTRO
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="sg-main-layout" style={styles.mainLayout}>
@@ -4986,43 +4839,42 @@ export default function RymonConnect() {
               {/* Staff-Only Navigation Sections (Hidden from key-login Streamers) */}
               {!isStreamer && (
                 <>
-                  {/* Reseller — Focused simplified view */}
+                  <div style={styles.navCategoryHeader}>CORE</div>
+                  <button
+                    onClick={() => handleSelectTab('overview')}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'overview' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}><IconOverview /></span>
+                    <span>Overview</span>
+                  </button>
+
+                  <div style={styles.navCategoryHeader}>LICENSES</div>
+                  <button
+                    onClick={() => handleSelectTab('generate')}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'generate' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}><IconPlus /></span>
+                    <span>Generate Key</span>
+                  </button>
+                  <button
+                    onClick={() => handleSelectTab('keys')}
+                    style={{
+                      ...styles.navItem,
+                      ...(activeTab === 'keys' ? styles.navItemActive : {})
+                    }}
+                  >
+                    <span style={styles.navIcon}><IconKey /></span>
+                    <span>License Keys</span>
+                  </button>
+
                   {isReseller && (
                     <>
-                      <div style={styles.navCategoryHeader}>CORE</div>
-                      <button
-                        onClick={() => handleSelectTab('overview')}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'overview' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}><IconOverview /></span>
-                        <span>Overview</span>
-                      </button>
-
-                      <div style={styles.navCategoryHeader}>LICENSES</div>
-                      <button
-                        onClick={() => handleSelectTab('generate')}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'generate' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}><IconPlus /></span>
-                        <span>Generate Key</span>
-                      </button>
-                      <button
-                        onClick={() => handleSelectTab('keys')}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'keys' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}><IconKey /></span>
-                        <span>License Keys</span>
-                      </button>
-
                       <div style={styles.navCategoryHeader}>PRICING</div>
                       <button
                         onClick={() => handleSelectTab('advance')}
@@ -5040,39 +4892,6 @@ export default function RymonConnect() {
                   {/* Owner & Admin — Full management view */}
                   {(isOwner || isAdmin) && (
                     <>
-                      <div style={styles.navCategoryHeader}>CORE</div>
-                      <button
-                        onClick={() => handleSelectTab('overview')}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'overview' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}><IconOverview /></span>
-                        <span>Overview</span>
-                      </button>
-
-                      <div style={styles.navCategoryHeader}>LICENSES</div>
-                      <button
-                        onClick={() => handleSelectTab('generate')}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'generate' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}><IconPlus /></span>
-                        <span>Generate Key</span>
-                      </button>
-                      <button
-                        onClick={() => handleSelectTab('keys')}
-                        style={{
-                          ...styles.navItem,
-                          ...(activeTab === 'keys' ? styles.navItemActive : {})
-                        }}
-                      >
-                        <span style={styles.navIcon}><IconKey /></span>
-                        <span>License Keys</span>
-                      </button>
                       {isRootOwner && (
                         <button
                           onClick={() => handleSelectTab('connect-api')}
@@ -5189,19 +5008,105 @@ export default function RymonConnect() {
           <main className="sg-content-pane" style={styles.contentPane}>
             {/* 1. OVERVIEW DASHBOARD */}
             {activeTab === 'overview' && (
-              <div className="sg-view-container" style={styles.viewContainer}>
+              <div key="overview" className="sg-view-container" style={styles.viewContainer}>
                 <div className="sg-banner-row" style={styles.bannerRow}>
                   <div>
                     <h2 style={styles.pageTitle}>Overview</h2>
                   </div>
                   <div style={styles.badgeCluster}>
-                    <span style={styles.greenPulseBadge}>● Active</span>
+                    <span className="sg-live-beacon" style={styles.greenPulseBadge}>● LIVE CORE</span>
+                  </div>
+                </div>
+
+                {/* Holographic Cyber Command Hero Strip */}
+                <div className="sg-hud-hero-card sg-beam-card sg-spotlight-card sg-scanline-overlay">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                    <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <AudioWaveformBars color="#00f5ff" bars={5} height={15} />
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.16em', color: '#00f5ff', textTransform: 'uppercase' }}>
+                          {currentUser?.role === 'owner' ? 'FOUNDER COMMAND DECK' : 'RYMON TELEMETRY HUD'}
+                        </span>
+                      </div>
+                      <h3 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: 900, color: '#f8fafc', letterSpacing: '-0.02em' }}>
+                        Welcome back, <span style={{ color: '#fbbf24' }}>@{currentUser?.username || 'Operator'}</span>
+                      </h3>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <span>⚡ {stats.playingNow} Live In-Game</span>
+                        <span>•</span>
+                        <span>🛡️ {stats.active} Active Passes</span>
+                        <span>•</span>
+                        <span>📦 {stats.unused} Ready Stock</span>
+                      </div>
+                      {/* Live Capacity Bar */}
+                      <div style={{ marginTop: '12px', maxWidth: '380px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontWeight: 700, color: '#94a3b8', marginBottom: '4px' }}>
+                          <span>FLEET UTILIZATION</span>
+                          <span style={{ color: '#00f5ff' }}>
+                            {stats.total > 0 ? Math.round(((stats.active + stats.playingNow) / stats.total) * 100) : 0}% ACTIVE
+                          </span>
+                        </div>
+                        <div style={{ height: '5px', width: '100%', borderRadius: '999px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              height: '100%',
+                              width: `${stats.total > 0 ? Math.min(100, Math.round(((stats.active + stats.playingNow) / stats.total) * 100)) : 8}%`,
+                              background: 'linear-gradient(90deg, #8b5cf6 0%, #00f5ff 60%, #10b981 100%)',
+                              borderRadius: '999px',
+                              boxShadow: '0 0 12px rgba(0, 245, 255, 0.6)',
+                              transition: 'width 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectTab('generate')}
+                        className="sg-cta-glow"
+                        style={{
+                          padding: '11px 18px',
+                          minHeight: '44px',
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                          color: '#05070d',
+                          fontWeight: 900,
+                          fontSize: '12px',
+                          letterSpacing: '0.05em',
+                          border: 'none',
+                          cursor: 'pointer',
+                          boxShadow: '0 6px 20px rgba(245, 158, 11, 0.35)'
+                        }}
+                      >
+                        ⚡ MINT NEW KEY
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectTab('keys')}
+                        style={{
+                          padding: '11px 16px',
+                          minHeight: '44px',
+                          borderRadius: '10px',
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          border: '1px solid rgba(255, 255, 255, 0.16)',
+                          color: '#f8fafc',
+                          fontWeight: 700,
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔑 VIEW KEYS ({stats.total})
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {/* Metric Counters (Clickable to filter License Keys) */}
                 <div className="sg-stat-grid" style={styles.statGrid}>
                   <div
+                    className="sg-stat-card sg-spotlight-card"
                     onClick={() => {
                       setKeyStatusFilter('PLAYING')
                       handleSelectTab('keys')
@@ -5215,11 +5120,12 @@ export default function RymonConnect() {
                   >
                     <div style={{ ...styles.statIconFrame, color: '#10b981' }}><IconGamepad /></div>
                     <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                      <div style={{ ...styles.statNum, color: '#10b981' }}>{stats.playingNow}</div>
+                      <div style={{ ...styles.statNum, color: '#10b981' }}><AnimatedCounter value={stats.playingNow} /></div>
                       <div style={{ ...styles.statLabel, color: '#86efac' }}>Playing Now</div>
                     </div>
                   </div>
                   <div
+                    className="sg-stat-card sg-spotlight-card"
                     onClick={() => {
                       setKeyStatusFilter('ALL')
                       handleSelectTab('keys')
@@ -5229,11 +5135,12 @@ export default function RymonConnect() {
                   >
                     <div style={styles.statIconFrame}><IconKey /></div>
                     <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                      <div style={styles.statNum}>{stats.total}</div>
+                      <div style={styles.statNum}><AnimatedCounter value={stats.total} /></div>
                       <div style={styles.statLabel}>Total Keys</div>
                     </div>
                   </div>
                   <div
+                    className="sg-stat-card sg-spotlight-card"
                     onClick={() => {
                       setKeyStatusFilter('ACTIVE')
                       handleSelectTab('keys')
@@ -5243,11 +5150,12 @@ export default function RymonConnect() {
                   >
                     <div style={{ ...styles.statIconFrame, color: '#38bdf8' }}><IconCheck /></div>
                     <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                      <div style={{ ...styles.statNum, color: '#38bdf8' }}>{stats.active}</div>
+                      <div style={{ ...styles.statNum, color: '#38bdf8' }}><AnimatedCounter value={stats.active} /></div>
                       <div style={styles.statLabel}>Active Keys</div>
                     </div>
                   </div>
                   <div
+                    className="sg-stat-card sg-spotlight-card"
                     onClick={() => {
                       setKeyStatusFilter('WAITING')
                       handleSelectTab('keys')
@@ -5261,11 +5169,12 @@ export default function RymonConnect() {
                   >
                     <div style={{ ...styles.statIconFrame, color: '#f59e0b' }}><IconAlert /></div>
                     <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                      <div style={{ ...styles.statNum, color: '#f59e0b' }}>{stats.unused}</div>
+                      <div style={{ ...styles.statNum, color: '#f59e0b' }}><AnimatedCounter value={stats.unused} /></div>
                       <div style={styles.statLabel}>Unused Keys</div>
                     </div>
                   </div>
                   <div
+                    className="sg-stat-card sg-spotlight-card"
                     onClick={() => {
                       setKeyStatusFilter('PAUSED')
                       handleSelectTab('keys')
@@ -5275,11 +5184,12 @@ export default function RymonConnect() {
                   >
                     <div style={{ ...styles.statIconFrame, color: '#f59e0b' }}><IconPause /></div>
                     <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                      <div style={{ ...styles.statNum, color: '#f59e0b' }}>{stats.paused}</div>
+                      <div style={{ ...styles.statNum, color: '#f59e0b' }}><AnimatedCounter value={stats.paused} /></div>
                       <div style={styles.statLabel}>Paused Keys</div>
                     </div>
                   </div>
                   <div
+                    className="sg-stat-card sg-spotlight-card"
                     onClick={() => {
                       setKeyStatusFilter('EXPIRED')
                       handleSelectTab('keys')
@@ -5293,7 +5203,7 @@ export default function RymonConnect() {
                   >
                     <div style={{ ...styles.statIconFrame, color: '#ef4444' }}><IconTrash /></div>
                     <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                      <div style={{ ...styles.statNum, color: '#ef4444' }}>{stats.expired}</div>
+                      <div style={{ ...styles.statNum, color: '#ef4444' }}><AnimatedCounter value={stats.expired} /></div>
                       <div style={{ ...styles.statLabel, color: '#fca5a5' }}>Expired Keys</div>
                     </div>
                   </div>
@@ -5386,7 +5296,7 @@ export default function RymonConnect() {
 
                 {/* Quick Shortcuts & Recent Activities */}
                 <div className="sg-dual-grid" style={styles.dualGrid}>
-                  <div className="sg-card-box" style={styles.cardBox}>
+                  <div className="sg-card-box sg-spotlight-card" style={styles.cardBox}>
                     <div style={styles.cardHeader}>
                       <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>Quick Actions</h4>
                     </div>
@@ -5479,7 +5389,7 @@ export default function RymonConnect() {
                     </div>
                   </div>
 
-                  <div className="sg-card-box" style={styles.cardBox}>
+                  <div className="sg-card-box sg-spotlight-card" style={styles.cardBox}>
                     <div style={styles.cardHeader}>
                       <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>Recent Activity</h4>
                       <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>AUDIT</span>
@@ -5829,15 +5739,9 @@ export default function RymonConnect() {
                           )}
 
                           <div style={{ marginTop: '6px', fontSize: '11.5px', lineHeight: '1.4' }}>
-                            {!isCustomAppMode && genGame === 'Free Fire MAX' ? (
-                              <span style={{ color: '#05df72' }}>
-                                🔥 <strong>Free Fire MAX Exclusive:</strong> Full Streamer Remote controls (ESP, Aimbot, Telemetry HUD) enabled.
-                              </span>
-                            ) : (
-                              <span style={{ color: '#00d9ff' }}>
-                                🔑 <strong>Pure KeyAuth Isolation:</strong> Key will <u>ONLY</u> work on <strong>{isCustomAppMode ? (customAppNameInput.trim() || 'Custom App') : genGame}</strong>. Zero streamer controls (authentication &amp; HWID only).
-                              </span>
-                            )}
+                            <span style={{ color: '#00d9ff' }}>
+                              🔑 <strong>KeyAuth App Isolation:</strong> Key will <u>ONLY</u> authenticate inside <strong>{isCustomAppMode ? (customAppNameInput.trim() || 'Custom App') : genGame}</strong> (HWID lock &amp; expiration enforced).
+                            </span>
                           </div>
                         </div>
 
@@ -5898,173 +5802,13 @@ export default function RymonConnect() {
                         />
                       </div>
 
-                      {isCustomAppMode ? (
-                        <div
-                          style={{
-                            marginTop: '16px',
-                            padding: '12px 14px',
-                            background: 'rgba(15, 23, 42, 0.7)',
-                            border: '1px solid rgba(56, 189, 248, 0.3)',
-                            borderRadius: '10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px'
-                          }}
-                        >
-                          <span style={{ fontSize: '18px' }}>📦</span>
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 800, color: '#38bdf8' }}>
-                              CUSTOM APPLICATION MODE (PURE KEYAUTH ONLY)
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                              Keys generated for custom third-party apps use direct KeyAuth API verification. Web remote controls are exclusively designed for Free Fire MAX.
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ marginTop: '18px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <label style={{ ...styles.formLabel, margin: 0 }}>SELECT KEY EDITION &bull; ARCHITECTURE</label>
-                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                              Base: ₹{basePlanPrice} {isVipSelected ? `• +${vipSurchargePercent}% VIP Web Surcharge` : '• Zero Web Egress'}
-                            </span>
-                          </div>
-
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-                            {/* Card 1: Standard Mobile APK */}
-                            <div
-                              onClick={() => setGenEdition('normal')}
-                              style={{
-                                padding: '14px 16px',
-                                borderRadius: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                background: genEdition === 'normal'
-                                  ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.16), rgba(15, 23, 42, 0.85))'
-                                  : 'rgba(15, 23, 42, 0.55)',
-                                border: genEdition === 'normal'
-                                  ? '1.5px solid #00d9ff'
-                                  : '1px solid rgba(51, 65, 85, 0.5)',
-                                boxShadow: genEdition === 'normal'
-                                  ? '0 0 20px rgba(0, 217, 255, 0.2), inset 0 0 15px rgba(0, 217, 255, 0.08)'
-                                  : 'none',
-                                position: 'relative'
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                <span style={{
-                                  fontSize: '10px',
-                                  fontWeight: 800,
-                                  padding: '3px 8px',
-                                  borderRadius: '6px',
-                                  background: genEdition === 'normal' ? 'rgba(0, 217, 255, 0.2)' : 'rgba(148, 163, 184, 0.1)',
-                                  color: genEdition === 'normal' ? '#00d9ff' : '#94a3b8',
-                                  border: genEdition === 'normal' ? '1px solid rgba(0, 217, 255, 0.5)' : '1px solid rgba(148, 163, 184, 0.2)'
-                                }}>
-                                  📱 STANDARD MOBILE
-                                </span>
-                                <span style={{ fontSize: '14px', fontWeight: 800, color: '#00d9ff' }}>
-                                  ₹{basePlanPrice}
-                                </span>
-                              </div>
-                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', marginBottom: '4px' }}>
-                                Normal APK In-Game Only
-                              </div>
-                              <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: '1.4' }}>
-                                Direct in-game mod/injector auth. Standard mobile play with zero web overhead.
-                              </div>
-                              {genEdition === 'normal' && (
-                                <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <span>✓</span> ACTIVE SELECTION (BASE PRICE)
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Card 2: VIP Streamer Remote */}
-                            <div
-                              onClick={() => {
-                                if (!canGenerateVipRemote) {
-                                  showToast('🔒 Reseller accounts are locked to Standard APK keys by default. Owner permission is required to unlock VIP Web Remote generation.')
-                                  return
-                                }
-                                setGenEdition('vip')
-                              }}
-                              style={{
-                                padding: '14px 16px',
-                                borderRadius: '12px',
-                                cursor: canGenerateVipRemote ? 'pointer' : 'not-allowed',
-                                opacity: canGenerateVipRemote ? 1 : 0.65,
-                                transition: 'all 0.2s ease',
-                                background: genEdition === 'vip'
-                                  ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(15, 23, 42, 0.9))'
-                                  : 'rgba(15, 23, 42, 0.55)',
-                                border: genEdition === 'vip'
-                                  ? '1.5px solid #f59e0b'
-                                  : '1px solid rgba(51, 65, 85, 0.5)',
-                                boxShadow: genEdition === 'vip'
-                                  ? '0 0 20px rgba(245, 158, 11, 0.25), inset 0 0 15px rgba(245, 158, 11, 0.1)'
-                                  : 'none',
-                                position: 'relative'
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                <span style={{
-                                  fontSize: '10px',
-                                  fontWeight: 800,
-                                  padding: '3px 8px',
-                                  borderRadius: '6px',
-                                  background: genEdition === 'vip' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(148, 163, 184, 0.1)',
-                                  color: genEdition === 'vip' ? '#fbbf24' : '#94a3b8',
-                                  border: genEdition === 'vip' ? '1px solid rgba(245, 158, 11, 0.6)' : '1px solid rgba(148, 163, 184, 0.2)'
-                                }}>
-                                  👑 VIP STREAMER REMOTE
-                                </span>
-                                <div style={{ textAlign: 'right' }}>
-                                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#fbbf24' }}>
-                                    ₹{Math.round(basePlanPrice * (1 + vipSurchargePercent / 100))}
-                                  </span>
-                                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#fbbf24', marginLeft: '4px', background: 'rgba(245, 158, 11, 0.2)', padding: '2px 4px', borderRadius: '4px' }}>
-                                    +{vipSurchargePercent}%
-                                  </span>
-                                </div>
-                              </div>
-                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span>Web Live Controller</span>
-                                {!canGenerateVipRemote && <span style={{ fontSize: '11px', color: '#f43f5e' }}>🔒 LOCKED</span>}
-                              </div>
-                              <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: '1.4' }}>
-                                Browser remote control (ESP radar, live Aimbot toggle, silent patch). 100% clean for screen recording.
-                              </div>
-                              {!canGenerateVipRemote ? (
-                                <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#f43f5e' }}>
-                                  🔒 LOCKED BY DEFAULT (Owner Permission Required)
-                                </div>
-                              ) : isReseller ? (
-                                <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#05df72', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <span>✓</span> PERMITTED BY OWNER (+{vipSurchargePercent}% SURCHARGE)
-                                </div>
-                              ) : genEdition === 'vip' ? (
-                                <div style={{ marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <span>✓</span> ACTIVE SELECTION (+{vipSurchargePercent}% SURCHARGE)
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
                       {/* Cost Summary Box */}
-                      <div style={styles.invoiceSummaryBox}>
+                      <div style={{ ...styles.invoiceSummaryBox, marginTop: '20px' }}>
                         <div>
                           <div style={{ fontSize: '13px', color: '#94a3b8' }}>
                             Invoice Cost ({genQuantity} Key{genQuantity > 1 ? 's' : ''} × {genDevicesMax} Device{genDevicesMax > 1 ? 's' : ''} × ₹{unitPlanPrice}):
-                            {isVipSelected && (
-                              <span style={{ marginLeft: '6px', fontSize: '11px', color: '#fbbf24', fontWeight: 700 }}>
-                                (Base ₹{basePlanPrice} + {vipSurchargePercent}% VIP Remote)
-                              </span>
-                            )}
                           </div>
-                          <div style={{ fontSize: '20px', fontWeight: 700, color: isVipSelected ? '#fbbf24' : '#00d9ff' }}>
+                          <div style={{ fontSize: '20px', fontWeight: 700, color: '#00d9ff' }}>
                             {isOwner ? '₹0 (Owner Free Mint)' : `₹${projectedInvoice.toLocaleString('en-IN')}`}
                           </div>
                           {/* Customer retail price hint — private to reseller/admin */}
@@ -6096,10 +5840,8 @@ export default function RymonConnect() {
                         style={{ ...styles.submitBtn, marginTop: '24px' }}
                       >
                         {authLoading
-                          ? (isVipSelected ? 'ALLOCATING RYMON VIP KEYS...' : 'GENERATING STANDARD APK KEYS...')
-                          : isVipSelected
-                          ? `👑 GENERATE ${genQuantity > 1 ? `${genQuantity} VIP KEYS` : 'VIP KEY'} (${genDuration})`
-                          : `📱 GENERATE ${genQuantity > 1 ? `${genQuantity} STANDARD KEYS` : 'STANDARD KEY'} (${genDuration})`}
+                          ? 'GENERATING LICENSE KEYS...'
+                          : `🔑 GENERATE ${genQuantity > 1 ? `${genQuantity} KEYS` : 'LICENSE KEY'} (${genDuration})`}
                       </button>
                     </form>
 
@@ -6352,55 +6094,6 @@ export default function RymonConnect() {
                         }}
                       >
                         {st.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Row 1B: Edition Filter Pills */}
-                  <div
-                    className="sg-filter-scroll-row"
-                    style={{
-                      display: 'flex',
-                      gap: '6px',
-                      flexWrap: 'nowrap',
-                      overflowX: 'auto',
-                      alignItems: 'center',
-                      paddingTop: '8px',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.06)'
-                    }}
-                  >
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      EDITION:
-                    </span>
-                    {(
-                      [
-                        { id: 'ALL', label: `All Editions (${stats.total})`, color: '#f8fafc' },
-                        { id: 'NORMAL', label: `Standard (${stats.normalCount})`, color: '#38bdf8' },
-                        { id: 'VIP', label: `VIP Remote (${stats.vipCount})`, color: '#f59e0b' }
-                      ] as const
-                    ).map((ed) => (
-                      <button
-                        key={ed.id}
-                        onClick={() => setKeyEditionFilter(ed.id)}
-                        style={{
-                          padding: '5px 10px',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          touchAction: 'manipulation',
-                          border:
-                            keyEditionFilter === ed.id
-                              ? `1px solid ${ed.color}`
-                              : '1px solid rgba(255, 255, 255, 0.08)',
-                          backgroundColor:
-                            keyEditionFilter === ed.id
-                              ? 'rgba(255, 255, 255, 0.08)'
-                              : 'transparent',
-                          color: keyEditionFilter === ed.id ? ed.color : '#94a3b8'
-                        }}
-                      >
-                        {ed.label}
                       </button>
                     ))}
                   </div>
@@ -6712,8 +6405,144 @@ export default function RymonConnect() {
                   </div>
                 )}
 
-                <div className="sg-table-card" style={styles.tableCard}>
-                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <div key="keys-list" className="sg-table-card" style={styles.tableCard}>
+                  {/* 📱 MOBILE HOLOGRAPHIC KEY CARDS (Zero Horizontal Table Scroll) */}
+                  <div className="sg-mobile-key-cards" style={{ padding: '10px' }}>
+                    {filteredKeys.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b', fontSize: '13px' }}>
+                        No licenses found matching criteria.
+                      </div>
+                    ) : (
+                      filteredKeys.map((k) => {
+                        const isPlaying = !k.is_paused && k.status === 'ACTIVE' && onlineKeySet.has(k.license_key.toUpperCase())
+                        return (
+                          <div key={`m_${k.license_key}`} className="sg-mobile-key-card sg-spotlight-card">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#f8fafc' }}>{k.game}</span>
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
+                                  #{k.id} • @{k.creator_username} • {k.plan_duration?.replace(/\s*\[VIP\]/gi, '').trim()}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                                {isPlaying && (
+                                  <span className="sg-live-beacon" style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', marginRight: '2px' }} />
+                                )}
+                                <span style={{
+                                  ...styles.statusPill,
+                                  background:
+                                    k.is_paused || k.status === 'PAUSED'
+                                      ? 'rgba(255,183,0,0.16)'
+                                      : k.status === 'ACTIVE'
+                                      ? 'rgba(5,223,114,0.16)'
+                                      : k.status === 'WAITING'
+                                      ? 'rgba(234,179,8,0.16)'
+                                      : 'rgba(239,68,68,0.16)',
+                                  color:
+                                    k.is_paused || k.status === 'PAUSED'
+                                      ? '#ffb700'
+                                      : k.status === 'ACTIVE'
+                                      ? '#05df72'
+                                      : k.status === 'WAITING'
+                                      ? '#eab308'
+                                      : '#ef4444'
+                                }}>
+                                  {isPlaying ? 'PLAYING' : k.is_paused || k.status === 'PAUSED' ? 'PAUSED' : k.status === 'WAITING' ? 'UNUSED' : k.status}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Mono Key Pill Row */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '8px',
+                              padding: '8px 10px',
+                              borderRadius: '10px',
+                              background: 'rgba(4, 7, 15, 0.75)',
+                              border: '1px solid rgba(0, 217, 255, 0.2)',
+                              marginBottom: '10px'
+                            }}>
+                              <code style={{ fontSize: '12px', fontWeight: 700, color: '#00d9ff', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {k.license_key}
+                              </code>
+                              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyKey(k.license_key)}
+                                  style={{ ...styles.actionIconBtn, padding: '6px 10px', minHeight: '34px', fontSize: '11px', fontWeight: 700, color: copiedKey === k.license_key ? '#05df72' : '#00d9ff' }}
+                                >
+                                  {copiedKey === k.license_key ? '✓ Copied' : '📋 Copy'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyDeliverySlip(k.license_key, k.plan_duration, k.game)}
+                                  style={{ ...styles.actionIconBtn, padding: '6px 9px', minHeight: '34px' }}
+                                  title="Copy Delivery Slip"
+                                >
+                                  <IconReceipt size={13} color={copiedDeliverySlip === k.license_key ? '#05df72' : '#cbd5e1'} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Telemetry & Devices */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#94a3b8', marginBottom: '10px' }}>
+                              <span>{k.devices_used}/{k.devices_max} Device • {k.device_hwid ? `🔒 ${k.device_hwid.slice(0, 10)}…` : '🟢 Unbound'}</span>
+                              <span style={{ fontWeight: 700, color: k.status === 'EXPIRED' ? '#ef4444' : '#e2e8f0' }}>
+                                {formatRemainingTime(k.expires_at, k.status, k.is_paused, k.plan_duration)}
+                              </span>
+                            </div>
+
+                            {/* Action Row */}
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '10px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePauseKey(k.license_key)}
+                                disabled={pauseLoadingKeys.has(k.license_key)}
+                                style={{ ...styles.actionIconBtn, flex: 1, minHeight: '38px', fontSize: '11px', fontWeight: 700, color: k.is_paused || k.status === 'PAUSED' ? '#05df72' : '#ffb700' }}
+                              >
+                                {k.is_paused || k.status === 'PAUSED' ? '▶ Resume' : '⏸ Pause'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleResetHWID(k.license_key)}
+                                disabled={hwidLoadingKeys.has(k.license_key)}
+                                style={{ ...styles.actionIconBtn, flex: 1, minHeight: '38px', fontSize: '11px', fontWeight: 700, color: '#38bdf8' }}
+                              >
+                                🔄 HWID
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTargetExtendKey(k.license_key)
+                                  handleSelectTab('extend')
+                                }}
+                                style={{ ...styles.actionIconBtn, flex: 1, minHeight: '38px', fontSize: '11px', fontWeight: 700, color: '#c084fc' }}
+                              >
+                                ➕ Extend
+                              </button>
+                              {(isOwner || k.status === 'EXPIRED' || k.status === 'WAITING') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteKey(k.license_key, k.status)}
+                                  disabled={deleteLoadingKeys.has(k.license_key)}
+                                  style={{ ...styles.actionIconBtn, minHeight: '38px', padding: '6px 10px', color: '#ef4444' }}
+                                  aria-label="Delete key"
+                                >
+                                  <IconTrash size={14} color="#ef4444" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+
+                  <div className="sg-desktop-key-table" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                     <table className="sg-data-table" style={styles.dataTable}>
                       <thead>
                         <tr>
@@ -6783,79 +6612,7 @@ export default function RymonConnect() {
                               </td>
                               <td style={styles.td}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span style={styles.planBadge}>{k.plan_duration?.replace(' [VIP]', '')}</span>
-                                  {k.plan_duration?.includes('[VIP]') ? (
-                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                      <span
-                                        style={{
-                                          border: '1px solid rgba(250, 204, 21, 0.55)',
-                                          background: 'rgba(250, 204, 21, 0.18)',
-                                          color: '#fde047',
-                                          fontSize: '9.5px',
-                                          fontWeight: 800,
-                                          padding: '2px 6px',
-                                          borderRadius: '6px'
-                                        }}
-                                        title="VIP Streamer Edition: Live Web Remote & Streamer Controls"
-                                      >
-                                        👑 VIP REMOTE
-                                      </span>
-                                      {isOwner && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleToggleVipKey(k.license_key, false)}
-                                          style={{
-                                            border: '1px solid rgba(148, 163, 184, 0.35)',
-                                            background: 'rgba(15, 23, 42, 0.6)',
-                                            color: '#94a3b8',
-                                            fontSize: '9px',
-                                            padding: '2px 5px',
-                                            borderRadius: '5px',
-                                            cursor: 'pointer'
-                                          }}
-                                          title="Revert to Standard APK key"
-                                        >
-                                          📱 Standard
-                                        </button>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                      <span
-                                        style={{
-                                          border: '1px solid rgba(0, 217, 255, 0.35)',
-                                          background: 'rgba(0, 217, 255, 0.1)',
-                                          color: '#38bdf8',
-                                          fontSize: '9.5px',
-                                          fontWeight: 800,
-                                          padding: '2px 6px',
-                                          borderRadius: '6px'
-                                        }}
-                                        title="Standard Mobile Edition: In-Game APK Authentication Only (Zero Web Overhead)"
-                                      >
-                                        📱 APK ONLY
-                                      </span>
-                                      {(isOwner || isAdmin) && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleToggleVipKey(k.license_key, true)}
-                                          style={{
-                                            border: '1px solid rgba(245, 158, 11, 0.5)',
-                                            background: 'rgba(245, 158, 11, 0.16)',
-                                            color: '#fbbf24',
-                                            fontSize: '9.5px',
-                                            fontWeight: 800,
-                                            padding: '2px 6px',
-                                            borderRadius: '6px',
-                                            cursor: 'pointer'
-                                          }}
-                                          title="Click to upgrade key to VIP Streamer Remote (+50%)"
-                                        >
-                                          👑 +VIP
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
+                                  <span style={styles.planBadge}>{k.plan_duration?.replace(/\s*\[VIP\]/gi, '').trim()}</span>
                                 </div>
                               </td>
                               <td style={styles.td}>
@@ -7046,7 +6803,7 @@ export default function RymonConnect() {
               </div>
             )}
 
-            {/* 5. USERS TABLE (MEDIA_1791705436370_50F30D3E.PNG) */}
+            {/* 5. USERS TABLE */}
             {activeTab === 'users' && (
               <div className="sg-view-container" style={styles.viewContainer}>
                 <div className="sg-banner-row" style={styles.bannerRow}>
@@ -7237,52 +6994,33 @@ export default function RymonConnect() {
                                       <IconPricing size={13} color="#fde047" />
                                     </button>
                                     {isRootOwner && u.username.toLowerCase() !== 'debajoyti' && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => openAppPermModal(u)}
-                                          style={{
-                                            padding: '4px 8px',
-                                            borderRadius: '6px',
-                                            fontSize: '10px',
-                                            fontWeight: 800,
-                                            cursor: 'pointer',
-                                            background: Boolean(u.permissions?.allow_custom_apps) || (Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0)
-                                              ? 'rgba(0, 217, 255, 0.16)'
-                                              : 'rgba(239, 68, 68, 0.16)',
-                                            border: Boolean(u.permissions?.allow_custom_apps) || (Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0)
-                                              ? '1px solid rgba(0, 217, 255, 0.45)'
-                                              : '1px solid rgba(239, 68, 68, 0.45)',
-                                            color: Boolean(u.permissions?.allow_custom_apps) || (Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0)
-                                              ? '#00d9ff'
-                                              : '#f87171'
-                                          }}
-                                          title="Click to manage custom app permissions for this user"
-                                        >
-                                          {u.permissions?.allow_custom_apps
-                                            ? '✨ All Custom'
-                                            : Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0
-                                            ? `🛡️ ${(u.permissions as any).allowed_apps[0]} (${(u.permissions as any).allowed_apps.length})`
-                                            : '🔒 FF MAX Only'}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleToggleUserVipRemote(u.username, !isUserVipRemoteAllowed(u))}
-                                          style={{
-                                            padding: '4px 8px',
-                                            borderRadius: '6px',
-                                            fontSize: '10px',
-                                            fontWeight: 800,
-                                            cursor: 'pointer',
-                                            background: isUserVipRemoteAllowed(u) ? 'rgba(245, 158, 11, 0.18)' : 'rgba(148, 163, 184, 0.1)',
-                                            border: isUserVipRemoteAllowed(u) ? '1px solid rgba(245, 158, 11, 0.55)' : '1px solid rgba(148, 163, 184, 0.3)',
-                                            color: isUserVipRemoteAllowed(u) ? '#fbbf24' : '#94a3b8'
-                                          }}
-                                          title={isUserVipRemoteAllowed(u) ? 'Owner Permitted: Click to lock account to Standard APK only' : 'Locked by Default: Click to Permit VIP Web Remote key generation'}
-                                        >
-                                          {isUserVipRemoteAllowed(u) ? '👑 VIP Permitted' : '🔒 APK Only'}
-                                        </button>
-                                      </>
+                                      <button
+                                        type="button"
+                                        onClick={() => openAppPermModal(u)}
+                                        style={{
+                                          padding: '4px 8px',
+                                          borderRadius: '6px',
+                                          fontSize: '10px',
+                                          fontWeight: 800,
+                                          cursor: 'pointer',
+                                          background: Boolean(u.permissions?.allow_custom_apps) || (Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0)
+                                            ? 'rgba(0, 217, 255, 0.16)'
+                                            : 'rgba(239, 68, 68, 0.16)',
+                                          border: Boolean(u.permissions?.allow_custom_apps) || (Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0)
+                                            ? '1px solid rgba(0, 217, 255, 0.45)'
+                                            : '1px solid rgba(239, 68, 68, 0.45)',
+                                          color: Boolean(u.permissions?.allow_custom_apps) || (Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0)
+                                            ? '#00d9ff'
+                                            : '#f87171'
+                                        }}
+                                        title="Click to manage custom app permissions for this user"
+                                      >
+                                        {u.permissions?.allow_custom_apps
+                                          ? '✨ All Custom'
+                                          : Array.isArray((u.permissions as any)?.allowed_apps) && (u.permissions as any).allowed_apps.length > 0
+                                          ? `🛡️ ${(u.permissions as any).allowed_apps[0]} (${(u.permissions as any).allowed_apps.length})`
+                                          : '🔒 FF MAX Only'}
+                                      </button>
                                     )}
                                     <button
                                       onClick={() => {
@@ -8167,110 +7905,6 @@ export default function RymonConnect() {
                         </select>
                       </div>
 
-                      {/* VIP Web Remote Permission Controls */}
-                      <div style={styles.settingToggleRow}>
-                        <div>
-                          <div style={styles.settingTitle}>
-                            <span>Allow Resellers to Generate VIP Web Remote Keys</span>
-                            {!(securityPolicy.allow_reseller_web_remote ?? false) && (
-                              <span style={{ marginLeft: '8px', fontSize: '10px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#fca5a5', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
-                                STRICT LOCKED
-                              </span>
-                            )}
-                          </div>
-                          <div style={styles.settingSub}>
-                            When OFF (Default / Strict), Resellers are locked to Standard APK keys only (zero web remote egress). When ON, Resellers can generate VIP Streamer Web Remote keys.
-                          </div>
-                        </div>
-                        <div
-                          onClick={() =>
-                            handleSaveSecurityPolicy({
-                              ...securityPolicy,
-                              allow_reseller_web_remote: !(securityPolicy.allow_reseller_web_remote ?? false)
-                            })
-                          }
-                          style={{
-                            ...styles.switchPill,
-                            background: (securityPolicy.allow_reseller_web_remote ?? false)
-                              ? '#05df72'
-                              : 'rgba(30,36,50,0.8)'
-                          }}
-                        >
-                          <div
-                            style={{
-                              ...styles.switchKnob,
-                              transform: (securityPolicy.allow_reseller_web_remote ?? false)
-                                ? 'translateX(20px)'
-                                : 'translateX(0)'
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={styles.settingToggleRow}>
-                        <div>
-                          <div style={styles.settingTitle}>Allow Level 2 Admins to Generate VIP Web Remote Keys</div>
-                          <div style={styles.settingSub}>
-                            Grants Admins permission to generate VIP Streamer Web Remote keys with live web control
-                          </div>
-                        </div>
-                        <div
-                          onClick={() =>
-                            handleSaveSecurityPolicy({
-                              ...securityPolicy,
-                              allow_admin_web_remote: !(securityPolicy.allow_admin_web_remote ?? true)
-                            })
-                          }
-                          style={{
-                            ...styles.switchPill,
-                            background: (securityPolicy.allow_admin_web_remote ?? true)
-                              ? '#00d9ff'
-                              : 'rgba(30,36,50,0.8)'
-                          }}
-                        >
-                          <div
-                            style={{
-                              ...styles.switchKnob,
-                              transform: (securityPolicy.allow_admin_web_remote ?? true)
-                                ? 'translateX(20px)'
-                                : 'translateX(0)'
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={styles.settingToggleRow}>
-                        <div>
-                          <div style={styles.settingTitle}>VIP Web Remote Price Surcharge Markup</div>
-                          <div style={styles.settingSub}>
-                            Automatic percentage surcharge applied to base plan pricing for VIP Streamer Web Remote keys
-                          </div>
-                        </div>
-                        <select
-                          value={securityPolicy.vip_price_surcharge_percent ?? 50}
-                          onChange={(e) =>
-                            handleSaveSecurityPolicy({
-                              ...securityPolicy,
-                              vip_price_surcharge_percent: parseInt(e.target.value) || 0
-                            })
-                          }
-                          style={{
-                            ...styles.selectInput,
-                            width: 'auto',
-                            padding: '8px 14px',
-                            fontSize: '12px',
-                            fontWeight: 800,
-                            color: '#05df72',
-                            border: '1px solid rgba(5, 223, 114, 0.4)'
-                          }}
-                        >
-                          <option value={0}>0% (No Surcharge)</option>
-                          <option value={25}>+25% VIP Surcharge</option>
-                          <option value={50}>+50% VIP Surcharge (Standard Recommended)</option>
-                          <option value={75}>+75% VIP Surcharge</option>
-                          <option value={100}>+100% VIP Surcharge (2x Price)</option>
-                        </select>
-                      </div>
                     </div>
 
                     {/* Sovereign Anti-Sharing, Reseller Expiry & APK Force-Update Policy */}
@@ -8855,25 +8489,12 @@ export default function RymonConnect() {
             {activeTab === 'connect-api' && isRootOwner && (() => {
               const isCustomTypeMode = connectSelectedApp === 'Custom' || connectSelectedApp === '__CUSTOM__';
               const effectiveConnectAppName = isCustomTypeMode ? (connectCustomAppName.trim() || 'Tool X') : (connectSelectedApp || 'Free Fire MAX');
-              const getAppSecret = (appName: string): string => {
-                if (appName === 'Free Fire MAX') return 'ff_max_sec_7a8b9c1d2e3f405162738495a6b7c8d9e0f1';
-                let hash1 = 0x811c9dc5;
-                let hash2 = 0x55555555;
-                for (let i = 0; i < appName.length; i++) {
-                  hash1 ^= appName.charCodeAt(i);
-                  hash1 = (hash1 * 0x01000193) >>> 0;
-                  hash2 = (hash2 * 33 + appName.charCodeAt(i)) >>> 0;
-                }
-                const part1 = hash1.toString(16).padStart(8, '0');
-                const part2 = hash2.toString(16).padStart(8, '0');
-                return (part1 + part2 + '1e584eab26bac5030d2a5fbfec013059afac1d348431d892632d8961').substring(0, 48);
-              };
-              const currentSecret = getAppSecret(effectiveConnectAppName);
+              const currentSecret = getAppSecret(effectiveConnectAppName, registeredApps);
               const ownerUsername = currentUser?.username || 'debajoyti';
 
               // Code snippets
               const cppSnippet = `/*
- * Safe Streamer - KeyAuth C++ Client (Drop-in Header & Example)
+ * KeyAuth C++ Client (Drop-in Header & Example)
  * Application: ${effectiveConnectAppName}
  * Owner ID:    ${ownerUsername}
  * Gateway:     https://greenvest.shop/connect
@@ -8922,7 +8543,7 @@ namespace KeyAuth {
             }
 
             std::string resStr;
-            std::string jsonBody = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"" + name + "\\"}";
+            std::string jsonBody = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"" + name + "\\",\\"secret\\":\\"" + secret + "\\",\\"version\\":\\"" + version + "\\"}";
 
             struct curl_slist* headers = NULL;
             headers = curl_slist_append(headers, "Content-Type: application/json");
@@ -9064,6 +8685,7 @@ namespace KeyAuth
                     user_key = key,
                     serial = hwid,
                     app = Name,
+                    secret = Secret,
                     version = Version
                 };
 
@@ -9170,6 +8792,8 @@ public class KeyAuth {
             body.put("user_key", key);
             body.put("serial", hwid);
             body.put("app", this.name);
+            body.put("secret", this.secret);
+            body.put("version", this.version);
 
             URL url = new URL(gatewayUrl);
             conn = (HttpURLConnection) url.openConnection();
@@ -9243,7 +8867,9 @@ class KeyAuth:
         payload = {
             "user_key": key,
             "serial": hwid,
-            "app": self.name
+            "app": self.name,
+            "secret": self.secret,
+            "version": self.version
         }
         r = requests.post(self.gateway, json=payload, timeout=10)
         return r.json()
@@ -9269,7 +8895,8 @@ else:
   -d '{
     "user_key": "YOUR_LICENSE_KEY",
     "serial": "DEVICE_HWID_OR_ANDROID_ID",
-    "app": "${effectiveConnectAppName}"
+    "app": "${effectiveConnectAppName}",
+    "secret": "${currentSecret}"
   }'`;
 
               return (
@@ -9601,16 +9228,16 @@ else:
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                         <div style={{ fontSize: '14px', fontWeight: 800, color: '#05df72', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          🎮 Free Fire MAX Mode
+                          🎮 Free Fire MAX (Built-in App)
                         </div>
                         <span style={{ fontSize: '10.5px', background: 'rgba(5, 223, 114, 0.15)', color: '#05df72', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
-                          STREAMER REMOTE + KEYAUTH
+                          DEFAULT KEYAUTH PRESET
                         </span>
                       </div>
                       <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: '1.6' }}>
-                        • <strong>KeyAuth Licensing:</strong> HWID lock, expiration time, pause/resume.<br />
-                        • <strong>Streamer Remote Control:</strong> Live web ESP toggle, box, skeleton, aimbot FOV slider, crosshair, spectator auto-hide.<br />
-                        • <strong>Strict Isolation:</strong> Keys minted for Free Fire MAX will ONLY log in to Free Fire MAX.
+                        • <strong>KeyAuth Licensing:</strong> HWID device lock, expiration timer, instant pause/resume.<br />
+                        • <strong>Legacy Client Compatibility:</strong> Supports existing APK / native daemon builds seamlessly alongside Connect Secret validation.<br />
+                        • <strong>Strict Isolation:</strong> Keys minted for Free Fire MAX cannot be used on other registered custom applications.
                       </div>
                     </div>
 
@@ -9630,8 +9257,8 @@ else:
                         </span>
                       </div>
                       <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: '1.6' }}>
-                        • <strong>Pure KeyAuth Licensing:</strong> Device HWID lock, expiration check, instant freeze from dashboard.<br />
-                        • <strong>Zero Streamer Overhead:</strong> Streamer controls and ESP panels are completely bypassed and excluded.<br />
+                        • <strong>Pure KeyAuth Licensing:</strong> Device HWID lock, expiration check, instant pause/resume from dashboard.<br />
+                        • <strong>Required App Secret:</strong> Enforces both <code>app</code> and per-app <code>secret</code> on Edge Gateway &amp; RPC.<br />
                         • <strong>Strict App Isolation:</strong> Keys generated for <em>{effectiveConnectAppName}</em> will fail if used in Free Fire MAX or any other app!
                       </div>
                     </div>
@@ -9824,9 +9451,7 @@ else:
                                   type="button"
                                   onClick={() => {
                                     const matching = keysList.find(k =>
-                                      effectiveConnectAppName.toLowerCase() === 'free fire max'
-                                        ? String(k?.game || '').toLowerCase().includes('free fire')
-                                        : String(k?.game || '').toLowerCase() === effectiveConnectAppName.toLowerCase()
+                                      String(k?.game || 'Free Fire MAX').trim().toLowerCase() === effectiveConnectAppName.toLowerCase()
                                     );
                                     const keyToPick = matching || keysList[0];
                                     setTestConnectKey(keyToPick.license_key);
@@ -9900,14 +9525,15 @@ else:
                         </div>
                         <div style={{ color: '#94a3b8', lineHeight: '1.7' }}>
                           • <strong>Gateway URL:</strong> <code>https://greenvest.shop/connect</code> (Cloudflare Edge Proxy)<br />
-                          • <strong>Required Header:</strong> <code>Content-Type: application/json</code> (Zero secret API keys required in APK!)<br />
-                          • <strong>Request Body:</strong> <code>{`{"user_key": "...", "serial": "...", "app": "${effectiveConnectAppName}"}`}</code><br />
+                          • <strong>Required Header:</strong> <code>Content-Type: application/json</code><br />
+                          • <strong>Required Fields:</strong> <code>{`{"user_key": "...", "serial": "...", "app": "${effectiveConnectAppName}", "secret": "${currentSecret.substring(0, 12)}..."}`}</code><br />
+                          • <strong>Strict App + Secret Lock:</strong> Both <code>app</code> and <code>secret</code> must match; blank <code>app</code> or wrong secret is rejected.<br />
                           • <strong>Response Fields:</strong><br />
-                          &nbsp;&nbsp;&nbsp;&nbsp;<code>status</code> (boolean): Key authenticity &amp; device match<br />
+                          &nbsp;&nbsp;&nbsp;&nbsp;<code>status</code> (boolean): Key authenticity, secret &amp; device match<br />
                           &nbsp;&nbsp;&nbsp;&nbsp;<code>is_paused</code> (boolean): Reseller pause status<br />
                           &nbsp;&nbsp;&nbsp;&nbsp;<code>expires_at</code> (ISO 8601 string): Exact expiration timestamp<br />
                           &nbsp;&nbsp;&nbsp;&nbsp;<code>game / app</code> (string): Target game/app name<br />
-                          &nbsp;&nbsp;&nbsp;&nbsp;<code>reason</code> (string): Error reason if rejected (e.g. <em>App Mismatch!</em>)
+                          &nbsp;&nbsp;&nbsp;&nbsp;<code>reason</code> (string): Error reason if rejected (e.g. <em>App Mismatch!</em> or <em>Invalid App Secret!</em>)
                         </div>
                       </div>
                     </div>
@@ -10418,66 +10044,26 @@ else:
                     </div>
                   </div>
 
-                  <div style={{ marginTop: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 800 }}>
-                        READY-TO-RUN CLIENT CODE ({snippetLanguage.toUpperCase()}):
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const targetAppName = selectedSnippetApp?.name || 'Free Fire MAX'
-                          let codeToCopy = ''
-                          if (snippetLanguage === 'curl') {
-                            codeToCopy = `curl -X POST https://greenvest.shop/connect \\\n  -H "Content-Type: application/json" \\\n  -d '{"user_key": "YOUR-LICENSE-KEY", "serial": "DEVICE-HWID", "app": "${targetAppName}"}'`
-                          } else if (snippetLanguage === 'java') {
-                            codeToCopy = `// Android Java KeyAuth snippet for ${targetAppName}\nJSONObject payload = new JSONObject();\npayload.put("user_key", licenseKey);\npayload.put("serial", deviceHwid);\npayload.put("app", "${targetAppName}");\n\nURL url = new URL("https://greenvest.shop/connect");\nHttpURLConnection conn = (HttpURLConnection) url.openConnection();\nconn.setRequestMethod("POST");\nconn.setRequestProperty("Content-Type", "application/json");\nconn.setDoOutput(true);\nconn.getOutputStream().write(payload.toString().getBytes("UTF-8"));\n\n// Read JSON response (status, success, data.EXP, data.status)`
-                          } else if (snippetLanguage === 'cpp') {
-                            codeToCopy = `// C++ Native libcurl snippet for ${targetAppName}\n#include <curl/curl.h>\n\nconst char* json = "{\\"user_key\\":\\"%s\\",\\"serial\\":\\"%s\\",\\"app\\":\\"${targetAppName}\\"}";\n// Send POST request to https://greenvest.shop/connect`
-                          } else if (snippetLanguage === 'csharp') {
-                            codeToCopy = `// C# Unity WebRequest for ${targetAppName}\nstring json = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"${targetAppName}\\"}";\nUnityWebRequest req = UnityWebRequest.PostWwwForm("https://greenvest.shop/connect", json);\n// Check res.downloadHandler.text`
-                          } else if (snippetLanguage === 'python') {
-                            codeToCopy = `import requests\n\nres = requests.post("https://greenvest.shop/connect", json={\n    "user_key": "YOUR_KEY",\n    "serial": "DEVICE_HWID",\n    "app": "${targetAppName}"\n})\ndata = res.json()\nif data.get("success"):\n    print("Access Granted! Expiry:", data["data"]["EXP"])\nelse:\n    print("Access Denied:", data.get("reason"))`
-                          }
-                          navigator.clipboard.writeText(codeToCopy)
-                          showToast(`Copied ${snippetLanguage.toUpperCase()} snippet for ${targetAppName}!`)
-                        }}
-                        style={{ ...styles.chipBtn, fontSize: '11px', padding: '4px 12px' }}
-                      >
-                        📋 Copy Code Snippet
-                      </button>
-                    </div>
-
-                    <pre style={{
-                      margin: 0,
-                      padding: '16px',
-                      background: '#04060a',
-                      border: '1px solid rgba(0, 217, 255, 0.25)',
-                      borderRadius: '8px',
-                      fontFamily: 'Consolas, monospace',
-                      fontSize: '12px',
-                      color: '#00d9ff',
-                      overflowX: 'auto',
-                      lineHeight: '1.6'
-                    }}>
-                      {(() => {
-                        const targetAppName = selectedSnippetApp?.name || 'Free Fire MAX'
-                        if (snippetLanguage === 'curl') {
-                          return `curl -X POST https://greenvest.shop/connect \\
+                  {(() => {
+                    const targetAppName = selectedSnippetApp?.name || 'Free Fire MAX'
+                    const targetSecret = getAppSecret(targetAppName, registeredApps)
+                    const snippetMap: Record<'curl' | 'java' | 'cpp' | 'csharp' | 'python', string> = {
+                      curl: `curl -X POST https://greenvest.shop/connect \\
   -H "Content-Type: application/json" \\
   -d '{
     "user_key": "YOUR-LICENSE-KEY",
     "serial": "DEVICE-HWID",
-    "app": "${targetAppName}"
-  }'`
-                        } else if (snippetLanguage === 'java') {
-                          return `// ==============================================================
+    "app": "${targetAppName}",
+    "secret": "${targetSecret}"
+  }'`,
+                      java: `// ==============================================================
 // Android Java KeyAuth Verification for "${targetAppName}"
 // ==============================================================
 JSONObject payload = new JSONObject();
 payload.put("user_key", licenseKey);
 payload.put("serial", androidId);
 payload.put("app", "${targetAppName}");
+payload.put("secret", "${targetSecret}");
 
 URL url = new URL("https://greenvest.shop/connect");
 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -10499,16 +10085,15 @@ if (json.optBoolean("success")) {
     // Access Granted! Pure KeyAuth Valid until: exp
 } else {
     String reason = json.optString("reason", "License Invalid");
-    // Access Denied: reason (e.g. App Mismatch or Expired)
-}`
-                        } else if (snippetLanguage === 'cpp') {
-                          return `// ==============================================================
+    // Access Denied: reason (e.g. App Mismatch, Invalid App Secret, or Expired)
+}`,
+                      cpp: `// ==============================================================
 // C++ Native KeyAuth Verification for "${targetAppName}"
 // ==============================================================
 #include <string>
 #include <curl/curl.h>
 
-std::string payload = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"${targetAppName}\\"}";
+std::string payload = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"${targetAppName}\\",\\"secret\\":\\"${targetSecret}\\"}";
 
 CURL* curl = curl_easy_init();
 if (curl) {
@@ -10522,9 +10107,8 @@ if (curl) {
     CURLcode res = curl_easy_perform(curl);
     // Parse JSON response: success, status, data.EXP
     curl_easy_cleanup(curl);
-}`
-                        } else if (snippetLanguage === 'csharp') {
-                          return `// ==============================================================
+}`,
+                      csharp: `// ==============================================================
 // C# / Unity KeyAuth Verification for "${targetAppName}"
 // ==============================================================
 using UnityEngine;
@@ -10532,8 +10116,8 @@ using UnityEngine.Networking;
 using System.Collections;
 
 IEnumerator VerifyLicense(string key, string hwid) {
-    string jsonPayload = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"${targetAppName}\\"}";
-    byte[] bodyRaw = System.Text.Encoding.UTF_8.GetBytes(jsonPayload);
+    string jsonPayload = "{\\"user_key\\":\\"" + key + "\\",\\"serial\\":\\"" + hwid + "\\",\\"app\\":\\"${targetAppName}\\",\\"secret\\":\\"${targetSecret}\\"}";
+    byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonPayload);
 
     using (UnityWebRequest req = new UnityWebRequest("https://greenvest.shop/connect", "POST")) {
         req.uploadHandler = new UploadHandlerRaw(bodyRaw);
@@ -10545,15 +10129,15 @@ IEnumerator VerifyLicense(string key, string hwid) {
             Debug.Log("Response: " + req.downloadHandler.text);
         }
     }
-}`
-                        } else {
-                          return `import requests
+}`,
+                      python: `import requests
 
 # Pure KeyAuth Check for ${targetAppName}
 response = requests.post("https://greenvest.shop/connect", json={
     "user_key": "YOUR-LICENSE-KEY",
     "serial": "DEVICE-HWID-001",
-    "app": "${targetAppName}"
+    "app": "${targetAppName}",
+    "secret": "${targetSecret}"
 })
 
 data = response.json()
@@ -10561,16 +10145,49 @@ if data.get("success"):
     print("License Valid! Game:", data["data"]["app"], "Expires:", data["data"]["EXP"])
 else:
     print("License Denied! Reason:", data.get("reason"))`
-                        }
-                      })()}
-                    </pre>
-                  </div>
+                    }
+                    const activeSnippetCode = snippetMap[snippetLanguage]
+
+                    return (
+                      <div style={{ marginTop: '16px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 800 }}>
+                            READY-TO-RUN CLIENT CODE ({snippetLanguage.toUpperCase()}):
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(activeSnippetCode)
+                              showToast(`Copied ${snippetLanguage.toUpperCase()} snippet for ${targetAppName}!`)
+                            }}
+                            style={{ ...styles.chipBtn, fontSize: '11px', padding: '4px 12px' }}
+                          >
+                            📋 Copy Code Snippet
+                          </button>
+                        </div>
+
+                        <pre style={{
+                          margin: 0,
+                          padding: '16px',
+                          background: '#04060a',
+                          border: '1px solid rgba(0, 217, 255, 0.25)',
+                          borderRadius: '8px',
+                          fontFamily: 'Consolas, monospace',
+                          fontSize: '12px',
+                          color: '#00d9ff',
+                          overflowX: 'auto',
+                          lineHeight: '1.6'
+                        }}>
+                          {activeSnippetCode}
+                        </pre>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             )}
 
 
-            {/* 13. STREAMER REMOTE (TELEMETRY & HARDWARE CONTROLLER) */}
             {/* 13. KEYAUTH STANDALONE — LICENSE STATUS & HARDWARE PORTAL */}
             {activeTab === 'license' && (() => {
               const targetLic = currentKey ? keysList.find((k) => k.license_key.toUpperCase() === currentKey.toUpperCase()) : null
@@ -10814,9 +10431,11 @@ else:
                         color: '#cbd5e1',
                         lineHeight: '1.6'
                       }}>
-                        <span style={{ color: '#64748b' }}>// Parameters:</span><br />
-                        <span style={{ color: '#00d9ff' }}>"key"</span>: <span style={{ color: '#05df72' }}>"{currentKey || 'YOUR_LICENSE_KEY'}"</span>,<br />
-                        <span style={{ color: '#00d9ff' }}>"hwid"</span>: <span style={{ color: '#05df72' }}>"DEVICE_UNIQUE_HWID_OR_SERIAL"</span>
+                        <span style={{ color: '#64748b' }}>// Required JSON POST Parameters:</span><br />
+                        <span style={{ color: '#00d9ff' }}>"user_key"</span>: <span style={{ color: '#05df72' }}>"{currentKey || 'YOUR_LICENSE_KEY'}"</span>,<br />
+                        <span style={{ color: '#00d9ff' }}>"serial"</span>: <span style={{ color: '#05df72' }}>"DEVICE_UNIQUE_HWID_OR_SERIAL"</span>,<br />
+                        <span style={{ color: '#00d9ff' }}>"app"</span>: <span style={{ color: '#05df72' }}>"{targetLic?.game || 'Free Fire MAX'}"</span>,<br />
+                        <span style={{ color: '#00d9ff' }}>"secret"</span>: <span style={{ color: '#05df72' }}>"{isRootOwner ? getAppSecret(targetLic?.game || 'Free Fire MAX', registeredApps) : 'YOUR_APP_SECRET'}"</span>
                       </div>
                     </div>
                   </div>
@@ -11696,7 +11315,7 @@ else:
                 onClick={() => handleSelectTab('overview')}
               >
                 <IconOverview />
-                <span>Dashboard</span>
+                <span>Overview</span>
               </button>
               <button
                 type="button"
@@ -11708,23 +11327,23 @@ else:
               </button>
               <button
                 type="button"
-                className={`sg-mobile-bottom-tab ${activeTab === 'generate' ? 'active' : ''}`}
+                className={`sg-mobile-bottom-tab sg-mobile-dock-fab ${activeTab === 'generate' ? 'active' : ''}`}
                 onClick={() => handleSelectTab('generate')}
               >
                 <IconPlus />
-                <span>Gen</span>
+                <span>Mint</span>
               </button>
               <button
                 type="button"
-                className={`sg-mobile-bottom-tab ${activeTab === 'overview' ? 'active' : ''}`}
-                onClick={() => handleSelectTab('overview')}
+                className={`sg-mobile-bottom-tab ${activeTab === (isReseller ? 'advance' : 'users') ? 'active' : ''}`}
+                onClick={() => handleSelectTab(isReseller ? 'advance' : 'users')}
               >
-                <IconOverview />
-                <span>Stats</span>
+                {isReseller ? <IconPricing /> : <IconUsers />}
+                <span>{isReseller ? 'Rates' : 'Users'}</span>
               </button>
               <button
                 type="button"
-                className={`sg-mobile-bottom-tab ${mobileMenuOpen || ['referrals', 'users', 'add-balance', 'advance', 'apps', 'connect-api', 'delete', 'extend'].includes(activeTab) ? 'active' : ''}`}
+                className={`sg-mobile-bottom-tab ${mobileMenuOpen || ['referrals', 'add-balance', 'apps', 'connect-api', 'delete', 'extend'].includes(activeTab) ? 'active' : ''}`}
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               >
                 <IconMenu />
@@ -11799,39 +11418,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '10px'
   },
-  logoFrame: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    border: '1px solid rgba(255, 255, 255, 0.15)',
-    boxShadow: '0 0 12px rgba(139, 92, 246, 0.25)',
-    flexShrink: 0
-  },
-  logoImage: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover'
-  },
   brandTitleText: {
     fontSize: '15px',
     fontWeight: 800,
     letterSpacing: '0.03em',
     color: '#f8fafc'
-  },
-  brandVioletPill: {
-    color: '#a78bfa',
-    fontWeight: 700,
-    fontSize: '10px',
-    marginLeft: '6px',
-    padding: '2px 6px',
-    borderRadius: '4px',
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
-    border: '1px solid rgba(139, 92, 246, 0.3)',
-    boxShadow: '0 0 8px rgba(139, 92, 246, 0.2)'
-  },
-  brandSubText: {
-    display: 'none'
   },
   headerRight: {
     display: 'flex',
@@ -12694,97 +12285,6 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#ffffff',
     transition: 'transform 0.15s ease'
   },
-  emergencyPurgeBtn: {
-    padding: '8px 14px',
-    minHeight: '44px',
-    background: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.3)',
-    color: '#f87171',
-    fontSize: '11px',
-    fontWeight: 700,
-    borderRadius: '6px',
-    cursor: 'pointer'
-  },
-  controlGrid3Col: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-    gap: '12px'
-  },
-  columnCard: {
-    padding: '14px 16px',
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
-    backdropFilter: 'blur(16px)',
-    WebkitBackdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12)',
-    borderRadius: '12px'
-  },
-  columnHead: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '10px',
-    paddingBottom: '10px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
-  },
-  columnIcon: {
-    fontSize: '14px'
-  },
-  toggleRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '8px 0',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.04)'
-  },
-  toggleTitle: {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#f8fafc'
-  },
-  sliderBlock: {
-    padding: '8px 0',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.04)'
-  },
-  sliderLabelRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '11px',
-    color: '#94a3b8',
-    marginBottom: '6px',
-    fontWeight: 600
-  },
-  sliderValText: {
-    color: '#a78bfa',
-    fontWeight: 700
-  },
-  sliderInput: {
-    width: '100%',
-    accentColor: '#8b5cf6',
-    cursor: 'pointer'
-  },
-  themePaletteGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
-    gap: '6px'
-  },
-  themePillBtn: {
-    padding: '8px 10px',
-    minHeight: '36px',
-    borderRadius: '6px',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    color: '#94a3b8',
-    fontSize: '11px',
-    fontWeight: 600,
-    cursor: 'pointer'
-  },
-  themePillBtnActive: {
-    backgroundColor: 'rgba(139, 92, 246, 0.16)',
-    borderColor: '#8b5cf6',
-    color: '#ffffff',
-    fontWeight: 700
-  },
   modalOverlay: {
     position: 'fixed',
     top: 0,
@@ -12812,21 +12312,11 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '14px',
     textAlign: 'center'
   },
-  modalIcon: {
-    fontSize: '32px',
-    marginBottom: '10px'
-  },
   modalTitle: {
     fontSize: '16px',
     fontWeight: 800,
     color: '#f8fafc',
     margin: '0 0 8px 0'
-  },
-  modalText: {
-    fontSize: '12px',
-    color: '#94a3b8',
-    lineHeight: 1.5,
-    margin: '0 0 20px 0'
   },
   modalActions: {
     display: 'flex',
@@ -12841,17 +12331,6 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid rgba(255, 255, 255, 0.1)',
     color: '#cbd5e1',
     fontWeight: 600,
-    fontSize: '12px',
-    cursor: 'pointer'
-  },
-  modalConfirmPurgeBtn: {
-    padding: '10px 18px',
-    minHeight: '44px',
-    borderRadius: '6px',
-    background: '#ef4444',
-    border: 'none',
-    color: '#ffffff',
-    fontWeight: 700,
     fontSize: '12px',
     cursor: 'pointer'
   }

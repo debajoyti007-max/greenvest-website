@@ -136,11 +136,9 @@ export default function RymonIntroVideo() {
     }
 
     window.addEventListener('replay_rymon_intro', handleReplay)
-    window.addEventListener('replay_gv_intro', handleReplay)
 
     return () => {
       window.removeEventListener('replay_rymon_intro', handleReplay)
-      window.removeEventListener('replay_gv_intro', handleReplay)
     }
   }, [muted])
 
